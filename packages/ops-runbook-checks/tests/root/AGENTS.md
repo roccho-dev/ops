@@ -1,0 +1,10 @@
+# AGENTS.md
+
+- `0/9` は CDP / ChatGPT thread / Project Source / artifact 回収の owner。
+- agent 管理の正本は `$HOME/.agents/events.jsonl`。
+- `$HOME/.agents/status.md` は生成物。
+- status.md は生成物として扱う。
+- `ops-agent-events`
+- `ops-artifact-materialize`
+- `ops-knowledge-intake`
+- `ops-runbook-checks`

@@ -25,6 +25,13 @@
             exec ${pkgs.python3}/bin/python3 ${./packages/ops-knowledge-intake/bin/ops-knowledge-intake.py} "$@"
           '';
         };
+        ops-runbook-checks = pkgs.writeShellApplication {
+          name = "ops-runbook-checks";
+          runtimeInputs = [ pkgs.python3 ];
+          text = ''
+            exec ${pkgs.python3}/bin/python3 ${./packages/ops-runbook-checks/bin/ops-runbook-checks.py} "$@"
+          '';
+        };
         ops-bootstrap = pkgs.runCommand "ops-bootstrap" { } ''
           mkdir -p $out/share/ops
           cat > $out/share/ops/README <<'EOF'
@@ -59,6 +66,15 @@
           grep -q 'retry-template-candidate' "$out/knowledge.tsv"
           grep -q 'gate-candidate' "$out/knowledge.tsv"
           grep -q '"count": 3' "$out/summary.json"
+        '';
+        ops-runbook-checks = pkgs.runCommand "ops-runbook-checks-check" {
+          nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-runbook-checks ];
+        } ''
+          mkdir -p "$out"
+          ops-runbook-checks \
+            --root ${./packages/ops-runbook-checks/tests/root} \
+            --json > "$out/report.json"
+          grep -q '"ok": true' "$out/report.json"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README
