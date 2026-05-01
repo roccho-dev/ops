@@ -1,0 +1,5 @@
+item_id	member_path	normalized_path	member_type	group	logical_unit	role_hint	content_class	extension	basename	parent_path	size_bytes	compressed_bytes	compression_method	modified_at	sha256	is_nested_archive
+1	root/run/RUN_REPORT.md	run/RUN_REPORT.md	file	cdp_ops_poc	project-source-test	runtime_report	text_like	.md	RUN_REPORT.md	run	123	80	8	2026-05-01 00:00:00	abc	no
+2	root/prompts/RETRY.md	prompts/RETRY.md	file	cdp_ops_poc	project-source-test	thread_prompt	text_like	.md	RETRY.md	prompts	100	70	8	2026-05-01 00:00:00	def	no
+3	root/proofs/receipt.json	proofs/receipt.json	file	cdp_ops_poc	project-source-test	receipt_or_source_read_proof	text_like	.json	receipt.json	proofs	50	40	8	2026-05-01 00:00:00	ghi	no
+4	root/ignore.bin	ignore.bin	file	cdp_ops_poc	project-source-test	other_file	binary	.bin	ignore.bin		10	10	8	2026-05-01 00:00:00	jkl	no
