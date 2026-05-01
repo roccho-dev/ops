@@ -34,7 +34,13 @@ REQUIRED_AGENTS_TOKENS = [
     "0/9",
     "CDP",
     "Project Source",
+    "$HOME/.agents/events.jsonl",
     "$HOME/.agents/status.md",
+    "ops-agent-events",
+    "ops-artifact-materialize",
+    "ops-knowledge-intake",
+    "ops-runbook-checks",
+    "status.md は生成物",
 ]
 
 
