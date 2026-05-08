@@ -8,3 +8,8 @@
 - `ops-artifact-materialize`
 - `ops-knowledge-intake`
 - `ops-runbook-checks`
+- `ops-thread-fsm`
+- `delivery-verified`
+- `impl-review`
+- `merge-review`
+- `merge-ready`

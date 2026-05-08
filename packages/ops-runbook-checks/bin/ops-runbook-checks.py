@@ -20,7 +20,9 @@ REQUIRED_PATHS = [
     "specs/packages/ops-agent-events/default.nix",
     "specs/packages/ops-cdp-core/default.nix",
     "specs/packages/ops-project-source-sync/default.nix",
+    "specs/packages/ops-thread-fsm/default.nix",
     "ops/flake.nix",
+    "ops/packages/ops-thread-fsm/bin/ops-thread-fsm",
     "cdp-ops-poc",
 ]
 
@@ -40,7 +42,19 @@ REQUIRED_AGENTS_TOKENS = [
     "ops-artifact-materialize",
     "ops-knowledge-intake",
     "ops-runbook-checks",
+    "ops-thread-fsm",
+    "delivery-verified",
+    "impl-review",
+    "merge-review",
+    "merge-ready",
     "status.md は生成物",
+]
+
+REQUIRED_FILE_TOKENS = [
+    {
+        "relPath": "ops/flake.nix",
+        "tokens": ["ops-thread-fsm", "ops-thread-fsm-check"],
+    },
 ]
 
 
@@ -67,10 +81,29 @@ def check_agents(root: pathlib.Path) -> list[dict[str, Any]]:
     ]
 
 
+def check_file_tokens(root: pathlib.Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for spec in REQUIRED_FILE_TOKENS:
+        rel = spec["relPath"]
+        path = root / rel
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        for token in spec["tokens"]:
+            rows.append(
+                {
+                    "relPath": rel,
+                    "token": token,
+                    "present": token in text,
+                    "required": True,
+                }
+            )
+    return rows
+
+
 def run(root: pathlib.Path) -> dict[str, Any]:
     paths = [check_path(root, rel, True) for rel in REQUIRED_PATHS]
     paths.extend(check_path(root, rel, False) for rel in OPTIONAL_PACKAGE_PATHS)
     agents = check_agents(root)
+    file_tokens = check_file_tokens(root)
     failures = [
         f"missing required path: {row['relPath']}"
         for row in paths
@@ -81,6 +114,11 @@ def run(root: pathlib.Path) -> dict[str, Any]:
         for row in agents
         if row["required"] and not row["present"]
     )
+    failures.extend(
+        f"{row['relPath']} missing required token: {row['token']}"
+        for row in file_tokens
+        if row["required"] and not row["present"]
+    )
     return {
         "kind": "ops.runbookChecks.report.v1",
         "root": str(root),
@@ -88,6 +126,7 @@ def run(root: pathlib.Path) -> dict[str, Any]:
         "failures": failures,
         "paths": paths,
         "agentsTokens": agents,
+        "fileTokens": file_tokens,
     }
 
 
