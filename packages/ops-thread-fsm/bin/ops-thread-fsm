@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import argparse,json,pathlib,sys
+ST="init source-packed request-sent sleeping-900 readback output-materialized review-pass local-gate-pass merge-ready".split();OUT=["BEGIN_B64_FILE","diff --git","RUN_REPORT","MATERIALIZE_MANIFEST","file tree","patch"];DONE=["できた","done","complete","completed"];REJ=["review-reject","reject","差し戻し","fail","failed"];PAS=["review-pass","pass","passed","合格"];LGF=["local-gate-fail","local gate fail","test fail","tests failed"];LGP=["local-gate-pass","local gate pass","tests passed"]
+def load(p):
+ s=pathlib.Path(p).read_text(encoding="utf-8") if p else ""
+ try:return json.loads(s)
+ except Exception:return s
+def text(x):
+ return x if isinstance(x,str) else ("\n".join(text(i) for i in x) if isinstance(x,list) else ("\n".join(text(v) for v in x.values()) if isinstance(x,dict) else ""))
+def streaming(x):
+ return (any((str(k).replace("_","").lower()=="isstreaming" and v is True) or streaming(v) for k,v in x.items()) if isinstance(x,dict) else (any(streaming(i) for i in x) if isinstance(x,list) else False))
+def hit(s,t):
+ l=s.lower();return [x for x in t if x.lower() in l]
+def row(c,st,rt,why,nxt,act,e):return {"kind":"ops-thread-fsm.classification.v1","classification":c,"isStreaming":st,"retry":rt,"retryReason":why,"nextStateKind":nxt,"nextAction":act,"evidence":e}
+def classify(x,ph,rk):
+ s=text(x)
+ if streaming(x):return row("streaming",True,False,None,"sleeping-900","sleep 900; then CDP readback via ops-cdp-core",["isStreaming:true"])
+ e=hit(s,LGF)
+ if e:return row("local-gate-fail",False,True,"local gate failed","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",e)
+ if rk=="review":
+  e=hit(s,REJ)
+  if e:return row("review-reject",False,True,"review rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",e)
+  e=hit(s,PAS)
+  if e:return row("review-pass",False,False,None,"review-pass","advance to merge request or local gate",e)
+  return row("review-pending",False,True,"no explicit review pass/reject","request-sent","ask explicit review result; sleep 900",[])
+ e=hit(s,OUT)
+ return row("output-candidate",False,False,None,"output-materialized","materialize via ops-artifact-materialize; then review gate",e) if e else row("output-missing",False,True,"no materializable patch/file tree/artifact/RUN_REPORT","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",hit(s,DONE))
+def jp(x,j=True):print(json.dumps(x,ensure_ascii=False,indent=2) if j else x)
+def c_class(a):
+ r=classify(load(a.input),a.phase,a.request_kind); jp(r,a.json) if a.json else print(r["classification"]); return 0 if r["classification"] in ("output-candidate","review-pass") else 1
+def c_next(a):
+ m={"request-sent":"sleep 900; then CDP readback via ops-cdp-core","sleeping-900":"CDP readback via ops-cdp-core","local-gate-pass":"check-ready: materialize + review + local gate + RUN_REPORT readable","merge-ready":"complete"}; r={"kind":"ops-thread-fsm.next.v1","stateKind":a.state_kind,"phase":a.phase,"requestKind":a.request_kind,"classification":a.classification,"dryRun":a.dry_run,"writes":False,"sends":False,"nextAction":m.get(a.state_kind,"render/send/classify; fail closed if unclear")}; jp(r,a.json) if a.json else print(r["nextAction"]); return 0
+def c_prompt(a):
+ print("Return materializable patch/file tree/artifact plus RUN_REPORT. Use BEGIN_B64_FILE. Host uses ops-artifact-materialize, review gate, ops-runbook-checks local gate. After send confirm success only; no heartbeat/reminder/Codex app automation; sleep 900; CDP readback via ops-cdp-core. isStreaming:true and ChatGPT 'できた' are not complete. Ready requires materialize + review gate + local gate + RUN_REPORT readable."); return 0
+def okj(p):
+ x=load(p) if p and pathlib.Path(p).exists() else None; return isinstance(x,dict) and x.get("ok") is True and int(x.get("count",1))>0
+def c_ready(a):
+ rev=classify(load(a.review) if a.review and pathlib.Path(a.review).exists() else {},"merge","review")["classification"]=="review-pass"; lg=load(a.local_gate) if a.local_gate and pathlib.Path(a.local_gate).exists() else None; lgt=text(lg); lgok=(isinstance(lg,dict) and lg.get("ok") is True) or (hit(lgt,LGP) and not hit(lgt,LGF)); rr=bool(a.run_report and pathlib.Path(a.run_report).exists() and pathlib.Path(a.run_report).read_text(encoding="utf-8").strip()); ch={"materialize":okj(a.materialize_manifest),"review":rev,"localGate":lgok,"runReport":rr}; ready=all(ch.values()); jp({"kind":"ops-thread-fsm.ready.v1","ready":ready,"stateKind":"merge-ready" if ready else "not-ready","dryRun":a.dry_run,"writes":False,"sends":False,"checks":ch},a.json); return 0 if ready else 1
+def c_status(a):jp({"kind":"ops-thread-fsm.status.v1","canonicalLedger":"ops-agent-events events.jsonl"},a.json);return 0
+def main(v):
+ p=argparse.ArgumentParser();s=p.add_subparsers(dest="c",required=True)
+ q=s.add_parser("status");q.add_argument("--events");q.add_argument("--state");q.add_argument("--json",action="store_true");q.set_defaults(f=c_status)
+ q=s.add_parser("next");q.add_argument("--state-kind",required=True,choices=ST);q.add_argument("--phase",default="impl");q.add_argument("--request-kind",default="work");q.add_argument("--classification");q.add_argument("--dry-run",action="store_true");q.add_argument("--json",action="store_true");q.set_defaults(f=c_next)
+ q=s.add_parser("classify-readback");q.add_argument("--input",required=True);q.add_argument("--phase",required=True);q.add_argument("--request-kind",required=True);q.add_argument("--json",action="store_true");q.set_defaults(f=c_class)
+ q=s.add_parser("render-prompt");q.add_argument("--phase",required=True);q.add_argument("--request-kind",required=True);q.add_argument("--dry-run",action="store_true");q.set_defaults(f=c_prompt)
+ q=s.add_parser("check-ready");q.add_argument("--materialize-manifest");q.add_argument("--review");q.add_argument("--local-gate");q.add_argument("--run-report");q.add_argument("--dry-run",action="store_true");q.add_argument("--json",action="store_true");q.set_defaults(f=c_ready)
+ a=p.parse_args(v);return a.f(a)
+if __name__=="__main__":raise SystemExit(main(sys.argv[1:]))

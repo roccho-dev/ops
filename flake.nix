@@ -32,6 +32,13 @@
             exec ${pkgs.python3}/bin/python3 ${./packages/ops-runbook-checks/bin/ops-runbook-checks.py} "$@"
           '';
         };
+        ops-thread-fsm = pkgs.writeShellApplication {
+          name = "ops-thread-fsm";
+          runtimeInputs = [ pkgs.python3 ];
+          text = ''
+            exec ${pkgs.python3}/bin/python3 ${./packages/ops-thread-fsm/bin/ops-thread-fsm} "$@"
+          '';
+        };
         ops-bootstrap = pkgs.runCommand "ops-bootstrap" { } ''
           mkdir -p $out/share/ops
           cat > $out/share/ops/README <<'EOF'
@@ -75,6 +82,18 @@
             --root ${./packages/ops-runbook-checks/tests/root} \
             --json > "$out/report.json"
           grep -q '"ok": true' "$out/report.json"
+        '';
+        ops-thread-fsm = pkgs.runCommand "ops-thread-fsm-check" {
+          nativeBuildInputs = [ pkgs.python3 self.packages.${pkgs.stdenv.hostPlatform.system}.ops-thread-fsm ];
+        } ''
+          mkdir -p "$out"
+          cp -R ${./packages/ops-thread-fsm} ./ops-thread-fsm-src
+          chmod -R u+w ./ops-thread-fsm-src
+          python3 -S ./ops-thread-fsm-src/tests/test_ops_thread_fsm.py > "$out/test.log"
+          ops-thread-fsm next --state-kind request-sent --dry-run --json > "$out/next.json"
+          grep -q '"writes": false' "$out/next.json"
+          grep -q 'sleep 900' "$out/next.json"
+          touch "$out/done"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README
