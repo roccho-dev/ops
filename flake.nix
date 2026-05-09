@@ -46,9 +46,16 @@
             exec ${pkgs.python3}/bin/python3 ${./packages/ops-tailnet-github-egress/bin/ops-tailnet-github-egress.py} "$@"
           '';
         };
+        git-push-tailnet = pkgs.writeShellApplication {
+          name = "git-push-tailnet";
+          runtimeInputs = [ pkgs.git pkgs.python3 ops-tailnet-github-egress ];
+          text = ''
+            exec ${pkgs.python3}/bin/python3 ${./packages/ops-tailnet-github-egress/bin/git-push-tailnet} "$@"
+          '';
+        };
         ops-refs-vault = pkgs.writeShellApplication {
           name = "ops-refs-vault";
-          runtimeInputs = [ pkgs.git pkgs.python3 ops-tailnet-github-egress ];
+          runtimeInputs = [ pkgs.git pkgs.python3 git-push-tailnet ops-tailnet-github-egress ];
           text = ''
             exec ${pkgs.python3}/bin/python3 ${./packages/ops-refs-vault/bin/ops-refs-vault.py} "$@"
           '';
@@ -110,7 +117,7 @@
           touch "$out/done"
         '';
         ops-tailnet-github-egress = pkgs.runCommand "ops-tailnet-github-egress-check" {
-          nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-tailnet-github-egress pkgs.gnugrep ];
+          nativeBuildInputs = [ pkgs.git pkgs.python3 self.packages.${pkgs.stdenv.hostPlatform.system}.ops-tailnet-github-egress self.packages.${pkgs.stdenv.hostPlatform.system}.git-push-tailnet pkgs.gnugrep ];
         } ''
           mkdir -p "$out"
           ops-tailnet-github-egress policy --json > "$out/policy.json"
@@ -122,6 +129,8 @@
           grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-push-local-app-connector-long.sh}
           grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-restore-ref-app-connector-long.sh}
           ! grep -R "print \$1; exit" ${./packages/ops-tailnet-github-egress/snippets}
+          GIT_PUSH_TAILNET_SCRIPT=${./packages/ops-tailnet-github-egress/bin/git-push-tailnet} \
+            python3 -S ${./packages/ops-tailnet-github-egress/tests/test_git_push_tailnet.py} > "$out/git-push-tailnet.log"
         '';
         ops-refs-vault = pkgs.runCommand "ops-refs-vault-check" {
           nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-refs-vault pkgs.gnugrep ];
