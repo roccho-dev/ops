@@ -1,52 +1,220 @@
 #!/usr/bin/env python3
-import sys,json,pathlib
-A=sys.argv[1:];C=A[0] if A else ''
-def a(k,d=None):return A[A.index(k)+1] if k in A and A.index(k)+1<len(A) else d
-def r(p):
- s=pathlib.Path(p).read_text() if p else '{}'
- try:return json.loads(s)
- except Exception:return {'text':s}
-def t(x):return x if isinstance(x,str) else '\n'.join(map(t,x.values())) if isinstance(x,dict) else ''
-def b(d,*k):return isinstance(d,dict) and any(d.get(x) is True or str(d.get(x,'')).lower() in 'true yes ok pass valid present 1'.split() for x in k)
-def p(st):return {'createWorktree':st=='allowed-to-create-worktree','implement':st=='allowed-to-implement','returnArtifact':st=='allowed-to-return-artifact','sendReview':st=='allowed-to-send-review','readyForMergeReview':st=='ready-for-merge-review','mergeReady':st=='merge-ready','canonicalMerge':False,'push':False,'overwrite':False}
-def o(c,n,e=[],retry=False,why=None,auto=None):
- d={'kind':'ops-thread-fsm.classification.v1','classification':c,'nextStateKind':n,'evidence':e,'retry':retry,'retryReason':why,'isStreaming':c=='streaming','permissions':p(n),'writes':False,'sends':False,'nextAction':'fail closed if unclear'}
- if auto is not None:d['autoContinue']=auto
- print(json.dumps(d,ensure_ascii=False));return 0 if c in ['accepted-plan','false-blocker','output-candidate','impl-review-pass','merge-review-pass'] else 1
-def first(s):return next((x.strip() for x in s.splitlines() if x.strip()),'')
-def v(x,y):
- x=x.casefold();y=y.casefold();return x in [y,'verdict: '+y,'verdict='+y,'status: '+y,'status='+y,'result: '+y,'result='+y]
-def cls():
- x=r(a('--input'));s=t(x);rk=a('--request-kind','work')
- if x.get('isStreaming') is True:return o('streaming','sleeping-900',['isStreaming:true'])
- if rk in ['impl-review','merge-review']:
-  l=first(s);q=rk+'-pass'
-  if v(l,q):return o(q,q,[l])
-  if 'reject' in s.lower() or 'failed' in s.lower():return o(rk+'-reject','request-sent',[l],True,'review rejected')
-  return o(rk+'-pending','request-sent',[],True,'explicit gate verdict required')
- return o('output-candidate','output-materialized') if any(w in s for w in ['BEGIN_B64_FILE','RUN_REPORT','diff --git','MATERIALIZE_MANIFEST']) else o('output-missing','request-sent',[],True,'no materializable output')
-def ext(d):
- e=d.get('externalThread',{}) if isinstance(d,dict) else {};need=b(d,'externalThreadWork','externalThreadRequired') or b(e,'work','required','requested')
- return (not need) or ((b(d,'sendConfirmation','externalSendConfirmation') or b(e,'sendConfirmation','sent')) and (b(d,'readback','readbackExists','externalReadback') or b(e,'readback','readbackExists')))
-def plan():
- d=r(a('--input'));c=str(d.get('blockerClaim',d.get('claim',d.get('blocker',''))));lo=c.lower()
- if c and b(d,'readbackDisprovesBlocker','readbackContradictsBlocker','readbackProvesClaimFalse'):return o('false-blocker','accepted-plan',[c],auto=False)
- if c and b(d,'blockerEvidence','evidenceSupportsBlocker','readbackSupportsBlocker'):return o('real-blocker','real-blocker',[c],True,'real blocker',False)
- if c and any(x in lo for x in ['not sent','thread not created','not in project','cannot connect']):return o('insufficient-plan','state-requiring-user-gen0-agreement',[c],True,'unsupported blocker claim',False)
- req=['planComplete','localBaseEvidenceValid','successConditionsPresent','failureConditionsPresent','gatesPresent','reportableEvidencePresent'];miss=[x for x in req if not b(d,x)]
- if not ext(d):miss.append('externalThreadSendConfirmationAndReadback')
- if miss:return o('insufficient-plan','insufficient-plan',miss,True,'missing plan evidence',False)
- need=['preAuthorized','noOverwrite','noMerge','noPush','worktreeBranchAbsent'];bad=[x for x in need if not b(d,x)]
- return o('accepted-plan','state-requiring-user-gen0-agreement',bad,auto=False) if bad else o('accepted-plan','state-allowed-to-proceed-without-extra-user-agreement',auto=True)
-def ready():
- m=r(a('--delivery'));rows=m.get('rows',[]);ok=m.get('ok') is True and m.get('count',0)>0 and len(rows)==m.get('count') and all(x.get('bytes')==x.get('bytesExpected') and x.get('sha256')==x.get('sha256Expected') for x in rows)
- ok=ok and v(first(t(r(a('--impl-review')))),'impl-review-pass') and r(a('--local-gate')).get('ok') is True and v(first(t(r(a('--merge-review')))),'merge-review-pass') and pathlib.Path(a('--run-report')).read_text().strip()
- print(json.dumps({'kind':'ops-thread-fsm.ready.v1','ready':bool(ok),'stateKind':'merge-ready' if ok else 'not-ready','writes':False,'sends':False}));return 0 if ok else 1
-if C=='classify-readback':sys.exit(cls())
-if C=='evaluate-plan':sys.exit(plan())
-if C=='check-ready':sys.exit(ready())
-if C=='next':
- st=a('--state-kind');print(json.dumps({'kind':'ops-thread-fsm.next.v1','stateKind':st,'dryRun':'--dry-run' in A,'writes':False,'sends':False,'permissions':p(st),'nextAction':'sleep 900; then CDP readback' if st=='request-sent' else 'fail closed if unclear'}));sys.exit(0)
-if C=='render-prompt':print('Auto-continue only for complete pre-authorized no-overwrite no-merge no-push plans with local base evidence and external-thread send confirmation plus readback. Unsupported blocker claims need evidence. Target ready-for-merge-review, not merge-ready.');sys.exit(0)
-if C=='status':print(json.dumps({'kind':'ops-thread-fsm.status.v1'}));sys.exit(0)
-print('usage',file=sys.stderr);sys.exit(2)
+from __future__ import annotations
+import argparse,json,pathlib,re,sys
+
+STATES = """init source-packed request-sent sleeping-900 readback output-materialized delivery-verified impl-review impl-review-pass merge-local-gate-pass merge-review merge-review-pass real-blocker false-blocker insufficient-plan accepted-plan state-requiring-user-gen0-agreement state-allowed-to-proceed-without-extra-user-agreement allowed-to-create-worktree allowed-to-implement allowed-to-return-artifact allowed-to-send-review ready-for-merge-review merge-ready escalation-needed""".split()
+OUT = ["BEGIN_B64_FILE","diff --git","RUN_REPORT","MATERIALIZE_MANIFEST","file tree","patch"]
+DONE = ["できた","done","complete","completed"]
+REJECT = ["impl-review-reject","merge-review-reject","review-reject","reject","差し戻し","fail","failed"]
+LG_FAIL = ["local-gate-fail","local gate fail","test fail","tests failed"]
+LG_PASS = ["local-gate-pass","local gate pass","tests passed"]
+UNSUPPORTED = ["not sent","thread not created","not in project","cannot connect"]
+PERM_NAMES = "createWorktree implement returnArtifact sendReview readyForMergeReview mergeReady canonicalMerge push overwrite".split()
+PERMS = {s:{k:False for k in PERM_NAMES} for s in STATES}
+PERMS["allowed-to-create-worktree"]["createWorktree"] = True
+PERMS["allowed-to-implement"]["implement"] = True
+PERMS["allowed-to-return-artifact"]["returnArtifact"] = True
+PERMS["allowed-to-send-review"]["sendReview"] = True
+PERMS["ready-for-merge-review"]["readyForMergeReview"] = True
+PERMS["merge-ready"]["mergeReady"] = True
+NEXT = {
+ "request-sent":"sleep 900; then delegated readback via ops-cdp-core",
+ "sleeping-900":"delegated readback via ops-cdp-core",
+ "output-materialized":"verify materialization manifest and readable RUN_REPORT",
+ "delivery-verified":"send impl-review request when allowed by host",
+ "impl-review":"wait for explicit first-line impl-review verdict",
+ "impl-review-pass":"apply to merge worktree and run local gates outside this FSM",
+ "merge-local-gate-pass":"send merge-review request when allowed by host",
+ "merge-review":"wait for explicit first-line merge-review verdict",
+ "merge-review-pass":"check merge-ready evidence",
+ "state-allowed-to-proceed-without-extra-user-agreement":"advance to isolated worktree permission when branch/worktree are absent",
+ "allowed-to-create-worktree":"create only requested isolated worktree; do not overwrite",
+ "allowed-to-implement":"perform local implementation only; never implies merge-ready",
+ "allowed-to-return-artifact":"return materializable artifact, RUN_REPORT, gates, risks",
+ "allowed-to-send-review":"send review handoff when evidence is present",
+ "ready-for-merge-review":"handoff is ready for independent review; not merge-ready",
+ "merge-ready":"reviewed merge-ready state; FSM still does not perform merge",
+}
+
+def load(p):
+    if not p: return ""
+    s = pathlib.Path(p).read_text(encoding="utf-8")
+    try: return json.loads(s)
+    except Exception: return s
+
+def text(x):
+    if isinstance(x,str): return x
+    if isinstance(x,list): return "\n".join(text(i) for i in x)
+    if isinstance(x,dict): return "\n".join(text(v) for v in x.values())
+    return "" if x is None else str(x)
+
+def first_line(s):
+    for line in s.splitlines():
+        line = line.strip()
+        if line: return line
+    return ""
+
+def hits(s, markers):
+    l=s.lower(); return [m for m in markers if m.lower() in l]
+
+def exact(s,t):
+    return re.search(r"(?<![A-Za-z0-9_-])"+re.escape(t.lower())+r"(?![A-Za-z0-9_-])",s.lower()) is not None
+
+def streaming(x):
+    if isinstance(x,dict):
+        return any((str(k).replace("_","").lower()=="isstreaming" and v is True) or streaming(v) for k,v in x.items())
+    if isinstance(x,list): return any(streaming(i) for i in x)
+    return False
+
+def verdict(line, token):
+    t=token.casefold(); l=line.casefold()
+    return l in {t,f"verdict: {t}",f"verdict={t}",f"status: {t}",f"status={t}",f"result: {t}",f"result={t}"}
+
+def perms(state):
+    p={k:False for k in PERM_NAMES}; p.update(PERMS.get(state,{})); return p
+
+def row(c,n,e=None,retry=False,why=None,auto=None,action=None):
+    r={"kind":"ops-thread-fsm.classification.v1","classification":c,"nextStateKind":n,"evidence":e or [],"retry":retry,"retryReason":why,"isStreaming":c=="streaming","permissions":perms(n),"writes":False,"sends":False,"nextAction":action or NEXT.get(n,"fail closed if unclear")}
+    if auto is not None: r["autoContinue"]=auto
+    return r
+
+def emit(x,j,key=None): print(json.dumps(x,ensure_ascii=False,indent=2) if j else x[key])
+
+def classify_value(x, phase, rk):
+    s=text(x)
+    if streaming(x): return row("streaming","sleeping-900",["isStreaming:true"],action=NEXT["request-sent"])
+    e=hits(s,LG_FAIL)
+    if e: return row("local-gate-fail","request-sent",e,True,"local gate failed",action=f"send {phase} retry via delegated channel; sleep 900")
+    if rk in ("impl-review","merge-review"):
+        pt=f"{rk}-pass"; rt=f"{rk}-reject"; line=first_line(s)
+        if verdict(line,rt) or hits(s,REJECT):
+            return row(f"{rk}-reject","request-sent",[line] if verdict(line,rt) else hits(s,REJECT),True,f"{rk} rejected",action=f"send {phase} retry via delegated channel; sleep 900")
+        if verdict(line,pt): return row(f"{rk}-pass",f"{rk}-pass",[line],action="advance to next gate")
+        return row(f"{rk}-pending","request-sent",hits(s,["review-pass","pass","passed","合格",pt]),True,f"no first-line {pt}/{rt} verdict; generic review-pass is insufficient",action="ask explicit gate-specific review result; sleep 900")
+    if rk == "review":
+        if hits(s,REJECT): return row("review-reject","request-sent",hits(s,REJECT),True,"review rejected")
+        if exact(s,"review-pass"): return row("review-pass","review-pass",["review-pass"])
+        return row("review-pending","request-sent",retry=True,why="no explicit review-pass/reject")
+    e=hits(s,OUT)
+    if e: return row("output-candidate","output-materialized",e,action="materialize via ops-artifact-materialize; then delivery-verified gate")
+    return row("output-missing","request-sent",hits(s,DONE),True,"no materializable patch/file tree/artifact/RUN_REPORT",action=f"send {phase} retry via delegated channel; sleep 900")
+
+def flag(d,*ks):
+    if not isinstance(d,dict): return False
+    return any(d.get(k) is True or (isinstance(d.get(k),str) and d[k].strip().lower() in "true yes ok pass valid present 1".split()) for k in ks)
+
+def concrete(x):
+    if x is None or isinstance(x,bool) or isinstance(x,(int,float)): return False
+    if isinstance(x,str): return bool(x.strip())
+    if isinstance(x,list): return any(concrete(i) for i in x)
+    if isinstance(x,dict): return any(concrete(v) for v in x.values())
+    return False
+
+def evidence(d,*ks): return any(concrete(d.get(k)) for k in ks) if isinstance(d,dict) else False
+
+def ext_requested(d):
+    e=d.get("externalThread",{}) if isinstance(d.get("externalThread"),dict) else {}
+    return flag(d,"externalThreadWork","externalThreadRequired","externalThreadRequested") or flag(e,"work","required","requested")
+
+def ext_ok(d):
+    e=d.get("externalThread",{}) if isinstance(d.get("externalThread"),dict) else {}
+    send=evidence(d,"sendConfirmationEvidence","sendConfirmationContent","externalSendConfirmationEvidence") or evidence(e,"sendConfirmationEvidence","sendConfirmationContent","sendConfirmation")
+    rb=evidence(d,"readbackEvidence","readbackContent","externalReadbackEvidence") or evidence(e,"readbackEvidence","readbackContent","readback")
+    return send and rb
+
+def evaluate_plan_value(x):
+    d=x if isinstance(x,dict) else {"text":text(x)}
+    claim=str(d.get("blockerClaim",d.get("claim",d.get("blocker",""))))
+    low=claim.casefold()
+    if claim and flag(d,"readbackDisprovesBlocker","readbackContradictsBlocker","readbackProvesClaimFalse"):
+        return row("false-blocker","accepted-plan",[claim],auto=False,action="correct blocker classification and resume plan evaluation")
+    if claim and flag(d,"blockerEvidence","evidenceSupportsBlocker","readbackSupportsBlocker"):
+        return row("real-blocker","real-blocker",[claim],True,"real blocker supported by evidence/readback",auto=False)
+    if claim and any(m in low for m in UNSUPPORTED):
+        return row("insufficient-plan","state-requiring-user-gen0-agreement",[claim],True,"unsupported blocker claim is not a real blocker without evidence/readback",auto=False)
+    req="planComplete localBaseEvidenceValid successConditionsPresent failureConditionsPresent gatesPresent reportableEvidencePresent".split()
+    missing=[k for k in req if not flag(d,k)]
+    if ext_requested(d) and not ext_ok(d): missing.append("externalThreadConcreteSendConfirmationAndReadback")
+    if missing: return row("insufficient-plan","insufficient-plan",missing,True,"missing required plan/evidence fields",auto=False)
+    safe="preAuthorized noOverwrite noMerge noPush worktreeBranchAbsent".split()
+    unsafe=[k for k in safe if not flag(d,k)]
+    if unsafe: return row("accepted-plan","state-requiring-user-gen0-agreement",unsafe,auto=False,action="hold for user/gen0 agreement because auto-continue scope is not fully proven")
+    return row("accepted-plan","state-allowed-to-proceed-without-extra-user-agreement",["complete pre-authorized plan","no overwrite","no merge","no push","local base evidence valid"],auto=True,action="auto-continue may proceed through implementation, self-gate, and handoff only")
+
+def as_int(x):
+    try: return int(x)
+    except Exception: return None
+
+def hex64(x): return isinstance(x,str) and re.fullmatch(r"[0-9a-fA-F]{64}",x or "") is not None
+
+def delivery_ok(p):
+    if not p or not pathlib.Path(p).exists(): return False
+    x=load(p)
+    if not isinstance(x,dict) or x.get("ok") is not True: return False
+    c=as_int(x.get("count")); rows=x.get("rows")
+    if c is None or c<=0 or not isinstance(rows,list) or len(rows)!=c: return False
+    seen=[]
+    for r in rows:
+        if not isinstance(r,dict) or r.get("ok") is not True: return False
+        if not isinstance(r.get("path"),str) or not r["path"].strip(): return False
+        b=as_int(r.get("bytes")); be=as_int(r.get("bytesExpected",r.get("sizeExpected")))
+        if b is None or be is None or b<=0 or b!=be: return False
+        sh=str(r.get("sha256","")).lower(); se=str(r.get("sha256Expected","")).lower()
+        if not (hex64(sh) and hex64(se) and sh==se): return False
+        fi=as_int(r.get("fileIndex")); fc=as_int(r.get("fileCount"))
+        if fi is None or fc is None or fc!=c: return False
+        seen.append(fi)
+    return sorted(seen)==list(range(1,c+1))
+
+def local_gate_ok(p):
+    if not p or not pathlib.Path(p).exists(): return False
+    x=load(p); s=text(x)
+    return (isinstance(x,dict) and x.get("ok") is True) or (bool(hits(s,LG_PASS)) and not hits(s,LG_FAIL))
+
+def readable(p): return bool(p and pathlib.Path(p).exists() and pathlib.Path(p).read_text(encoding="utf-8").strip())
+
+def review_ok(p,rk):
+    return bool(p and pathlib.Path(p).exists() and classify_value(load(p),rk.split("-")[0],rk)["classification"]==f"{rk}-pass")
+
+def c_class(a):
+    r=classify_value(load(a.input),a.phase,a.request_kind); emit(r,a.json,"classification")
+    return 0 if r["classification"] in {"output-candidate","review-pass","impl-review-pass","merge-review-pass"} else 1
+
+def c_plan(a):
+    r=evaluate_plan_value(load(a.input)); emit(r,a.json,"classification")
+    return 0 if r["classification"] in {"accepted-plan","false-blocker"} else 1
+
+def c_next(a):
+    r={"kind":"ops-thread-fsm.next.v1","stateKind":a.state_kind,"phase":a.phase,"requestKind":a.request_kind,"classification":a.classification,"dryRun":a.dry_run,"writes":False,"sends":False,"permissions":perms(a.state_kind),"nextAction":NEXT.get(a.state_kind,"render/send/classify; fail closed if unclear")}
+    emit(r,a.json,"nextAction"); return 0
+
+def c_prompt(a):
+    print("Return materializable full replacement files plus RUN_REPORT. Review gates require first-line gate-specific verdicts only; generic review-pass/pass/passed/合格, negations, prose mentions, and cross-gate tokens fail closed. Accepted plans may auto-continue only when complete, pre-authorized, local-base-evidenced, no-overwrite, no-merge, no-push, and external-thread work has concrete send confirmation plus readback. Target handoff is ready-for-merge-review; merge-ready additionally requires merge review. FSM does not implement push, CDP, refs-vault, canonical merge, artifact materialization, or external-thread mechanics.")
+    return 0
+
+def c_ready(a):
+    delivery=delivery_ok(a.delivery or a.materialize_manifest)
+    impl=review_ok(a.impl_review or a.review,"impl-review")
+    gate=local_gate_ok(a.local_gate)
+    report=readable(a.run_report)
+    r4m=delivery and impl and gate and report
+    merge=review_ok(a.merge_review,"merge-review")
+    mr=r4m and merge
+    ready=mr if a.target=="merge-ready" else r4m
+    state="merge-ready" if mr else "ready-for-merge-review" if r4m else "not-ready"
+    r={"kind":"ops-thread-fsm.ready.v1","ready":ready,"target":a.target,"stateKind":state,"readyForMergeReview":r4m,"mergeReady":mr,"dryRun":a.dry_run,"writes":False,"sends":False,"checks":{"delivery":delivery,"implReview":impl,"localGate":gate,"runReport":report,"mergeReview":merge}}
+    emit(r,a.json,"stateKind"); return 0 if ready else 1
+
+def c_status(a):
+    emit({"kind":"ops-thread-fsm.status.v1","canonicalLedger":"ops-agent-events events.jsonl","states":STATES,"controllerOnly":True,"forbiddenMechanics":["push","CDP","refs-vault","canonical merge","external-thread mechanics"]},a.json,None); return 0
+
+def main(argv):
+    p=argparse.ArgumentParser(); s=p.add_subparsers(dest="cmd",required=True)
+    q=s.add_parser("status"); q.add_argument("--events"); q.add_argument("--state"); q.add_argument("--json",action="store_true"); q.set_defaults(f=c_status)
+    q=s.add_parser("next"); q.add_argument("--state-kind",required=True,choices=STATES); q.add_argument("--phase",default="impl"); q.add_argument("--request-kind",default="work"); q.add_argument("--classification"); q.add_argument("--dry-run",action="store_true"); q.add_argument("--json",action="store_true"); q.set_defaults(f=c_next)
+    q=s.add_parser("classify-readback"); q.add_argument("--input",required=True); q.add_argument("--phase",required=True); q.add_argument("--request-kind",required=True); q.add_argument("--json",action="store_true"); q.set_defaults(f=c_class)
+    q=s.add_parser("evaluate-plan"); q.add_argument("--input",required=True); q.add_argument("--json",action="store_true"); q.set_defaults(f=c_plan)
+    q=s.add_parser("render-prompt"); q.add_argument("--phase",required=True); q.add_argument("--request-kind",required=True); q.add_argument("--dry-run",action="store_true"); q.set_defaults(f=c_prompt)
+    q=s.add_parser("check-ready"); q.add_argument("--delivery"); q.add_argument("--materialize-manifest"); q.add_argument("--impl-review"); q.add_argument("--review"); q.add_argument("--local-gate"); q.add_argument("--merge-review"); q.add_argument("--run-report"); q.add_argument("--target",choices=["ready-for-merge-review","merge-ready"],default="ready-for-merge-review"); q.add_argument("--dry-run",action="store_true"); q.add_argument("--json",action="store_true"); q.set_defaults(f=c_ready)
+    a=p.parse_args(argv); return a.f(a)
+if __name__ == "__main__": raise SystemExit(main(sys.argv[1:]))
