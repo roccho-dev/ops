@@ -1,0 +1,7 @@
+Offline contract check is implemented by nix flake check via `ops-tailnet-github-egress policy --json` plus static snippet guards.
+Live route checks remain operator-run and are not executed in offline package tests.
+
+Static guards required for reusable shell snippets:
+- github-route-check.sh retries DNS, deduplicates all resolved github.com IPv4 addresses, and checks every route with `ip route get`.
+- long-transfer push and restore snippets obtain their pinned HostName from `github-route-check.sh ... --print-selected-ip`.
+- snippets must not regress to `awk '{print $1; exit}'` first-IP-only route checks.

@@ -39,6 +39,20 @@
             exec ${pkgs.python3}/bin/python3 ${./packages/ops-thread-fsm/bin/ops-thread-fsm} "$@"
           '';
         };
+        ops-tailnet-github-egress = pkgs.writeShellApplication {
+          name = "ops-tailnet-github-egress";
+          runtimeInputs = [ pkgs.git pkgs.glibc.bin pkgs.iproute2 pkgs.openssh pkgs.procps pkgs.python3 pkgs.sudo pkgs.tailscale ];
+          text = ''
+            exec ${pkgs.python3}/bin/python3 ${./packages/ops-tailnet-github-egress/bin/ops-tailnet-github-egress.py} "$@"
+          '';
+        };
+        ops-refs-vault = pkgs.writeShellApplication {
+          name = "ops-refs-vault";
+          runtimeInputs = [ pkgs.git pkgs.python3 ops-tailnet-github-egress ];
+          text = ''
+            exec ${pkgs.python3}/bin/python3 ${./packages/ops-refs-vault/bin/ops-refs-vault.py} "$@"
+          '';
+        };
         ops-bootstrap = pkgs.runCommand "ops-bootstrap" { } ''
           mkdir -p $out/share/ops
           cat > $out/share/ops/README <<'EOF'
@@ -94,6 +108,27 @@
           grep -q '"writes": false' "$out/next.json"
           grep -q 'sleep 900' "$out/next.json"
           touch "$out/done"
+        '';
+        ops-tailnet-github-egress = pkgs.runCommand "ops-tailnet-github-egress-check" {
+          nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-tailnet-github-egress pkgs.gnugrep ];
+        } ''
+          mkdir -p "$out"
+          ops-tailnet-github-egress policy --json > "$out/policy.json"
+          grep -q '"connectorTag": "tag:github"' "$out/policy.json"
+          grep -q 'route-gated local git push' "$out/policy.json"
+          grep -q 'tcp_mtu_probing' "$out/policy.json"
+          grep -q 'all resolved github.com IPv4' ${./packages/ops-tailnet-github-egress/tests/offline-contract.txt}
+          grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-route-check.sh}
+          grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-push-local-app-connector-long.sh}
+          grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-restore-ref-app-connector-long.sh}
+          ! grep -R "print \$1; exit" ${./packages/ops-tailnet-github-egress/snippets}
+        '';
+        ops-refs-vault = pkgs.runCommand "ops-refs-vault-check" {
+          nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-refs-vault pkgs.gnugrep ];
+        } ''
+          mkdir -p "$out"
+          ops-refs-vault smoke-local > "$out/report.json"
+          grep -q '"ok": true' "$out/report.json"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README

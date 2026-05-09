@@ -13,3 +13,9 @@
 - `impl-review`
 - `merge-review`
 - `merge-ready`
+- `ops-tailnet-github-egress`
+- `ops-refs-vault`
+- route-gated local push
+- long-transfer
+- github.com
+- tag:github

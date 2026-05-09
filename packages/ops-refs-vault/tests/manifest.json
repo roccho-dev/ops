@@ -1,0 +1,15 @@
+{
+  "targetForgeRepo": {
+    "sshUrl": "/tmp/ops-refs-vault-test/refs.git"
+  },
+  "repos": [
+    {
+      "repoId": "alpha",
+      "localPath": "src/alpha"
+    },
+    {
+      "repoId": "beta",
+      "localPath": "nested/beta"
+    }
+  ]
+}
