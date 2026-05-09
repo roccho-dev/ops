@@ -22,6 +22,7 @@ REQUIRED_PATHS = [
     "specs/packages/ops-project-source-sync/default.nix",
     "specs/packages/ops-thread-fsm/default.nix",
     "ops/flake.nix",
+    "ops/packages/ops-thread-fsm/default.nix",
     "ops/packages/ops-thread-fsm/bin/ops-thread-fsm",
     "cdp-ops-poc",
 ]
@@ -53,7 +54,13 @@ REQUIRED_AGENTS_TOKENS = [
 REQUIRED_FILE_TOKENS = [
     {
         "relPath": "ops/flake.nix",
-        "tokens": ["ops-thread-fsm", "ops-thread-fsm-check"],
+        "tokens": [
+            "ops-thread-fsm",
+            "ops-thread-fsm-check",
+            "writeShellApplication",
+            "runCommand \"ops-thread-fsm-check\"",
+            "self.packages.${pkgs.stdenv.hostPlatform.system}.ops-thread-fsm",
+        ],
     },
 ]
 

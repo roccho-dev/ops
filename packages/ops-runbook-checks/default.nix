@@ -7,7 +7,7 @@ builtins.fromJSON ''
   "primaryTarget": "packages/ops-runbook-checks",
   "requiredOutputs": "packages.<system>.ops-runbook-checks",
   "requiredChecks": "ops-runbook-checks.sample-root",
-  "responsibility": "Check minimum runbook paths, ops-thread-fsm paths, package/check wiring, and AGENTS.md navigation tokens so future gen0 can recover without memory.",
+  "responsibility": "Check minimum runbook paths, ops-thread-fsm paths including default.nix/bin, package/check wiring, and AGENTS.md navigation tokens so future gen0 can recover without memory.",
   "forbiddenResponsibility": "Does not duplicate long operational knowledge in AGENTS.md and does not promote raw evidence automatically."
 }
 ''

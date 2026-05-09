@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import argparse,json,pathlib,sys
-ST="init source-packed request-sent sleeping-900 readback output-materialized delivery-verified impl-review-pass merge-local-gate-pass merge-review-pass merge-ready".split();OUT=["BEGIN_B64_FILE","diff --git","RUN_REPORT","MATERIALIZE_MANIFEST","file tree","patch"];DONE=["できた","done","complete","completed"];REJ=["review-reject","reject","差し戻し","fail","failed"];PAS=["review-pass","pass","passed","合格"];LGF=["local-gate-fail","local gate fail","test fail","tests failed"];LGP=["local-gate-pass","local gate pass","tests passed"]
+import argparse,json,pathlib,re,sys
+ST="init source-packed request-sent sleeping-900 readback output-materialized delivery-verified impl-review impl-review-pass merge-local-gate-pass merge-review merge-review-pass merge-ready".split();OUT=["BEGIN_B64_FILE","diff --git","RUN_REPORT","MATERIALIZE_MANIFEST","file tree","patch"];DONE=["できた","done","complete","completed"];REJ=["review-reject","reject","差し戻し","fail","failed"];LGF=["local-gate-fail","local gate fail","test fail","tests failed"];LGP=["local-gate-pass","local gate pass","tests passed"]
 def load(p):
  s=pathlib.Path(p).read_text(encoding="utf-8") if p else ""
  try:return json.loads(s)
@@ -12,33 +12,59 @@ def streaming(x):
  return (any((str(k).replace("_","").lower()=="isstreaming" and v is True) or streaming(v) for k,v in x.items()) if isinstance(x,dict) else (any(streaming(i) for i in x) if isinstance(x,list) else False))
 def hit(s,t):
  l=s.lower();return [x for x in t if x.lower() in l]
+def exact(s,t):return re.search(r"(?<![A-Za-z0-9_-])"+re.escape(t.lower())+r"(?![A-Za-z0-9_-])",s.lower()) is not None
+def neg(s,t):
+ l=s.lower(); return any(x in l for x in ["does not pass","doesn't pass","not pass","not passed","no pass",f"not {t}",f"no {t}",f"does not {t}"])
 def row(c,st,rt,why,nxt,act,e):return {"kind":"ops-thread-fsm.classification.v1","classification":c,"isStreaming":st,"retry":rt,"retryReason":why,"nextStateKind":nxt,"nextAction":act,"evidence":e}
-def review_class(rk, suffix):
- return f"{rk}-{suffix}" if rk in ("impl-review","merge-review") else f"review-{suffix}"
+def review_class(rk,suffix): return f"{rk}-{suffix}" if rk in ("impl-review","merge-review") else f"review-{suffix}"
 def classify(x,ph,rk):
- s=text(x)
+ s=text(x); l=s.lower()
  if streaming(x):return row("streaming",True,False,None,"sleeping-900","sleep 900; then CDP readback via ops-cdp-core",["isStreaming:true"])
  e=hit(s,LGF)
  if e:return row("local-gate-fail",False,True,"local gate failed","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",e)
- if rk in ("review","impl-review","merge-review"):
-  e=hit(s,REJ)
-  if e:return row(review_class(rk,"reject"),False,True,f"{rk} rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",e)
-  e=hit(s,PAS)
-  if e:return row(review_class(rk,"pass"),False,False,None,review_class(rk,"pass"),"advance to next gate",e)
-  return row(f"{rk}-pending",False,True,f"no explicit {rk} pass/reject","request-sent","ask explicit review result; sleep 900",[])
+ if rk in ("impl-review","merge-review"):
+  pt=f"{rk}-pass"; rt=f"{rk}-reject"
+  if exact(s,rt) or hit(s,REJ):return row(f"{rk}-reject",False,True,f"{rk} rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",[rt] if exact(s,rt) else hit(s,REJ))
+  if exact(s,pt) and not neg(s,pt):return row(f"{rk}-pass",False,False,None,f"{rk}-pass","advance to next gate",[pt])
+  return row(f"{rk}-pending",False,True,f"no explicit {pt}/{rt}; generic review-pass is insufficient","request-sent","ask explicit gate-specific review result; sleep 900",hit(s,["review-pass","pass","合格"]))
+ if rk=="review":
+  if hit(s,REJ):return row("review-reject",False,True,"review rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",hit(s,REJ))
+  if exact(s,"review-pass") and not neg(s,"review-pass"):return row("review-pass",False,False,None,"review-pass","advance to next gate",["review-pass"])
+  return row("review-pending",False,True,"no explicit review-pass/reject","request-sent","ask explicit review result; sleep 900",[])
  e=hit(s,OUT)
- return row("output-candidate",False,False,None,"output-materialized","materialize via ops-artifact-materialize; then review gate",e) if e else row("output-missing",False,True,"no materializable patch/file tree/artifact/RUN_REPORT","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",hit(s,DONE))
+ return row("output-candidate",False,False,None,"output-materialized","materialize via ops-artifact-materialize; then delivery-verified gate",e) if e else row("output-missing",False,True,"no materializable patch/file tree/artifact/RUN_REPORT","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",hit(s,DONE))
 def jp(x,j=True):print(json.dumps(x,ensure_ascii=False,indent=2) if j else x)
 def c_class(a):
  r=classify(load(a.input),a.phase,a.request_kind); jp(r,a.json) if a.json else print(r["classification"]); return 0 if r["classification"] in ("output-candidate","review-pass","impl-review-pass","merge-review-pass") else 1
 def c_next(a):
- m={"request-sent":"sleep 900; then CDP readback via ops-cdp-core","sleeping-900":"CDP readback via ops-cdp-core","output-materialized":"verify delivery manifest and RUN_REPORT readable","delivery-verified":"send impl-review request","impl-review-pass":"apply to merge worktree and run local gates","merge-local-gate-pass":"send merge-review request","merge-review-pass":"check-ready: delivery + impl-review + local gate + merge-review + RUN_REPORT","merge-ready":"complete"}; r={"kind":"ops-thread-fsm.next.v1","stateKind":a.state_kind,"phase":a.phase,"requestKind":a.request_kind,"classification":a.classification,"dryRun":a.dry_run,"writes":False,"sends":False,"nextAction":m.get(a.state_kind,"render/send/classify; fail closed if unclear")}; jp(r,a.json) if a.json else print(r["nextAction"]); return 0
+ m={"request-sent":"sleep 900; then CDP readback via ops-cdp-core","sleeping-900":"CDP readback via ops-cdp-core","output-materialized":"verify delivery manifest bytes/sha/fileCount and RUN_REPORT readable","delivery-verified":"send impl-review request","impl-review":"wait for explicit impl-review-pass or impl-review-reject","impl-review-pass":"apply to merge worktree and run local gates","merge-local-gate-pass":"send merge-review request","merge-review":"wait for explicit merge-review-pass or merge-review-reject","merge-review-pass":"check-ready: delivery + impl-review + local gate + merge-review + RUN_REPORT","merge-ready":"complete"}; r={"kind":"ops-thread-fsm.next.v1","stateKind":a.state_kind,"phase":a.phase,"requestKind":a.request_kind,"classification":a.classification,"dryRun":a.dry_run,"writes":False,"sends":False,"nextAction":m.get(a.state_kind,"render/send/classify; fail closed if unclear")}; jp(r,a.json) if a.json else print(r["nextAction"]); return 0
 def c_prompt(a):
- print("Return materializable patch/file tree/artifact plus RUN_REPORT. Use BEGIN_B64_FILE. Host uses ops-artifact-materialize, delivery-verified gate, impl-review, ops-runbook-checks local gate, and merge-review. After send confirm success only; no heartbeat/reminder/Codex app automation; sleep 900; CDP readback via ops-cdp-core. isStreaming:true and ChatGPT 'できた' are not complete. merge-ready requires delivery + impl-review + local gate + merge-review + RUN_REPORT readable."); return 0
-def okj(p):
- x=load(p) if p and pathlib.Path(p).exists() else None; return isinstance(x,dict) and x.get("ok") is True and int(x.get("count",1))>0
+ print("Return materializable patch/file tree/artifact plus RUN_REPORT. Use BEGIN_B64_FILE. Host uses ops-artifact-materialize, delivery-verified gate, impl-review, ops-runbook-checks local gate, and merge-review. Review gates require explicit impl-review-pass or merge-review-pass tokens; generic review-pass/合格 is insufficient. After send confirm success only; no heartbeat/reminder/Codex app automation; sleep 900; CDP readback via ops-cdp-core. isStreaming:true and ChatGPT 'できた' are not complete. merge-ready requires delivery + impl-review + local gate + merge-review + RUN_REPORT readable."); return 0
+def intv(x):
+ try:return int(x)
+ except Exception:return None
+def hex64(x):return isinstance(x,str) and re.fullmatch(r"[0-9a-fA-F]{64}",x or "") is not None
+def delivery_ok(p):
+ if not p or not pathlib.Path(p).exists(): return False
+ x=load(p)
+ if not isinstance(x,dict) or x.get("ok") is not True: return False
+ c=intv(x.get("count"))
+ rows=x.get("rows")
+ if c is None or c<=0 or not isinstance(rows,list) or len(rows)!=c: return False
+ seen=[]
+ for r in rows:
+  if not isinstance(r,dict) or r.get("ok") is not True: return False
+  if not isinstance(r.get("path"),str) or not r.get("path").strip(): return False
+  b=intv(r.get("bytes")); be=intv(r.get("bytesExpected",r.get("sizeExpected")))
+  if b is None or be is None or b!=be or b<=0: return False
+  sh=str(r.get("sha256","")).lower(); se=str(r.get("sha256Expected","")).lower()
+  if not (hex64(sh) and hex64(se) and sh==se): return False
+  fi=intv(r.get("fileIndex")); fc=intv(r.get("fileCount"))
+  if fi is None or fc is None or fc!=c: return False
+  seen.append(fi)
+ return sorted(seen)==list(range(1,c+1))
 def c_ready(a):
- delivery=okj(a.delivery or a.materialize_manifest); impl=classify(load(a.impl_review or a.review) if (a.impl_review or a.review) and pathlib.Path(a.impl_review or a.review).exists() else {},"impl","impl-review")["classification"]=="impl-review-pass"; merge=classify(load(a.merge_review) if a.merge_review and pathlib.Path(a.merge_review).exists() else {},"merge","merge-review")["classification"]=="merge-review-pass"; lg=load(a.local_gate) if a.local_gate and pathlib.Path(a.local_gate).exists() else None; lgt=text(lg); lgok=(isinstance(lg,dict) and lg.get("ok") is True) or (hit(lgt,LGP) and not hit(lgt,LGF)); rr=bool(a.run_report and pathlib.Path(a.run_report).exists() and pathlib.Path(a.run_report).read_text(encoding="utf-8").strip()); ch={"delivery":delivery,"implReview":impl,"localGate":lgok,"mergeReview":merge,"runReport":rr}; ready=all(ch.values()); jp({"kind":"ops-thread-fsm.ready.v1","ready":ready,"stateKind":"merge-ready" if ready else "not-ready","dryRun":a.dry_run,"writes":False,"sends":False,"checks":ch},a.json); return 0 if ready else 1
+ delivery=delivery_ok(a.delivery or a.materialize_manifest); impl=classify(load(a.impl_review or a.review) if (a.impl_review or a.review) and pathlib.Path(a.impl_review or a.review).exists() else {},"impl","impl-review")["classification"]=="impl-review-pass"; merge=classify(load(a.merge_review) if a.merge_review and pathlib.Path(a.merge_review).exists() else {},"merge","merge-review")["classification"]=="merge-review-pass"; lg=load(a.local_gate) if a.local_gate and pathlib.Path(a.local_gate).exists() else None; lgt=text(lg); lgok=(isinstance(lg,dict) and lg.get("ok") is True) or (hit(lgt,LGP) and not hit(lgt,LGF)); rr=bool(a.run_report and pathlib.Path(a.run_report).exists() and pathlib.Path(a.run_report).read_text(encoding="utf-8").strip()); ch={"delivery":delivery,"implReview":impl,"localGate":lgok,"mergeReview":merge,"runReport":rr}; ready=all(ch.values()); jp({"kind":"ops-thread-fsm.ready.v1","ready":ready,"stateKind":"merge-ready" if ready else "not-ready","dryRun":a.dry_run,"writes":False,"sends":False,"checks":ch},a.json); return 0 if ready else 1
 def c_status(a):jp({"kind":"ops-thread-fsm.status.v1","canonicalLedger":"ops-agent-events events.jsonl"},a.json);return 0
 def main(v):
  p=argparse.ArgumentParser();s=p.add_subparsers(dest="c",required=True)
