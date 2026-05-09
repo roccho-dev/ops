@@ -15,6 +15,14 @@ def hit(s,t):
 def exact(s,t):return re.search(r"(?<![A-Za-z0-9_-])"+re.escape(t.lower())+r"(?![A-Za-z0-9_-])",s.lower()) is not None
 def neg(s,t):
  l=s.lower(); return any(x in l for x in ["does not pass","doesn't pass","not pass","not passed","no pass",f"not {t}",f"no {t}",f"does not {t}"])
+def first_non_empty_line(s):
+ for line in s.splitlines():
+  line=line.strip()
+  if line:return line
+ return ""
+def structured_verdict(line,token):
+ low=line.casefold(); tok=token.casefold()
+ return low in (tok,f"verdict: {tok}",f"verdict={tok}",f"status: {tok}",f"status={tok}",f"result: {tok}",f"result={tok}")
 def row(c,st,rt,why,nxt,act,e):return {"kind":"ops-thread-fsm.classification.v1","classification":c,"isStreaming":st,"retry":rt,"retryReason":why,"nextStateKind":nxt,"nextAction":act,"evidence":e}
 def review_class(rk,suffix): return f"{rk}-{suffix}" if rk in ("impl-review","merge-review") else f"review-{suffix}"
 def classify(x,ph,rk):
@@ -23,10 +31,10 @@ def classify(x,ph,rk):
  e=hit(s,LGF)
  if e:return row("local-gate-fail",False,True,"local gate failed","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",e)
  if rk in ("impl-review","merge-review"):
-  pt=f"{rk}-pass"; rt=f"{rk}-reject"
-  if exact(s,rt) or hit(s,REJ):return row(f"{rk}-reject",False,True,f"{rk} rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",[rt] if exact(s,rt) else hit(s,REJ))
-  if exact(s,pt) and not neg(s,pt):return row(f"{rk}-pass",False,False,None,f"{rk}-pass","advance to next gate",[pt])
-  return row(f"{rk}-pending",False,True,f"no explicit {pt}/{rt}; generic review-pass is insufficient","request-sent","ask explicit gate-specific review result; sleep 900",hit(s,["review-pass","pass","合格"]))
+  pt=f"{rk}-pass"; rt=f"{rk}-reject"; line=first_non_empty_line(s)
+  if structured_verdict(line,rt) or hit(s,REJ):return row(f"{rk}-reject",False,True,f"{rk} rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",[line] if structured_verdict(line,rt) else hit(s,REJ))
+  if structured_verdict(line,pt):return row(f"{rk}-pass",False,False,None,f"{rk}-pass","advance to next gate",[line])
+  return row(f"{rk}-pending",False,True,f"no first-line {pt}/{rt} verdict; generic review-pass is insufficient","request-sent","ask explicit gate-specific review result; sleep 900",hit(s,["review-pass","pass","passed","合格",pt]))
  if rk=="review":
   if hit(s,REJ):return row("review-reject",False,True,"review rejected","request-sent",f"send {ph} retry via ops-cdp-core; sleep 900",hit(s,REJ))
   if exact(s,"review-pass") and not neg(s,"review-pass"):return row("review-pass",False,False,None,"review-pass","advance to next gate",["review-pass"])
@@ -39,7 +47,7 @@ def c_class(a):
 def c_next(a):
  m={"request-sent":"sleep 900; then CDP readback via ops-cdp-core","sleeping-900":"CDP readback via ops-cdp-core","output-materialized":"verify delivery manifest bytes/sha/fileCount and RUN_REPORT readable","delivery-verified":"send impl-review request","impl-review":"wait for explicit impl-review-pass or impl-review-reject","impl-review-pass":"apply to merge worktree and run local gates","merge-local-gate-pass":"send merge-review request","merge-review":"wait for explicit merge-review-pass or merge-review-reject","merge-review-pass":"check-ready: delivery + impl-review + local gate + merge-review + RUN_REPORT","merge-ready":"complete"}; r={"kind":"ops-thread-fsm.next.v1","stateKind":a.state_kind,"phase":a.phase,"requestKind":a.request_kind,"classification":a.classification,"dryRun":a.dry_run,"writes":False,"sends":False,"nextAction":m.get(a.state_kind,"render/send/classify; fail closed if unclear")}; jp(r,a.json) if a.json else print(r["nextAction"]); return 0
 def c_prompt(a):
- print("Return materializable patch/file tree/artifact plus RUN_REPORT. Use BEGIN_B64_FILE. Host uses ops-artifact-materialize, delivery-verified gate, impl-review, ops-runbook-checks local gate, and merge-review. Review gates require explicit impl-review-pass or merge-review-pass tokens; generic review-pass/合格 is insufficient. After send confirm success only; no heartbeat/reminder/Codex app automation; sleep 900; CDP readback via ops-cdp-core. isStreaming:true and ChatGPT 'できた' are not complete. merge-ready requires delivery + impl-review + local gate + merge-review + RUN_REPORT readable."); return 0
+ print("Return materializable patch/file tree/artifact plus RUN_REPORT. Use BEGIN_B64_FILE. Host uses ops-artifact-materialize, delivery-verified gate, impl-review, ops-runbook-checks local gate, and merge-review. Review gates require first-line gate-specific verdicts: impl-review-pass or merge-review-pass; generic review-pass/合格 is insufficient. After send confirm success only; no heartbeat/reminder/Codex app automation; sleep 900; CDP readback via ops-cdp-core. isStreaming:true and ChatGPT 'できた' are not complete. merge-ready requires delivery + impl-review + local gate + merge-review + RUN_REPORT readable."); return 0
 def intv(x):
  try:return int(x)
  except Exception:return None
