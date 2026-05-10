@@ -1,55 +1,39 @@
 #!/usr/bin/env python3
-import sys,json,pathlib
-A=sys.argv[1:];C=A[0] if A else ''
-def v(k,d=None):return A[A.index(k)+1] if k in A and A.index(k)+1<len(A) else d
-def J(x):print(json.dumps(x))
-def L(p):
- t=pathlib.Path(p).read_text() if p else ''
- try:return json.loads(t)
- except Exception:return t
-def ok(d,k):return isinstance(d,dict) and (d.get(k) is True or str(d.get(k,'')).lower() in 'true yes ok pass valid 1'.split())
-def ev(d,k):return isinstance(d,dict) and isinstance(d.get(k),str) and d[k].strip()
-def P(s):
- p={x:False for x in 'createWorktree implement returnArtifact sendReview readyForMergeReview mergeReady canonicalMerge push overwrite'.split()}
- if s=='allowed-to-implement':p['implement']=True
- if s=='ready-for-merge-review':p['readyForMergeReview']=True
- if s=='merge-ready':p['mergeReady']=True
- return p
-def R(c,n,e=[],a=None):
- r={'classification':c,'nextStateKind':n,'evidence':e,'permissions':P(n),'writes':False,'sends':False,'nextAction':'sleep 900; then delegated readback via ops-cdp-core' if n=='request-sent' else 'stop' if n in ['real-blocker','escalation-needed'] else 'continue'}
- if a is not None:r['autoContinue']=a
- return r
-def T(x):return x if isinstance(x,str) else ' '.join(map(T,x.values() if isinstance(x,dict) else x)) if isinstance(x,(dict,list)) else ''
-def Cc(x,k):
- s=T(x).lower();f=next((z.strip().lower() for z in T(x).splitlines() if z.strip()),'')
- if isinstance(x,dict) and x.get('isStreaming') is True:return R('streaming','sleeping-900')
- if k in ['impl-review','merge-review']:
-  good=k+'-pass'
-  if f in [good,'verdict: '+good,'verdict='+good]:return R(good,good)
-  if 'reject' in s or 'fail' in s:return R(k+'-reject','request-sent')
-  return R(k+'-pending','request-sent')
- return R('output-candidate','output-materialized') if 'begin_b64_file' in s or 'run_report' in s else R('output-missing','request-sent')
-def Pl(p):
- p=p if isinstance(p,dict) else {};c=str(p.get('blockerClaim','')).lower()
- if c and ok(p,'readbackDisprovesBlocker'):return R('false-blocker','accepted-plan',[c],False)
- if c and ok(p,'blockerEvidence'):return R('real-blocker','real-blocker',[c],False)
- bad=[]
- if p.get('noMerge') is False or ok(p,'mergeRequested'):bad+=['merge-scope']
- if p.get('noPush') is False or ok(p,'pushRequested'):bad+=['push-scope']
- if p.get('noOverwrite') is False or ok(p,'overwriteRequested'):bad+=['overwrite-scope']
- if bad:return R('escalation-needed','escalation-needed',bad,False)
- req='planComplete localBaseEvidenceValid successConditionsPresent failureConditionsPresent gatesPresent reportableEvidencePresent worktreeBranchAbsent noMerge noPush noOverwrite'.split();miss=[k for k in req if not ok(p,k)]
- if ok(p,'externalThreadWork') and not(ev(p,'sendConfirmationEvidence') and ev(p,'readbackEvidence')):miss+=['externalThreadConcreteSendConfirmationAndReadback']
- if miss:return R('insufficient-plan','insufficient-plan',miss,False)
- if not ok(p,'preAuthorized'):return R('accepted-plan','state-requiring-user-gen0-agreement',['preAuthorized'],False)
- return R('accepted-plan','state-allowed-to-proceed-without-extra-user-agreement',['safe'],True)
-def M(p):
- m=L(p);rs=m.get('rows',[]) if isinstance(m,dict) else []
- return isinstance(m,dict) and m.get('ok') is True and m.get('count')==len(rs)>0 and all(r.get('ok') is True and r.get('path') and r.get('bytes')==r.get('bytesExpected') and r.get('sha256')==r.get('sha256Expected') for r in rs)
-if C=='next':s=v('--state-kind');J({'stateKind':s,'writes':False,'sends':False,'permissions':P(s),'nextAction':'sleep 900; then delegated readback via ops-cdp-core' if s=='request-sent' else 'continue'});sys.exit()
-if C=='status':J({'states':'request-sent real-blocker false-blocker insufficient-plan accepted-plan state-requiring-user-gen0-agreement state-allowed-to-proceed-without-extra-user-agreement allowed-to-implement ready-for-merge-review merge-ready escalation-needed'.split()});sys.exit()
-if C=='classify-readback':r=Cc(L(v('--input')),v('--request-kind'));J(r);sys.exit(0 if r['classification'] in ['output-candidate','impl-review-pass','merge-review-pass'] else 1)
-if C=='evaluate-plan':r=Pl(L(v('--input')));J(r);sys.exit(0 if r['classification'] in ['accepted-plan','false-blocker'] else 1)
-if C=='render-prompt':print('safe auto-continue requires no merge no push no overwrite concrete evidence; target ready-for-merge-review');sys.exit()
-if C=='check-ready':r=M(v('--delivery',v('--materialize-manifest'))) and Cc(L(v('--impl-review',v('--review'))),'impl-review')['classification']=='impl-review-pass' and v('--local-gate') and pathlib.Path(v('--local-gate')).exists() and v('--run-report') and pathlib.Path(v('--run-report')).read_text().strip();J({'ready':bool(r),'readyForMergeReview':bool(r),'mergeReady':False,'stateKind':'ready-for-merge-review' if r else 'not-ready','writes':False,'sends':False});sys.exit(0 if r else 1)
-sys.exit(2)
+"""CLI wrapper for the ops-thread-fsm controller package.
+
+The implementation lives under ../lib so the binary stays small enough for
+artifact transfer while remaining runnable through both:
+  python3 -S packages/ops-thread-fsm/bin/ops-thread-fsm ...
+  ops-thread-fsm ...
+"""
+from __future__ import annotations
+
+import pathlib
+import sys
+
+
+def _lib_dir() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[1] / "lib"
+
+
+def _main(argv: list[str]) -> int:
+    lib_dir = _lib_dir()
+    if str(lib_dir) not in sys.path:
+        sys.path.insert(0, str(lib_dir))
+
+    try:
+        from ops_thread_fsm.cli import main
+    except ModuleNotFoundError as exc:
+        sys.stderr.write(
+            "ops-thread-fsm: missing implementation module "
+            "ops_thread_fsm.cli under packages/ops-thread-fsm/lib\n"
+        )
+        sys.stderr.write(f"{exc}\n")
+        return 2
+
+    result = main(argv)
+    return int(result or 0)
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv[1:]))

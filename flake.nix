@@ -36,6 +36,7 @@
           name = "ops-thread-fsm";
           runtimeInputs = [ pkgs.python3 ];
           text = ''
+            export PYTHONPATH="${./packages/ops-thread-fsm/lib}''${PYTHONPATH:+:}''${PYTHONPATH:-}"
             exec ${pkgs.python3}/bin/python3 ${./packages/ops-thread-fsm/bin/ops-thread-fsm} "$@"
           '';
         };
