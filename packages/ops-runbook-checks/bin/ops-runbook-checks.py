@@ -51,8 +51,17 @@ REQUIRED_AGENTS_TOKENS = [
     "ops-thread-fsm",
     "delivery-verified",
     "impl-review",
+    "impl-review-pass",
+    "merge executor",
+    "merge-candidate-ready",
     "merge-review",
+    "merge-review-pass",
     "merge-ready",
+    "localizer",
+    "localized-local-gate-pass",
+    "remote-backup-verified",
+    "role-override",
+    "post-hoc-merge-review-required",
     "ops-tailnet-github-egress",
     "ops-refs-vault",
     "route-gated local push",
@@ -69,6 +78,8 @@ FORBIDDEN_AGENTS_TOKENS = [
     "specs-local-layout-restore-proof-20260508T010136Z",
     "refs-vault-real-repo-shelter-20260508T042439Z",
     "refs-vault-ux-restore-proof-20260508T041421Z",
+    "specs-merge",
+    "ops-merge",
 ]
 
 REQUIRED_FILE_TOKENS = [

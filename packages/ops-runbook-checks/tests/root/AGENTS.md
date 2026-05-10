@@ -11,8 +11,17 @@
 - `ops-thread-fsm`
 - `delivery-verified`
 - `impl-review`
+- `impl-review-pass`
+- `merge executor`
+- `merge-candidate-ready`
 - `merge-review`
+- `merge-review-pass`
 - `merge-ready`
+- `localizer`
+- `localized-local-gate-pass`
+- `remote-backup-verified`
+- `role-override`
+- `post-hoc-merge-review-required`
 - `ops-tailnet-github-egress`
 - `ops-refs-vault`
 - route-gated local push
