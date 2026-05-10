@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Validate the small ops runbook navigation surface.
+"""Check that a local ops runbook has the minimum navigation anchors.
 
-This checker is deliberately narrow.  It reports whether a fresh gen0 can find
-the reusable packages, FSM gates, and flake wiring.  It does not implement CDP,
-artifact materialization, push, merge, refs-vault, or thread-FSM behavior.
+This is a guardrail, not a documentation generator. It verifies that a fresh
+gen0 can start from AGENTS.md, find status, and discover the reusable ops/specs
+packages instead of depending on memory.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -13,116 +14,194 @@ import pathlib
 import sys
 from typing import Any
 
-PACKAGE_ANCHORS = [
-    "ops-thread-fsm",
-    "ops-runbook-checks",
-    "ops-artifact-materialize",
-    "ops-tailnet-github-egress",
-    "ops-refs-vault",
+
+REQUIRED_PATHS = [
+    "AGENTS.md",
+    "specs/packages/ops-agent-events/default.nix",
+    "specs/packages/ops-cdp-core/default.nix",
+    "specs/packages/ops-project-source-sync/default.nix",
+    "specs/packages/ops-thread-fsm/default.nix",
+    "ops/flake.nix",
+    "ops/packages/ops-thread-fsm/default.nix",
+    "ops/packages/ops-thread-fsm/bin/ops-thread-fsm",
+    "ops/packages/ops-tailnet-github-egress",
+    "specs/packages/ops-tailnet-github-egress/default.nix",
+    "ops/packages/ops-refs-vault",
+    "specs/packages/ops-refs-vault/default.nix",
+    "ops/packages/ops-refs-vault/docs/knowledge-map.md",
+    "cdp-ops-poc",
 ]
-FSM_TOKENS = [
+
+OPTIONAL_PACKAGE_PATHS = [
+    "ops/packages/ops-artifact-materialize",
+    "ops/packages/ops-knowledge-intake",
+    "ops/packages/ops-runbook-checks",
+]
+
+REQUIRED_AGENTS_TOKENS = [
+    "0/9",
+    "CDP",
+    "Project Source",
+    "$HOME/.agents/events.jsonl",
+    "$HOME/.agents/status.md",
+    "ops-agent-events",
+    "ops-artifact-materialize",
+    "ops-knowledge-intake",
+    "ops-runbook-checks",
+    "ops-thread-fsm",
     "delivery-verified",
     "impl-review",
     "impl-review-pass",
     "merge executor",
     "merge-candidate-ready",
-    "ready-for-merge-review",
+    "merge-review",
+    "merge-review-pass",
+    "merge-ready",
     "localizer",
     "localized-local-gate-pass",
     "remote-backup-verified",
     "role-override",
     "post-hoc-merge-review-required",
-    "merge-review",
-    "merge-review-pass",
-    "merge-ready",
-    "plan-accepted",
-    "false-blocker",
-    "insufficient-plan",
-    "escalation-needed",
+    "ops-tailnet-github-egress",
+    "ops-refs-vault",
+    "route-gated local push",
+    "long-transfer",
+    "github.com",
+    "tag:github",
+    "status.md は生成物",
 ]
-ENTRYPOINT_TOKENS = ["AGENTS.md", "packages", "status.md", "events.jsonl"]
-FORBIDDEN_MECHANICS = ["BEGIN_B64_FILE", "MATERIALIZE_MANIFEST", "diff --git"]
 
-def read(root: pathlib.Path, rel: str) -> str:
+FORBIDDEN_AGENTS_TOKENS = [
+    "app-connector-push-test-20260507T191701Z",
+    "app-connector-mtu-probing-push-20260507T221847Z",
+    "single-remote-restore-proof-20260507T234133Z",
+    "specs-local-layout-restore-proof-20260508T010136Z",
+    "refs-vault-real-repo-shelter-20260508T042439Z",
+    "refs-vault-ux-restore-proof-20260508T041421Z",
+    "specs-merge",
+    "ops-merge",
+]
+
+REQUIRED_FILE_TOKENS = [
+    {
+        "relPath": "ops/flake.nix",
+        "tokens": [
+            "ops-thread-fsm",
+            "ops-thread-fsm-check",
+            "writeShellApplication",
+            "runCommand \"ops-thread-fsm-check\"",
+            "self.packages.${pkgs.stdenv.hostPlatform.system}.ops-thread-fsm",
+            "ops-tailnet-github-egress",
+            "ops-tailnet-github-egress-check",
+            "ops-refs-vault",
+            "ops-refs-vault-check",
+        ],
+    },
+]
+
+
+def check_path(root: pathlib.Path, rel: str, required: bool) -> dict[str, Any]:
     path = root / rel
-    return path.read_text(encoding="utf-8") if path.exists() else ""
+    return {
+        "relPath": rel,
+        "exists": path.exists(),
+        "required": required,
+        "kind": "directory" if path.is_dir() else "file" if path.is_file() else "missing",
+    }
 
-def token_rows(where: str, text: str, tokens: list[str]) -> list[dict[str, Any]]:
-    return [{"where": where, "token": token, "present": token in text, "required": True} for token in tokens]
 
-def path_rows(root: pathlib.Path) -> list[dict[str, Any]]:
-    rows = []
-    for rel in ["AGENTS.md", "ops/flake.nix"]:
+def check_agents(root: pathlib.Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    path = root / "AGENTS.md"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    required = [
+        {
+            "token": token,
+            "present": token in text,
+            "required": True,
+        }
+        for token in REQUIRED_AGENTS_TOKENS
+    ]
+    forbidden = [
+        {
+            "token": token,
+            "present": token in text,
+            "requiredAbsent": True,
+        }
+        for token in FORBIDDEN_AGENTS_TOKENS
+    ]
+    return required, forbidden
+
+
+def check_file_tokens(root: pathlib.Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for spec in REQUIRED_FILE_TOKENS:
+        rel = spec["relPath"]
         path = root / rel
-        rows.append({"relPath": rel, "exists": path.exists(), "required": True})
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        for token in spec["tokens"]:
+            rows.append(
+                {
+                    "relPath": rel,
+                    "token": token,
+                    "present": token in text,
+                    "required": True,
+                }
+            )
     return rows
 
-def agents_is_small_entrypoint(text: str) -> tuple[bool, list[str]]:
-    failures: list[str] = []
-    lines = [line for line in text.splitlines() if line.strip()]
-    if len(lines) > 80:
-        failures.append("AGENTS.md is too long for a small entrypoint")
-    for marker in FORBIDDEN_MECHANICS:
-        if marker in text:
-            failures.append(f"AGENTS.md appears to contain raw evidence/artifact marker: {marker}")
-    for token in ENTRYPOINT_TOKENS:
-        if token not in text:
-            failures.append(f"AGENTS.md missing entrypoint token: {token}")
-    return not failures, failures
-
-def flake_rows(text: str) -> list[dict[str, Any]]:
-    tokens = [
-        "ops-thread-fsm",
-        "ops-runbook-checks",
-        "ops-thread-fsm-check",
-        "ops-runbook-checks-check",
-        "writeShellApplication",
-        "runCommand",
-    ]
-    return token_rows("ops/flake.nix", text, tokens)
 
 def run(root: pathlib.Path) -> dict[str, Any]:
-    agents = read(root, "AGENTS.md")
-    flake = read(root, "ops/flake.nix")
-
-    rows = path_rows(root)
-    agent_tokens = token_rows("AGENTS.md", agents, PACKAGE_ANCHORS + FSM_TOKENS)
-    flake_tokens = flake_rows(flake)
-    small_ok, small_failures = agents_is_small_entrypoint(agents)
-
-    failures = [f"missing required path: {r['relPath']}" for r in rows if r["required"] and not r["exists"]]
-    failures.extend(f"{r['where']} missing required token: {r['token']}" for r in agent_tokens + flake_tokens if r["required"] and not r["present"])
-    failures.extend(small_failures)
-
-    explicit_review_ok = all(token in agents for token in ["impl-review-pass", "merge-review-pass"])
-    if "review-pass" in agents and not explicit_review_ok:
-        failures.append("generic review-pass is present without explicit gate pass tokens")
-
+    paths = [check_path(root, rel, True) for rel in REQUIRED_PATHS]
+    paths.extend(check_path(root, rel, False) for rel in OPTIONAL_PACKAGE_PATHS)
+    agents, forbidden_agents = check_agents(root)
+    file_tokens = check_file_tokens(root)
+    failures = [
+        f"missing required path: {row['relPath']}"
+        for row in paths
+        if row["required"] and not row["exists"]
+    ]
+    failures.extend(
+        f"AGENTS.md missing required token: {row['token']}"
+        for row in agents
+        if row["required"] and not row["present"]
+    )
+    failures.extend(
+        f"{row['relPath']} missing required token: {row['token']}"
+        for row in file_tokens
+        if row["required"] and not row["present"]
+    )
+    failures.extend(
+        f"AGENTS.md embeds raw proof token instead of remaining an entrypoint: {row['token']}"
+        for row in forbidden_agents
+        if row["present"]
+    )
     return {
-        "kind": "ops.runbookChecks.report.v2",
+        "kind": "ops.runbookChecks.report.v1",
         "root": str(root),
         "ok": not failures,
         "failures": failures,
-        "paths": rows,
-        "agentsSmallEntrypoint": small_ok,
-        "agentsTokens": agent_tokens,
-        "fileTokens": flake_tokens,
-        "forbiddenResponsibility": "navigation checks only; no CDP/materializer/push/merge/refs-vault/FSM implementation",
+        "paths": paths,
+        "agentsTokens": agents,
+        "forbiddenAgentsTokens": forbidden_agents,
+        "fileTokens": file_tokens,
     }
+
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="/home/nixos/repos")
-    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--root", default="/home/nixos/repos", help="repo parent root to check")
+    parser.add_argument("--json", action="store_true", help="print JSON report")
     args = parser.parse_args(argv)
+
     report = run(pathlib.Path(args.root))
     if args.json:
-        print(json.dumps(report, indent=2, ensure_ascii=False))
+        print(json.dumps(report, indent=2))
     else:
         print("ops-runbook-checks:", "pass" if report["ok"] else "fail")
         for failure in report["failures"]:
             print(f"- {failure}")
     return 0 if report["ok"] else 1
+
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
