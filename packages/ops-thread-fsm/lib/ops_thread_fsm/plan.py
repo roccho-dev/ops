@@ -1,110 +1,44 @@
-"""Plan classification helpers for the ops thread FSM controller."""
+"""Plan classification helpers for ops-thread-fsm.
 
-from __future__ import annotations
+The controller classifies supplied evidence only.  It does not perform CDP,
+pushes, refs-vault operations, artifact materialization, local gate execution,
+overwrite handling, or canonical merges.
+"""
 
-from dataclasses import asdict, is_dataclass
-from typing import Any, Iterable, Mapping, MutableMapping, Sequence
+from .state_model import (
+    FALSE_BLOCKER,
+    INSUFFICIENT_PLAN,
+    PLAN_ACCEPTED,
+    next_action_for,
+    permissions_for,
+)
 
-from .state_model import FALSE_BLOCKER, INSUFFICIENT_PLAN, PLAN_ACCEPTED, canonical_state_kind
-
-JsonMap = dict[str, Any]
-
-_REQUIRED_CONCRETE_EVIDENCE: dict[str, tuple[str, ...]] = {
-    "localBase": (
-        "localBaseEvidence",
-        "localBaseReadbackEvidence",
-        "localBaseContent",
-        "localBase",
-        "localBaseValue",
-        "localBaseSha",
-        "localBaseCommit",
-        "localBaseEvidenceValues",
-        "localBaseEvidenceValins",
-    ),
-    "base": (
-        "baseEvidence",
-        "baseReadbackEvidence",
-        "baseContent",
-        "base",
-        "baseRef",
-        "baseSha",
-        "baseCommit",
-    ),
-    "upstream": (
-        "upstreamEvidence",
-        "upstreamReadbackEvidence",
-        "upstreamContent",
-        "upstream",
-        "upstreamRef",
-        "upstreamHead",
-        "upstreamSha",
-        "upstreamCommit",
-    ),
-    "head": (
-        "headEvidence",
-        "headReadbackEvidence",
-        "headContent",
-        "head",
-        "headSha",
-        "headCommit",
-        "candidateHead",
-        "candidateHeadEvidence",
-    ),
-    "worktree": (
-        "worktreeEvidence",
-        "worktreeReadbackEvidence",
-        "worktreeContent",
-        "worktree",
-        "worktreePath",
-        "worktreeStatus",
-        "worktreeCleanEvidence",
-    ),
-    "branch": (
-        "branchEvidence",
-        "branchReadbackEvidence",
-        "branchContent",
-        "branch",
-        "branchName",
-        "candidateBranch",
-        "candidateBranchEvidence",
-    ),
-    "successConditions": (
-        "successConditionsEvidence",
-        "successConditionEvidence",
-        "successConditionsContent",
-        "successConditions",
-        "successCriteria",
-        "successCriteriaEvidence",
-    ),
-    "failureConditions": (
-        "failureConditionsEvidence",
-        "failureConditionEvidence",
-        "failureConditionsContent",
-        "failureConditions",
-        "failureCriteria",
-        "failureCriteriaEvidence",
-    ),
-    "gates": (
-        "gatesEvidence",
-        "gateEvidence",
-        "gatesContent",
-        "gates",
-        "requiredGates",
-        "requiredGatesEvidence",
-        "gateList",
-    ),
-    "reportableEvidence": (
-        "reportableEvidence",
-        "reportableEvidenceEvidence",
-        "reportableEvidenceContent",
-        "reportEvidence",
-        "responseEvidence",
-        "readbackResponseEvidence",
-        "externalThreadResponseEvidence",
-    ),
+UNSUPPORTED = ["not sent", "thread not created", "not in project", "cannot connect"]
+BOOLEAN_REQUIRED = [
+    ("planComplete",),
+    ("localBaseEvidenceValid", "localBaseEvidenceValinsPresent"),
+    ("successConditionsPresent",),
+    ("failureConditionsPresent",),
+    ("gatesPresent",),
+    ("reportableEvidencePresent",),
+    ("worktreeBranchAbsent",),
+    ("noMerge",),
+    ("noPush",),
+    ("noOverwrite",),
+]
+REQUIRED_CONCRETE = {
+    "localBase": ("localBaseEvidence", "localBaseReadbackEvidence", "localBaseContent", "localBase", "localBaseValue", "localBaseSha", "localBaseCommit", "localBaseEvidenceValues", "localBaseEvidenceValins"),
+    "base": ("baseEvidence", "baseReadbackEvidence", "baseContent", "base", "baseRef", "baseSha", "baseCommit"),
+    "upstream": ("upstreamEvidence", "upstreamReadbackEvidence", "upstreamContent", "upstream", "upstreamRef", "upstreamHead", "upstreamSha", "upstreamCommit"),
+    "head": ("headEvidence", "headReadbackEvidence", "headContent", "head", "headSha", "headCommit", "candidateHead", "candidateHeadEvidence"),
+    "worktree": ("worktreeEvidence", "worktreeReadbackEvidence", "worktreeContent", "worktree", "worktreePath", "worktreeStatus", "worktreeCleanEvidence"),
+    "branch": ("branchEvidence", "branchReadbackEvidence", "branchContent", "branch", "branchName", "candidateBranch", "candidateBranchEvidence"),
+    "successConditions": ("successConditionsEvidence", "successConditionEvidence", "successConditionsContent", "successConditions", "successCriteria", "successCriteriaEvidence"),
+    "failureConditions": ("failureConditionsEvidence", "failureConditionEvidence", "failureConditionsContent", "failureConditions", "failureCriteria", "failureCriteriaEvidence"),
+    "gates": ("gatesEvidence", "gateEvidence", "gatesContent", "gates", "requiredGates", "requiredGatesEvidence", "gateList"),
+    "reportableEvidence": ("reportableEvidence", "reportableEvidenceEvidence", "reportableEvidenceContent", "reportEvidence", "responseEvidence", "readbackResponseEvidence", "externalThreadResponseEvidence"),
 }
-
-_FALSE_BLOCKER_READBACK_FIELDS = (
+FALSE_BLOCKER_READBACK = (
     "readbackEvidence",
     "readbackContent",
     "readbackProof",
@@ -115,281 +49,162 @@ _FALSE_BLOCKER_READBACK_FIELDS = (
     "responseEvidence",
     "readbackResponseEvidence",
 )
-
-_BLOCKER_CLAIM_FIELDS = (
-    "blockerClaim",
-    "blocker",
-    "blockerEvidence",
-    "claimedBlocker",
-    "claim",
-)
-
-_TRUE_STRINGS = {"1", "true", "t", "yes", "y", "on", "present", "ok", "passed", "pass"}
-_FALSE_STRINGS = {"", "0", "false", "f", "no", "n", "off", "none", "null", "missing", "absent", "n/a"}
-_PLACEHOLDER_EVIDENCE_STRINGS = _TRUE_STRINGS | _FALSE_STRINGS | {"evidence", "provided", "available"}
-_CONTAINER_KEYS = (
-    "evidence",
-    "proof",
-    "proofs",
-    "facts",
-    "plan",
-    "thread",
-    "state",
-    "readback",
-    "metadata",
-    "context",
-)
+PLACEHOLDERS = {"", "true", "false", "yes", "no", "ok", "pass", "valid", "present", "1", "0", "provided", "available", "evidence", "none", "null", "missing", "absent"}
 
 
-def _mapping(value: Any) -> Mapping[str, Any]:
-    if isinstance(value, Mapping):
-        return value
-    if is_dataclass(value):
-        return asdict(value)
-    if hasattr(value, "__dict__"):
-        return vars(value)
-    return {}
+def truthy(v):
+    return v is True or (isinstance(v, str) and v.strip().lower() in {"true", "yes", "ok", "pass", "valid", "present", "1"})
 
 
-def _iter_mappings(value: Any, *, _seen: set[int] | None = None) -> Iterable[Mapping[str, Any]]:
-    if _seen is None:
-        _seen = set()
-    if id(value) in _seen:
-        return
-    _seen.add(id(value))
-    current = _mapping(value)
-    if not current:
-        return
-    yield current
-    for key in _CONTAINER_KEYS:
-        nested = current.get(key)
-        nested_mapping = _mapping(nested)
-        if nested_mapping:
-            yield from _iter_mappings(nested_mapping, _seen=_seen)
-    for nested in current.values():
-        if isinstance(nested, Mapping):
-            yield from _iter_mappings(nested, _seen=_seen)
-
-
-def _normalise_key(key: object) -> str:
-    return str(key).replace("_", "").replace("-", "").lower()
-
-
-def _lookup(payload: Any, names: Sequence[str]) -> tuple[str | None, Any]:
-    wanted = {_normalise_key(name): name for name in names}
-    for mapping in _iter_mappings(payload):
-        direct = {str(key): key for key in mapping.keys()}
-        for name in names:
-            if name in direct:
-                return name, mapping[direct[name]]
-        normalised = {_normalise_key(key): key for key in mapping.keys()}
-        for wanted_key, display_name in wanted.items():
-            if wanted_key in normalised:
-                return display_name, mapping[normalised[wanted_key]]
-    return None, None
-
-
-def _truthy(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
+def concrete(v):
+    if v is None or isinstance(v, bool):
         return False
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        token = value.strip().lower()
-        if token in _TRUE_STRINGS:
-            return True
-        if token in _FALSE_STRINGS:
-            return False
-        return bool(token)
-    return _has_concrete_evidence(value)
-
-
-def _has_concrete_evidence(value: Any) -> bool:
-    if value is None or isinstance(value, bool):
-        return False
-    if isinstance(value, (int, float)):
+    if isinstance(v, (int, float)):
         return True
-    if isinstance(value, str):
-        token = value.strip()
-        if not token:
-            return False
-        return token.lower() not in _PLACEHOLDER_EVIDENCE_STRINGS
-    if isinstance(value, Mapping):
-        return any(_has_concrete_evidence(item) for item in value.values())
-    if isinstance(value, (list, tuple, set, frozenset)):
-        return any(_has_concrete_evidence(item) for item in value)
+    if isinstance(v, str):
+        return bool(v.strip()) and v.strip().lower() not in PLACEHOLDERS
+    if isinstance(v, dict):
+        return any(concrete(x) for x in v.values())
+    if isinstance(v, (list, tuple, set, frozenset)):
+        return any(concrete(x) for x in v)
     return True
 
 
-def _first_concrete(payload: Any, names: Sequence[str]) -> tuple[str | None, Any]:
-    field, value = _lookup(payload, names)
-    if _has_concrete_evidence(value):
-        return field, value
+def flag(p, key):
+    return isinstance(p, dict) and truthy(p.get(key))
+
+
+def flag_any(p, keys):
+    return any(flag(p, key) for key in keys)
+
+
+def evidence(p, *keys):
+    return any(concrete(p.get(k)) for k in keys) if isinstance(p, dict) else False
+
+
+def first_evidence(p, keys):
+    if not isinstance(p, dict):
+        return None, None
+    for key in keys:
+        value = p.get(key)
+        if concrete(value):
+            return key, value
     return None, None
 
 
-def concrete_evidence(payload: Any) -> JsonMap:
-    """Return the concrete safe-auto-continue evidence found in *payload*."""
-
-    found: JsonMap = {}
-    for category, aliases in _REQUIRED_CONCRETE_EVIDENCE.items():
-        field, value = _first_concrete(payload, aliases)
-        if field is not None:
-            found[category] = {"field": field, "value": value}
+def concrete_evidence(p):
+    found = {}
+    for category, keys in REQUIRED_CONCRETE.items():
+        key, value = first_evidence(p, keys)
+        if key:
+            found[category] = {"field": key, "value": value}
     return found
 
 
-def missing_concrete_evidence(payload: Any) -> list[str]:
-    found = concrete_evidence(payload)
-    return [category for category in _REQUIRED_CONCRETE_EVIDENCE if category not in found]
+def missing_concrete(p):
+    found = concrete_evidence(p)
+    return [category for category in REQUIRED_CONCRETE if category not in found]
 
 
-def _payload_flag(payload: Any, name: str, default: bool = False) -> bool:
-    _, value = _lookup(payload, (name,))
-    if value is None:
-        return default
-    return _truthy(value)
-
-
-def _required_boolean_flags_present(payload: Any) -> bool:
-    """Preserve the previous safety gates while strengthening their evidence."""
-
-    required_true = (
-        "planComplete",
-        "localBaseEvidenceValinsPresent",
-        "failureConditionsPresent",
-        "gatesPresent",
-        "reportableEvidencePresent",
-        "worktreeBranchAbsent",
-        "noMerge",
-        "noPush",
-        "noOverwrite",
-    )
-    return all(_payload_flag(payload, name) for name in required_true)
-
-
-def row(
-    state_kind: object,
-    reason: str = "",
-    evidence: Any | None = None,
-    *,
-    autoContinue: bool = False,
-    missing: Sequence[str] | None = None,
-    **extra: Any,
-) -> JsonMap:
-    """Build a result row with canonical state/classification tokens."""
-
-    canonical = canonical_state_kind(state_kind)
-    result: JsonMap = {
-        "state": canonical,
-        "stateKind": canonical,
-        "classification": canonical,
-        "reason": reason,
-        "evidence": evidence if evidence is not None else {},
-        "autoContinue": bool(autoContinue),
+def row(kind, state, ev=None, retry=False, reason=None, auto=None, missing=None):
+    out = {
+        "kind": "ops-thread-fsm.classification.v1",
+        "classification": kind,
+        "stateKind": kind,
+        "nextStateKind": state,
+        "evidence": ev if ev is not None else [],
+        "retry": retry,
+        "retryReason": reason,
+        "permissions": permissions_for(state),
+        "writes": False,
+        "sends": False,
+        "nextAction": next_action_for(state),
     }
+    if auto is not None:
+        out["autoContinue"] = auto
     if missing:
-        result["missingEvidence"] = list(missing)
-    result.update(extra)
-    return result
+        out["missingEvidence"] = list(missing)
+    return out
 
 
-plan_row = row
-build_plan_row = row
+def destructive(p):
+    text = "\n".join(str(p.get(k, "")) for k in ("scope", "requestedActions", "text")).lower()
+    out = []
+    if p.get("noMerge") is False or flag(p, "mergeRequested") or flag(p, "canonicalMergeRequested") or ("merge" in text and "no merge" not in text):
+        out.append("merge-scope")
+    if p.get("noPush") is False or flag(p, "pushRequested") or ("push" in text and "no push" not in text):
+        out.append("push-scope")
+    if p.get("noOverwrite") is False or flag(p, "overwriteRequested") or ("overwrite" in text and "no overwrite" not in text):
+        out.append("overwrite-scope")
+    return out
 
 
-def _false_blocker_row(payload: Any) -> JsonMap | None:
-    _, disproves = _lookup(payload, ("readbackDisprovesBlocker",))
-    if not _truthy(disproves):
-        return None
+def external_requested(p):
+    n = p.get("externalThread") if isinstance(p.get("externalThread"), dict) else {}
+    keys = ("externalThreadWork", "externalThreadRequired", "externalThreadRequested", "work", "required", "requested")
+    return any(flag(x, k) for x in (p, n) for k in keys)
 
-    claim_field, claim = _first_concrete(payload, _BLOCKER_CLAIM_FIELDS)
-    readback_field, readback = _first_concrete(payload, _FALSE_BLOCKER_READBACK_FIELDS)
-    evidence: JsonMap = {}
-    if claim_field is not None:
-        evidence["blockerClaim"] = {"field": claim_field, "value": claim}
 
-    if readback_field is None:
+def external_confirmed(p):
+    n = p.get("externalThread") if isinstance(p.get("externalThread"), dict) else {}
+    send = evidence(p, "sendConfirmationEvidence", "sendConfirmationContent", "externalSendConfirmationEvidence") or evidence(n, "sendConfirmationEvidence", "sentEvidence")
+    readback = evidence(p, "readbackEvidence", "readbackContent", "externalReadbackEvidence") or evidence(n, "readbackEvidence", "readback")
+    response = evidence(p, "responseEvidence", "responseContent", "externalResponseEvidence") or evidence(n, "responseEvidence", "response")
+    return send and readback and response
+
+
+def evaluate_plan_value(value):
+    p = value if isinstance(value, dict) else {"text": str(value or "")}
+    claim = str(p.get("blockerClaim", p.get("claim", p.get("blocker", "")))).strip()
+    lower = claim.lower()
+
+    if claim and flag(p, "readbackDisprovesBlocker"):
+        readback_key, readback_value = first_evidence(p, FALSE_BLOCKER_READBACK)
+        if not readback_key:
+            return row(
+                INSUFFICIENT_PLAN,
+                INSUFFICIENT_PLAN,
+                {"blockerClaim": claim},
+                True,
+                "readbackDisprovesBlocker requires concrete readback evidence",
+                False,
+                ["readbackEvidence"],
+            )
         return row(
-            INSUFFICIENT_PLAN,
-            "readbackDisprovesBlocker requires concrete readback evidence before false-blocker can be emitted",
-            evidence,
-            missing=["readbackEvidence"],
+            FALSE_BLOCKER,
+            PLAN_ACCEPTED,
+            {
+                "blockerClaim": claim,
+                "readbackEvidence": {"field": readback_key, "value": readback_value},
+            },
+            False,
+            "readback evidence disproves blocker claim",
+            False,
         )
 
-    evidence["readbackEvidence"] = {"field": readback_field, "value": readback}
-    return row(
-        FALSE_BLOCKER,
-        "readback evidence disproves the blocker claim",
-        evidence,
-        autoContinue=False,
-    )
+    if claim and flag(p, "blockerEvidence"):
+        return row("real-blocker", "real-blocker", [claim], True, "evidence-backed blocker", False)
+    if claim and any(token in lower for token in UNSUPPORTED):
+        return row(INSUFFICIENT_PLAN, INSUFFICIENT_PLAN, [claim], True, "unsupported blocker claim lacks evidence", False)
 
+    bad = destructive(p)
+    if bad:
+        return row("escalation-needed", "escalation-needed", bad, False, "merge/push/overwrite scope requires human judgment", False)
 
-def _accepted_plan_row(payload: Any) -> JsonMap | None:
-    if not _required_boolean_flags_present(payload):
-        return None
-
-    missing = missing_concrete_evidence(payload)
+    missing = [keys[0] for keys in BOOLEAN_REQUIRED if not flag_any(p, keys)]
+    missing.extend(missing_concrete(p))
+    if external_requested(p) and not external_confirmed(p):
+        missing.append("externalThreadConcreteSendConfirmationReadbackAndResponse")
     if missing:
-        return row(
-            INSUFFICIENT_PLAN,
-            "safe auto-continue requires concrete readback/evidence for every required plan field",
-            concrete_evidence(payload),
-            missing=missing,
-        )
+        return row(INSUFFICIENT_PLAN, INSUFFICIENT_PLAN, concrete_evidence(p) or missing, True, "missing safe-plan evidence", False, missing)
 
-    return row(
-        PLAN_ACCEPTED,
-        "safe auto-continue plan accepted with concrete controller evidence",
-        concrete_evidence(payload),
-        autoContinue=True,
-    )
+    ev = concrete_evidence(p)
+    if not flag(p, "preAuthorized"):
+        return row(PLAN_ACCEPTED, "state-requiring-user-gen0-agreement", ev or ["preAuthorized"], False, "safe plan lacks pre-authorization", False)
+    return row(PLAN_ACCEPTED, "state-allowed-to-proceed-without-extra-user-agreement", ev, False, None, True)
 
 
-def classify_plan(payload: Any) -> JsonMap:
-    """Classify a candidate plan payload.
-
-    The controller never performs CDP, pushes, merges, local gate execution,
-    overwrite handling, or canonical merge operations.  It only classifies the
-    supplied evidence and emits a canonical state row.
-    """
-
-    false_blocker = _false_blocker_row(payload)
-    if false_blocker is not None:
-        return false_blocker
-
-    accepted = _accepted_plan_row(payload)
-    if accepted is not None:
-        return accepted
-
-    if _payload_flag(payload, "planComplete"):
-        missing = missing_concrete_evidence(payload)
-        return row(
-            INSUFFICIENT_PLAN,
-            "plan is complete, but safe auto-continue evidence or safety flags are incomplete",
-            concrete_evidence(payload),
-            missing=missing or ["safeAutoContinueFlags"],
-        )
-
-    return row(
-        INSUFFICIENT_PLAN,
-        "insufficient evidence to accept the plan",
-        concrete_evidence(payload),
-        missing=missing_concrete_evidence(payload),
-    )
-
-
-classify = classify_plan
-evaluate_plan = classify_plan
-evaluate = classify_plan
-classify_safe_continue = classify_plan
-
-
-def safe_auto_continue_allowed(payload: Any) -> bool:
-    return classify_plan(payload).get("classification") == PLAN_ACCEPTED
-
-
-safe_auto_continue = safe_auto_continue_allowed
+classify_plan = evaluate_plan_value
+evaluate_plan = evaluate_plan_value
+classify = evaluate_plan_value
+safe_auto_continue_allowed = lambda payload: evaluate_plan_value(payload).get("classification") == PLAN_ACCEPTED and evaluate_plan_value(payload).get("autoContinue") is True

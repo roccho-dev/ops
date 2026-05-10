@@ -1,12 +1,18 @@
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "lib"))
+
 from ops_thread_fsm.core import classify as core_classify
-from ops_thread_fsm.plan import classify_plan
+from ops_thread_fsm.plan import evaluate_plan_value
 from ops_thread_fsm.state_model import PLAN_ACCEPTED, canonical_state_kind
 
 
 def _complete_payload(**overrides):
     payload = {
         "planComplete": True,
-        "localBaseEvidenceValinsPresent": True,
+        "localBaseEvidenceValid": True,
+        "successConditionsPresent": True,
         "failureConditionsPresent": True,
         "gatesPresent": True,
         "reportableEvidencePresent": True,
@@ -14,6 +20,7 @@ def _complete_payload(**overrides):
         "noMerge": True,
         "noPush": True,
         "noOverwrite": True,
+        "preAuthorized": True,
         "localBaseEvidence": "local base abc123 from git merge-base readback",
         "baseEvidence": "base origin/main abc123",
         "upstreamEvidence": "upstream origin/main def456",
@@ -38,13 +45,13 @@ def test_plan_accepted_is_canonical_for_legacy_state_kind_alias():
 
 def test_safe_auto_continue_requires_concrete_evidence_not_only_booleans():
     payload = _complete_payload(localBaseEvidence=True)
-    result = classify_plan(payload)
+    result = evaluate_plan_value(payload)
     assert result["classification"] == "insufficient-plan"
     assert "localBase" in result["missingEvidence"]
 
 
 def test_safe_auto_continue_accepts_only_with_all_concrete_evidence():
-    result = classify_plan(_complete_payload())
+    result = evaluate_plan_value(_complete_payload())
     assert result["classification"] == "plan-accepted"
     assert result["stateKind"] == "plan-accepted"
     assert result["autoContinue"] is True
@@ -53,7 +60,7 @@ def test_safe_auto_continue_accepts_only_with_all_concrete_evidence():
 
 
 def test_false_blocker_requires_readback_evidence():
-    result = classify_plan(
+    result = evaluate_plan_value(
         {
             "readbackDisprovesBlocker": True,
             "blockerClaim": "review claimed worktree evidence is absent",
@@ -64,7 +71,7 @@ def test_false_blocker_requires_readback_evidence():
 
 
 def test_false_blocker_emits_readback_evidence_when_present():
-    result = classify_plan(
+    result = evaluate_plan_value(
         {
             "readbackDisprovesBlocker": True,
             "blockerClaim": "review claimed worktree evidence is absent",
@@ -73,3 +80,9 @@ def test_false_blocker_emits_readback_evidence_when_present():
     )
     assert result["classification"] == "false-blocker"
     assert "readbackEvidence" in result["evidence"]
+
+
+if __name__ == "__main__":
+    for name, value in sorted(globals().items()):
+        if name.startswith("test_"):
+            value()

@@ -2,7 +2,7 @@
 import json,pathlib,subprocess,sys,tempfile,unittest
 R=pathlib.Path(__file__).resolve().parents[1];B=R/"bin"/"ops-thread-fsm";C=json.loads((R/"tests"/"fixtures"/"cases.json").read_text())
 def safe(**u):
- p=dict(planComplete=True,preAuthorized=True,localBaseEvidenceValid=True,successConditionsPresent=True,failureConditionsPresent=True,gatesPresent=True,reportableEvidencePresent=True,worktreeBranchAbsent=True,noMerge=True,noPush=True,noOverwrite=True,baseEvidence="ops/specs base",upstreamEvidence="local",headEvidence="head",worktreeEvidence="absent",branchEvidence="absent");p.update(u);return p
+ p=dict(planComplete=True,preAuthorized=True,localBaseEvidenceValid=True,successConditionsPresent=True,failureConditionsPresent=True,gatesPresent=True,reportableEvidencePresent=True,worktreeBranchAbsent=True,noMerge=True,noPush=True,noOverwrite=True,localBaseEvidence="local base abc123",baseEvidence="ops/specs base",upstreamEvidence="local upstream",headEvidence="candidate head",worktreeEvidence="absent worktree",branchEvidence="absent branch",successConditionsEvidence="success conditions",failureConditionsEvidence="failure conditions",gatesEvidence="required gates",reportableEvidence="reportable evidence");p.update(u);return p
 class T(unittest.TestCase):
  def setUp(s):s.t=tempfile.TemporaryDirectory();s.d=pathlib.Path(s.t.name)
  def tearDown(s):s.t.cleanup()
@@ -26,7 +26,7 @@ class T(unittest.TestCase):
  def test_safe_auto_continue_and_missing_safety_proofs(s):
   r=s.pl(safe());s.assertEqual(r["nextStateKind"],"state-allowed-to-proceed-without-extra-user-agreement");s.assertTrue(r["autoContinue"])
   for k in ["noMerge","noPush","noOverwrite"]:
-   p=safe();del p[k];r=s.pl(p);s.assertEqual(r["classification"],"insufficient-plan");s.assertIn(k,r["evidence"])
+   p=safe();del p[k];r=s.pl(p);s.assertEqual(r["classification"],"insufficient-plan");s.assertIn(k,r["missingEvidence"])
    r=s.pl(safe(**{k:False}));s.assertEqual(r["classification"],"escalation-needed");s.assertFalse(r["permissions"]["implement"])
   r=s.pl(safe(preAuthorized=False));s.assertEqual(r["nextStateKind"],"state-requiring-user-gen0-agreement");s.assertFalse(r["autoContinue"])
  def test_allowed_to_implement_is_not_merge_or_handoff(s):
