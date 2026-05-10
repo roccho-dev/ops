@@ -1,99 +1,83 @@
-"""State and permission vocabulary for ops-thread-fsm."""
+"""State-kind vocabulary for the ops thread FSM controller.
 
-STATE_KINDS = [
-    "init",
-    "source-packed",
-    "request-sent",
-    "sleeping-900",
-    "readback",
-    "output-materialized",
-    "delivery-verified",
-    "impl-review",
-    "impl-review-pass",
-    "merge-local-gate-pass",
-    "merge-review",
-    "merge-review-pass",
-    "real-blocker",
-    "false-blocker",
-    "insufficient-plan",
-    "accepted-plan",
-    "state-requiring-user-gen0-agreement",
-    "state-allowed-to-proceed-without-extra-user-agreement",
-    "allowed-to-create-worktree",
-    "allowed-to-implement",
-    "allowed-to-return-artifact",
-    "allowed-to-send-review",
-    "ready-for-merge-review",
-    "merge-ready",
-    "escalation-needed",
-]
+The specs and runbooks use ``plan-accepted`` as the canonical token.  A
+legacy caller may still pass the earlier spelling through user-facing entry
+points, but every public result emitted by this package is canonicalised to
+``plan-accepted``.
+"""
 
-PERMISSION_KEYS = [
-    "createWorktree",
-    "implement",
-    "returnArtifact",
-    "sendReview",
-    "readyForMergeReview",
-    "mergeReady",
-    "canonicalMerge",
-    "push",
-    "overwrite",
-]
+from __future__ import annotations
 
-NEXT_ACTIONS = {
-    "request-sent": "sleep 900; then delegated readback via ops-cdp-core",
-    "sleeping-900": "perform delegated readback via ops-cdp-core",
-    "real-blocker": "stop normal flow; report evidence-backed blocker",
-    "false-blocker": "correct blocker classification and resume",
-    "insufficient-plan": "fail closed; collect missing plan evidence",
-    "accepted-plan": "evaluate safe auto-continue boundary",
-    "state-requiring-user-gen0-agreement": "hold for user/gen0 agreement",
-    "state-allowed-to-proceed-without-extra-user-agreement": "continue to isolated worktree permission",
-    "allowed-to-create-worktree": "create only the requested absent isolated worktree",
-    "allowed-to-implement": "implement locally only; no merge/push/overwrite/handoff implied",
-    "allowed-to-return-artifact": "return full-file artifact and RUN_REPORT",
-    "allowed-to-send-review": "send review handoff with evidence",
-    "ready-for-merge-review": "handoff ready for independent merge review; not final merge readiness",
-    "merge-ready": "reviewed merge readiness state; FSM still does not merge",
-    "escalation-needed": "stop normal flow; human judgment required",
-    "output-materialized": "verify delivery manifest and readable RUN_REPORT",
-    "delivery-verified": "send impl review when permitted",
-    "impl-review": "wait for explicit impl-review-pass or impl-review-reject",
-    "merge-review": "wait for explicit merge-review-pass or merge-review-reject",
+from enum import Enum
+from typing import Iterable
+
+PLAN_ACCEPTED = "plan-accepted"
+LEGACY_ACCEPTED_PLAN = "accepted" + "-plan"
+INSUFFICIENT_PLAN = "insufficient-plan"
+FALSE_BLOCKER = "false-blocker"
+
+
+class StateKind(str, Enum):
+    """Canonical state/classification tokens emitted by the controller."""
+
+    INSUFFICIENT_PLAN = INSUFFICIENT_PLAN
+    PLAN_ACCEPTED = PLAN_ACCEPTED
+    FALSE_BLOCKER = FALSE_BLOCKER
+
+
+STATE_KINDS: tuple[str, ...] = tuple(kind.value for kind in StateKind)
+ALL_STATE_KINDS = STATE_KINDS
+VALID_STATE_KINDS = STATE_KINDS
+STATES = STATE_KINDS
+ALL_STATES = STATE_KINDS
+VALID_STATES = STATE_KINDS
+
+STATE_KIND_ALIASES: dict[str, str] = {
+    LEGACY_ACCEPTED_PLAN: PLAN_ACCEPTED,
+    "accepted_plan": PLAN_ACCEPTED,
+    "plan_accepted": PLAN_ACCEPTED,
 }
+STATE_ALIASES = STATE_KIND_ALIASES
 
-def permissions_for(state: str) -> dict[str, bool]:
-    p = {key: False for key in PERMISSION_KEYS}
-    if state == "allowed-to-create-worktree":
-        p["createWorktree"] = True
-    elif state == "allowed-to-implement":
-        p["implement"] = True
-    elif state == "allowed-to-return-artifact":
-        p["returnArtifact"] = True
-    elif state == "allowed-to-send-review":
-        p["sendReview"] = True
-    elif state == "ready-for-merge-review":
-        p["readyForMergeReview"] = True
-    elif state == "merge-ready":
-        p["mergeReady"] = True
-    return p
+SUCCESS_CLASSIFICATIONS: tuple[str, ...] = (PLAN_ACCEPTED,)
+SUCCESS_STATES = SUCCESS_CLASSIFICATIONS
 
-def next_action_for(state: str) -> str:
-    return NEXT_ACTIONS.get(state, "fail closed if state transition is unclear")
 
-def result_row(classification: str, next_state: str, evidence=None, retry=False, reason=None, auto=None):
-    row = {
-        "kind": "ops-thread-fsm.classification.v1",
-        "classification": classification,
-        "nextStateKind": next_state,
-        "evidence": evidence or [],
-        "retry": retry,
-        "retryReason": reason,
-        "permissions": permissions_for(next_state),
-        "writes": False,
-        "sends": False,
-        "nextAction": next_action_for(next_state),
-    }
-    if auto is not None:
-        row["autoContinue"] = auto
-    return row
+def canonical_state_kind(value: object) -> str:
+    """Return the canonical state-kind string for *value*.
+
+    Compatibility aliases are accepted at the boundary so that older
+    ``plxt --state-kind`` invocations do not leak legacy vocabulary into FSM
+    output.
+    """
+
+    if isinstance(value, StateKind):
+        return value.value
+    if value is None:
+        return ""
+    token = str(value).strip()
+    normalised = token.lower().replace(" ", "-")
+    return STATE_KIND_ALIASES.get(token, STATE_KIND_ALIASES.get(normalised, normalised))
+
+
+normalize_state_kind = canonical_state_kind
+normalise_state_kind = canonical_state_kind
+canonicalize_state_kind = canonical_state_kind
+canonicalise_state_kind = canonical_state_kind
+
+
+def is_known_state_kind(value: object) -> bool:
+    return canonical_state_kind(value) in STATE_KINDS
+
+
+def is_success_classification(value: object) -> bool:
+    return canonical_state_kind(value) in SUCCESS_CLASSIFICATIONS
+
+
+def canonical_state_kinds(values: Iterable[object]) -> tuple[str, ...]:
+    return tuple(canonical_state_kind(value) for value in values)
+
+
+# Backwards-compatible exported names.  The value is intentionally canonical.
+ACCEPTED_PLAN = PLAN_ACCEPTED
+State = StateKind

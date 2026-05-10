@@ -1,112 +1,80 @@
-"""Command handlers and public helpers for ops-thread-fsm.
+"""Core entry points for the ops thread FSM controller."""
 
-The implementation is split into small modules for reliable artifact transfer.  This
-module is the stable surface used by cli.py and readiness.py.
-"""
 from __future__ import annotations
 
+import argparse
 import json
 import sys
-from typing import Any
+from typing import Any, Iterable, Mapping
 
-from .classify import classify_readback_value
-from .evidence import delivery_manifest_ok, load_value, readable_file
-from .plan import evaluate_plan_value
-from .state_model import STATE_KINDS, next_action_for, permissions_for
+from .plan import classify_plan, row
+from .state_model import PLAN_ACCEPTED, canonical_state_kind, is_success_classification
+
+SUCCESS_CLASSIFICATIONS = (PLAN_ACCEPTED,)
+SUCCESS_STATES = SUCCESS_CLASSIFICATIONS
 
 
-def emit(value: Any, json_mode: bool, scalar_key: str | None = None) -> None:
-    if json_mode:
-        print(json.dumps(value, ensure_ascii=False, indent=2))
-    elif scalar_key is not None and isinstance(value, dict):
-        print(value[scalar_key])
+def classification_is_success(value: object) -> bool:
+    return is_success_classification(value)
+
+
+is_success = classification_is_success
+
+
+def classify(payload: Any | None = None, *, state_kind: object | None = None) -> dict[str, Any]:
+    """Classify either an explicit state kind or a plan evidence payload."""
+
+    if state_kind is not None:
+        canonical = canonical_state_kind(state_kind)
+        return row(
+            canonical,
+            "state kind supplied by caller",
+            {"stateKind": canonical},
+            autoContinue=classification_is_success(canonical),
+        )
+    return classify_plan(payload or {})
+
+
+classify_payload = classify
+evaluate = classify
+
+
+def _load_payload(text: str) -> Any:
+    if not text.strip():
+        return {}
+    return json.loads(text)
+
+
+def run(argv: Iterable[str] | None = None, stdin: Any | None = None, stdout: Any | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Classify ops-thread FSM evidence")
+    parser.add_argument("--state-kind", dest="state_kind", help="state kind to canonicalise")
+    parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    parser.add_argument("--input", "-i", dest="input_path", help="read JSON evidence from a file instead of stdin")
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if stdout is None:
+        stdout = sys.stdout
+    if stdin is None:
+        stdin = sys.stdin
+
+    if args.state_kind:
+        result = classify(state_kind=args.state_kind)
     else:
-        print(value)
+        if args.input_path:
+            with open(args.input_path, "r", encoding="utf-8") as handle:
+                payload = _load_payload(handle.read())
+        else:
+            payload = _load_payload(stdin.read())
+        result = classify_plan(payload)
+
+    json.dump(result, stdout, indent=2 if args.pretty else None, sort_keys=True)
+    stdout.write("\n")
+    return 0 if classification_is_success(result.get("classification")) else 1
 
 
-def cmd_status(args: Any) -> int:
-    emit(
-        {
-            "kind": "ops-thread-fsm.status.v1",
-            "states": STATE_KINDS,
-            "controllerOnly": True,
-            "forbiddenMechanics": [
-                "CDP",
-                "push",
-                "refs-vault",
-                "artifact materializer",
-                "local gate execution",
-                "external-thread mechanics",
-                "canonical merge",
-            ],
-        },
-        args.json,
-    )
-    return 0
+def main(argv: Iterable[str] | None = None) -> int:
+    return run(argv)
 
 
-def cmd_next(args: Any) -> int:
-    state = args.state_kind
-    if state not in STATE_KINDS:
-        print(f"unknown state-kind: {state}", file=sys.stderr)
-        return 2
-    emit(
-        {
-            "kind": "ops-thread-fsm.next.v1",
-            "stateKind": state,
-            "phase": args.phase,
-            "requestKind": args.request_kind,
-            "classification": args.classification,
-            "dryRun": args.dry_run,
-            "writes": False,
-            "sends": False,
-            "permissions": permissions_for(state),
-            "nextAction": next_action_for(state),
-        },
-        args.json,
-        "nextAction",
-    )
-    return 0
-
-
-def cmd_classify_readback(args: Any) -> int:
-    result = classify_readback_value(load_value(args.input), args.phase, args.request_kind)
-    emit(result, args.json, "classification")
-    if result["classification"] in {"output-candidate", "impl-review-pass", "merge-review-pass"}:
-        return 0
-    return 1
-
-
-def cmd_evaluate_plan(args: Any) -> int:
-    result = evaluate_plan_value(load_value(args.input))
-    emit(result, args.json, "classification")
-    if result["classification"] in {"accepted-plan", "false-blocker"}:
-        return 0
-    return 1
-
-
-def cmd_render_prompt(args: Any) -> int:
-    print(
-        "Return materializable full-file artifacts plus RUN_REPORT. "
-        "Review gates require first-line impl-review-pass or merge-review-pass only. "
-        "Safe auto-continue requires a complete pre-authorized plan with valid local base evidence, "
-        "no merge, no push, no overwrite, branch/worktree absence, success/failure/gate/reportable evidence, "
-        "and concrete external-thread send confirmation, readback, and response evidence when external work is used. "
-        "request-sent means sleep 900, then delegated readback via ops-cdp-core. "
-        "Target handoff is ready-for-merge-review; final readiness additionally requires merge review. "
-        "FSM does not implement CDP, push, refs-vault, artifact materialization, local gates, external-thread mechanics, or canonical merge."
-    )
-    return 0
-
-
-__all__ = [
-    "cmd_status",
-    "cmd_next",
-    "cmd_classify_readback",
-    "cmd_evaluate_plan",
-    "cmd_render_prompt",
-    "classify_readback_value",
-    "delivery_manifest_ok",
-    "load_value",
-    "readable_file",
-]
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
