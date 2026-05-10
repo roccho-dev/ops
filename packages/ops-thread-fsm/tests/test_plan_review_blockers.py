@@ -82,6 +82,20 @@ def test_false_blocker_emits_readback_evidence_when_present():
     assert "readbackEvidence" in result["evidence"]
 
 
+def test_destructive_scope_takes_precedence_over_false_blocker():
+    result = evaluate_plan_value(
+        {
+            "readbackDisprovesBlocker": True,
+            "blockerClaim": "review claimed worktree evidence is absent",
+            "readbackEvidence": "review readback line shows worktree evidence is present",
+            "mergeRequested": True,
+            "noMerge": False,
+        }
+    )
+    assert result["classification"] == "escalation-needed"
+    assert result["nextStateKind"] == "escalation-needed"
+
+
 if __name__ == "__main__":
     for name, value in sorted(globals().items()):
         if name.startswith("test_"):

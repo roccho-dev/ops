@@ -158,6 +158,10 @@ def evaluate_plan_value(value):
     claim = str(p.get("blockerClaim", p.get("claim", p.get("blocker", "")))).strip()
     lower = claim.lower()
 
+    bad = destructive(p)
+    if bad:
+        return row("escalation-needed", "escalation-needed", bad, False, "merge/push/overwrite scope requires human judgment", False)
+
     if claim and flag(p, "readbackDisprovesBlocker"):
         readback_key, readback_value = first_evidence(p, FALSE_BLOCKER_READBACK)
         if not readback_key:
@@ -186,10 +190,6 @@ def evaluate_plan_value(value):
         return row("real-blocker", "real-blocker", [claim], True, "evidence-backed blocker", False)
     if claim and any(token in lower for token in UNSUPPORTED):
         return row(INSUFFICIENT_PLAN, INSUFFICIENT_PLAN, [claim], True, "unsupported blocker claim lacks evidence", False)
-
-    bad = destructive(p)
-    if bad:
-        return row("escalation-needed", "escalation-needed", bad, False, "merge/push/overwrite scope requires human judgment", False)
 
     missing = [keys[0] for keys in BOOLEAN_REQUIRED if not flag_any(p, keys)]
     missing.extend(missing_concrete(p))
