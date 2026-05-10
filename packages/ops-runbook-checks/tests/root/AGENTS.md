@@ -1,30 +1,36 @@
 # AGENTS.md
 
-- `0/9` は CDP / ChatGPT thread / Project Source / artifact 回収の owner。
-- agent 管理の正本は `$HOME/.agents/events.jsonl`。
-- `$HOME/.agents/status.md` は生成物。
-- status.md は生成物として扱う。
-- `ops-agent-events`
-- `ops-artifact-materialize`
-- `ops-knowledge-intake`
-- `ops-runbook-checks`
-- `ops-thread-fsm`
-- `delivery-verified`
-- `impl-review`
-- `impl-review-pass`
-- `merge executor`
-- `merge-candidate-ready`
-- `merge-review`
-- `merge-review-pass`
-- `merge-ready`
-- `localizer`
-- `localized-local-gate-pass`
-- `remote-backup-verified`
-- `role-override`
-- `post-hoc-merge-review-required`
-- `ops-tailnet-github-egress`
-- `ops-refs-vault`
-- route-gated local push
-- long-transfer
-- github.com
-- tag:github
+Small entrypoint only. Long operational evidence and raw artifacts stay out of AGENTS.md.
+
+Use packages and specs instead of memory:
+- ops-thread-fsm
+- ops-runbook-checks
+- ops-artifact-materialize
+- ops-tailnet-github-egress
+- ops-refs-vault
+
+FSM and gate vocabulary:
+- plan-accepted
+- false-blocker
+- insufficient-plan
+- escalation-needed
+- delivery-verified
+- impl-review
+- impl-review-pass
+- merge executor
+- merge-candidate-ready
+- ready-for-merge-review
+- localizer
+- localized-local-gate-pass
+- remote-backup-verified
+- role-override
+- post-hoc-merge-review-required
+- merge-review
+- merge-review-pass
+- merge-ready
+
+Generic `review-pass` is not sufficient; use explicit gate pass tokens above.
+
+State/evidence:
+- events.jsonl is the source of truth
+- status.md is generated
