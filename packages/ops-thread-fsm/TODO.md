@@ -16,6 +16,34 @@ This package should make that failure harder to repeat.
 
 ## TODOs
 
+- Add first-class discussion-loop states for design/review handoffs:
+  - `discussion-request-sent`
+  - `discussion-send-confirmed`
+  - `discussion-readback`
+  - `discussion-objections-present`
+  - `discussion-response-required`
+  - `discussion-response-sent`
+  - `discussion-no-objections-candidate`
+  - `discussion-no-objections-confirmed`
+  - `discussion-blocked-needs-parent`
+- Implement `objections-present` behavior:
+  - classify every objection as `accept`, `reject`, `modify`, or
+    `needs-parent`,
+  - continue with a response round for `accept`, `reject`, and `modify`,
+  - stop and escalate for `needs-parent`,
+  - never treat `discussion-started`, `discussion-readback`, or
+    `discussion-objections-present` as completion.
+- Add prompt/run fields for:
+  - `discussionId`
+  - `proposalRevision`
+  - `counterpartyActor`
+  - `requiredTopics`
+  - `objectionClassificationRequired`
+  - `nextRoundRequired`
+  - `noObjectionsRequiredFrom`
+  - `parentEscalationCondition`
+- Require explicit `no-objections` from both sides on the same proposal
+  revision before the discussion loop can complete.
 - Add `merge` as a valid request kind.
 - Add machine states matching the specs contract:
   - `planner-targets-ready`
