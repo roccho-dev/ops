@@ -9,8 +9,12 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      cdpFor = pkgs: (import ./packages/ops-cdp-core/src/cdp/chromium-cdp.nix { }).perSystem { inherit pkgs; };
     in {
-      packages = forEachSystem (pkgs: rec {
+      packages = forEachSystem (pkgs:
+      let
+        cdp = cdpFor pkgs;
+      in rec {
         ops-artifact-materialize = pkgs.writeShellApplication {
           name = "ops-artifact-materialize";
           runtimeInputs = [ pkgs.python3 ];
@@ -67,8 +71,11 @@
           ops bootstrap package. Replace with package-backed implementations.
           EOF
         '';
+        ops-cdp-core = cdp.packages.cdp;
         default = ops-bootstrap;
-      });
+      } // cdp.packages);
+
+      apps = forEachSystem (pkgs: (cdpFor pkgs).apps);
 
       checks = forEachSystem (pkgs: {
         ops-artifact-materialize = pkgs.runCommand "ops-artifact-materialize-check" {
@@ -139,6 +146,24 @@
           mkdir -p "$out"
           ops-refs-vault smoke-local > "$out/report.json"
           grep -q '"ok": true' "$out/report.json"
+        '';
+        ops-cdp-core = pkgs.runCommand "ops-cdp-core-check" {
+          nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-cdp-core ];
+        } ''
+          mkdir -p "$out"
+          chromium-cdp-chatgpt-command-map > "$out/chatgpt-command-map.md"
+          grep -q 'chromium-cdp-upload-project-source-text' "$out/chatgpt-command-map.md"
+          grep -q 'chromium-cdp-create-project-thread' "$out/chatgpt-command-map.md"
+          test -x "$(command -v chromium-cdp-upload-project-source-text)"
+          test -x "$(command -v chromium-cdp-upload-project-source-file)"
+          test -x "$(command -v chromium-cdp-create-project-thread)"
+          test -x "$(command -v chromium-cdp-send-chatgpt)"
+          test -x "$(command -v chromium-cdp-project-source-reread)"
+          test -x "$(command -v chromium-cdp-fetch-artifact-strict)"
+          test -x "$(command -v cdp-bridge)"
+          cdp-bridge --help > "$out/cdp-bridge-help.txt" 2>&1
+          grep -q 'cdp-bridge wsurl' "$out/cdp-bridge-help.txt"
+          grep -q 'click-mode direct' "$out/cdp-bridge-help.txt"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README

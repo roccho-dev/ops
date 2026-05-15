@@ -1,0 +1,19 @@
+{
+  "kind": "ops.packageImplementation.v1",
+  "mission": "CDP automation is operational implementation. repos/ops is the canonical runtime home.",
+  "opsPackagePath": "packages/ops-cdp-core/default.nix",
+  "package": "ops-cdp-core",
+  "repoCategory": "feat",
+  "repoId": "ops",
+  "repoPlacement": "fixed",
+  "requiredChecks": "checks.<system>.ops-cdp-core",
+  "requiredOutputs": "packages.<system>.ops-cdp-core and apps.<system>.chromium-cdp-*",
+  "responsibility": "Own the ChatGPT CDP, Project Source, thread creation, thread send/readback, artifact fetch, and host git workflow command surface migrated from flakes.",
+  "forbiddenResponsibility": "Do not keep the same implementation as a second canonical runtime in flakes.",
+  "migrationSource": {
+    "repo": "flakes",
+    "branch": "task/0-9-cdp-access-check",
+    "head": "e468c5ffbbdefe8d650fe18e91752184da52e8fd",
+    "path": "parts/cdp"
+  }
+}
