@@ -163,6 +163,7 @@
           test -x "$(command -v cdp-bridge)"
           cdp-bridge --help > "$out/cdp-bridge-help.txt" 2>&1
           grep -q 'cdp-bridge wsurl' "$out/cdp-bridge-help.txt"
+          grep -q 'click-mode direct' "$out/cdp-bridge-help.txt"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README

@@ -9,7 +9,7 @@ The command contract intentionally matches the earlier Zig bridge:
   cdp-bridge new     [--addr 127.0.0.1] [--port 9222] [--url about:blank]
   cdp-bridge close   [--addr 127.0.0.1] [--port 9222] --id <targetId>
   cdp-bridge call    --ws <ws://...> --req <json> [--timeout-ms 30000]
-  cdp-bridge filechooser --ws <ws://...> --selector <css> --file <path> [--file <path> ...] [--click-mode mouse|programmatic] [--timeout-ms 30000]
+  cdp-bridge filechooser --ws <ws://...> --selector <css> --file <path> [--file <path> ...] [--click-mode direct|mouse|programmatic] [--timeout-ms 30000]
 
 This implementation is Python standard-library only. It avoids pinning the ops
 flake to a Zig stdlib version while preserving the transport functionality that
@@ -60,7 +60,7 @@ def usage() -> str:
         "  cdp-bridge new     [--addr 127.0.0.1] [--port 9222] [--url about:blank]\n"
         "  cdp-bridge close   [--addr 127.0.0.1] [--port 9222] --id <targetId>\n"
         "  cdp-bridge call    --ws <ws://...> --req <json> [--timeout-ms 30000]\n"
-        "  cdp-bridge filechooser --ws <ws://...> --selector <css> --file <path> [--file <path> ...] [--click-mode mouse|programmatic] [--timeout-ms 30000]\n"
+        "  cdp-bridge filechooser --ws <ws://...> --selector <css> --file <path> [--file <path> ...] [--click-mode direct|mouse|programmatic] [--timeout-ms 30000]\n"
     )
 
 
@@ -375,7 +375,7 @@ def build_center_expr(selector: str) -> str:
         "if (!el) return { ok: false, reason: 'not_found', selector: sel }; "
         "try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) {} "
         "const r = el.getBoundingClientRect(); "
-        "return { ok: true, selector: sel, x: r.x + r.width / 2, y: r.y + r.height / 2 }; }})()"
+        "return { ok: true, selector: sel, x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()"
     )
 
 
@@ -385,7 +385,7 @@ def build_click_expr(selector: str) -> str:
         f"(() => {{ const sel = {sel}; const el = document.querySelector(sel); "
         "if (!el) return { ok: false, reason: 'not_found', selector: sel }; "
         "el.click(); return { ok: true, selector: sel, id: String(el.id || ''), "
-        "tag: String(el.tagName || ''), type: String(el.type || '') }; }})()"
+        "tag: String(el.tagName || ''), type: String(el.type || '') }; })()"
     )
 
 
@@ -400,7 +400,32 @@ def build_verify_expr(file_paths: list[str]) -> str:
         "const visible = names.map((name) => ({ name, ok: picked.some((x) => (x.names || []).includes(name)) || String(document.body && document.body.innerText || '').includes(name) })); "
         "const aria = Array.from(document.querySelectorAll('[aria-label]')).map((e)=>String(e.getAttribute('aria-label')||'')); "
         "const hasTile = names.some((name) => aria.includes(name)); "
-        "return { href: location.href, title: document.title, visible, ok: visible.every((row) => row.ok), inputs: picked, has_aria_label_tile: hasTile }; }})()"
+        "return { href: location.href, title: document.title, visible, ok: visible.every((row) => row.ok), inputs: picked, has_aria_label_tile: hasTile }; })()"
+    )
+
+
+def build_dispatch_file_change_expr(selector: str) -> str:
+    sel = json.dumps(selector)
+    return (
+        f"(() => {{ const sel = {sel}; const el = document.querySelector(sel); "
+        "if (!el) return { ok: false, reason: 'not_found', selector: sel }; "
+        "const before = { n: el.files ? el.files.length : 0, names: el.files ? Array.from(el.files).map((f) => f.name) : [] }; "
+        "try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {} "
+        "try { el.dispatchEvent(new Event('change', { bubbles: true })); } catch (_) {} "
+        "return { ok: true, selector: sel, id: String(el.id || ''), tag: String(el.tagName || ''), type: String(el.type || ''), before }; })()"
+    )
+
+
+def build_add_sources_button_expr() -> str:
+    return (
+        "(() => { "
+        "const candidates = Array.from(document.querySelectorAll('button,[role=\"button\"]')); "
+        "const el = candidates.find((x) => String(x.innerText || x.textContent || '').trim() === 'Add sources'); "
+        "if (!el) return { ok: false, reason: 'not_found' }; "
+        "try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) {} "
+        "const r = el.getBoundingClientRect(); "
+        "return { ok: true, x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width, h: r.height, text: String(el.innerText || el.textContent || '') }; "
+        "})()"
     )
 
 
@@ -420,6 +445,116 @@ def dispatch_mouse_click(sock: socket.socket, next_id: int, x: float, y: float, 
         ws_send_and_wait_id(sock, {"id": next_id, "method": "Input.dispatchMouseEvent", "params": params}, next_id, timeout_ms)
         next_id += 1
     return next_id
+
+
+def ws_direct_set_file_input(sock: socket.socket, next_id: int, selector: str, file_paths: list[str], timeout_ms: int) -> tuple[int, dict[str, Any]]:
+    doc = ws_send_and_wait_id(
+        sock,
+        {"id": next_id, "method": "DOM.getDocument", "params": {"depth": 1, "pierce": True}},
+        next_id,
+        timeout_ms,
+    )
+    next_id += 1
+    doc_obj = json.loads(doc)
+    root_id = doc_obj.get("result", {}).get("root", {}).get("nodeId")
+    if not isinstance(root_id, int):
+        raise BridgeError("DOM.getDocument did not return root nodeId")
+
+    query = ws_send_and_wait_id(
+        sock,
+        {"id": next_id, "method": "DOM.querySelector", "params": {"nodeId": root_id, "selector": selector}},
+        next_id,
+        timeout_ms,
+    )
+    next_id += 1
+    query_obj = json.loads(query)
+    node_id = query_obj.get("result", {}).get("nodeId")
+    if not isinstance(node_id, int) or node_id <= 0:
+        trigger = ws_send_and_wait_id(
+            sock,
+            {
+                "id": next_id,
+                "method": "Runtime.evaluate",
+                "params": {"expression": build_add_sources_button_expr(), "returnByValue": True, "awaitPromise": False, "userGesture": False},
+            },
+            next_id,
+            timeout_ms,
+        )
+        next_id += 1
+        trigger_obj = json.loads(trigger)
+        trigger_value = trigger_obj.get("result", {}).get("result", {}).get("value", {})
+        if not trigger_value.get("ok"):
+            raise BridgeError(f"file input not found and Add sources button not found: {selector}")
+        next_id = dispatch_mouse_click(sock, next_id, float(trigger_value.get("x") or 0), float(trigger_value.get("y") or 0), timeout_ms)
+        file_chooser_opened = ws_wait_for_method(sock, "Page.fileChooserOpened", timeout_ms)
+        evt = json.loads(file_chooser_opened)
+        backend_node_id = require_int(evt.get("params", {}).get("backendNodeId"), "backendNodeId")
+        set_files = ws_send_and_wait_id(
+            sock,
+            {
+                "id": next_id,
+                "method": "DOM.setFileInputFiles",
+                "params": {"backendNodeId": backend_node_id, "files": file_paths},
+            },
+            next_id,
+            timeout_ms,
+        )
+        next_id += 1
+        return next_id, {
+            "mode": "add_sources_button_filechooser",
+            "backendNodeId": backend_node_id,
+            "document": doc_obj,
+            "querySelector": query_obj,
+            "addSourcesButton": trigger_obj,
+            "fileChooserOpened": evt,
+            "setFileInputFiles": json.loads(set_files),
+        }
+
+    try:
+        scroll = ws_send_and_wait_id(
+            sock,
+            {"id": next_id, "method": "DOM.scrollIntoViewIfNeeded", "params": {"nodeId": node_id}},
+            next_id,
+            timeout_ms,
+        )
+        scroll_obj: Any = json.loads(scroll)
+    except Exception as exc:
+        scroll_obj = {"ok": False, "ignored_error": str(exc)}
+    next_id += 1
+
+    set_files = ws_send_and_wait_id(
+        sock,
+        {
+            "id": next_id,
+            "method": "DOM.setFileInputFiles",
+            "params": {"nodeId": node_id, "files": file_paths},
+        },
+        next_id,
+        timeout_ms,
+    )
+    next_id += 1
+
+    dispatch = ws_send_and_wait_id(
+        sock,
+        {
+            "id": next_id,
+            "method": "Runtime.evaluate",
+            "params": {"expression": build_dispatch_file_change_expr(selector), "returnByValue": True, "awaitPromise": False, "userGesture": True},
+        },
+        next_id,
+        timeout_ms,
+    )
+    next_id += 1
+
+    return next_id, {
+        "mode": "direct_file_input",
+        "nodeId": node_id,
+        "document": doc_obj,
+        "querySelector": query_obj,
+        "scrollIntoViewIfNeeded": scroll_obj,
+        "setFileInputFiles": json.loads(set_files),
+        "dispatchInputChange": json.loads(dispatch),
+    }
 
 
 def ws_filechooser(ws_url: str, selector: str, file_paths: list[str], timeout_ms: int, click_mode: str = "mouse") -> str:
@@ -453,7 +588,12 @@ def ws_filechooser(ws_url: str, selector: str, file_paths: list[str], timeout_ms
         )
         center_obj = json.loads(center).get("result", {}).get("result", {}).get("value", {})
         next_id += 1
-        if click_mode == "programmatic":
+        if click_mode == "direct":
+            next_id, direct = ws_direct_set_file_input(sock, next_id, selector, file_paths, timeout_ms)
+            click_record = json.dumps({"mode": click_mode, "direct": direct}, separators=(",", ":"), ensure_ascii=False)
+            file_chooser_opened = None
+            set_files = json.dumps(direct["setFileInputFiles"], separators=(",", ":"), ensure_ascii=False)
+        elif click_mode == "programmatic":
             click_req = {
                 "id": next_id,
                 "method": "Runtime.evaluate",
@@ -467,22 +607,28 @@ def ws_filechooser(ws_url: str, selector: str, file_paths: list[str], timeout_ms
                 raise BridgeError(f"selector not clickable: {center_obj}")
             next_id = dispatch_mouse_click(sock, next_id, float(center_obj.get("x") or 0), float(center_obj.get("y") or 0), timeout_ms)
             click_record = json.dumps({"mode": click_mode, "x": center_obj.get("x"), "y": center_obj.get("y")}, separators=(",", ":"))
+            file_chooser_opened = ws_wait_for_method(sock, "Page.fileChooserOpened", timeout_ms)
         else:
             raise BridgeError(f"invalid click mode: {click_mode}")
-        file_chooser_opened = ws_wait_for_method(sock, "Page.fileChooserOpened", timeout_ms)
-        evt = json.loads(file_chooser_opened)
-        backend_node_id = require_int(evt.get("params", {}).get("backendNodeId"), "backendNodeId")
-        set_files = ws_send_and_wait_id(
-            sock,
-            {
-                "id": next_id,
-                "method": "DOM.setFileInputFiles",
-                "params": {"backendNodeId": backend_node_id, "files": file_paths},
-            },
-            next_id,
-            timeout_ms,
-        )
-        next_id += 1
+        if click_mode == "programmatic":
+            file_chooser_opened = ws_wait_for_method(sock, "Page.fileChooserOpened", timeout_ms)
+        backend_node_id = None
+        if file_chooser_opened is None:
+            evt = None
+        else:
+            evt = json.loads(file_chooser_opened)
+            backend_node_id = require_int(evt.get("params", {}).get("backendNodeId"), "backendNodeId")
+            set_files = ws_send_and_wait_id(
+                sock,
+                {
+                    "id": next_id,
+                    "method": "DOM.setFileInputFiles",
+                    "params": {"backendNodeId": backend_node_id, "files": file_paths},
+                },
+                next_id,
+                timeout_ms,
+            )
+            next_id += 1
         intercept_off = ws_send_and_wait_id(
             sock,
             {"id": next_id, "method": "Page.setInterceptFileChooserDialog", "params": {"enabled": False}},
@@ -510,7 +656,7 @@ def ws_filechooser(ws_url: str, selector: str, file_paths: list[str], timeout_ms
             "intercept_on": json.loads(intercept_on),
             "center": json.loads(center),
             "click": json.loads(click_record),
-            "fileChooserOpened": json.loads(file_chooser_opened),
+            "fileChooserOpened": evt,
             "setFileInputFiles": json.loads(set_files),
             "intercept_off": json.loads(intercept_off),
             "verify": json.loads(verify),

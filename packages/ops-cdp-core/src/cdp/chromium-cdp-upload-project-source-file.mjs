@@ -1,8 +1,8 @@
-// Upload a local file into ChatGPT Project Sources via the browser file chooser.
+// Upload a local file into ChatGPT Project Sources via CDP.
 //
 // Unlike chromium-cdp-upload-project-source-text.mjs, this path is for binary
-// files too. It relies on cdp-bridge filechooser so the browser receives the
-// host path as a real File instead of a DataTransfer text fallback.
+// files too. It sets the Project Sources file input from a host path, so zip
+// archives remain real files instead of DataTransfer text fallback payloads.
 
 import {
   cdpCall,
@@ -80,6 +80,68 @@ function uploadViaFileChooser(wsUrl, filePath, timeoutMs) {
   return { selector, raw: raw.trim(), parsed: JSON.parse(raw) };
 }
 
+function uploadViaDirectFileInput(wsUrl, filePath, timeoutMs) {
+  const selector = 'input[type="file"]:not(#upload-files):not(#upload-photos):not(#upload-camera)';
+  const raw = runToString([
+    "cdp-bridge",
+    "filechooser",
+    "--ws", String(wsUrl),
+    "--selector", selector,
+    "--file", String(filePath),
+    "--click-mode", "direct",
+    "--timeout-ms", String(timeoutMs || 120000),
+  ]);
+  return { selector, mode: "direct_dom_set_file_input_files", raw: raw.trim(), parsed: JSON.parse(raw) };
+}
+
+function uploadProjectSourceFile(wsUrl, filePath, timeoutMs) {
+  const attempts = [];
+  try {
+    const direct = uploadViaDirectFileInput(wsUrl, filePath, timeoutMs);
+    return { ok: true, selectedMode: "direct", attempts: [{ mode: "direct", ok: true, result: direct }] };
+  } catch (e) {
+    attempts.push({ mode: "direct", ok: false, error: String(e && e.message ? e.message : e).slice(0, 2000) });
+  }
+
+  try {
+    const mouse = uploadViaFileChooser(wsUrl, filePath, timeoutMs);
+    return { ok: true, selectedMode: "mouse_filechooser", attempts: attempts.concat([{ mode: "mouse_filechooser", ok: true, result: mouse }]) };
+  } catch (e) {
+    attempts.push({ mode: "mouse_filechooser", ok: false, error: String(e && e.message ? e.message : e).slice(0, 2000) });
+  }
+
+  return { ok: false, selectedMode: null, attempts };
+}
+
+function confirmUploadAnywayIfPresent(wsUrl, timeoutMs) {
+  const deadline = Date.now() + Math.min(Number(timeoutMs) || 0, 15000);
+  let last = null;
+  while (true) {
+    const resp = cdpCall(wsUrl, {
+      id: 91,
+      method: "Runtime.evaluate",
+      params: {
+        expression: `(() => {
+          const body = String(document.body && document.body.innerText || '');
+          const buttons = Array.from(document.querySelectorAll('button,[role="button"]'));
+          const button = buttons.find((b) => String(b.innerText || b.textContent || '').trim() === 'Upload anyway');
+          if (!button) return { ok: true, clicked: false, modalPresent: body.includes('Upload anyway') || body.includes('File already exists') };
+          try { button.click(); } catch (_) {}
+          return { ok: true, clicked: true, modalPresent: true };
+        })()`,
+        returnByValue: true,
+        awaitPromise: false,
+        userGesture: true,
+      },
+    }, 30000);
+    last = resp && resp.result && resp.result.result ? resp.result.result.value : null;
+    if (last && last.clicked) return last;
+    if (!last || !last.modalPresent) return last || { ok: true, clicked: false, modalPresent: false };
+    if (Date.now() >= deadline) return last;
+    sleepMs(500);
+  }
+}
+
 function main(argv) {
   const args = parseArgs(argv);
   if (!args) {
@@ -107,7 +169,8 @@ function main(argv) {
   sleepMs(args.waitMs);
 
   const fileName = basename(args.file);
-  const upload = uploadViaFileChooser(wsUrl, args.file, args.timeoutMs);
+  const upload = uploadProjectSourceFile(wsUrl, args.file, args.timeoutMs);
+  const duplicateConfirm = confirmUploadAnywayIfPresent(wsUrl, args.timeoutMs);
   const visible = cdpEvaluate(wsUrl, waitForProjectSourceVisibleExpr(fileName, args.timeoutMs), {
     awaitPromise: true,
     returnByValue: true,
@@ -115,12 +178,13 @@ function main(argv) {
   });
   const visibleValue = visible && visible.result && visible.result.result ? visible.result.result.value : null;
   const result = {
-    ok: !!(upload && upload.parsed && upload.parsed.ok && visibleValue && visibleValue.ok),
+    ok: !!(upload && upload.ok && visibleValue && visibleValue.ok),
     projectUrl: args.projectUrl,
     sourcesUrl: url,
     target: { id: target.id, url: target.url, title: target.title },
     file: { path: args.file, name: fileName },
     upload,
+    duplicateConfirm,
     visible: visibleValue,
   };
   const out = JSON.stringify(result, null, 2) + "\n";
