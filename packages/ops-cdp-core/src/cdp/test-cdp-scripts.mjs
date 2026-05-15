@@ -2,6 +2,7 @@ import * as std from 'qjs:std';
 import * as os from 'qjs:os';
 
 import { CdpError } from "./lib.mjs";
+import { assertProjectThreadUrlMatchesProject, projectIdsCompatible } from "./chatgpt/shared.mjs";
 import {
   materializeThreadIr,
   materializeDownloadResolveIr,
@@ -91,6 +92,26 @@ function writeJson(path, value) {
 }
 
 std.out.puts("=== CDP Scripts Integration Tests ===\n");
+
+std.out.puts("\n=== Project URL Guard Tests ===\n");
+assert(projectIdsCompatible("abc", "abc"), "same project ids are compatible");
+assert(projectIdsCompatible("abc", "abc-worker"), "project thread slug may suffix the project id");
+try {
+  const check = assertProjectThreadUrlMatchesProject(
+    "https://chatgpt.com/g/g-p-abc-worker/c/6a06f8d0-b8ec-83aa-9e07-c675e0ef4f93",
+    "https://chatgpt.com/g/g-p-abc/project",
+    "test thread",
+  );
+  assert(check.projectId === "abc" && check.threadProjectId === "abc-worker", "thread URL is bound to projectUrl");
+} catch (e) {
+  assert(false, `project/thread compatibility unexpectedly failed: ${String(e)}`);
+}
+try {
+  assertProjectThreadUrlMatchesProject("https://chatgpt.com/c/6a06f8d0-b8ec-83aa-9e07-c675e0ef4f93", "https://chatgpt.com/g/g-p-abc/project", "test thread");
+  assert(false, "non-project thread URL should be rejected");
+} catch (_) {
+  assert(true, "non-project thread URL is rejected for Project Source dependent sends");
+}
 
 const testCases = [
   { script: "read-thread.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },

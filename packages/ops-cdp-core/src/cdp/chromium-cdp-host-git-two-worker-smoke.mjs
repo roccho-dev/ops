@@ -105,7 +105,7 @@ function main(args) {
       validate: "chromium-cdp-worker-artifact-validate --repo <worktree-or-repo> --result <result.json> --patch <changes.patch> --expectedBaseRev <baseRev>",
       apply: "chromium-cdp-worker-apply --repo <repo> --worktree <repo>/.worktrees/<worker> --branch worker/<worker> --result <result.json> --patch <changes.patch> --expectedBaseRev <baseRev>",
       merge: "chromium-cdp-worker-merge-queue --repo <repo> --branch worker/thread-a --branch worker/thread-b",
-      reread: "chromium-cdp-project-source-reread --url <thread-url> --manifest SOURCE_MANIFEST.epoch-<new-epoch>.json --epoch <new-epoch> --baseRev <merged-head>",
+      reread: "chromium-cdp-project-source-reread --projectUrl <project-url> --url <thread-url> --manifest SOURCE_MANIFEST.epoch-<new-epoch>.json --epoch <new-epoch> --baseRev <merged-head>",
     },
     sourceFiles: {
       rule: "Project Sources are append-like in practice. Use epoch-specific filenames and tell workers the exact manifest/snapshot names.",

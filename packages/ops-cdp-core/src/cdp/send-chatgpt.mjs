@@ -21,12 +21,12 @@ import {
 import * as std from "qjs:std";
 import * as os from "qjs:os";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
-import { SELECTORS, keyTap, mouseClick, requireChatGptTarget } from "./chatgpt/index.mjs";
+import { SELECTORS, assertProjectThreadUrlMatchesProject, keyTap, mouseClick, requireChatGptTarget } from "./chatgpt/index.mjs";
 import { requireCdp } from "./connect.mjs";
 
 function usage() {
   std.err.puts(
-    "usage: qjs --std -m send-chatgpt.mjs --url <thread-url> (--text <s> | --text-file <path>) [--prepend <s>] [--append <s>] [--outDir <dir>] [--dryRun] [--allowGenerating] [--requireDomPro] [--domWaitMs 8000] [--send-confirm-ms 5000] [--addr 127.0.0.1] [--port 9222] [--wait-ms 0] [--id <targetId>]\n",
+    "usage: qjs --std -m send-chatgpt.mjs --url <thread-url> (--text <s> | --text-file <path>) [--projectUrl <.../project>] [--prepend <s>] [--append <s>] [--outDir <dir>] [--dryRun] [--allowGenerating] [--requireDomPro] [--domWaitMs 8000] [--send-confirm-ms 5000] [--addr 127.0.0.1] [--port 9222] [--wait-ms 0] [--id <targetId>]\n",
   );
   std.err.flush();
 }
@@ -37,6 +37,7 @@ function buildArgs(argv) {
       addr: getDefaultAddr(),
       port: getDefaultPort(),
       url: null,
+      projectUrl: null,
       id: null,
       waitMs: 0,
       text: null,
@@ -54,6 +55,7 @@ function buildArgs(argv) {
       addr: {},
       port: { parse: (raw, current) => Number(raw) || current },
       url: { required: true },
+      projectUrl: { names: ["--projectUrl", "--project-url"] },
       id: {},
       waitMs: { name: "--wait-ms", parse: (raw, current) => Number(raw) || current },
       text: {},
@@ -173,6 +175,9 @@ function main(args) {
   if (!text.length) {
     throw new Error("text is empty");
   }
+  const projectUrlCheck = args.projectUrl
+    ? assertProjectThreadUrlMatchesProject(args.url, args.projectUrl, "--url")
+    : null;
 
   if (args.outDir) ensureDir(args.outDir);
 
@@ -234,6 +239,8 @@ function main(args) {
   const preflightRecord = {
     ts_utc: new Date().toISOString(),
     url: String(args.url || ""),
+    projectUrl: String(args.projectUrl || ""),
+    project_url_check: projectUrlCheck,
     target: { id: target.id, url: target.url, title: target.title },
     dom_model: domModelPreflight,
     require_dom_pro: !!args.requireDomPro,
@@ -253,6 +260,7 @@ function main(args) {
         reason: "dom_model_not_extended_pro",
         target: { id: target.id, url: target.url, title: target.title },
         before,
+        project_url_check: projectUrlCheck,
         dom_model_preflight: domModelPreflight,
       };
       if (args.outDir) std.writeFile(`${args.outDir}/SEND_META.json`, JSON.stringify(out, null, 2) + "\n");
@@ -268,6 +276,7 @@ function main(args) {
       dry_run: true,
       target: { id: target.id, url: target.url, title: target.title },
       before,
+      project_url_check: projectUrlCheck,
       dom_model_preflight: domModelPreflight,
       allow_generating: !!args.allowGenerating,
       text_len: text.length,
@@ -326,6 +335,7 @@ function main(args) {
     reason: after && after.ok && after.len === 0 ? null : "send_not_confirmed_prompt_not_cleared",
     target: { id: target.id, url: target.url, title: target.title },
     before,
+    project_url_check: projectUrlCheck,
     dom_model_preflight: domModelPreflight,
     allow_generating: !!args.allowGenerating,
     afterType,

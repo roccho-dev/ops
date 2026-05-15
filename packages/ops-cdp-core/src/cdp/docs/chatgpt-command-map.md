@@ -117,7 +117,7 @@
 | project source 一覧や file を集める | project source | `chromium-cdp-project-sources-collect-files` | 読み取り側 |
 | project source の add/read を一気に試す | project source composite | `chromium-cdp-project-sources-roundtrip` | composite。今は UI drift に弱い |
 | thread -> source -> read を一気に試す | project source composite | `chromium-cdp-project-sources-turn-roundtrip` | composite。`--removeAfter` が escape hatch |
-| 同名source更新後に読み直しを指示する | project source | `chromium-cdp-project-source-reread` | 既存threadのcache/古い文脈を避ける |
+| 同名source更新後に読み直しを指示する | project source | `chromium-cdp-project-source-reread` | `--projectUrl` 必須。既存threadのcache/古い文脈を避ける |
 | host repo snapshot を作る | host git | `chromium-cdp-source-snapshot-text` | Project Sources 用 current snapshot |
 | worker成果を検証する | host git | `chromium-cdp-worker-artifact-validate` | `result.json` / `changes.patch` |
 | worker patch を worktree へ適用する | host git | `chromium-cdp-worker-apply` | test と commit まで |

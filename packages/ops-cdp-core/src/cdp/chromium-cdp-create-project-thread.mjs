@@ -1,7 +1,7 @@
 import * as std from "qjs:std";
 import { requireCdp } from "./connect.mjs";
 import { getDefaultAddr, getDefaultPort, mkCaller, parseArgs, run, sleepMs } from "./lib.mjs";
-import { extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
+import { assertProjectThreadUrlMatchesProject, extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
 
 function usage() {
@@ -256,6 +256,9 @@ function createThread(args) {
     threadUrl: created && created.ok ? String(created.href || "") : null,
     conversationId: created && created.ok ? (created.conversationId || extractConversationId(created.href || "")) : null,
   };
+  result.project_url_check = result.threadUrl
+    ? assertProjectThreadUrlMatchesProject(result.threadUrl, args.projectUrl, "created thread")
+    : null;
 
   if (args.outPath) {
     std.writeFile(args.outPath, JSON.stringify(result, null, 2) + "\n");

@@ -2,6 +2,7 @@ import * as os from "qjs:os";
 import * as std from "qjs:std";
 
 import { getDefaultAddr, getDefaultPort, parseArgs, run, runToString, sleepMs } from "./lib.mjs";
+import { assertProjectThreadUrlMatchesProject, extractProjectId } from "./chatgpt/index.mjs";
 
 function getScriptModulePath(name) {
   const root = String(std.getenv("HQ_CDP_SCRIPT_SRC") || "");
@@ -14,7 +15,7 @@ function getQjsExe() {
 
 function usage() {
   std.err.puts(
-    "usage: qjs --std -m chromium-cdp-project-source-reread.mjs --url <thread-url> [--url <thread-url> ...] [--urlsFile <path>] [--manifest SOURCE_MANIFEST.json] [--epoch <n>] [--baseRev <rev>] [--message <text>] [--intervalMs 15000] [--dryRun] [--addr 127.0.0.1] [--port <n>] [--json]\n",
+    "usage: qjs --std -m chromium-cdp-project-source-reread.mjs --projectUrl <.../project> --url <project-thread-url> [--url <project-thread-url> ...] [--urlsFile <path>] [--manifest SOURCE_MANIFEST.json] [--epoch <n>] [--baseRev <rev>] [--message <text>] [--intervalMs 15000] [--dryRun] [--addr 127.0.0.1] [--port <n>] [--json]\n",
   );
   std.err.flush();
 }
@@ -22,6 +23,7 @@ function usage() {
 function buildArgs(argv) {
   return parseArgs(argv, {
     defaults: {
+      projectUrl: null,
       urls: [],
       urlsFile: null,
       manifest: "SOURCE_MANIFEST.json",
@@ -36,6 +38,7 @@ function buildArgs(argv) {
       json: false,
     },
     flags: {
+      projectUrl: { names: ["--projectUrl", "--project-url"] },
       urls: { names: ["--url"], multiple: true },
       urlsFile: {},
       manifest: {},
@@ -56,7 +59,7 @@ function buildArgs(argv) {
         const body = String(std.loadFile(out.urlsFile) || "");
         out.urls.push(...body.split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
       }
-      return out.urls.length > 0 ? out : null;
+      return out.projectUrl && out.urls.length > 0 ? out : null;
     },
   });
 }
@@ -76,6 +79,9 @@ function buildMessage(args) {
 }
 
 function main(args) {
+  const projectId = extractProjectId(args.projectUrl);
+  if (!projectId) throw new Error("--projectUrl must be a ChatGPT Project URL");
+  const urlChecks = args.urls.map((url, i) => assertProjectThreadUrlMatchesProject(url, args.projectUrl, `--url[${i}]`));
   const message = buildMessage(args);
   const sent = [];
   for (let i = 0; i < args.urls.length; i++) {
@@ -89,6 +95,7 @@ function main(args) {
         const out = runToString([
           getQjsExe(), "--std", "-m", getScriptModulePath("send-chatgpt.mjs"),
           "--url", url,
+          "--projectUrl", String(args.projectUrl),
           "--text-file", path,
           "--addr", String(args.addr),
           "--port", String(args.port),
@@ -101,7 +108,7 @@ function main(args) {
     }
     if (i + 1 < args.urls.length && args.intervalMs > 0) sleepMs(args.intervalMs);
   }
-  const result = { ok: sent.every((row) => row.ok), count: sent.length, message, sent };
+  const result = { ok: sent.every((row) => row.ok), projectUrl: args.projectUrl, projectId, urlChecks, count: sent.length, message, sent };
   if (args.json) std.out.puts(JSON.stringify(result, null, 2) + "\n");
   else std.out.puts(`sent=${sent.length}\n`);
   return result.ok ? 0 : 1;

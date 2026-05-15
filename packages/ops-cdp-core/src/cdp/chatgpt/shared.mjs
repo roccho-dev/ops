@@ -20,6 +20,29 @@ export function extractProjectId(url) {
   return m ? m[1] : null;
 }
 
+export function projectIdsCompatible(parentProjectId, childProjectId) {
+  const parent = String(parentProjectId || "");
+  const child = String(childProjectId || "");
+  if (!parent || !child) return false;
+  if (parent === child) return true;
+  return child.startsWith(parent + "-") || parent.startsWith(child + "-");
+}
+
+export function assertProjectThreadUrlMatchesProject(threadUrl, projectUrl, label) {
+  const projectId = extractProjectId(projectUrl);
+  const threadProjectId = extractProjectId(threadUrl);
+  if (!projectId) {
+    throw new Error(`${label || "thread"}: --projectUrl is required and must be a ChatGPT Project URL`);
+  }
+  if (!threadProjectId) {
+    throw new Error(`${label || "thread"}: thread URL is not a ChatGPT Project thread URL: ${String(threadUrl || "")}`);
+  }
+  if (!projectIdsCompatible(projectId, threadProjectId)) {
+    throw new Error(`${label || "thread"}: project mismatch: projectUrl=${projectId}, threadUrl=${threadProjectId}`);
+  }
+  return { projectId, threadProjectId };
+}
+
 export function normalizeAbsUrl(href) {
   const h = String(href || "");
   if (!h) return h;

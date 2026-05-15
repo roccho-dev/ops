@@ -24,7 +24,7 @@
 | `chromium-cdp-git-ref-health` | `git+file://` 検証前に stale / invalid ref を検出し、`path:$PWD#...` へ寄せる判断材料を出す |
 | `chromium-cdp-thread-ledger` | `zeal0/9/thread/1` のように thread URL、prompt文字数、report、retry を測定する |
 | `chromium-cdp-worker-merge-queue` | worker branch を host repo の target branch へ順に merge する |
-| `chromium-cdp-project-source-reread` | epoch 固有 Project Source を各 thread へ再読込指示する |
+| `chromium-cdp-project-source-reread` | epoch 固有 Project Source を各 thread へ再読込指示する。`--projectUrl` は必須 |
 | `chromium-cdp-host-git-two-worker-smoke` | 2 worker 運用の計画 file と worker prompt を生成する |
 | `chromium-cdp-host-git-workflow-regression` | 実地で遭遇したブロックのoffline回帰テストをまとめて走らせる |
 
@@ -157,6 +157,7 @@ chromium-cdp-worker-merge-queue \
 
 ```bash
 chromium-cdp-project-source-reread \
+  --projectUrl "$PROJECT_URL" \
   --url "$THREAD_A" \
   --url "$THREAD_B" \
   --manifest "SOURCE_MANIFEST.epoch-$NEW_EPOCH.json" \
@@ -165,6 +166,8 @@ chromium-cdp-project-source-reread \
 ```
 
 Project Sources の画面に新しい file が見えていても、既存 thread 側の source 解決へ反映されるまで遅れることがあります。thread が `not found` や似た旧名を返した場合は、2-3 分待ってから同じ `chromium-cdp-project-source-reread` を再実行します。message では exact filename を指定し、似た名前や旧 epoch を無視させます。
+
+Project Source に依存する操作では `threadUrl` だけを根拠にしません。`--projectUrl` を必須にし、Project Source 画面で期待 file 名が見えること、対象 thread URL が同じ Project 系であること、送信後に readback で新しい turn / 返答を確認できることを別々の evidence として扱います。CDP の成功コードだけでは semantic success に昇格しません。
 
 ## worker runtime bundle policy
 

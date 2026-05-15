@@ -339,8 +339,9 @@ function main(args) {
   assertCase(cases, "post-merge snapshot baseRev updates", snapshot2.manifest.baseRev === mergedHead, snapshot2.manifest.baseRev);
 
   const reread = qjsJson("chromium-cdp-project-source-reread.mjs", [
-    "--url", "https://chatgpt.com/c/thread-a",
-    "--url", "https://chatgpt.com/c/thread-b",
+    "--projectUrl", "https://chatgpt.com/g/g-p-project/project",
+    "--url", "https://chatgpt.com/g/g-p-project/c/thread-a",
+    "--url", "https://chatgpt.com/g/g-p-project/c/thread-b",
     "--manifest", "SOURCE_MANIFEST.epoch-2.json",
     "--epoch", "2",
     "--baseRev", mergedHead,
