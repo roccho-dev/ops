@@ -52,6 +52,11 @@
   - `chromium-cdp-create-project-thread`
 - project source を触る
   - `chromium-cdp-project-sources-*`
+- transport-only 証跡を作る
+  - `project-transport-*`
+  - `project-source-put`
+  - `project-thread-*`
+  - `project-artifact-fetch`
 
 ## 運用モデル
 
@@ -125,6 +130,15 @@
 | package 実装運用の状態を進める | host orchestration | `chromium-cdp-package-run-state` | `run.json` を正本に impl/review/finalize を管理する |
 | worker branch を順にmergeする | host git | `chromium-cdp-worker-merge-queue` | host repo 正本へ統合 |
 | 2worker運用の計画を作る | host git | `chromium-cdp-host-git-two-worker-smoke` | prompt とplan生成 |
+| transport runtime を確認する | transport-only | `project-transport-doctor` | CDP / low-level command / wrapper command の存在確認。意味判断しない |
+| CDP port を調べる | transport-only | `project-transport-env` | 9222/9223/9224 などを probe する |
+| Project Source に置いて見えることを確認する | transport-only | `project-source-put` | thread 添付 fallback なし。Project Source only |
+| Project thread を作る | transport-only | `project-thread-create` | short pointer/control text だけを送る |
+| 既存 Project thread に送る | transport-only | `project-thread-send` | inline 長文を拒否する |
+| Project thread の readback を確認する | transport-only | `project-thread-readback` | marker readback のみ。内容承認しない |
+| artifact を回収して hash を出す | transport-only | `project-artifact-fetch` | `ARTIFACTS_MANIFEST.json` を書く |
+| transport result を claim JSONL に積む | transport-only | `project-transport-claim` | append-only。claim を approval にしない |
+| Project Source -> thread create の通常列を実行する | transport-only | `project-transport-run` | `transport-result.json` と `TRANSPORT_RUN_REPORT.md` を書く |
 
 ## thread file と project source の違い
 

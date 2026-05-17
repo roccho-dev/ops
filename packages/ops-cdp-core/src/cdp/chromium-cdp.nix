@@ -138,6 +138,32 @@
         name: spec: mkQjsCommand ({ inherit name; } // spec)
       ) qjsCommands;
 
+      mkProjectTransportCommand =
+        { name
+        , subcommand
+        }:
+        pkgs.writeShellScriptBin name ''
+          set -euo pipefail
+          export PATH=${lib.makeBinPath ([ cdpBridge pkgs.coreutils pkgs.python3 pkgs.quickjs-ng ] ++ lib.attrValues qjsCommandBins)}:$PATH
+          exec ${pkgs.python3}/bin/python3 ${cdpScriptSrc}/project-transport.py ${subcommand} "$@"
+        '';
+
+      projectTransportCommands = {
+        project-transport-doctor = { subcommand = "doctor"; };
+        project-transport-env = { subcommand = "env"; };
+        project-source-put = { subcommand = "source-put"; };
+        project-thread-create = { subcommand = "thread-create"; };
+        project-thread-send = { subcommand = "thread-send"; };
+        project-thread-readback = { subcommand = "thread-readback"; };
+        project-artifact-fetch = { subcommand = "artifact-fetch"; };
+        project-transport-claim = { subcommand = "claim"; };
+        project-transport-run = { subcommand = "run"; };
+      };
+
+      projectTransportCommandBins = lib.mapAttrs (
+        name: spec: mkProjectTransportCommand ({ inherit name; } // spec)
+      ) projectTransportCommands;
+
       chromiumCdpChatgptCommandMap = pkgs.writeShellScriptBin "chromium-cdp-chatgpt-command-map" ''
         set -euo pipefail
         exec ${pkgs.coreutils}/bin/cat ${cdpScriptSrc}/docs/chatgpt-command-map.md
@@ -155,7 +181,7 @@
           (lib.getBin pkgs.coreutils)
           (lib.getBin pkgs.python3)
           (lib.getBin pkgs.quickjs-ng)
-        ] ++ lib.attrValues qjsCommandBins;
+        ] ++ lib.attrValues qjsCommandBins ++ lib.attrValues projectTransportCommandBins;
       };
 
       launcherPackages = {
@@ -173,14 +199,14 @@
           type = "app";
           program = "${pkg}/bin/${name}";
         }
-      ) (qjsCommandBins // {
+      ) (qjsCommandBins // projectTransportCommandBins // {
         chromium-cdp = chromiumCdp;
         chromium-cdp-wsurl = chromiumCdpWsUrl;
         chromium-cdp-chatgpt-command-map = chromiumCdpChatgptCommandMap;
       });
     in
     {
-      packages = launcherPackages // qjsCommandBins;
+      packages = launcherPackages // qjsCommandBins // projectTransportCommandBins;
       apps = commandApps;
     };
 }

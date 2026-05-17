@@ -6,8 +6,8 @@ builtins.fromJSON ''
   "primaryTarget": "packages/ops-cdp-core",
   "repoId": "ops",
   "requiredChecks": "checks.<system>.ops-cdp-core",
-  "requiredOutputs": "packages.<system>.ops-cdp-core and apps.<system>.chromium-cdp-*",
-  "responsibility": "Own the ChatGPT CDP, Project Source, thread creation, thread send/readback, artifact fetch, and host git workflow command surface migrated from flakes.",
+  "requiredOutputs": "packages.<system>.ops-cdp-core, packages.<system>.chromium-cdp-*, and packages.<system>.project-transport-* wrappers",
+  "responsibility": "Own the ChatGPT CDP, Project Source, thread creation, thread send/readback, artifact fetch, project transport-only wrappers, and host git workflow command surface migrated from flakes.",
   "forbiddenResponsibility": "Does not make flakes a second canonical CDP implementation. flakes is migration source, compatibility shim, or deprecation marker only.",
   "migrationSource": {
     "repo": "flakes",

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.projectTransportResult.v1",
+  "type": "object",
+  "required": [
+    "kind",
+    "command",
+    "ok",
+    "status",
+    "semanticApproval",
+    "completionApproval",
+    "routeDecision"
+  ],
+  "properties": {
+    "kind": {
+      "const": "ops.projectTransportResult.v1"
+    },
+    "command": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string"
+    },
+    "semanticApproval": {
+      "const": false
+    },
+    "completionApproval": {
+      "const": false
+    },
+    "routeDecision": {
+      "const": false
+    },
+    "transportSent": {
+      "type": "boolean"
+    },
+    "transportVisible": {
+      "type": "boolean"
+    },
+    "transportRead": {
+      "type": "boolean"
+    },
+    "readbackVerified": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

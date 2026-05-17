@@ -7,8 +7,8 @@
   "repoId": "ops",
   "repoPlacement": "fixed",
   "requiredChecks": "checks.<system>.ops-cdp-core",
-  "requiredOutputs": "packages.<system>.ops-cdp-core and apps.<system>.chromium-cdp-*",
-  "responsibility": "Own the ChatGPT CDP, Project Source, thread creation, thread send/readback, artifact fetch, and host git workflow command surface migrated from flakes.",
+  "requiredOutputs": "packages.<system>.ops-cdp-core, packages.<system>.chromium-cdp-*, and packages.<system>.project-transport-* wrappers",
+  "responsibility": "Own the ChatGPT CDP, Project Source, thread creation, thread send/readback, artifact fetch, project transport-only wrappers, and host git workflow command surface migrated from flakes.",
   "forbiddenResponsibility": "Do not keep the same implementation as a second canonical runtime in flakes.",
   "migrationSource": {
     "repo": "flakes",

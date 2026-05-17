@@ -160,10 +160,41 @@
           test -x "$(command -v chromium-cdp-send-chatgpt)"
           test -x "$(command -v chromium-cdp-project-source-reread)"
           test -x "$(command -v chromium-cdp-fetch-artifact-strict)"
+          test -x "$(command -v project-transport-doctor)"
+          test -x "$(command -v project-transport-env)"
+          test -x "$(command -v project-source-put)"
+          test -x "$(command -v project-thread-create)"
+          test -x "$(command -v project-thread-send)"
+          test -x "$(command -v project-thread-readback)"
+          test -x "$(command -v project-artifact-fetch)"
+          test -x "$(command -v project-transport-claim)"
+          test -x "$(command -v project-transport-run)"
           test -x "$(command -v cdp-bridge)"
           cdp-bridge --help > "$out/cdp-bridge-help.txt" 2>&1
           grep -q 'cdp-bridge wsurl' "$out/cdp-bridge-help.txt"
           grep -q 'click-mode direct' "$out/cdp-bridge-help.txt"
+          mkdir -p "$out/transport"
+          printf 'hello\n' > "$out/transport/source.txt"
+          printf 'use Project Source artifact\n' > "$out/transport/prompt.txt"
+          project-transport-doctor --offline --out-path "$out/transport/doctor.json" > "$out/transport/doctor.stdout"
+          project-source-put --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --file "$out/transport/source.txt" --out-dir "$out/transport" > "$out/transport/source-put.json"
+          project-thread-create --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --text-file "$out/transport/prompt.txt" --out-dir "$out/transport" > "$out/transport/thread-create.json"
+          project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --project-url 'https://chatgpt.com/g/g-p-test/project' --text 'artifact: source.txt' --out-dir "$out/transport" > "$out/transport/thread-send.json"
+          ! project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --text "$(python3 - <<'PY'
+          print('x' * 2100)
+          PY
+          )" --out-dir "$out/transport" > "$out/transport/thread-send-long.json"
+          project-thread-readback --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --id target-test --markers source.txt --out-dir "$out/transport" > "$out/transport/readback.json"
+          project-artifact-fetch --dry-run --name result.zip --url 'https://chatgpt.com/g/g-p-test/c/test' --out-dir "$out/transport" > "$out/transport/artifact-fetch.json"
+          project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run" > "$out/transport/run.json"
+          project-transport-claim --input "$out/transport/run/transport-result.json" --claim-path "$out/transport/claim.jsonl" > "$out/transport/claim.json"
+          test -f "$out/transport/run/TRANSPORT_RUN_REPORT.md"
+          test -s "$out/transport/claim.jsonl"
+          grep -q '"semanticApproval": false' "$out/transport/run/transport-result.json"
+          grep -q '"completionApproval": false' "$out/transport/run/transport-result.json"
+          grep -q '"routeDecision": false' "$out/transport/run/transport-result.json"
+          grep -q '"threadAttachmentFallbackAllowed": false' "$out/transport/source-put.json"
+          grep -q 'inline-too-long' "$out/transport/thread-send-long.json"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README
