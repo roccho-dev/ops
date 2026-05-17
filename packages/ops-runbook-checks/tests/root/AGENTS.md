@@ -1,30 +1,8 @@
 # AGENTS.md
 
-- `0/9` は CDP / ChatGPT thread / Project Source / artifact 回収の owner。
-- agent 管理の正本は `$HOME/.agents/events.jsonl`。
-- `$HOME/.agents/status.md` は生成物。
-- status.md は生成物として扱う。
-- `ops-agent-events`
-- `ops-artifact-materialize`
-- `ops-knowledge-intake`
-- `ops-runbook-checks`
-- `ops-thread-fsm`
-- `delivery-verified`
-- `impl-review`
-- `impl-review-pass`
-- `merge executor`
-- `merge-candidate-ready`
-- `merge-review`
-- `merge-review-pass`
-- `merge-ready`
-- `localizer`
-- `localized-local-gate-pass`
-- `remote-backup-verified`
-- `role-override`
-- `post-hoc-merge-review-required`
-- `ops-tailnet-github-egress`
-- `ops-refs-vault`
-- route-gated local push
-- long-transfer
-- github.com
-- tag:github
+This fixture is a small router.
+
+- `rootActor`, `parentActor`, `childActor`, `delegatedParentActor`, and `transportOnlyActor` are the authority-bearing role names.
+- `complete-approved` is the only success terminal.
+- Package work is resolved from `repos/specs` package contract data.
+- Do not treat static checks as ChatGPT, review, merge, push, or completion proof.
