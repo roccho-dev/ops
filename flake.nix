@@ -111,6 +111,36 @@
             --root ${./packages/ops-runbook-checks/tests/root} \
             --json > "$out/report.json"
           grep -q '"ok": true' "$out/report.json"
+          grep -q '"classification": "minimum-static-gate-pass"' "$out/report.json"
+          grep -q '"scope": "static-only"' "$out/report.json"
+          grep -q '"capability": "chatgpt.projectSource.uploadReadback"' "$out/report.json"
+          grep -q '"capability": "chatgpt.artifact.receipt"' "$out/report.json"
+          grep -q '"capability": "review.impl.pass"' "$out/report.json"
+          grep -q '"capability": "review.merge.pass"' "$out/report.json"
+          grep -q '"capability": "tailnet.github.egressPush"' "$out/report.json"
+          grep -q '"capability": "authority.completeApproved"' "$out/report.json"
+          test "$(grep -c '"not-proven-by-static-check"' "$out/report.json")" -eq 6
+          cp -R ${./packages/ops-runbook-checks/tests/root} "$out/legacy-token-root"
+          chmod -R u+w "$out/legacy-token-root"
+          cat >> "$out/legacy-token-root/AGENTS.md" <<'EOF'
+
+          Legacy false-positive tokens below must fail this otherwise complete fixture:
+
+          - `0/9`
+          - `$HOME/.agents/status.md`
+          - `delivery-verified`
+          - `merge executor`
+          - `role-override`
+          - `post-hoc-merge-review-required`
+          EOF
+          if ops-runbook-checks \
+            --root "$out/legacy-token-root" \
+            --json > "$out/legacy-report.json"; then
+            echo "legacy token fixture unexpectedly passed" >&2
+            exit 1
+          fi
+          grep -q '"classification": "minimum-static-gate-fail"' "$out/legacy-report.json"
+          grep -q 'AGENTS.md still contains legacy or raw-success token' "$out/legacy-report.json"
         '';
         ops-thread-fsm = pkgs.runCommand "ops-thread-fsm-check" {
           nativeBuildInputs = [ pkgs.python3 self.packages.${pkgs.stdenv.hostPlatform.system}.ops-thread-fsm ];
