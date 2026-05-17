@@ -42,3 +42,20 @@ Every result is `ops.projectTransportResult.v1` and must keep:
   `--id`, it may open the URL when needed.
 - `project-transport-doctor` validates the requested CDP port, not just any
   ChatGPT session found on another port.
+
+## Project URL shapes
+
+Use the URL for the door you are opening.
+
+| command | accepted URL shape | reason |
+|---|---|---|
+| `project-source-put` | Project URL, including `?tab=sources` | this command opens the Project Sources file area |
+| `project-thread-create` | base Project URL without `?tab=sources` | this command creates a new Project thread |
+| `project-thread-send` | existing `/c/<thread-id>` URL | this command sends a short pointer/control message to one thread |
+| `project-thread-readback` | existing `/c/<thread-id>` URL, preferably with `--id` | this command reads one target thread |
+| `project-transport-run` | base Project URL without `?tab=sources` when it will create a thread | this command uploads source, then creates a thread |
+
+If `project-thread-create` or the thread-create phase of `project-transport-run`
+receives `?tab=sources`, it fails with `project-url-wrong-shape`. This is
+intentional: the Project Sources tab is the file-upload door, not the
+thread-creation door.

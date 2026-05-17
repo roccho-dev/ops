@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 
 DECISION_FLAGS = {
@@ -87,6 +88,23 @@ def common_result(command: str, args: argparse.Namespace) -> dict[str, Any]:
         "dryRun": bool(getattr(args, "dry_run", False)),
         **DECISION_FLAGS,
     }
+
+
+def project_url_shape_error(project_url: str, purpose: str) -> dict[str, Any] | None:
+    parsed = urlparse(project_url)
+    query = parse_qs(parsed.query)
+    if purpose == "thread-create" and query.get("tab") == ["sources"]:
+        return {
+            "ok": False,
+            "status": "project-url-wrong-shape",
+            "reason": "thread creation requires the base Project URL, not the Project Sources tab URL",
+            "projectUrl": project_url,
+            "expectedUrlShape": "https://chatgpt.com/g/<project-id>/<project-name>/project",
+            "rejectedUrlShape": "project?tab=sources",
+            "allowedFor": ["project-source-put"],
+            "forbiddenFor": ["project-thread-create", "project-transport-run thread-create phase"],
+        }
+    return None
 
 
 def parse_json_maybe(text: str) -> Any:
@@ -279,6 +297,9 @@ def read_prompt(args: argparse.Namespace) -> str:
 
 def handle_thread_create(args: argparse.Namespace) -> int:
     result = common_result("project-thread-create", args)
+    if shape_error := project_url_shape_error(args.project_url, "thread-create"):
+        result.update(shape_error)
+        return maybe_write_out(args, result)
     text = read_prompt(args)
     result["projectUrl"] = args.project_url
     result["promptLength"] = len(text)
@@ -503,6 +524,14 @@ def handle_run(args: argparse.Namespace) -> int:
     result["projectUrl"] = args.project_url
     result["outDir"] = str(out_dir)
     steps: list[dict[str, Any]] = []
+    if args.prompt_file or args.text:
+        if shape_error := project_url_shape_error(args.project_url, "thread-create"):
+            result.update(shape_error)
+            result["status"] = "project-url-wrong-shape"
+            result["steps"] = steps
+            write_run_report(out_dir, result)
+            write_json(out_dir / "transport-result.json", result)
+            return maybe_write_out(args, result)
 
     for source in args.source_file:
         ns = argparse.Namespace(**vars(args))

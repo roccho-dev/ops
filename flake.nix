@@ -208,7 +208,9 @@
           printf 'use Project Source artifact\n' > "$out/transport/prompt.txt"
           project-transport-doctor --offline --out-path "$out/transport/doctor.json" > "$out/transport/doctor.stdout"
           project-source-put --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --file "$out/transport/source.txt" --out-dir "$out/transport" > "$out/transport/source-put.json"
+          project-source-put --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --file "$out/transport/source.txt" --out-dir "$out/transport" > "$out/transport/source-put-sources-tab.json"
           project-thread-create --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --text-file "$out/transport/prompt.txt" --out-dir "$out/transport" > "$out/transport/thread-create.json"
+          ! project-thread-create --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --text-file "$out/transport/prompt.txt" --out-dir "$out/transport" > "$out/transport/thread-create-sources-tab.json"
           project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --project-url 'https://chatgpt.com/g/g-p-test/project' --text 'artifact: source.txt' --out-dir "$out/transport" > "$out/transport/thread-send.json"
           ! project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --text "$(python3 - <<'PY'
           print('x' * 2100)
@@ -217,6 +219,7 @@
           project-thread-readback --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --id target-test --markers source.txt --out-dir "$out/transport" > "$out/transport/readback.json"
           project-artifact-fetch --dry-run --name result.zip --url 'https://chatgpt.com/g/g-p-test/c/test' --out-dir "$out/transport" > "$out/transport/artifact-fetch.json"
           project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run" > "$out/transport/run.json"
+          ! project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run-wrong-shape" > "$out/transport/run-wrong-shape.json"
           project-transport-claim --input "$out/transport/run/transport-result.json" --claim-path "$out/transport/claim.jsonl" > "$out/transport/claim.json"
           test -f "$out/transport/run/TRANSPORT_RUN_REPORT.md"
           test -s "$out/transport/claim.jsonl"
@@ -224,6 +227,8 @@
           grep -q '"completionApproval": false' "$out/transport/run/transport-result.json"
           grep -q '"routeDecision": false' "$out/transport/run/transport-result.json"
           grep -q '"threadAttachmentFallbackAllowed": false' "$out/transport/source-put.json"
+          grep -q 'project-url-wrong-shape' "$out/transport/thread-create-sources-tab.json"
+          grep -q 'project-url-wrong-shape' "$out/transport/run-wrong-shape.json"
           grep -q 'inline-too-long' "$out/transport/thread-send-long.json"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
