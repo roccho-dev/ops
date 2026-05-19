@@ -2,7 +2,7 @@
 
 Status: proposal-only
 
-This worktree contains exactly one proposal and one matching issue ledger record.
+This file documents exactly one proposal and one matching issue ledger record.
 It does not implement code, approve merge, push, cleanup, or close the issue.
 
 ## 2. `todo-20260520-source-put-failure-classification`
