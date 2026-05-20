@@ -92,6 +92,12 @@ def attr_defined(flake_text, name):
     return any(re.search(pattern, flake_text) for pattern in patterns)
 
 
+def forbidden_flake_output_lines(flake_text, output_name):
+    escaped = re.escape(output_name)
+    pattern = re.compile(rf"(?m)^\s*{escaped}\s*=")
+    return [match.start() for match in pattern.finditer(flake_text)]
+
+
 def run_structure(root, system, args):
     items = []
     flake = root / "flake.nix"
@@ -107,6 +113,10 @@ def run_structure(root, system, args):
     check_item(items, "inputs-specs-declared", specs_declared, "flake.nix declares inputs.specs")
     check_item(items, "outputs-receive-specs", re.search(r"outputs\s*=\s*\{[^}]*specs", flake_text) is not None, "outputs argument includes specs")
     check_item(items, "prove-feat-package-wired", attr_defined(flake_text, "prove-feat"), "flake.nix defines prove-feat outputs")
+    apps = forbidden_flake_output_lines(flake_text, "apps")
+    devshells = forbidden_flake_output_lines(flake_text, "devShells")
+    check_item(items, "no-top-level-apps-output", not apps, "flake.nix does not expose top-level apps")
+    check_item(items, "no-top-level-devshells-output", not devshells, "flake.nix does not expose top-level devShells")
 
     lock = read_json(lock_path) if lock_path.is_file() else {}
     specs_locked = locked_specs(lock)

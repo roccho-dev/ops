@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     specs = {
-      url = "git+file:///home/nixos/repos/specs?rev=0d22a3cfdddaf7cb3f9ba320f262e78b423fd610";
+      url = "git+file:///home/nixos/repos/specs?rev=baca6748aa0f87bbf5d761f57b2485991a714754";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -128,9 +128,6 @@
         }
         // cdp.packages
       );
-
-      apps = forEachSystem (pkgs: (cdpFor pkgs).apps);
-
       checks = forEachSystem (
         pkgs:
         let
