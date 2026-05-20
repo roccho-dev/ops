@@ -1,0 +1,21 @@
+{
+  "kind": "ops.profileRouteLiveProof.v1",
+  "status": "live-proof-pass",
+  "candidateBranch": "codex/profile-golden-route-gate-20260520",
+  "candidateHead": "2454abfec69b21264b483c3234d98967a6893905",
+  "projectUrl": "https://chatgpt.com/g/g-p-69fee227df308191b1ff7c00eb87d097-ops-merge/project",
+  "threadUrl": "https://chatgpt.com/g/g-p-69fee227df308191b1ff7c00eb87d097-ops-merge/c/6a0d54a2-8f8c-83ab-bb5a-cdc84d255a9d",
+  "cdpPort": 9223,
+  "token": "CODEX_PROFILE_ROUTE_PROOF_20260520T062343Z",
+  "route": {
+    "envStatus": "project-route-recommended",
+    "projectAccessStatus": "project-access-ok",
+    "sourcePutStatus": "source-upload-visible",
+    "threadCreateStatus": "thread-created",
+    "threadReadbackStatus": "readback-verified",
+    "readbackWaitSecondsMinimum": 300
+  },
+  "semanticApproval": false,
+  "completionApproval": false,
+  "routeDecision": false
+}

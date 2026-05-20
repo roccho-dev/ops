@@ -1,0 +1,19 @@
+{
+  "kind": "ops.profileRouteNegativeProof.v1",
+  "status": "unauth-route-rejected",
+  "candidateBranch": "codex/profile-golden-route-gate-20260520",
+  "candidateHead": "2454abfec69b21264b483c3234d98967a6893905",
+  "cdpPort": 9224,
+  "profileKind": "fresh-empty-unauthenticated-runtime-profile",
+  "envStatus": "project-route-not-verified",
+  "envOk": false,
+  "doctorStatus": "project-route-not-verified",
+  "doctorOk": false,
+  "doctorReason": "NO_AUTH_SESSION_COOKIE",
+  "doctorSessionStatus": "unauthenticated",
+  "doctorSessionUrl": "https://chatgpt.com/auth/login/?next=%2Fg%2Fg-p-69fee227df308191b1ff7c00eb87d097-ops-merge%2Fproject",
+  "recommendedRoute": null,
+  "semanticApproval": false,
+  "completionApproval": false,
+  "routeDecision": false
+}

@@ -78,6 +78,14 @@ Expected behavior:
 - generic auth without target Project access is not `ok`
 - Project login redirect is `project-access-profile-missing`
 - a usable candidate returns `recommendedRoute`
+- a fresh unauthenticated profile must not produce a `recommendedRoute`
+- a route is complete only after Project Source upload, Project thread creation,
+  and delayed thread readback prove that the target Project can read the source
 
 Do not make deprecated `flakes` commands, raw `.mjs` scripts, or proof worktree
 paths normal actor instructions. They are debug or migration evidence only.
+
+The compact proof for the current route gate is under
+`packages/ops-cdp-core/evidence/profile-route-gate-20260520/`.
+It records both the authenticated positive route and the fresh-profile negative
+route. Raw CDP logs remain raw evidence and are not normal actor instructions.
