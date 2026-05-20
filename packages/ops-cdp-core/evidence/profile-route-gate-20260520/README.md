@@ -22,6 +22,20 @@ Raw CDP logs stay outside package docs unless promoted by a later handoff.
 - Doctor reason: `NO_AUTH_SESSION_COOKIE`
 - Recommended route: `null`
 
+## Unauthenticated to existing snapshot route
+
+- Fresh unauthenticated runtime profile: rejected
+- Existing authenticated snapshot source:
+  `/home/nixos/.secret/hq/chromium-cdp-profile.snapshot`
+- Runtime profile: fresh copy of that existing snapshot
+- CDP port: 9223
+- Result: `project-route-recommended`
+- Project Source upload: `source-upload-visible`
+- Project thread create: `thread-created`
+- Readback interval: at least 300 seconds
+- Readback result: `readback-verified`
+- Proof marker: `SAFE_PROJECT_SOURCE_MARKER_20260520T081000Z`
+
 ## Rule
 
 A reachable CDP port is not enough.
@@ -29,10 +43,10 @@ Generic ChatGPT login is not enough.
 The accepted route is the requested Project URL itself, followed by Project
 Source upload, thread creation, and delayed thread readback.
 
-## Automatic login route
+## Automatic session route
 
-The reusable automatic route is session reuse from an approved profile snapshot.
-It is not credential or OTP automation.
+The reusable automatic route proven here is session reuse from an existing
+authenticated profile snapshot. It is not credential or OTP automation.
 
 The route is:
 
@@ -52,10 +66,21 @@ headful seed profile
 
 Accepted as automatic:
 
-- starting CDP from a runtime copy of an already approved authenticated
+- starting CDP from a runtime copy of an existing authenticated
   snapshot;
 - proving the requested Project route before upload;
 - using Project Source and delayed readback to prove the route.
+- rejecting a fresh unauthenticated profile before using the snapshot runtime
+  copy.
+
+Proven source:
+
+- `/home/nixos/.secret/hq/chromium-cdp-profile.snapshot`
+
+Not proven by this package evidence:
+
+- creating that snapshot from a fresh profile;
+- publishing that snapshot through canonical `ops-cdp-core` commands.
 
 Not accepted as automatic:
 

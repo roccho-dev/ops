@@ -1,0 +1,42 @@
+{
+  "kind": "ops.profileRouteUnauthToSuccessProof.v1",
+  "status": "unauth-to-existing-snapshot-runtime-copy-pass",
+  "candidateBranch": "codex/profile-golden-route-gate-20260520",
+  "candidateHeadBeforeProofCommit": "f7cddd1a9ddd",
+  "projectUrl": "https://chatgpt.com/g/g-p-69fee227df308191b1ff7c00eb87d097-ops-merge/project",
+  "authMechanism": "existing-authenticated-snapshot-runtime-copy",
+  "credentialAutomation": false,
+  "otpAutomation": false,
+  "sourceSnapshot": {
+    "path": "/home/nixos/.secret/hq/chromium-cdp-profile.snapshot",
+    "exists": true
+  },
+  "unauthenticatedPhase": {
+    "cdpPort": 9224,
+    "profileKind": "fresh-empty-runtime-profile",
+    "doctorStatus": "project-route-not-verified",
+    "doctorOk": false,
+    "doctorSessionStatus": "unauthenticated",
+    "doctorReason": "NO_AUTH_SESSION_COOKIE",
+    "recommendedRoute": null
+  },
+  "existingSnapshotRuntimeCopyPhase": {
+    "cdpPort": 9223,
+    "envStatus": "project-route-recommended",
+    "projectAccessStatus": "project-access-ok",
+    "sourcePutStatus": "source-upload-visible",
+    "threadCreateStatus": "thread-created",
+    "threadUrl": "https://chatgpt.com/g/g-p-69fee227df308191b1ff7c00eb87d097-ops-merge/c/6a0d6c48-cf9c-83a2-8636-01eb1213d2fb",
+    "threadReadbackStatus": "readback-verified",
+    "readbackWaitSecondsMinimum": 300,
+    "projectSourceFile": "PROJECT_SOURCE_SESSION_ROUTE_MARKER_20260520.md",
+    "proofMarker": "SAFE_PROJECT_SOURCE_MARKER_20260520T081000Z"
+  },
+  "discardedAttempt": {
+    "status": "readback-missing-marker",
+    "reason": "The first prompt used Token wording and produced a policy response. It did not prove Project Source readback and is not counted as success."
+  },
+  "semanticApproval": false,
+  "completionApproval": false,
+  "routeDecision": false
+}
