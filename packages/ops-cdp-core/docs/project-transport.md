@@ -89,3 +89,24 @@ The compact proof for the current route gate is under
 `packages/ops-cdp-core/evidence/profile-route-gate-20260520/`.
 It records both the authenticated positive route and the fresh-profile negative
 route. Raw CDP logs remain raw evidence and are not normal actor instructions.
+
+## ChatGPT login route
+
+`chromium-cdp-chatgpt-login` and related probes classify login state. They do
+not enter credentials, OTP values, or account selections.
+
+The accepted automatic login route is authenticated snapshot reuse:
+
+```text
+approved seed profile
+  -> published authenticated snapshot
+  -> fresh runtime copy
+  -> Chromium CDP
+  -> target Project route proof
+```
+
+If a fresh profile reaches `/auth/login`, the route is not automatic. Complete
+login in a managed browser, verify login-complete, publish the snapshot, and use
+a runtime copy for Project transport. Until the profile bootstrap lifecycle is
+owned by `ops-cdp-core`, older `flakes/parts/chrome` bootstrap commands are
+migration evidence only, not normal actor instructions.

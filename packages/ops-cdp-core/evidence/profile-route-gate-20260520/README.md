@@ -28,3 +28,40 @@ A reachable CDP port is not enough.
 Generic ChatGPT login is not enough.
 The accepted route is the requested Project URL itself, followed by Project
 Source upload, thread creation, and delayed thread readback.
+
+## Automatic login route
+
+The reusable automatic route is session reuse from an approved profile snapshot.
+It is not credential or OTP automation.
+
+The route is:
+
+```text
+headful seed profile
+  -> user completes login in the managed browser when needed
+  -> login-complete probe confirms the seed is logged in
+  -> stop bootstrap browser cleanly
+  -> publish seed profile to authenticated snapshot
+  -> copy snapshot to a fresh runtime profile
+  -> start Chromium CDP with that runtime copy
+  -> project-transport-env/doctor probes the requested Project URL
+  -> Project Source upload
+  -> Project thread creation
+  -> delayed thread readback
+```
+
+Accepted as automatic:
+
+- starting CDP from a runtime copy of an already approved authenticated
+  snapshot;
+- proving the requested Project route before upload;
+- using Project Source and delayed readback to prove the route.
+
+Not accepted as automatic:
+
+- entering credentials, OTP, or account selection through CDP;
+- treating a fresh unauthenticated profile as usable;
+- treating a generic ChatGPT session as Project access;
+- treating a reachable CDP port as Project access;
+- telling actors to run deprecated `flakes/parts/chrome` commands as the normal
+  route before those commands are promoted into `ops-cdp-core`.
