@@ -48,14 +48,10 @@ Source upload, thread creation, and delayed thread readback.
 The reusable automatic route proven here is session reuse from an existing
 authenticated profile snapshot. It is not credential or OTP automation.
 
-The route is:
+The proven route is:
 
 ```text
-headful seed profile
-  -> user completes login in the managed browser when needed
-  -> login-complete probe confirms the seed is logged in
-  -> stop bootstrap browser cleanly
-  -> publish seed profile to authenticated snapshot
+existing authenticated snapshot
   -> copy snapshot to a fresh runtime profile
   -> start Chromium CDP with that runtime copy
   -> project-transport-env/doctor probes the requested Project URL
@@ -87,6 +83,4 @@ Not accepted as automatic:
 - entering credentials, OTP, or account selection through CDP;
 - treating a fresh unauthenticated profile as usable;
 - treating a generic ChatGPT session as Project access;
-- treating a reachable CDP port as Project access;
-- telling actors to run deprecated `flakes/parts/chrome` commands as the normal
-  route before those commands are promoted into `ops-cdp-core`.
+- treating a reachable CDP port as Project access.

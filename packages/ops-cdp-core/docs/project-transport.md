@@ -82,14 +82,13 @@ Expected behavior:
 - a route is complete only after Project Source upload, Project thread creation,
   and delayed thread readback prove that the target Project can read the source
 
-Do not make deprecated `flakes` commands, raw `.mjs` scripts, or proof worktree
-paths normal actor instructions. They are debug or migration evidence only.
+Do not give actors alternate legacy/script/proof paths as normal instructions.
+The normal route is this package's Project transport wrapper surface.
 
 The compact proof for the current route gate is under
 `packages/ops-cdp-core/evidence/profile-route-gate-20260520/`.
 It records the authenticated positive route, the fresh-profile negative route,
-and an unauthenticated-to-existing-snapshot-runtime-copy proof. Raw CDP logs
-remain raw evidence and are not normal actor instructions.
+and an unauthenticated-to-existing-snapshot-runtime-copy proof.
 
 ## ChatGPT session route
 
@@ -106,11 +105,9 @@ existing authenticated snapshot
   -> target Project route proof
 ```
 
-If a fresh profile reaches `/auth/login`, the route is not automatic. Complete
-login in a managed browser, verify login-complete, publish the snapshot, and use
-a runtime copy for Project transport. Until the profile bootstrap lifecycle is
-owned by `ops-cdp-core`, older `flakes/parts/chrome` bootstrap commands are
-migration evidence only, not normal actor instructions.
+If a fresh profile reaches `/auth/login`, the route is not automatic. The
+normal Project transport route starts from an existing authenticated snapshot
+runtime copy and must still prove the requested Project route.
 
 The currently proven recovery from an unauthenticated route is narrower:
 reject the fresh profile, copy an existing authenticated snapshot into a fresh
