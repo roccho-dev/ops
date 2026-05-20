@@ -1,6 +1,110 @@
 {
   "kind": "spec.implements.v1",
-  "specsRev": "22fdb9f",
-  "systems": ["x86_64-linux"],
-  "implements": []
+  "specsRev": "0d22a3c",
+  "systems": [
+    "x86_64-linux",
+    "aarch64-linux"
+  ],
+  "source": {
+    "repo": "devenv-pkg://repo/ops/target.bundle",
+    "localPath": "/home/nixos/repos/ops"
+  },
+  "implements": [
+    {
+      "package": "prove-feat",
+      "contractId": "spec.packages.prove-feat.v1",
+      "outputs": [
+        "packages.<system>.prove-feat"
+      ],
+      "checks": [
+        "checks.<system>.prove-feat",
+        "checks.<system>.prove-feat-structure",
+        "checks.<system>.prove-feat-format",
+        "checks.<system>.prove-feat-deadnix",
+        "checks.<system>.prove-feat-contract-lint"
+      ],
+      "commands": [
+        "nix run .#prove-feat",
+        "nix build .#checks.x86_64-linux.prove-feat"
+      ],
+      "implementedBy": [
+        "flake.nix",
+        "flake.lock",
+        "spec/implements.json",
+        "packages/prove-feat/default.nix",
+        "packages/prove-feat/bin/prove-feat.py"
+      ]
+    },
+    {
+      "package": "ops-artifact-materialize",
+      "contractId": "spec.packages.ops-artifact-materialize.v1",
+      "outputs": [
+        "packages.<system>.ops-artifact-materialize"
+      ],
+      "checks": [
+        "checks.<system>.ops-artifact-materialize"
+      ]
+    },
+    {
+      "package": "ops-knowledge-intake",
+      "contractId": "spec.packages.ops-knowledge-intake.v1",
+      "outputs": [
+        "packages.<system>.ops-knowledge-intake"
+      ],
+      "checks": [
+        "checks.<system>.ops-knowledge-intake"
+      ]
+    },
+    {
+      "package": "ops-runbook-checks",
+      "contractId": "spec.packages.ops-runbook-checks.v1",
+      "outputs": [
+        "packages.<system>.ops-runbook-checks"
+      ],
+      "checks": [
+        "checks.<system>.ops-runbook-checks"
+      ]
+    },
+    {
+      "package": "ops-thread-fsm",
+      "contractId": "spec.packages.ops-thread-fsm.v1",
+      "outputs": [
+        "packages.<system>.ops-thread-fsm"
+      ],
+      "checks": [
+        "checks.<system>.ops-thread-fsm"
+      ]
+    },
+    {
+      "package": "ops-tailnet-github-egress",
+      "contractId": "spec.packages.ops-tailnet-github-egress.v1",
+      "outputs": [
+        "packages.<system>.ops-tailnet-github-egress",
+        "packages.<system>.git-push-tailnet"
+      ],
+      "checks": [
+        "checks.<system>.ops-tailnet-github-egress"
+      ]
+    },
+    {
+      "package": "ops-refs-vault",
+      "contractId": "spec.packages.ops-refs-vault.v1",
+      "outputs": [
+        "packages.<system>.ops-refs-vault"
+      ],
+      "checks": [
+        "checks.<system>.ops-refs-vault"
+      ]
+    },
+    {
+      "package": "ops-cdp-core",
+      "contractId": "spec.packages.ops-cdp-core.v1",
+      "outputs": [
+        "packages.<system>.ops-cdp-core"
+      ],
+      "checks": [
+        "checks.<system>.ops-cdp-core"
+      ]
+    }
+  ]
 }
