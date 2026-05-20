@@ -186,6 +186,7 @@
           grep -q 'chromium-cdp-create-project-thread' "$out/chatgpt-command-map.md"
           test -x "$(command -v chromium-cdp-upload-project-source-text)"
           test -x "$(command -v chromium-cdp-upload-project-source-file)"
+          test -x "$(command -v chromium-cdp-project-access-probe)"
           test -x "$(command -v chromium-cdp-create-project-thread)"
           test -x "$(command -v chromium-cdp-send-chatgpt)"
           test -x "$(command -v chromium-cdp-project-source-reread)"
@@ -207,6 +208,9 @@
           printf 'hello\n' > "$out/transport/source.txt"
           printf 'use Project Source artifact\n' > "$out/transport/prompt.txt"
           project-transport-doctor --offline --out-path "$out/transport/doctor.json" > "$out/transport/doctor.stdout"
+          ! project-transport-doctor --offline --project-url 'https://chatgpt.com/g/g-p-test/project' --out-path "$out/transport/doctor-offline-project.json" > "$out/transport/doctor-offline-project.stdout"
+          project-transport-doctor --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --out-path "$out/transport/doctor-project-dry-run.json" > "$out/transport/doctor-project-dry-run.stdout"
+          ! project-transport-env --ports 1 --project-url 'https://chatgpt.com/g/g-p-test/project' --out-path "$out/transport/env-no-port.json" > "$out/transport/env-no-port.stdout"
           project-source-put --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --file "$out/transport/source.txt" --out-dir "$out/transport" > "$out/transport/source-put.json"
           project-source-put --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --file "$out/transport/source.txt" --out-dir "$out/transport" > "$out/transport/source-put-sources-tab.json"
           project-thread-create --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --text-file "$out/transport/prompt.txt" --out-dir "$out/transport" > "$out/transport/thread-create.json"
@@ -230,6 +234,9 @@
           grep -q 'project-url-wrong-shape' "$out/transport/thread-create-sources-tab.json"
           grep -q 'project-url-wrong-shape' "$out/transport/run-wrong-shape.json"
           grep -q 'inline-too-long' "$out/transport/thread-send-long.json"
+          grep -q 'offline-project-route-unverified' "$out/transport/doctor-offline-project.json"
+          grep -q 'project-probe-dry-run-ready' "$out/transport/doctor-project-dry-run.json"
+          grep -q 'no-cdp-port-reachable' "$out/transport/env-no-port.json"
         '';
         ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
           test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README

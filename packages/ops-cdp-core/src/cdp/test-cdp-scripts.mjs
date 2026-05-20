@@ -129,6 +129,7 @@ const testCases = [
   { script: "chromium-cdp-worker-merge-queue.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },
   { script: "chromium-cdp-upload-project-source-text.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },
   { script: "chromium-cdp-upload-project-source-file.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },
+  { script: "chromium-cdp-project-access-probe.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },
   { script: "chromium-cdp-source-snapshot-text.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },
   { script: "chromium-cdp-project-source-reread.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },
   { script: "chromium-cdp-host-git-two-worker-smoke.mjs", args: ["--help"], helpRc: 2, helpStream: "stderr" },

@@ -59,3 +59,25 @@ If `project-thread-create` or the thread-create phase of `project-transport-run`
 receives `?tab=sources`, it fails with `project-url-wrong-shape`. This is
 intentional: the Project Sources tab is the file-upload door, not the
 thread-creation door.
+
+## Profile and Project access
+
+Generic ChatGPT login is not enough. A profile route is usable only when it can
+open the requested Project URL itself.
+
+Use:
+
+```sh
+project-transport-doctor --project-url "$PROJECT_URL"
+project-transport-env --project-url "$PROJECT_URL" --ports 9222,9223,9224
+```
+
+Expected behavior:
+
+- no reachable CDP port is `no-cdp-port-reachable`
+- generic auth without target Project access is not `ok`
+- Project login redirect is `project-access-profile-missing`
+- a usable candidate returns `recommendedRoute`
+
+Do not make deprecated `flakes` commands, raw `.mjs` scripts, or proof worktree
+paths normal actor instructions. They are debug or migration evidence only.

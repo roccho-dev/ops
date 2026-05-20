@@ -22,6 +22,7 @@ DECISION_FLAGS = {
 
 LOW_LEVEL_COMMANDS = [
     "chromium-cdp-chatgpt-doctor",
+    "chromium-cdp-project-access-probe",
     "chromium-cdp-upload-project-source-file",
     "chromium-cdp-create-project-thread",
     "chromium-cdp-send-chatgpt",
@@ -179,12 +180,63 @@ def handle_env(args: argparse.Namespace) -> int:
         except OSError as e:
             row["error"] = str(e)
         probes.append(row)
+    reachable = [p for p in probes if p.get("tcpConnect")]
+    project_probes = []
+    if args.project_url and reachable and not args.dry_run:
+        for row in reachable:
+            cmd = [
+                "chromium-cdp-project-access-probe",
+                "--projectUrl", args.project_url,
+                "--addr", args.addr,
+                "--port", str(row["port"]),
+                "--timeoutMs", str(args.timeout_ms),
+                "--json",
+            ]
+            low = run_command(cmd, timeout=max(60, args.timeout_ms // 1000 + 30))
+            probe = low.get("json") if isinstance(low.get("json"), dict) else None
+            project_probes.append({
+                "addr": args.addr,
+                "port": row["port"],
+                "command": low,
+                "projectAccess": probe,
+                "ok": low["returncode"] == 0 and bool(probe and probe.get("ok")),
+            })
+    elif args.project_url and reachable and args.dry_run:
+        project_probes = [{
+            "addr": args.addr,
+            "port": row["port"],
+            "dryRun": True,
+            "plannedCommand": [
+                "chromium-cdp-project-access-probe",
+                "--projectUrl", args.project_url,
+                "--addr", args.addr,
+                "--port", str(row["port"]),
+            ],
+        } for row in reachable]
+    recommended = next((p for p in project_probes if p.get("ok")), None)
+    if args.project_url:
+        ok = bool(recommended) if not args.dry_run else bool(reachable)
+        status = "project-route-recommended" if recommended else (
+            "project-route-probe-dry-run" if args.dry_run and reachable else (
+                "no-cdp-port-reachable" if not reachable else "project-route-not-verified"
+            )
+        )
+    else:
+        ok = bool(reachable)
+        status = "cdp-port-reachable" if reachable else "no-cdp-port-reachable"
     result.update({
-        "ok": True,
-        "status": "env-probed",
+        "ok": ok,
+        "status": status,
         "addr": args.addr,
+        "projectUrl": args.project_url,
         "probes": probes,
-        "selectedPort": next((p["port"] for p in probes if p.get("tcpConnect")), None),
+        "projectAccessProbes": project_probes,
+        "selectedPort": next((p["port"] for p in reachable), None),
+        "recommendedRoute": {
+            "addr": recommended["addr"],
+            "port": recommended["port"],
+            "status": recommended.get("projectAccess", {}).get("status"),
+        } if recommended else None,
     })
     return maybe_write_out(args, result)
 
@@ -204,7 +256,29 @@ def handle_doctor(args: argparse.Namespace) -> int:
         "offlineOnly": args.offline,
     })
     if args.offline:
-        result.update({"ok": not missing, "status": "offline-runtime-ok" if not missing else "missing-command"})
+        if args.project_url:
+            result.update({
+                "ok": False,
+                "status": "offline-project-route-unverified",
+                "projectUrl": args.project_url,
+                "reason": "offline runtime check cannot verify target Project access",
+            })
+        else:
+            result.update({"ok": not missing, "status": "offline-runtime-ok" if not missing else "missing-command"})
+        return maybe_write_out(args, result)
+
+    if args.project_url and args.dry_run:
+        result.update({
+            "ok": True,
+            "status": "project-probe-dry-run-ready",
+            "projectUrl": args.project_url,
+            "plannedCommand": [
+                "chromium-cdp-project-access-probe",
+                "--projectUrl", args.project_url,
+                "--addr", args.addr,
+                "--port", str(args.port),
+            ],
+        })
         return maybe_write_out(args, result)
 
     cmd = ["chromium-cdp-chatgpt-doctor", "--addr", args.addr, "--json"]
@@ -224,6 +298,31 @@ def handle_doctor(args: argparse.Namespace) -> int:
     })
     if requested_login_url:
         result["status"] = "cdp-runtime-login-required"
+    if args.project_url:
+        probe_cmd = [
+            "chromium-cdp-project-access-probe",
+            "--projectUrl", args.project_url,
+            "--addr", args.addr,
+            "--port", str(args.port),
+            "--timeoutMs", str(args.timeout_ms),
+            "--json",
+        ]
+        probe = run_command(probe_cmd, timeout=max(60, args.timeout_ms // 1000 + 30))
+        project_access = probe.get("json") if isinstance(probe.get("json"), dict) else None
+        result["projectUrl"] = args.project_url
+        result["projectAccessCommand"] = probe
+        result["projectAccess"] = project_access
+        project_ok = probe["returncode"] == 0 and bool(project_access and project_access.get("ok"))
+        result["ok"] = not missing and project_ok
+        result["status"] = "project-route-ok" if project_ok else (
+            project_access.get("status") if isinstance(project_access, dict) and project_access.get("status") else "project-route-not-verified"
+        )
+        result["recommendedRoute"] = {
+            "addr": args.addr,
+            "port": args.port,
+            "status": result["status"],
+            "projectUrl": args.project_url,
+        } if project_ok else None
     return maybe_write_out(args, result)
 
 
@@ -273,9 +372,18 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
     elif low.get("json") is not None:
         parsed = low["json"]
     visible = bool(parsed and parsed.get("visible") and parsed["visible"].get("ok"))
+    observed_text = json.dumps(parsed or {}, sort_keys=True) + "\n" + low.get("stdout", "") + "\n" + low.get("stderr", "")
+    if visible:
+        status = "source-upload-visible"
+    elif "/auth/login" in observed_text or "login required" in observed_text.lower():
+        status = "project-access-profile-missing"
+    elif parsed and parsed.get("target") and parsed["target"].get("url") and "/project" not in str(parsed["target"].get("url")):
+        status = "source-page-not-loaded"
+    else:
+        status = "source-upload-not-visible"
     result.update({
         "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")) and visible,
-        "status": "source-upload-visible" if visible else "source-upload-not-verified",
+        "status": status,
         "transportSent": low["returncode"] == 0,
         "transportVisible": visible,
         "readbackVerified": visible,
@@ -587,14 +695,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("env")
     add_common_io(p)
-    p.add_argument("--addr", default=os.environ.get("HQ_CHROME_ADDR", "127.0.0.1"))
+    add_cdp_common(p)
     p.add_argument("--ports", type=lambda s: [int(x) for x in s.split(",") if x], default=None)
     p.add_argument("--connect-timeout-sec", type=float, default=0.25)
+    p.add_argument("--project-url", "--projectUrl", dest="project_url")
     p.set_defaults(func=handle_env)
 
     p = sub.add_parser("doctor")
     add_common_io(p)
     add_cdp_common(p)
+    p.add_argument("--project-url", "--projectUrl", dest="project_url")
     p.add_argument("--offline", action="store_true")
     p.set_defaults(func=handle_doctor)
 

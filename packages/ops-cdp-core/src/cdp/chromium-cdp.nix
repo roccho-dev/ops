@@ -113,6 +113,7 @@
         chromium-cdp-upload-chatgpt-file = { script = "upload-chatgpt-file.mjs"; };
         chromium-cdp-upload-project-source-text = { script = "chromium-cdp-upload-project-source-text.mjs"; };
         chromium-cdp-upload-project-source-file = { script = "chromium-cdp-upload-project-source-file.mjs"; };
+        chromium-cdp-project-access-probe = { script = "chromium-cdp-project-access-probe.mjs"; };
         chromium-cdp-project-inventory = { script = "project-inventory.mjs"; };
         chromium-cdp-projectize-thread = { script = "projectize-thread.mjs"; };
         chromium-cdp-project-sources-promote-turn = { script = "project-sources-promote-turn.mjs"; };
