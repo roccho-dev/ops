@@ -24,3 +24,34 @@ Open work before treating the bridge backend as fully settled:
   a WebSocket `call` against a browser target, not just print help.
 - Keep `flakes` as migration source / compatibility shim only. Do not restore
   a second canonical CDP runtime there.
+
+## Promote profile bootstrap lifecycle into ops-cdp-core
+
+Current route gate status:
+
+- `project-transport-*` wrappers now prove the requested Project URL, not just
+  generic ChatGPT auth or a reachable CDP port.
+- Compact evidence exists for an authenticated positive route and a fresh
+  unauthenticated negative route:
+  `packages/ops-cdp-core/evidence/profile-route-gate-20260520/`.
+
+Remaining gap:
+
+- The reusable profile bootstrap lifecycle is still migration knowledge in the
+  deprecated `flakes/parts/chrome` tree.
+- `ops-cdp-core` does not yet expose a canonical `seed profile -> login verify
+  -> published snapshot -> runtime copy -> Project route proof` command set.
+
+Do not call the deprecated `flakes` route a normal actor instruction. Use it as
+migration evidence until `ops-cdp-core` owns the lifecycle.
+
+Canonical target behavior:
+
+- start a headful bootstrap lane with an explicit seed profile;
+- verify CDP and VNC liveness;
+- check `login-complete` without collecting credentials or OTP values;
+- stop the bootstrap lane cleanly;
+- publish the approved seed into the snapshot path;
+- use a runtime copy of the snapshot for Project Source transport;
+- prove the requested Project URL with `project-transport-env` or
+  `project-transport-doctor` before upload/thread/readback.
