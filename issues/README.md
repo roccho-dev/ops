@@ -16,6 +16,10 @@ Current issue set:
 | [002](002-project-transport-live-proof-hardening.md) | Project Source upload/readback/artifact fetch live-proof hardening | `ops-cdp-core` |
 | [003](003-end-to-end-handoff-generator.md) | end-to-end handoff generator | new package or `ops-cdp-core` wrapper |
 | [004](004-src-pack-offline-nix-cache-payload.md) | Src Pack + Offline Nix Cache payload | new package |
+| [project-handoff-preflight-command](project-handoff-preflight-command/262205-054419.md) | Project handoff preflight command | `ops-cdp-core` or new wrapper |
+| [localize-readiness-classifier](localize-readiness-classifier/262205-054419.md) | classify localize readiness route | new package or `ops-thread-fsm` integration |
+| [chatgpt-project-handoff-runner](chatgpt-project-handoff-runner/262205-054419.md) | ChatGPT Project handoff runner | `ops-cdp-core` wrapper |
+| [handoff-result-importer](handoff-result-importer/262205-054419.md) | import ChatGPT handoff result into claim/evidence | `ops-agent-events` or new wrapper |
 
 Shared non-goals:
 
