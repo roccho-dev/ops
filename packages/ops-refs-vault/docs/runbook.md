@@ -1,114 +1,120 @@
 # ops-refs-vault runbook
 
-`ops-refs-vault` は、local の複数 repo を保ったまま、単一 remote repo に退避するための package です。
+`ops-refs-vault` backs up repo-specific bare SSOT repositories into one
+replaceable forge repository by namespaced refs.
 
-標準 remote は `roccho-dev/refs` です。
+## Canonical route
 
 ```text
-local repos/* -> refs/heads/repos/<repoId>/<branch> in roccho-dev/refs
-local tags    -> refs/tags/repos/<repoId>/<tag> only when requested
+local working clone
+  -> git push or rsync
+  -> nixos-vm:$HOME/repos/<repoId>.git
+  -> ops-refs-vault backup-one / backup-all
+  -> git@github.com:roccho-dev/refs.git refs/heads/repos/<repoId>/<branch>
 ```
 
-## 1. 1 repo を vault 用に設定する
+Roles:
 
-```bash
-ops-refs-vault adopt \
-  --repo-id specs \
-  --repo-dir /home/nixos/repos/specs \
-  --remote git@github.com:roccho-dev/refs.git
+| role | location |
+|---|---|
+| SSOT | `nixos-vm:$HOME/repos/<repoId>.git` repo-specific bare repo |
+| backup | single forge repo, normally `git@github.com:roccho-dev/refs.git` |
+| local | temporary workspace or working clone |
+| local -> SSOT | `git push` or `rsync`, outside this package's approval boundary |
+| SSOT -> backup | namespaced refs via this package |
+
+GitHub is backup, not SSOT. Dirty files, untracked files, ignored files,
+secrets, and build caches are not protected by this Git backup route.
+
+## Manifest
+
+```json
+{
+  "targetForgeRepo": {
+    "sshUrl": "git@github.com:roccho-dev/refs.git"
+  },
+  "repos": [
+    {
+      "repoId": "specs",
+      "sourceBarePath": "/home/nixos/repos/specs.git"
+    }
+  ]
+}
 ```
 
-`adopt` は remote/fetch/tag policy を設定します。local bare remote なら通常の
-`git push refs-vault` で検証できます。
+When running on `nixos-vm`, `sourceBarePath` is normally
+`$HOME/repos/<repoId>.git`. A remote source URL is allowed, but the normal
+operator route is to run on the host where the bare SSOT paths are local.
 
-GitHub remote の場合、`adopt` は `remote.<name>.push` を設定しません。これは、
-`git push refs-vault` が通常経路の GitHub push として実行される escape hatch を防ぐためです。
-GitHub へ出す時は `ops-refs-vault push-all` を使います。`push-all` が各 refspec を
-`ops-tailnet-github-egress push-local --long-transfer` に委譲します。
+## Back up
 
 ```bash
-ops-refs-vault push-all \
-  --manifest /path/to/refs-vault.manifest.json \
-  --workspace /home/nixos/repos
-```
-
-この経路は `github.com` の全 IPv4 route が `tailscale0` であることを gate し、
-`HostName=<route checked IPv4>` / `HostKeyAlias=github.com` / `ssh -4` /
-`KexAlgorithms=curve25519-sha256` / `HostKeyAlgorithms=ssh-ed25519` を使います。
-実 repo head のような non-tiny push は必ず `--long-transfer` を使います。
-
-## 2. manifest に従ってまとめて push する
-
-```bash
-ops-refs-vault push-all \
-  --manifest /path/to/refs-vault.manifest.json \
-  --workspace /home/nixos/repos \
-  --dry-run
-```
-
-問題なければ `--dry-run` を外します。remote が GitHub なら、`push-all` は各 refspec を
-`ops-tailnet-github-egress push-local --long-transfer` に渡します。GitHub ではない local bare remote なら、
-GitHub 不使用のまま `git push <local-remote> <refspec>` を使います。
-
-```bash
-ops-refs-vault push-all \
-  --manifest /path/to/refs-vault.manifest.json \
-  --workspace /home/nixos/repos
-```
-
-`push-all` は `repoId` ではなく manifest の `localPath` を見ます。
-これにより、`repos/devtools` でも `custom/devtools-src` でも同じ `repoId=devtools` として扱えます。
-
-## 3. exact branch を復元する
-
-```bash
-ops-refs-vault materialize \
-  --manifest /path/to/refs-vault.manifest.json \
-  --repo-id specs \
-  --branch main \
-  --dest /tmp/restored-specs
-```
-
-指定 branch がなければ失敗します。
-勝手に `main` へ fallback しません。
-
-## 4. remote を監査する
-
-```bash
-ops-refs-vault audit \
-  --manifest /path/to/refs-vault.manifest.json \
-  --remote git@github.com:roccho-dev/refs.git
-```
-
-## 5. local と remote の hash を照合する
-
-```bash
-ops-refs-vault verify-ref \
-  --repo-dir /home/nixos/repos/specs \
-  --remote git@github.com:roccho-dev/refs.git \
+ops-refs-vault backup-one \
+  --manifest refs-vault.manifest.json \
   --repo-id specs \
   --branch main
+
+ops-refs-vault backup-all \
+  --manifest refs-vault.manifest.json
 ```
 
-## 6. local bare remote で smoke する
+The destination branch is:
+
+```text
+refs/heads/repos/<repoId>/<branch>
+```
+
+Default backup is no-force. Use `--force` only after an operator decision.
+
+## Verify and audit
+
+```bash
+ops-refs-vault verify-one \
+  --manifest refs-vault.manifest.json \
+  --repo-id specs \
+  --branch main
+
+ops-refs-vault audit \
+  --manifest refs-vault.manifest.json
+
+ops-refs-vault inventory \
+  --manifest refs-vault.manifest.json \
+  --out-dir /tmp/refs-vault-inventory
+```
+
+`verify-one` compares the bare SSOT branch hash with the forge backup hash.
+
+## Restore
+
+Restore always writes to a staging bare repo first.
+
+```bash
+ops-refs-vault restore-bare-one \
+  --manifest refs-vault.manifest.json \
+  --repo-id specs \
+  --branch main \
+  --staging-bare /tmp/restored/specs.git
+```
+
+Promotion into the SSOT location is a separate approved step:
+
+```bash
+ops-refs-vault promote-staging-bare \
+  --repo-id specs \
+  --staging-bare /tmp/restored/specs.git \
+  --target-bare "$HOME/repos/specs.git" \
+  --confirm
+```
+
+Missing branch restore fails. It does not fall back to `main` or the first
+available branch.
+
+## Smoke
 
 ```bash
 ops-refs-vault smoke-local
 ```
 
-この smoke は GitHub を使いません。
-同じ branch 名と同じ tag 名が repoId namespace で衝突しないこと、exact restore、missing branch fail を確認します。
-
-## 7. hot backup の限界
-
-`roccho-dev/refs` は hot backup です。cold backup ではありません。
-守れるのは commit 済みで remote へ push 済みの Git object だけです。
-dirty / untracked / ignored / secret / build cache は Git push では保護されません。
-release 保証が必要な時は、別途 bundle と signed manifest を作ります。
-shallow repo は content shelter には使えても exact history backup ではありません。
-
-## 8. default safety
-
-- default は no-force です。force は `--force` を明示した時だけです。
-- tags は default では push しません。`--push-tags` を明示した時だけ `refs/tags/repos/<repoId>/<tag>` へ出します。
-- missing branch restore は default fail です。勝手に `main` や最初の branch へ fallback しません。
+The smoke test creates local bare SSOT repos, backs them up to a local bare
+forge repo, restores one branch to staging, promotes it into a target bare repo,
+and checks hash equality.

@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     specs = {
-      url = "git+file:///home/nixos/repos/specs?rev=baca6748aa0f87bbf5d761f57b2485991a714754";
+      url = "git+file:///home/nixos/repos/specs?rev=2e3d05dae25ee9000eda53028e1a6f2ecf8a341c";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -295,6 +295,9 @@
                 mkdir -p "$out"
                 ops-refs-vault smoke-local > "$out/report.json"
                 grep -q '"ok": true' "$out/report.json"
+                for proof in P01 P02 P03 P04 P05 P06 P07 P08 P09 P10 P11; do
+                  grep -q "\"id\": \"$proof\"" "$out/report.json"
+                done
               '';
           ops-cdp-core =
             pkgs.runCommand "ops-cdp-core-check"

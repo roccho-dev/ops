@@ -1,25 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-dest="${1:?usage: manual-restore.sh <dest> <remote> <repoId> <branch>}"
-remote="${2:?usage: manual-restore.sh <dest> <remote> <repoId> <branch>}"
-repo_id="${3:?usage: manual-restore.sh <dest> <remote> <repoId> <branch>}"
-branch="${4:?usage: manual-restore.sh <dest> <remote> <repoId> <branch>}"
-remote_name="${REFS_REMOTE_NAME:-refs-vault}"
+manifest="${1:?usage: manual-restore.sh <manifest> <repoId> <branch> <staging-bare>}"
+repo_id="${2:?usage: manual-restore.sh <manifest> <repoId> <branch> <staging-bare>}"
+branch="${3:?usage: manual-restore.sh <manifest> <repoId> <branch> <staging-bare>}"
+staging_bare="${4:?usage: manual-restore.sh <manifest> <repoId> <branch> <staging-bare>}"
 
-mkdir -p "$dest"
-if [ ! -d "$dest/.git" ]; then
-  git init -q -b "$branch" "$dest"
-fi
-
-cd "$dest"
-if git remote get-url "$remote_name" >/dev/null 2>&1; then
-  git remote set-url "$remote_name" "$remote"
-else
-  git remote add "$remote_name" "$remote"
-fi
-
-git fetch --no-tags "$remote_name" \
-  "+refs/heads/repos/${repo_id}/${branch}:refs/remotes/${remote_name}/${branch}"
-git checkout -q -B "$branch" "refs/remotes/${remote_name}/${branch}"
-git status --short
+exec ops-refs-vault restore-bare-one \
+  --manifest "$manifest" \
+  --repo-id "$repo_id" \
+  --branch "$branch" \
+  --staging-bare "$staging_bare"

@@ -9,12 +9,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.parse
 from pathlib import Path
 
 
 DEFAULT_REMOTE = "git@github.com:roccho-dev/refs.git"
-DEFAULT_REMOTE_NAME = "refs-vault"
 REPO_ID_RE = re.compile(r"^(?!\.)(?!.*\.\.)(?!.*\.lock$)(?!.*@\{)[A-Za-z0-9._-]+$")
 
 
@@ -22,7 +20,7 @@ class VaultError(RuntimeError):
     pass
 
 
-def run(cmd, cwd=None, check=True, capture=False, env=None):
+def run(cmd, cwd=None, check=True, capture=False):
     result = subprocess.run(
         cmd,
         cwd=cwd,
@@ -30,7 +28,6 @@ def run(cmd, cwd=None, check=True, capture=False, env=None):
         text=True,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
-        env=env,
     )
     if check and result.returncode != 0:
         detail = ""
@@ -45,16 +42,21 @@ def validate_repo_id(repo_id):
         raise VaultError(f"invalid repoId: {repo_id}")
 
 
+def validate_branch(branch):
+    if not branch or branch.startswith("/") or branch.endswith("/") or ".." in branch or "@{" in branch:
+        raise VaultError(f"invalid branch: {branch}")
+
+
 def load_manifest(path):
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
-def remote_from_manifest(manifest, override=None):
+def vault_remote(manifest, override=None):
     if override:
         return override
     target = manifest.get("targetForgeRepo", {})
-    return target.get("sshUrl") or target.get("httpsUrl") or DEFAULT_REMOTE
+    return target.get("sshUrl") or target.get("url") or DEFAULT_REMOTE
 
 
 def manifest_repos(manifest):
@@ -63,266 +65,28 @@ def manifest_repos(manifest):
         if not repo_id:
             continue
         validate_repo_id(repo_id)
-        yield repo_id, repo.get("localPath") or f"repos/{repo_id}", repo
+        yield repo_id, repo
 
 
-
-def remote_host(remote):
-    if not remote:
-        return None
-    remote = remote.strip()
-    scp_like = re.match(r"^[^@:/]+@([^:/]+):", remote)
-    if scp_like:
-        return scp_like.group(1).lower()
-    parsed = urllib.parse.urlparse(remote)
-    if parsed.hostname:
-        return parsed.hostname.lower()
-    return None
-
-
-def is_github_remote(remote):
-    return remote_host(remote) == "github.com"
-
-
-def is_github_ssh_remote(remote):
-    remote = (remote or "").strip()
-    return remote.startswith("git@github.com:") or (
-        urllib.parse.urlparse(remote).scheme == "ssh"
-        and remote_host(remote) == "github.com"
-    )
-
-
-def local_refspecs(repo_dir, repo_id, force=False, push_tags=False):
+def manifest_repo(manifest, repo_id):
     validate_repo_id(repo_id)
-    prefix = "+" if force else ""
-    heads = run(["git", "for-each-ref", "--format=%(refname)", "refs/heads"], cwd=repo_dir, capture=True).stdout.splitlines()
-    refspecs = []
-    for ref in heads:
-        if not ref.startswith("refs/heads/"):
-            continue
-        branch = ref[len("refs/heads/"):]
-        if not branch:
-            continue
-        refspecs.append(f"{prefix}{ref}:refs/heads/repos/{repo_id}/{branch}")
-    if push_tags:
-        tags = run(["git", "for-each-ref", "--format=%(refname)", "refs/tags"], cwd=repo_dir, capture=True).stdout.splitlines()
-        for ref in tags:
-            if not ref.startswith("refs/tags/"):
-                continue
-            tag = ref[len("refs/tags/"):]
-            if not tag:
-                continue
-            refspecs.append(f"{prefix}{ref}:refs/tags/repos/{repo_id}/{tag}")
-    return refspecs
+    for current_id, repo in manifest_repos(manifest):
+        if current_id == repo_id:
+            return repo
+    raise VaultError(f"repoId not found in manifest: {repo_id}")
 
 
-def egress_push_command(args, repo_dir, remote, refspec):
-    cmd = [
-        args.github_egress_command,
-        "push-local",
-        "--long-transfer",
-        "--repo-dir",
-        str(repo_dir),
-        "--remote",
-        remote,
-        "--refspec",
-        refspec,
-        "--timeout",
-        str(args.github_push_timeout),
-        "--json",
-    ]
-    return cmd
+def source_bare(repo):
+    path = repo.get("sourceBarePath") or repo.get("sourceBare") or repo.get("barePath")
+    if not path:
+        raise VaultError(f"manifest repoId={repo.get('repoId')} is missing sourceBarePath")
+    return path
 
 
-def push_refspec(args, repo_dir, remote, refspec):
-    if is_github_remote(remote):
-        if not is_github_ssh_remote(remote):
-            raise VaultError("GitHub push requires an SSH remote URL so ops-tailnet-github-egress can pin HostName and HostKeyAlias")
-        cmd = egress_push_command(args, repo_dir, remote, refspec)
-        return run(cmd, cwd=repo_dir, capture=True)
-    return run(["git", "push", remote, refspec], cwd=repo_dir, capture=True)
-
-def git_dir(repo_dir):
-    result = run(["git", "rev-parse", "--git-dir"], cwd=repo_dir, capture=True)
-    return result.stdout.strip()
-
-
-def current_branch(repo_dir):
-    result = run(["git", "branch", "--show-current"], cwd=repo_dir, capture=True)
-    return result.stdout.strip()
-
-
-def is_dirty(repo_dir):
-    result = run(["git", "status", "--porcelain=v1"], cwd=repo_dir, capture=True)
-    return bool(result.stdout.strip())
-
-
-def local_head(repo_dir, ref="HEAD"):
-    result = run(["git", "rev-parse", ref], cwd=repo_dir, capture=True)
-    return result.stdout.strip()
-
-
-def configure_remote(repo_dir, repo_id, remote_url, remote_name, force=False, push_tags=False):
+def namespaced_head(repo_id, branch):
     validate_repo_id(repo_id)
-    git_dir(repo_dir)
-    github_remote = is_github_remote(remote_url)
-    if run(["git", "remote", "get-url", remote_name], cwd=repo_dir, check=False, capture=True).returncode == 0:
-        run(["git", "remote", "set-url", remote_name, remote_url], cwd=repo_dir)
-    else:
-        run(["git", "remote", "add", remote_name, remote_url], cwd=repo_dir)
-
-    run(["git", "config", "--unset-all", f"remote.{remote_name}.fetch"], cwd=repo_dir, check=False, capture=True)
-    run(["git", "config", "--add", f"remote.{remote_name}.fetch", f"+refs/heads/repos/{repo_id}/*:refs/remotes/{remote_name}/*"], cwd=repo_dir)
-    run(["git", "config", f"remote.{remote_name}.tagOpt", "--no-tags"], cwd=repo_dir)
-
-    # Always remove stale direct push refspecs first. For GitHub remotes we do
-    # not install new remote.<name>.push entries, because they create a plain
-    # `git push <remote-name>` escape hatch around ops-tailnet-github-egress.
-    run(["git", "config", "--unset-all", f"remote.{remote_name}.push"], cwd=repo_dir, check=False, capture=True)
-    direct_push_refspecs = []
-    if not github_remote:
-        prefix = "+" if force else ""
-        direct_push_refspecs.append(f"{prefix}refs/heads/*:refs/heads/repos/{repo_id}/*")
-        if push_tags:
-            direct_push_refspecs.append(f"{prefix}refs/tags/*:refs/tags/repos/{repo_id}/*")
-        for refspec in direct_push_refspecs:
-            run(["git", "config", "--add", f"remote.{remote_name}.push", refspec], cwd=repo_dir)
-
-    return {
-        "githubRemote": github_remote,
-        "directPushConfigured": bool(direct_push_refspecs),
-        "directPushRefspecs": direct_push_refspecs,
-        "githubPushRule": "GitHub remotes must be pushed with ops-refs-vault push-all, which delegates to ops-tailnet-github-egress push-local --long-transfer",
-    }
-
-
-def cmd_adopt(args):
-    repo_dir = Path(args.repo_dir).resolve()
-    remote_config = configure_remote(repo_dir, args.repo_id, args.remote, args.remote_name, args.force, args.push_tags)
-    print(json.dumps({
-        "ok": True,
-        "repoId": args.repo_id,
-        "repoDir": str(repo_dir),
-        "remoteName": args.remote_name,
-        "remote": args.remote,
-        "headNamespace": f"refs/heads/repos/{args.repo_id}/*",
-        "tagNamespace": f"refs/tags/repos/{args.repo_id}/*",
-        "pushTags": args.push_tags,
-        "force": args.force,
-        **remote_config,
-    }, ensure_ascii=False, indent=2))
-
-
-def cmd_push_all(args):
-    manifest = load_manifest(args.manifest)
-    remote = remote_from_manifest(manifest, args.remote)
-    workspace = Path(args.workspace).resolve()
-    github_remote = is_github_remote(remote)
-    results = []
-    for repo_id, local_path, _repo in manifest_repos(manifest):
-        repo_dir = (workspace / local_path).resolve()
-        item = {
-            "repoId": repo_id,
-            "localPath": local_path,
-            "repoDir": str(repo_dir),
-            "remote": remote,
-            "githubRemote": github_remote,
-            "pushMode": "egress-long-transfer" if github_remote else "direct-non-github",
-        }
-        if not repo_dir.exists():
-            item.update(status="missing")
-            results.append(item)
-            continue
-        try:
-            git_dir(repo_dir)
-            branch = current_branch(repo_dir)
-            item["branch"] = branch
-            item["head"] = local_head(repo_dir)
-            item["dirty"] = is_dirty(repo_dir)
-            refspecs = local_refspecs(repo_dir, repo_id, args.force, args.push_tags)
-            item["refspecs"] = refspecs
-            if args.clean_only and item["dirty"]:
-                item["status"] = "blocked-dirty"
-            elif not branch:
-                item["status"] = "blocked-detached"
-            elif not refspecs:
-                item["status"] = "blocked-no-local-heads"
-            elif args.dry_run:
-                if github_remote:
-                    item["egressCommands"] = [egress_push_command(args, repo_dir, remote, refspec) for refspec in refspecs]
-                item["status"] = "dry-run"
-            else:
-                configure_remote(repo_dir, repo_id, remote, args.remote_name, args.force, args.push_tags)
-                push_results = []
-                for refspec in refspecs:
-                    push = push_refspec(args, repo_dir, remote, refspec)
-                    push_results.append({
-                        "refspec": refspec,
-                        "rc": push.returncode,
-                        "stdout": (push.stdout or "").strip(),
-                        "stderr": (push.stderr or "").strip(),
-                    })
-                item["pushResults"] = push_results
-                item["status"] = "pushed"
-        except Exception as exc:
-            item.update(status="failed", error=str(exc))
-        results.append(item)
-    ok_statuses = {"pushed", "dry-run", "missing", "blocked-dirty", "blocked-detached", "blocked-no-local-heads"}
-    print(json.dumps({
-        "ok": all(r["status"] in ok_statuses for r in results),
-        "remote": remote,
-        "githubRemote": github_remote,
-        "githubPushRule": "GitHub remotes are pushed only through ops-tailnet-github-egress push-local --long-transfer",
-        "results": results,
-    }, ensure_ascii=False, indent=2))
-
-
-def exact_remote_ref(repo_id, branch):
-    validate_repo_id(repo_id)
-    if not branch or branch.startswith("/") or branch.endswith("/") or ".." in branch or "@{" in branch:
-        raise VaultError(f"invalid branch: {branch}")
+    validate_branch(branch)
     return f"refs/heads/repos/{repo_id}/{branch}"
-
-
-def cmd_materialize(args):
-    manifest = load_manifest(args.manifest)
-    remote = remote_from_manifest(manifest, args.remote)
-    dest = Path(args.dest).resolve()
-    remote_ref = exact_remote_ref(args.repo_id, args.branch)
-    dest.mkdir(parents=True, exist_ok=True)
-    if not (dest / ".git").exists():
-        run(["git", "init", "-q", "-b", args.branch, str(dest)])
-    if run(["git", "remote", "get-url", args.remote_name], cwd=dest, check=False, capture=True).returncode == 0:
-        run(["git", "remote", "set-url", args.remote_name, remote], cwd=dest)
-    else:
-        run(["git", "remote", "add", args.remote_name, remote], cwd=dest)
-    run(["git", "config", f"remote.{args.remote_name}.tagOpt", "--no-tags"], cwd=dest)
-
-    fetch_dst = f"refs/remotes/{args.remote_name}/{args.branch}"
-    fetch = run(["git", "fetch", "--no-tags", args.remote_name, f"+{remote_ref}:{fetch_dst}"], cwd=dest, check=False, capture=True)
-    if fetch.returncode != 0:
-        if not args.allow_any_branch:
-            raise VaultError(f"missing remote branch: {remote_ref}")
-        run(["git", "fetch", "--no-tags", args.remote_name, f"+refs/heads/repos/{args.repo_id}/*:refs/remotes/{args.remote_name}/*"], cwd=dest)
-        first = run(["git", "for-each-ref", "--format=%(refname:short)", f"refs/remotes/{args.remote_name}"], cwd=dest, capture=True).stdout.splitlines()
-        if not first:
-            raise VaultError(f"no remote branches for repoId={args.repo_id}")
-        fetch_dst = first[0]
-        branch = fetch_dst.split("/", 1)[1] if "/" in fetch_dst else fetch_dst
-    else:
-        branch = args.branch
-
-    run(["git", "checkout", "-q", "-B", branch, fetch_dst], cwd=dest)
-    remote_config = configure_remote(dest, args.repo_id, remote, args.remote_name, False, False)
-    print(json.dumps({
-        "ok": True,
-        "repoId": args.repo_id,
-        "dest": str(dest),
-        "branch": current_branch(dest),
-        "head": local_head(dest),
-        "remoteRef": remote_ref,
-        **remote_config,
-    }, ensure_ascii=False, indent=2))
 
 
 def ls_remote(remote, pattern):
@@ -336,177 +100,434 @@ def ls_remote(remote, pattern):
     return rows
 
 
-def cmd_audit(args):
+def one_remote_hash(remote, ref):
+    rows = ls_remote(remote, ref)
+    if not rows:
+        return None
+    if len(rows) > 1:
+        raise VaultError(f"remote ref matched more than once: {ref}")
+    return rows[0][0]
+
+
+def is_local_bare(remote):
+    path = Path(remote)
+    return path.exists() and (path / "HEAD").is_file() and (path / "objects").is_dir()
+
+
+def push_ref_to_vault(source, vault, src_ref, dst_ref, force=False):
+    refspec = f"{'+' if force else ''}{src_ref}:{dst_ref}"
+    if is_local_bare(source):
+        run(["git", "--git-dir", source, "push", vault, refspec], capture=True)
+        return refspec
+    tmp = Path(tempfile.mkdtemp(prefix="ops-refs-vault-source-"))
+    try:
+        run(["git", "init", "-q", "--bare", str(tmp)])
+        run(["git", "--git-dir", str(tmp), "fetch", "--no-tags", source, f"+{src_ref}:{src_ref}"], capture=True)
+        run(["git", "--git-dir", str(tmp), "push", vault, refspec], capture=True)
+        return refspec
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def list_source_heads(source):
+    rows = ls_remote(source, "refs/heads/*")
+    out = []
+    for sha, ref in rows:
+        branch = ref[len("refs/heads/") :]
+        if branch:
+            validate_branch(branch)
+            out.append((sha, branch, ref))
+    return out
+
+
+def ensure_empty_or_new_bare(path):
+    bare = Path(path).resolve()
+    if bare.exists():
+        if not (bare / "HEAD").is_file() or not (bare / "objects").is_dir():
+            raise VaultError(f"staging path exists but is not a bare git repo: {bare}")
+        refs = run(["git", "--git-dir", str(bare), "for-each-ref", "--format=%(refname)"], capture=True).stdout.strip()
+        if refs:
+            raise VaultError(f"staging bare is not empty: {bare}")
+    else:
+        bare.parent.mkdir(parents=True, exist_ok=True)
+        run(["git", "init", "-q", "--bare", str(bare)])
+    return bare
+
+
+def init_bare_if_missing(path):
+    bare = Path(path).resolve()
+    if not bare.exists():
+        bare.parent.mkdir(parents=True, exist_ok=True)
+        run(["git", "init", "-q", "--bare", str(bare)])
+    if not (bare / "HEAD").is_file() or not (bare / "objects").is_dir():
+        raise VaultError(f"target path is not a bare git repo: {bare}")
+    return bare
+
+
+def push_source_ref_to_vault(source, vault, repo_id, branch, force=False, dry_run=False):
+    src_ref = f"refs/heads/{branch}"
+    dst_ref = namespaced_head(repo_id, branch)
+    source_sha = one_remote_hash(source, src_ref)
+    if not source_sha:
+        raise VaultError(f"source branch missing: {source} {src_ref}")
+    refspec = f"{'+' if force else ''}{src_ref}:{dst_ref}"
+    if not dry_run:
+        push_ref_to_vault(source, vault, src_ref, dst_ref, force)
+    return {"sourceRef": src_ref, "sourceHash": source_sha, "vaultRef": dst_ref, "refspec": refspec}
+
+
+def cmd_backup_one(args):
     manifest = load_manifest(args.manifest)
-    remote = remote_from_manifest(manifest, args.remote)
-    heads = ls_remote(remote, "refs/heads/repos/*")
-    tags = ls_remote(remote, "refs/tags/repos/*")
-    seen = {}
-    for sha, ref in heads:
-        mo = re.match(r"refs/heads/repos/([^/]+)/(.+)$", ref)
-        if mo:
-            seen.setdefault(mo.group(1), []).append({"branch": mo.group(2), "sha": sha})
-    seen_tags = {}
-    for sha, ref in tags:
-        mo = re.match(r"refs/tags/repos/([^/]+)/(.+)$", ref)
-        if mo:
-            seen_tags.setdefault(mo.group(1), []).append({"tag": mo.group(2), "sha": sha})
-    expected = [repo_id for repo_id, _local_path, _repo in manifest_repos(manifest)]
+    repo = manifest_repo(manifest, args.repo_id)
+    source = source_bare(repo)
+    vault = vault_remote(manifest, args.remote)
+    result = push_source_ref_to_vault(source, vault, args.repo_id, args.branch, args.force, args.dry_run)
+    remote_hash = None if args.dry_run else one_remote_hash(vault, result["vaultRef"])
+    ok = args.dry_run or result["sourceHash"] == remote_hash
     print(json.dumps({
-        "ok": not [r for r in expected if r not in seen],
-        "expectedRepoCount": len(expected),
-        "seenRepoCount": len(seen),
-        "seenHeadCount": sum(len(v) for v in seen.values()),
-        "seenTagRepoCount": len(seen_tags),
-        "seenTagCount": sum(len(v) for v in seen_tags.values()),
-        "missing": [r for r in expected if r not in seen],
-        "extra": sorted(set(seen) - set(expected)),
+        "ok": ok,
+        "mode": "backup-one",
+        "repoId": args.repo_id,
+        "sourceBarePath": source,
+        "vaultRemote": vault,
+        "dryRun": args.dry_run,
+        "remoteHash": remote_hash,
+        **result,
+    }, ensure_ascii=False, indent=2))
+    if not ok:
+        raise VaultError("post-push vault hash differs from source")
+
+
+def cmd_backup_all(args):
+    manifest = load_manifest(args.manifest)
+    vault = vault_remote(manifest, args.remote)
+    results = []
+    for repo_id, repo in manifest_repos(manifest):
+        source = source_bare(repo)
+        branches = [(sha, args.branch, f"refs/heads/{args.branch}")] if args.branch else list_source_heads(source)
+        for _sha, branch, _ref in branches:
+            item = {"repoId": repo_id, "sourceBarePath": source, "branch": branch}
+            try:
+                item.update(push_source_ref_to_vault(source, vault, repo_id, branch, args.force, args.dry_run))
+                item["remoteHash"] = None if args.dry_run else one_remote_hash(vault, item["vaultRef"])
+                item["ok"] = args.dry_run or item["sourceHash"] == item["remoteHash"]
+                item["status"] = "dry-run" if args.dry_run else "backed-up"
+            except Exception as exc:
+                item.update(ok=False, status="failed", error=str(exc))
+            results.append(item)
+    print(json.dumps({
+        "ok": all(item.get("ok") for item in results),
+        "mode": "backup-all",
+        "vaultRemote": vault,
+        "dryRun": args.dry_run,
+        "results": results,
+    }, ensure_ascii=False, indent=2))
+    if not all(item.get("ok") for item in results):
+        raise VaultError("one or more refs failed backup")
+
+
+def cmd_restore_bare_one(args):
+    manifest = load_manifest(args.manifest)
+    manifest_repo(manifest, args.repo_id)
+    vault = vault_remote(manifest, args.remote)
+    staging = ensure_empty_or_new_bare(args.staging_bare)
+    src_ref = namespaced_head(args.repo_id, args.branch)
+    dst_ref = f"refs/heads/{args.branch}"
+    fetch = run(["git", "--git-dir", str(staging), "fetch", "--no-tags", vault, f"+{src_ref}:{dst_ref}"], capture=True, check=False)
+    if fetch.returncode != 0:
+        raise VaultError(f"missing vault branch: {src_ref}")
+    restored_hash = one_remote_hash(str(staging), dst_ref)
+    vault_hash = one_remote_hash(vault, src_ref)
+    ok = restored_hash == vault_hash and bool(restored_hash)
+    print(json.dumps({
+        "ok": ok,
+        "mode": "restore-bare-one",
+        "repoId": args.repo_id,
+        "branch": args.branch,
+        "vaultRemote": vault,
+        "vaultRef": src_ref,
+        "stagingBare": str(staging),
+        "restoredRef": dst_ref,
+        "restoredHash": restored_hash,
+        "vaultHash": vault_hash,
+    }, ensure_ascii=False, indent=2))
+    if not ok:
+        raise VaultError("restored hash differs from vault")
+
+
+def cmd_promote_staging_bare(args):
+    if not args.confirm:
+        raise VaultError("promote-staging-bare requires --confirm")
+    staging = Path(args.staging_bare).resolve()
+    if not (staging / "HEAD").is_file() or not (staging / "objects").is_dir():
+        raise VaultError(f"staging path is not a bare git repo: {staging}")
+    target = init_bare_if_missing(args.target_bare)
+    heads = run(["git", "--git-dir", str(staging), "for-each-ref", "--format=%(refname)", "refs/heads"], capture=True).stdout.splitlines()
+    if not heads:
+        raise VaultError("staging bare has no heads to promote")
+    promoted = []
+    for ref in heads:
+        run(["git", "--git-dir", str(staging), "push", str(target), f"{ref}:{ref}"], capture=True)
+        promoted.append({"ref": ref, "hash": one_remote_hash(str(target), ref)})
+    print(json.dumps({
+        "ok": True,
+        "mode": "promote-staging-bare",
+        "repoId": args.repo_id,
+        "stagingBare": str(staging),
+        "targetBare": str(target),
+        "promoted": promoted,
     }, ensure_ascii=False, indent=2))
 
 
-def cmd_verify_ref(args):
-    remote_ref = exact_remote_ref(args.repo_id, args.branch)
-    local_sha = local_head(args.repo_dir, args.local_ref)
-    rows = ls_remote(args.remote, remote_ref)
-    remote_sha = rows[0][0] if rows else None
-    ok = local_sha == remote_sha
-    print(json.dumps({"ok": ok, "local": local_sha, "remote": remote_sha, "remoteRef": remote_ref}, ensure_ascii=False, indent=2))
+def cmd_verify_one(args):
+    manifest = load_manifest(args.manifest)
+    repo = manifest_repo(manifest, args.repo_id)
+    source = source_bare(repo)
+    vault = vault_remote(manifest, args.remote)
+    source_ref = f"refs/heads/{args.branch}"
+    vault_ref = namespaced_head(args.repo_id, args.branch)
+    source_hash = one_remote_hash(source, source_ref)
+    vault_hash = one_remote_hash(vault, vault_ref)
+    ok = bool(source_hash) and source_hash == vault_hash
+    print(json.dumps({
+        "ok": ok,
+        "mode": "verify-one",
+        "repoId": args.repo_id,
+        "branch": args.branch,
+        "sourceBarePath": source,
+        "vaultRemote": vault,
+        "sourceRef": source_ref,
+        "vaultRef": vault_ref,
+        "sourceHash": source_hash,
+        "vaultHash": vault_hash,
+    }, ensure_ascii=False, indent=2))
     if not ok:
-        raise VaultError("local and remote hashes differ")
+        raise VaultError("source and vault hashes differ")
+
+
+def cmd_audit(args):
+    manifest = load_manifest(args.manifest)
+    vault = vault_remote(manifest, args.remote)
+    seen = {}
+    for sha, ref in ls_remote(vault, "refs/heads/repos/*"):
+        mo = re.match(r"refs/heads/repos/([^/]+)/(.+)$", ref)
+        if mo:
+            seen.setdefault(mo.group(1), []).append({"branch": mo.group(2), "hash": sha})
+    expected = [repo_id for repo_id, _repo in manifest_repos(manifest)]
+    missing = [repo_id for repo_id in expected if repo_id not in seen]
+    print(json.dumps({
+        "ok": not missing,
+        "mode": "audit",
+        "vaultRemote": vault,
+        "expectedRepoIds": expected,
+        "seenRepoIds": sorted(seen),
+        "missing": missing,
+        "extra": sorted(set(seen) - set(expected)),
+        "seen": seen,
+    }, ensure_ascii=False, indent=2))
+    if missing:
+        raise VaultError("vault missing expected repo namespaces")
 
 
 def write_tsv(path, rows, fields):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\t".join(fields) + "\n")
         for row in rows:
-            fh.write("\t".join(str(row.get(f, "")) for f in fields) + "\n")
+            fh.write("\t".join(str(row.get(field, "")) for field in fields) + "\n")
 
 
 def cmd_inventory(args):
     manifest = load_manifest(args.manifest)
-    workspace = Path(args.workspace).resolve()
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    for repo_id, local_path, _repo in manifest_repos(manifest):
-        repo_dir = (workspace / local_path).resolve()
-        row = {"repoId": repo_id, "localPath": local_path, "repoDir": str(repo_dir)}
-        if not repo_dir.exists():
-            row.update(status="missing")
-        else:
-            try:
-                git_dir(repo_dir)
-                row.update(status="git", branch=current_branch(repo_dir), head=local_head(repo_dir), dirty=is_dirty(repo_dir))
-                if not row["branch"]:
-                    row["status"] = "detached"
-                elif row["dirty"]:
-                    row["status"] = "dirty"
-                else:
-                    row["status"] = "clean"
-            except Exception as exc:
-                row.update(status="failed", error=str(exc))
-        rows.append(row)
-    fields = ["repoId", "localPath", "repoDir", "status", "branch", "head", "dirty", "error"]
-    write_tsv(out_dir / "inventory.tsv", rows, fields)
-    write_tsv(out_dir / "push-plan.tsv", rows, fields)
-    print(json.dumps({"ok": True, "outDir": str(out_dir), "count": len(rows)}, ensure_ascii=False, indent=2))
+    for repo_id, repo in manifest_repos(manifest):
+        source = source_bare(repo)
+        try:
+            heads = list_source_heads(source)
+            if not heads:
+                rows.append({"repoId": repo_id, "sourceBarePath": source, "status": "empty"})
+            for sha, branch, ref in heads:
+                rows.append({"repoId": repo_id, "sourceBarePath": source, "status": "ok", "branch": branch, "ref": ref, "hash": sha})
+        except Exception as exc:
+            rows.append({"repoId": repo_id, "sourceBarePath": source, "status": "failed", "error": str(exc)})
+    fields = ["repoId", "sourceBarePath", "status", "branch", "ref", "hash", "error"]
+    write_tsv(out_dir / "bare-inventory.tsv", rows, fields)
+    print(json.dumps({"ok": all(row["status"] in {"ok", "empty"} for row in rows), "mode": "inventory", "outDir": str(out_dir), "rows": len(rows)}, ensure_ascii=False, indent=2))
 
 
-def init_repo(path, branch, text):
+def init_work_repo(path, branch, text):
     path.mkdir(parents=True, exist_ok=True)
     run(["git", "init", "-q", "-b", branch, str(path)])
     run(["git", "config", "user.email", "ops-refs-vault@example.invalid"], cwd=path)
     run(["git", "config", "user.name", "ops-refs-vault"], cwd=path)
-    (path / "README.md").write_text(text + "\n", encoding="utf-8")
-    run(["git", "add", "README.md"], cwd=path)
+    (path / "README.txt").write_text(text + "\n", encoding="utf-8")
+    run(["git", "add", "README.txt"], cwd=path)
     run(["git", "commit", "-q", "-m", "init"], cwd=path)
-    run(["git", "tag", "v1"], cwd=path)
+
+
+def push_work_to_bare(work, bare, branch):
+    run(["git", "remote", "add", "ssot", str(bare)], cwd=work)
+    run(["git", "push", "ssot", f"refs/heads/{branch}:refs/heads/{branch}"], cwd=work)
 
 
 def cmd_smoke_local(_args):
-    root = Path(tempfile.mkdtemp(prefix="ops-refs-vault-smoke-"))
+    root = Path(tempfile.mkdtemp(prefix="ops-refs-vault-bare-ssot-"))
+    proofs = []
+
+    def proof(proof_id, requirement, evidence):
+        proofs.append({"id": proof_id, "requirement": requirement, "status": "pass", "evidence": evidence})
+
     try:
-        remote = root / "refs.git"
-        run(["git", "init", "-q", "--bare", str(remote)])
-        workspace = root / "workspace"
-        alpha = workspace / "src" / "alpha"
-        beta = workspace / "nested" / "beta"
-        branch = "work/test"
-        init_repo(alpha, branch, "alpha")
-        init_repo(beta, branch, "beta")
+        vault = root / "refs.git"
+        alpha_bare = root / "ssot" / "alpha.git"
+        beta_bare = root / "ssot" / "beta.git"
+        alpha_work = root / "work" / "alpha"
+        beta_work = root / "work" / "beta"
+        branch = "main"
+        run(["git", "init", "-q", "--bare", str(vault)])
+        run(["git", "init", "-q", "--bare", str(alpha_bare)])
+        run(["git", "init", "-q", "--bare", str(beta_bare)])
+        init_work_repo(alpha_work, branch, "alpha")
+        init_work_repo(beta_work, branch, "beta")
+        push_work_to_bare(alpha_work, alpha_bare, branch)
+        push_work_to_bare(beta_work, beta_bare, branch)
+        proof("P01", "local working clones can update repo-specific bare SSOT repos by normal git push", [str(alpha_bare), str(beta_bare)])
         manifest = root / "manifest.json"
         manifest.write_text(json.dumps({
-            "targetForgeRepo": {"sshUrl": str(remote)},
+            "targetForgeRepo": {"sshUrl": str(vault)},
             "repos": [
-                {"repoId": "alpha", "localPath": "src/alpha"},
-                {"repoId": "beta", "localPath": "nested/beta"},
+                {"repoId": "alpha", "sourceBarePath": str(alpha_bare)},
+                {"repoId": "beta", "sourceBarePath": str(beta_bare)},
             ],
         }, indent=2), encoding="utf-8")
 
-        for repo_id, repo_dir in [("alpha", alpha), ("beta", beta)]:
-            configure_remote(repo_dir, repo_id, str(remote), DEFAULT_REMOTE_NAME, False, True)
-            run(["git", "push", DEFAULT_REMOTE_NAME], cwd=repo_dir)
+        class Args:
+            pass
 
-        expected = [
-            f"refs/heads/repos/alpha/{branch}",
-            f"refs/heads/repos/beta/{branch}",
-            "refs/tags/repos/alpha/v1",
-            "refs/tags/repos/beta/v1",
-        ]
-        remote_refs = {ref for _sha, ref in ls_remote(str(remote), "refs/*/repos/*")}
-        missing = [ref for ref in expected if ref not in remote_refs]
-        if missing:
-            raise VaultError(f"missing smoke refs: {missing}")
-
-        github_guard = root / "github-guard"
-        init_repo(github_guard, branch, "github guard")
-        github_config = configure_remote(github_guard, "github-guard", DEFAULT_REMOTE, DEFAULT_REMOTE_NAME, False, True)
-        github_push = run(["git", "config", "--get-all", f"remote.{DEFAULT_REMOTE_NAME}.push"], cwd=github_guard, check=False, capture=True)
-        if github_push.returncode == 0 or (github_push.stdout or "").strip():
-            raise VaultError("GitHub remote unexpectedly has direct remote.<name>.push refspecs")
-        if github_config.get("directPushConfigured"):
-            raise VaultError("GitHub remote reported directPushConfigured=true")
-
-        restore = root / "restore-alpha"
-        class Args: pass
-        mat = Args()
-        mat.manifest = str(manifest)
-        mat.remote = str(remote)
-        mat.remote_name = DEFAULT_REMOTE_NAME
-        mat.repo_id = "alpha"
-        mat.dest = str(restore)
-        mat.branch = branch
-        mat.allow_any_branch = False
+        backup = Args()
+        backup.manifest = str(manifest)
+        backup.remote = None
+        backup.branch = None
+        backup.force = False
+        backup.dry_run = False
         with contextlib.redirect_stdout(io.StringIO()):
-            cmd_materialize(mat)
-        if local_head(alpha) != local_head(restore):
-            raise VaultError("restored alpha head differs")
+            cmd_backup_all(backup)
+        proof("P02", "backup-all reads manifest sourceBarePath and backs up repo-specific bare SSOT repos", [str(manifest)])
 
-        mat_missing = Args()
-        mat_missing.manifest = str(manifest)
-        mat_missing.remote = str(remote)
-        mat_missing.remote_name = DEFAULT_REMOTE_NAME
-        mat_missing.repo_id = "alpha"
-        mat_missing.dest = str(root / "restore-missing")
-        mat_missing.branch = "missing"
-        mat_missing.allow_any_branch = False
+        vault_alpha_ref = namespaced_head("alpha", branch)
+        vault_beta_ref = namespaced_head("beta", branch)
+        if not one_remote_hash(str(vault), vault_alpha_ref) or not one_remote_hash(str(vault), vault_beta_ref):
+            raise VaultError("namespaced vault refs missing after backup-all")
+        proof("P03", "repoId and branch map to refs/heads/repos/<repoId>/<branch>", [vault_alpha_ref, vault_beta_ref])
+
+        audit = Args()
+        audit.manifest = str(manifest)
+        audit.remote = None
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_audit(audit)
+        proof("P04", "audit sees expected repoId namespaces in the single forge backup", ["audit"])
+
+        verify = Args()
+        verify.manifest = str(manifest)
+        verify.remote = None
+        verify.repo_id = "alpha"
+        verify.branch = branch
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_verify_one(verify)
+        proof("P05", "verify-one compares source bare hash with forge backup hash", ["verify-one alpha/main"])
+
+        inventory = Args()
+        inventory.manifest = str(manifest)
+        inventory.out_dir = str(root / "inventory")
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_inventory(inventory)
+        if not (root / "inventory" / "bare-inventory.tsv").is_file():
+            raise VaultError("inventory did not write bare-inventory.tsv")
+        proof("P06", "inventory emits machine-readable bare SSOT rows", [str(root / "inventory" / "bare-inventory.tsv")])
+
+        staging = root / "staging" / "alpha.git"
+        restore = Args()
+        restore.manifest = str(manifest)
+        restore.remote = None
+        restore.repo_id = "alpha"
+        restore.branch = branch
+        restore.staging_bare = str(staging)
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_restore_bare_one(restore)
+        proof("P07", "restore-bare-one restores exact repoId/branch into staging bare", [str(staging)])
+
+        restore_missing = Args()
+        restore_missing.manifest = str(manifest)
+        restore_missing.remote = None
+        restore_missing.repo_id = "alpha"
+        restore_missing.branch = "missing"
+        restore_missing.staging_bare = str(root / "staging" / "missing.git")
         try:
             with contextlib.redirect_stdout(io.StringIO()):
-                cmd_materialize(mat_missing)
-            raise VaultError("missing branch did not fail")
+                cmd_restore_bare_one(restore_missing)
+            raise VaultError("missing branch restore unexpectedly passed")
         except VaultError as exc:
-            if "missing remote branch" not in str(exc):
+            if "missing vault branch" not in str(exc):
                 raise
+        proof("P08", "missing branch restore fails instead of falling back to main", ["restore-bare-one alpha/missing"])
+
+        promoted = root / "promoted" / "alpha.git"
+        promote = Args()
+        promote.repo_id = "alpha"
+        promote.staging_bare = str(staging)
+        promote.target_bare = str(promoted)
+        promote.confirm = True
+        with contextlib.redirect_stdout(io.StringIO()):
+            cmd_promote_staging_bare(promote)
+
+        promoted_hash = one_remote_hash(str(promoted), "refs/heads/main")
+        alpha_hash = one_remote_hash(str(alpha_bare), "refs/heads/main")
+        if promoted_hash != alpha_hash:
+            raise VaultError("promoted bare hash differs from source bare")
+        proof("P09", "promote-staging-bare updates target bare only after --confirm", [str(promoted)])
+
+        old_manifest = root / "old-working-clone-manifest.json"
+        old_manifest.write_text(json.dumps({
+            "targetForgeRepo": {"sshUrl": str(vault)},
+            "repos": [{"repoId": "old", "localPath": "work/old"}],
+        }, indent=2), encoding="utf-8")
+        old_inventory = Args()
+        old_inventory.manifest = str(old_manifest)
+        old_inventory.out_dir = str(root / "old-inventory")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                cmd_inventory(old_inventory)
+            raise VaultError("manifest without sourceBarePath unexpectedly passed")
+        except VaultError as exc:
+            if "sourceBarePath" not in str(exc):
+                raise
+        proof("P10", "local working clone paths are not accepted as canonical backup source", [str(old_manifest)])
+
+        gamma_source = root / "ssot" / "gamma.git"
+        gamma_other = root / "ssot" / "gamma-other.git"
+        gamma_work = root / "work" / "gamma"
+        gamma_other_work = root / "work" / "gamma-other"
+        run(["git", "init", "-q", "--bare", str(gamma_source)])
+        run(["git", "init", "-q", "--bare", str(gamma_other)])
+        init_work_repo(gamma_work, branch, "gamma-source")
+        init_work_repo(gamma_other_work, branch, "gamma-other")
+        push_work_to_bare(gamma_work, gamma_source, branch)
+        push_work_to_bare(gamma_other_work, gamma_other, branch)
+        push_ref_to_vault(str(gamma_other), str(vault), "refs/heads/main", namespaced_head("gamma", "main"), force=True)
+        try:
+            push_source_ref_to_vault(str(gamma_source), str(vault), "gamma", "main", force=False, dry_run=False)
+            raise VaultError("non-fast-forward backup unexpectedly passed")
+        except VaultError as exc:
+            if "command failed" not in str(exc):
+                raise
+        proof("P11", "default backup is no-force and rejects diverged forge refs", ["gamma/main"])
 
         print(json.dumps({
             "ok": True,
+            "mode": "smoke-local",
             "root": str(root),
-            "checked": expected,
-            "githubDirectPushGuard": {
-                "remote": DEFAULT_REMOTE,
-                "directPushConfigured": False,
-                "remotePushRefspecs": [],
-            },
+            "proofs": proofs,
         }, ensure_ascii=False, indent=2))
     finally:
         if os.environ.get("OPS_REFS_VAULT_KEEP_SMOKE") != "1":
@@ -514,57 +535,55 @@ def cmd_smoke_local(_args):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Manage a single-remote multi-repo refs vault.")
+    parser = argparse.ArgumentParser(description="Back up repo-specific bare SSOT repos into one namespaced forge vault.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("adopt")
-    p.add_argument("--repo-id", required=True)
-    p.add_argument("--repo-dir", default=".")
-    p.add_argument("--remote", default=os.environ.get("REFS_REMOTE_URL", DEFAULT_REMOTE))
-    p.add_argument("--remote-name", default=os.environ.get("REFS_REMOTE_NAME", DEFAULT_REMOTE_NAME))
-    p.add_argument("--force", action="store_true")
-    p.add_argument("--push-tags", action="store_true")
-    p.set_defaults(func=cmd_adopt)
-
-    p = sub.add_parser("push-all")
+    p = sub.add_parser("backup-one")
     p.add_argument("--manifest", required=True)
-    p.add_argument("--workspace", default=".")
+    p.add_argument("--repo-id", required=True)
+    p.add_argument("--branch", required=True)
     p.add_argument("--remote")
-    p.add_argument("--remote-name", default=os.environ.get("REFS_REMOTE_NAME", DEFAULT_REMOTE_NAME))
+    p.add_argument("--force", action="store_true")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--clean-only", action="store_true", default=True)
-    p.add_argument("--force", action="store_true")
-    p.add_argument("--push-tags", action="store_true")
-    p.add_argument("--github-egress-command", default=os.environ.get("OPS_REFS_VAULT_GITHUB_EGRESS", "ops-tailnet-github-egress"))
-    p.add_argument("--github-push-timeout", type=int, default=int(os.environ.get("OPS_REFS_VAULT_GITHUB_PUSH_TIMEOUT", "600")))
-    p.set_defaults(func=cmd_push_all)
+    p.set_defaults(func=cmd_backup_one)
 
-    p = sub.add_parser("materialize")
+    p = sub.add_parser("backup-all")
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--remote")
+    p.add_argument("--branch")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_backup_all)
+
+    p = sub.add_parser("restore-bare-one")
     p.add_argument("--manifest", required=True)
     p.add_argument("--repo-id", required=True)
-    p.add_argument("--dest", required=True)
-    p.add_argument("--branch", default="main")
+    p.add_argument("--branch", required=True)
+    p.add_argument("--staging-bare", required=True)
     p.add_argument("--remote")
-    p.add_argument("--remote-name", default=os.environ.get("REFS_REMOTE_NAME", DEFAULT_REMOTE_NAME))
-    p.add_argument("--allow-any-branch", action="store_true")
-    p.set_defaults(func=cmd_materialize)
+    p.set_defaults(func=cmd_restore_bare_one)
+
+    p = sub.add_parser("promote-staging-bare")
+    p.add_argument("--repo-id", required=True)
+    p.add_argument("--staging-bare", required=True)
+    p.add_argument("--target-bare", required=True)
+    p.add_argument("--confirm", action="store_true")
+    p.set_defaults(func=cmd_promote_staging_bare)
 
     p = sub.add_parser("audit")
     p.add_argument("--manifest", required=True)
     p.add_argument("--remote")
     p.set_defaults(func=cmd_audit)
 
-    p = sub.add_parser("verify-ref")
-    p.add_argument("--repo-dir", required=True)
-    p.add_argument("--remote", required=True)
+    p = sub.add_parser("verify-one")
+    p.add_argument("--manifest", required=True)
     p.add_argument("--repo-id", required=True)
     p.add_argument("--branch", required=True)
-    p.add_argument("--local-ref", default="HEAD")
-    p.set_defaults(func=cmd_verify_ref)
+    p.add_argument("--remote")
+    p.set_defaults(func=cmd_verify_one)
 
     p = sub.add_parser("inventory")
     p.add_argument("--manifest", required=True)
-    p.add_argument("--workspace", default=".")
     p.add_argument("--out-dir", required=True)
     p.set_defaults(func=cmd_inventory)
 

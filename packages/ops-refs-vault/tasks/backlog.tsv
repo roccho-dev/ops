@@ -1,20 +1,4 @@
-id	kind	status	owner_package	summary	next_action
-K14	script	partial	ops-refs-vault	Hot backup update round-trip is proven but should become a named smoke scenario.	Add smoke case that advances a remote ref, rematerializes, and compares new hash.
-K17	doc	task	ops-tailnet-github-egress	g6i3 App Connector egress loop was fixed by accept-routes=false.	Promote to ops-tailnet-github-egress troubleshooting and route check docs.
-K19	script	partial	ops-refs-vault	Shelter push must default to no-force.	Add shelter-push command that refuses overwrite unless explicit.
-K20	script	task	ops-refs-vault	Existing canonical ref mismatch should push to shelter namespace.	Add remote hash precheck and shelter namespace selection.
-K21	script	task	ops-refs-vault	Unknown local repo should go to quarantine namespace.	Add inventory mapping mode and quarantine push mode.
-K22	doc+script	partial	ops-refs-vault	Git push protects only committed objects, not dirty/untracked files.	Make inventory fail dirty repos by default and document exceptions.
-K23	script	partial	ops-refs-vault	Detached HEAD should not be pushed as normal branch.	Keep detached as blocker and add explicit snapshot command.
-K24	doc+script	task	ops-refs-vault	Shallow repo can fail exact history push.	Add shallow detector and unshallow/snapshot decision output.
-K25	doc	task	ops-refs-vault	Shallow snapshot is content shelter, not exact history backup.	Document in shelter acceptance table.
-K26	doc	task	ops-refs-vault	Repo with its own remote can be held out, such as flakes.	Add heldOutRepos field to manifest schema.
-K27	script	partial	ops-refs-vault	Inventory evidence should be machine-readable TSV.	Extend inventory to write push-results.tsv and verify-results.tsv.
-K28	script	partial	ops-refs-vault	After push, remote hash must be verified with ls-remote.	Add verify-all command from push-plan.tsv.
-K30	doc	task	ops-refs-vault	spec and specs are distinct repoIds during shelter.	Add naming rule to manifest docs.
-K31	script	task	ops-refs-vault	.worktrees/* can be shelter targets but dirty worktrees are excluded.	Add workspace scanner policy.
-K32	script	task	ops-refs-vault	Proof repos and cdp-ops-poc temp repos should be excluded from production inventory.	Add default ignore rules.
-K33	doc+script	partial	ops-refs-vault	Restore UX has manual exact ref, tool restore, and manifest localPath restore.	Add restore-layout command for manifest localPath.
-K34	script	task	ops-refs-vault	Important restore should hash-check until strict materializer is proven everywhere.	Add materialize --expect-sha.
-K35	doc	task	ops-refs-vault	ops/main and specs/main canonical refs may contain task heads; core main shelter can be separate.	Add canonical vs shelter branch naming policy.
-FINAL_DESIGN	chatgpt	task	ops-refs-vault	ChatGPT should propose final shape of this git remote package.	Send tasks/chatgpt-final-package-proposal.md to ChatGPT and record answer as design review evidence.
+id	type	status	owner	summary	doneWhen
+K36	hardening	task	ops-refs-vault	Add remote sourceBarePath integration proof for ssh:// or scp-like source bare URLs.	backup-one and backup-all have a live or simulated remote-source proof
+K37	hardening	task	ops-refs-vault	Add explicit divergence report before --force backup.	force backup requires a machine-readable divergence report
+K38	hardening	task	ops-refs-vault	Add signed release manifest handoff for cold backup.	release manifest records source bare hashes and forge backup hashes

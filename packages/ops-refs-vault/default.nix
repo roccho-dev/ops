@@ -3,11 +3,11 @@ builtins.fromJSON ''
   "kind": "ops.packageImplementationMetadata.v1",
   "package": "ops-refs-vault",
   "repoId": "ops",
-  "mission": "Keep many local Git repos restorable from one remote forge repo by namespaced refs.",
+  "mission": "Keep repo-specific bare SSOT repositories on nixos-vm restorable from one remote forge backup repo by namespaced refs.",
   "primaryTarget": "packages/ops-refs-vault",
   "requiredOutputs": "packages.<system>.ops-refs-vault",
   "requiredChecks": "ops-refs-vault.smoke-local",
-  "responsibility": "Own refs-vault docs, reusable scripts, restore UX, shelter push evidence shape, and final-design task prompts.",
-  "forbiddenResponsibility": "Does not bypass ops-tailnet-github-egress for GitHub network routing, does not install direct remote.<name>.push refspecs for GitHub remotes, and does not store raw proof directories as package source."
+  "responsibility": "Own bare SSOT to single forge backup commands, restore-to-staging, promotion, inventory, audit, docs, and smoke evidence.",
+  "forbiddenResponsibility": "Does not treat local working clones as the canonical backup source, does not make GitHub the SSOT, does not auto-promote restored refs into SSOT without approval, and does not store raw proof directories as package source."
 }
 ''
