@@ -29,16 +29,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1779404814,
-        "narHash": "sha256-nr/VlpLi2X6MfEOabSN6rQDDDyRFI7+0r8I2g1TFvac=",
+        "lastModified": 1779535200,
+        "narHash": "sha256-0G505pRUaTqNXmMqG9ECkYNZ5ku54STVxseHydVQE0s=",
         "ref": "refs/heads/main",
-        "rev": "2e3d05dae25ee9000eda53028e1a6f2ecf8a341c",
-        "revCount": 132,
+        "rev": "35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6",
+        "revCount": 156,
         "type": "git",
         "url": "file:///home/nixos/repos/specs"
       },
       "original": {
-        "rev": "2e3d05dae25ee9000eda53028e1a6f2ecf8a341c",
+        "ref": "refs/heads/main",
+        "rev": "35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6",
         "type": "git",
         "url": "file:///home/nixos/repos/specs"
       }

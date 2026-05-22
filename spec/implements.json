@@ -1,6 +1,6 @@
 {
   "kind": "spec.implements.v1",
-  "specsRev": "2e3d05d",
+  "specsRev": "35e1e68",
   "systems": [
     "x86_64-linux",
     "aarch64-linux"

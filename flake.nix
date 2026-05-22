@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     specs = {
-      url = "git+file:///home/nixos/repos/specs?rev=2e3d05dae25ee9000eda53028e1a6f2ecf8a341c";
+      url = "git+file:///home/nixos/repos/specs?ref=refs/heads/main&rev=35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };

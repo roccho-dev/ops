@@ -67,6 +67,17 @@ def locked_specs(lock):
     return locked
 
 
+def package_catalog_by_name(args):
+    catalog, _placement = load_spec_data(args)
+    return {entry.get("package"): entry for entry in catalog if entry.get("package")}
+
+
+def prove_feat_output_policy(args):
+    package = package_catalog_by_name(args).get("prove-feat", {})
+    gate = package.get("outputReviewGate")
+    return gate if isinstance(gate, dict) else {}
+
+
 def manifest_kind(manifest):
     return manifest.get("kind") or manifest.get("schema")
 
@@ -113,10 +124,18 @@ def run_structure(root, system, args):
     check_item(items, "inputs-specs-declared", specs_declared, "flake.nix declares inputs.specs")
     check_item(items, "outputs-receive-specs", re.search(r"outputs\s*=\s*\{[^}]*specs", flake_text) is not None, "outputs argument includes specs")
     check_item(items, "prove-feat-package-wired", attr_defined(flake_text, "prove-feat"), "flake.nix defines prove-feat outputs")
-    apps = forbidden_flake_output_lines(flake_text, "apps")
-    devshells = forbidden_flake_output_lines(flake_text, "devShells")
-    check_item(items, "no-top-level-apps-output", not apps, "flake.nix does not expose top-level apps")
-    check_item(items, "no-top-level-devshells-output", not devshells, "flake.nix does not expose top-level devShells")
+
+    output_policy = prove_feat_output_policy(args)
+    check_item(items, "spec-output-policy-loaded", bool(output_policy), "specs package catalog exposes prove-feat outputReviewGate")
+    check_item(items, "spec-output-policy-package-only", output_policy.get("packageOutputOnly") is True, "specs outputReviewGate.packageOutputOnly=true")
+    allowed_outputs = set(output_policy.get("allowedTopLevelOutputs", []))
+    forbidden_outputs = set(output_policy.get("forbiddenTopLevelOutputs", []))
+    check_item(items, "spec-output-policy-allows-packages-checks", {"packages", "checks"}.issubset(allowed_outputs), "specs allows packages/checks top-level outputs")
+    check_item(items, "spec-output-policy-forbids-apps-devshells", {"apps", "devShells"}.issubset(forbidden_outputs), "specs forbids apps/devShells top-level outputs")
+    for output in sorted(forbidden_outputs):
+        matches = forbidden_flake_output_lines(flake_text, output)
+        check_id = f"no-top-level-{output.lower()}-output"
+        check_item(items, check_id, not matches, f"flake.nix does not expose top-level {output} because specs forbids it")
 
     lock = read_json(lock_path) if lock_path.is_file() else {}
     specs_locked = locked_specs(lock)
