@@ -45,6 +45,14 @@
               exec ${pkgs.python3}/bin/python3 ${./packages/ops-knowledge-intake/bin/ops-knowledge-intake.py} "$@"
             '';
           };
+          package-architecture-map = pkgs.writeShellApplication {
+            name = "package-architecture-map";
+            runtimeInputs = [ pkgs.python3 ];
+            text = ''
+              export PACKAGE_ARCHITECTURE_MAP_VIEWER="${./packages/package-architecture-map/viewer/index.html}"
+              exec ${pkgs.python3}/bin/python3 ${./packages/package-architecture-map/bin/package-architecture-map.py} "$@"
+            '';
+          };
           ops-runbook-checks = pkgs.writeShellApplication {
             name = "ops-runbook-checks";
             runtimeInputs = [ pkgs.python3 ];
@@ -197,6 +205,31 @@
                 grep -q 'retry-template-candidate' "$out/knowledge.tsv"
                 grep -q 'gate-candidate' "$out/knowledge.tsv"
                 grep -q '"count": 3' "$out/summary.json"
+              '';
+          package-architecture-map =
+            pkgs.runCommand "package-architecture-map-check"
+              {
+                nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.package-architecture-map ];
+              }
+              ''
+                mkdir -p "$out"
+                package-architecture-map \
+                  --inventory ${./packages/package-architecture-map/tests/a2ui-agent-status.inventory.json} \
+                  --out-dir "$out/dist" \
+                  --name a2ui-agent-status > "$out/stdout.json"
+                test -s "$out/dist/latest.mmd"
+                test -s "$out/dist/maps/a2ui-agent-status.mmd"
+                test -s "$out/dist/index.html"
+                test -s "$out/dist/manifest.json"
+                grep -q 'subgraph workspace' "$out/dist/latest.mmd"
+                grep -q 'agent-status-view' "$out/dist/latest.mmd"
+                grep -q 'future-only' "$out/dist/latest.mmd"
+                grep -q 'forbidden: canonical state' "$out/dist/latest.mmd"
+                grep -q '"generatedIsAuthority": false' "$out/dist/manifest.json"
+                package-architecture-map \
+                  ${./packages/package-architecture-map/tests/a2ui-agent-status.inventory.json} \
+                  --stdout > "$out/stdout.mmd"
+                cmp "$out/stdout.mmd" "$out/dist/latest.mmd"
               '';
           ops-runbook-checks =
             pkgs.runCommand "ops-runbook-checks-check"

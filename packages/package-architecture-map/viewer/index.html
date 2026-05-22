@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Package Architecture Map</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        color: #172026;
+        background: #f7f8fa;
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #d8dee4;
+        background: #fff;
+      }
+      main {
+        padding: 16px;
+      }
+      .note {
+        margin: 0;
+        font-size: 13px;
+        color: #57606a;
+      }
+      #diagram {
+        overflow: auto;
+        padding: 16px;
+        border: 1px solid #d8dee4;
+        background: #fff;
+      }
+      pre {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Package Architecture Map</strong>
+      <p class="note">Source of truth is inventory JSON. This page only renders generated Mermaid.</p>
+    </header>
+    <main>
+      <div id="diagram">Loading latest.mmd...</div>
+      <details>
+        <summary>Mermaid source</summary>
+        <pre id="source"></pre>
+      </details>
+    </main>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({ startOnLoad: false, securityLevel: "strict" });
+
+      const params = new URLSearchParams(window.location.search);
+      const target = params.get("mmd") || "latest.mmd";
+      const response = await fetch(target, { cache: "no-store" });
+      const source = await response.text();
+      document.getElementById("source").textContent = source;
+      const rendered = await mermaid.render("package-architecture-map-svg", source);
+      document.getElementById("diagram").innerHTML = rendered.svg;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,82 @@
+{
+  "kind": "packageArchitectureMap.inventory.v1",
+  "title": "a2ui agent status package placement",
+  "direction": "TD",
+  "groups": [
+    {
+      "kind": "group",
+      "id": "workspace",
+      "label": "/home/nixos/repos",
+      "children": [
+        {
+          "kind": "group",
+          "id": "specs",
+          "label": "specs/packages",
+          "children": [
+            {
+              "id": "agent-status-view",
+              "label": "agent-status-view",
+              "path": "specs/packages/agent-status-view",
+              "status": "new-contract",
+              "responsibility": "view contract and adapter boundary"
+            },
+            {
+              "id": "a2ui-component-registry",
+              "label": "a2ui-component-registry",
+              "status": "future-only",
+              "responsibility": "do not create until extraction pressure exists"
+            }
+          ]
+        },
+        {
+          "kind": "group",
+          "id": "ops",
+          "label": "ops/packages",
+          "children": [
+            {
+              "id": "ops-agent-events",
+              "label": "ops-agent-events",
+              "path": "ops/packages/ops-agent-events",
+              "responsibility": "event validate and reduce"
+            }
+          ]
+        },
+        {
+          "kind": "group",
+          "id": "webmcp",
+          "label": "webmcp",
+          "children": [
+            {
+              "id": "webmcp-glue",
+              "label": "temporary local glue",
+              "responsibility": "host, query, and local display glue",
+              "forbidden": [
+                "status semantics",
+                "canonical state",
+                "permanent component registry"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "agent-status-view",
+      "to": "ops-agent-events",
+      "label": "reads reduced state"
+    },
+    {
+      "from": "a2ui-component-registry",
+      "to": "agent-status-view",
+      "label": "later",
+      "style": "dotted"
+    },
+    {
+      "from": "webmcp-glue",
+      "to": "agent-status-view",
+      "label": "implements view surface"
+    }
+  ]
+}
