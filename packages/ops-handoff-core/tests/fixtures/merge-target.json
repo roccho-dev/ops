@@ -1,0 +1,8 @@
+{
+  "kind": "merge.target.v1",
+  "repoId": "ops",
+  "baseBranch": "main",
+  "candidateBranch": "codex/ops-handoff-core-proof-20260518",
+  "canonicalMergeAuthorized": false,
+  "pushAuthorized": false
+}

@@ -1,0 +1,36 @@
+{
+  "threads": [
+    {
+      "actorId": "actor.chatgpt.impl-work",
+      "parentActor": "actor.codex.project-operator",
+      "threadFunction": "impl-work",
+      "scope": {
+        "repoId": "ops"
+      }
+    },
+    {
+      "actorId": "actor.chatgpt.impl-review",
+      "parentActor": "actor.codex.project-operator",
+      "threadFunction": "impl-review",
+      "scope": {
+        "repoId": "ops"
+      }
+    },
+    {
+      "actorId": "actor.chatgpt.merge-work",
+      "parentActor": "actor.codex.project-operator",
+      "threadFunction": "merge-work",
+      "scope": {
+        "repoId": "ops"
+      }
+    },
+    {
+      "actorId": "actor.chatgpt.merge-review",
+      "parentActor": "actor.codex.project-operator",
+      "threadFunction": "merge-review",
+      "scope": {
+        "repoId": "ops"
+      }
+    }
+  ]
+}

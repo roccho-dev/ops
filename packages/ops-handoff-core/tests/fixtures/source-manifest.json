@@ -1,0 +1,7 @@
+{
+  "kind": "source.manifest.v1",
+  "repoId": "ops",
+  "baseHead": "base000",
+  "candidateHead": "candidate000",
+  "path": "SRC/src.tar.zst"
+}

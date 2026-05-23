@@ -32,6 +32,17 @@ class T(unittest.TestCase):
  def test_allowed_to_implement_is_not_merge_or_handoff(s):
   p=s.j("next","--state-kind","allowed-to-implement","--dry-run","--json")["permissions"];s.assertTrue(p["implement"])
   for k in ["createWorktree","returnArtifact","sendReview","readyForMergeReview","mergeReady","canonicalMerge","push","overwrite"]:s.assertFalse(p[k])
+ def test_handoff_created_is_nonterminal_and_localize_classifier(s):
+  h=s.j("next","--state-kind","handoff-created","--dry-run","--json")
+  s.assertFalse(any(h["permissions"].values()));s.assertIn("non-terminal",h["nextAction"])
+  stale=s.j("classify-localize","--input",s.f("stale.json",{"policyFresh":False}),"--json")
+  s.assertEqual(stale["stateKind"],"stale-policy-claim")
+  drift=s.j("classify-localize","--input",s.f("drift.json",{"policyFresh":True,"canonicalNoDrift":False}),"--json")
+  s.assertEqual(drift["stateKind"],"stale-canonical-head")
+  project=s.j("classify-localize","--input",s.f("project.json",{"policyFresh":True,"canonicalNoDrift":True,"projectHandoffSent":True}),"--json")
+  s.assertEqual(project["stateKind"],"project-handoff-sent")
+  ready=s.j("classify-localize","--input",s.f("ready.json",{"policyFresh":True,"canonicalNoDrift":True,"mergeReviewPass":True,"localGatePass":True,"runReportPresent":True}),"--json")
+  s.assertEqual(ready["stateKind"],"localizer-ready");s.assertTrue(ready["ready"])
  def test_ready_for_review_and_merge_review_boundary(s):
   m=s.f("m.json",C["manifest"]);i=s.f("i.json",{"text":"impl-review-pass\nok"});g=s.f("g.json",{"ok":True});r=s.f("RUN_REPORT.md","ok\n")
   a=["check-ready","--delivery",m,"--impl-review",i,"--local-gate",g,"--run-report",r,"--json"]

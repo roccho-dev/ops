@@ -19,6 +19,8 @@ DECISION_FLAGS = {
     "routeDecision": False,
 }
 
+THREAD_FUNCTIONS = {"impl-work", "impl-review", "merge-work", "merge-review"}
+
 
 LOW_LEVEL_COMMANDS = [
     "chromium-cdp-chatgpt-doctor",
@@ -607,6 +609,155 @@ def handle_claim(args: argparse.Namespace) -> int:
     return maybe_write_out(args, result)
 
 
+def load_json_file(path: str | Path) -> Any:
+    return json.loads(Path(path).read_text())
+
+
+def handle_handoff_preflight(args: argparse.Namespace) -> int:
+    result = common_result("project-handoff-preflight", args)
+    result["projectUrl"] = args.project_url
+    result["projectSourcePolicy"] = args.project_source_policy
+    result["requiredReadbackIntervalSeconds"] = args.readback_interval_seconds
+    missing: list[str] = []
+    invalid: list[dict[str, Any]] = []
+
+    if shape_error := project_url_shape_error(args.project_url, "thread-create"):
+        invalid.append({
+            "field": "projectUrl",
+            "status": shape_error["status"],
+            "reason": shape_error["reason"],
+        })
+
+    roster_value: Any = None
+    if not args.thread_roster:
+        missing.append("threadRoster")
+    else:
+        try:
+            roster_value = load_json_file(args.thread_roster)
+        except (OSError, json.JSONDecodeError) as exc:
+            invalid.append({"field": "threadRoster", "status": "invalid-json", "reason": str(exc)})
+
+    threads = []
+    if isinstance(roster_value, dict):
+        threads = roster_value.get("threads", [])
+    elif isinstance(roster_value, list):
+        threads = roster_value
+    elif roster_value is not None:
+        invalid.append({"field": "threadRoster", "status": "invalid-shape", "reason": "expected array or object with threads[]"})
+
+    seen_functions = set()
+    for row in threads if isinstance(threads, list) else []:
+        if not isinstance(row, dict):
+            invalid.append({"field": "threadRoster", "status": "invalid-entry", "reason": "thread entry must be object"})
+            continue
+        fn = str(row.get("threadFunction", ""))
+        if fn not in THREAD_FUNCTIONS:
+            invalid.append({"field": "threadFunction", "status": "invalid-thread-function", "value": fn})
+        else:
+            seen_functions.add(fn)
+        if not row.get("actorId"):
+            invalid.append({"field": "actorId", "status": "missing-field", "threadFunction": fn})
+        if not row.get("parentActor"):
+            invalid.append({"field": "parentActor", "status": "missing-field", "threadFunction": fn})
+
+    missing_functions = sorted(THREAD_FUNCTIONS - seen_functions)
+    if missing_functions:
+        invalid.append({"field": "threadFunction", "status": "missing-thread-functions", "missing": missing_functions})
+
+    source_files = []
+    for file_text in args.source_file:
+        path = Path(file_text)
+        exists = path.is_file()
+        source_files.append({
+            "path": str(path),
+            "name": path.name,
+            "exists": exists,
+            "sha256": sha256_file(path) if exists else None,
+        })
+        if not exists:
+            invalid.append({"field": "sourceFile", "status": "missing-file", "path": str(path)})
+    if not source_files:
+        missing.append("sourceFile")
+
+    bootstrap_files = []
+    for file_text in args.bootstrap_artifact:
+        path = Path(file_text)
+        exists = path.is_file()
+        bootstrap_files.append({
+            "path": str(path),
+            "name": path.name,
+            "exists": exists,
+            "sha256": sha256_file(path) if exists else None,
+        })
+        if not exists:
+            invalid.append({"field": "bootstrapArtifact", "status": "missing-file", "path": str(path)})
+    if not bootstrap_files:
+        missing.append("bootstrapArtifact")
+
+    expected_artifacts = [item for item in args.expected_artifact if item]
+    if not expected_artifacts:
+        missing.append("expectedArtifact")
+
+    if args.project_source_policy != "project-source-only":
+        invalid.append({
+            "field": "projectSourcePolicy",
+            "status": "unsupported-policy",
+            "reason": "thread attachments are not a Project Source fallback",
+        })
+
+    result.update({
+        "threadRoster": {
+            "path": args.thread_roster,
+            "threadFunctions": sorted(seen_functions),
+            "requiredThreadFunctions": sorted(THREAD_FUNCTIONS),
+        },
+        "sourceFiles": source_files,
+        "bootstrapArtifacts": bootstrap_files,
+        "expectedArtifacts": expected_artifacts,
+        "missing": missing,
+        "invalid": invalid,
+        "threadAttachmentFallbackAllowed": False,
+        "inlinePolicy": "short-control-pointer-only",
+    })
+
+    if missing or invalid:
+        result.update({
+            "ok": False,
+            "status": "project-handoff-preflight-failed",
+            "blockerClass": "project-binding-missing" if missing else "project-handoff-preflight-failed",
+        })
+        return maybe_write_out(args, result)
+
+    if args.dry_run:
+        result.update({
+            "ok": True,
+            "status": "dry-run-ready",
+            "plannedCommands": [
+                ["project-transport-doctor", "--project-url", args.project_url],
+                *[["project-source-put", "--project-url", args.project_url, "--file", row["path"]] for row in source_files],
+                ["project-thread-create", "--project-url", args.project_url, "--text-file", "<short pointer/control prompt>"],
+                ["project-thread-readback", "--url", "<created-thread-url>", "--markers", ",".join(expected_artifacts)],
+                ["project-artifact-fetch", "--name", expected_artifacts[0], "--url", "<created-thread-url>"],
+            ],
+        })
+        return maybe_write_out(args, result)
+
+    doctor = run_command([
+        "project-transport-doctor",
+        "--project-url", args.project_url,
+        "--addr", args.addr,
+        "--port", str(args.port),
+        "--timeout-ms", str(args.timeout_ms),
+    ], timeout=max(60, args.timeout_ms // 1000 + 30))
+    doctor_ok = doctor["returncode"] == 0 and bool(isinstance(doctor.get("json"), dict) and doctor["json"].get("ok"))
+    result["doctor"] = doctor
+    result.update({
+        "ok": doctor_ok,
+        "status": "project-handoff-preflight-ready" if doctor_ok else "project-route-not-verified",
+    })
+    return maybe_write_out(args, result)
+
+
 def write_run_report(out_dir: Path, result: dict[str, Any]) -> Path:
     path = out_dir / "TRANSPORT_RUN_REPORT.md"
     lines = [
@@ -681,6 +832,40 @@ def handle_run(args: argparse.Namespace) -> int:
             return maybe_write_out(args, result)
         if create_result.get("threadUrl"):
             result["threadUrl"] = create_result["threadUrl"]
+
+        if args.readback_marker:
+            readback_result = common_result("project-thread-readback", ns)
+            readback_result["markers"] = args.readback_marker
+            if args.dry_run:
+                readback_result.update({
+                    "ok": True,
+                    "status": "dry-run-ready",
+                    "plannedCommand": [
+                        "project-thread-readback",
+                        "--url", create_result.get("threadUrl", "<created-thread-url>"),
+                        "--markers", ",".join(args.readback_marker),
+                        "--wait-ms", str(args.readback_wait_ms),
+                    ],
+                })
+            elif create_result.get("threadUrl"):
+                readback_args = [
+                    "project-thread-readback",
+                    "--url", create_result["threadUrl"],
+                    "--markers", ",".join(args.readback_marker),
+                    "--wait-ms", str(args.readback_wait_ms),
+                    "--addr", args.addr,
+                    "--port", str(args.port),
+                    "--out-dir", str(out_dir),
+                ]
+                low = run_command([sys.executable, __file__] + readback_args, timeout=max(60, args.readback_wait_ms // 1000 + 60))
+                readback_result.update(low.get("json") or {"ok": False, "status": "thread-readback-wrapper-failed", "commandOutput": low})
+            else:
+                readback_result.update({"ok": False, "status": "thread-url-missing"})
+            steps.append(readback_result)
+            if not readback_result.get("ok"):
+                result.update({"ok": False, "status": "thread-readback-failed", "steps": steps})
+                write_run_report(out_dir, result)
+                return maybe_write_out(args, result)
 
     result.update({"ok": True, "status": "transport-run-ready" if args.dry_run else "transport-run-complete", "steps": steps})
     report = write_run_report(out_dir, result)
@@ -760,6 +945,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--event-id", "--eventId", dest="event_id", default="project-transport-claim")
     p.set_defaults(func=handle_claim)
 
+    p = sub.add_parser("handoff-preflight")
+    add_common_io(p)
+    add_cdp_common(p)
+    p.add_argument("--project-url", "--projectUrl", dest="project_url", required=True)
+    p.add_argument("--thread-roster", "--threadRoster", dest="thread_roster", required=True)
+    p.add_argument("--source-file", "--sourceFile", dest="source_file", action="append", default=[])
+    p.add_argument("--bootstrap-artifact", "--bootstrapArtifact", dest="bootstrap_artifact", action="append", default=[])
+    p.add_argument("--expected-artifact", "--expectedArtifact", dest="expected_artifact", action="append", default=[])
+    p.add_argument("--project-source-policy", "--projectSourcePolicy", dest="project_source_policy", default="project-source-only")
+    p.add_argument("--readback-interval-seconds", "--readbackIntervalSeconds", dest="readback_interval_seconds", type=int, default=300)
+    p.set_defaults(func=handle_handoff_preflight)
+
     p = sub.add_parser("run")
     add_common_io(p)
     add_cdp_common(p)
@@ -767,6 +964,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--source-file", "--sourceFile", dest="source_file", action="append", default=[])
     p.add_argument("--prompt-file", "--promptFile", dest="prompt_file")
     p.add_argument("--text")
+    p.add_argument("--readback-marker", "--readbackMarker", dest="readback_marker", action="append", default=[])
+    p.add_argument("--readback-wait-ms", "--readbackWaitMs", dest="readback_wait_ms", type=int, default=300000)
     p.set_defaults(func=handle_run)
 
     return parser

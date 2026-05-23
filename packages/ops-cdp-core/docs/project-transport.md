@@ -26,6 +26,7 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 | `project-thread-readback` | read a thread and require markers |
 | `project-artifact-fetch` | download one artifact and write `ARTIFACTS_MANIFEST.json` |
 | `project-transport-claim` | append a transport result into a claim JSONL |
+| `project-handoff-preflight` | validate Project URL shape, Project Source policy, threadFunction roster, bootstrap artifacts, and expected artifact contract before worker launch |
 | `project-transport-run` | run the common Project Source -> thread create transport sequence |
 
 ## Boundaries
@@ -35,6 +36,7 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 - Inline text is limited to short control, pointers, status, and artifact names.
 - Source, diff, review report, handoff body, and result artifacts must be files.
 - Successful transport is not approval, merge readiness, or completion.
+- `project-handoff-preflight` is structural route/input validation. It does not prove semantic review, localizer readiness, or approval.
 - Individual `nix run .#project-transport-*` commands may not expose sibling
   wrappers in `PATH`; use `nix shell .#ops-cdp-core` or the flake check when
   verifying the whole wrapper set.
