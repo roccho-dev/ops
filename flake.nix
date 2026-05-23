@@ -52,6 +52,26 @@
               exec ${pkgs.python3}/bin/python3 ${./packages/ops-runbook-checks/bin/ops-runbook-checks.py} "$@"
             '';
           };
+          ops-handoff-core = pkgs.writeShellApplication {
+            name = "ops-handoff-core";
+            runtimeInputs = [ pkgs.python3 ];
+            text = ''
+              exec ${pkgs.python3}/bin/python3 ${./packages/ops-handoff-core/bin/ops-handoff-core.py} "$@"
+            '';
+          };
+          ops-src-runtime-pack = pkgs.writeShellApplication {
+            name = "ops-src-runtime-pack";
+            runtimeInputs = [
+              pkgs.git
+              pkgs.gnutar
+              pkgs.gzip
+              pkgs.nix
+              pkgs.python3
+            ];
+            text = ''
+              exec ${pkgs.python3}/bin/python3 ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py} "$@"
+            '';
+          };
           ops-thread-fsm = pkgs.writeShellApplication {
             name = "ops-thread-fsm";
             runtimeInputs = [ pkgs.python3 ];
@@ -240,6 +260,81 @@
                 grep -q '"classification": "minimum-static-gate-fail"' "$out/legacy-report.json"
                 grep -q 'AGENTS.md still contains legacy or raw-success token' "$out/legacy-report.json"
               '';
+          ops-handoff-core =
+            pkgs.runCommand "ops-handoff-core-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.gnugrep
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-handoff-core
+                ];
+              }
+              ''
+                mkdir -p "$out/generated"
+                python3 -m py_compile ${./packages/ops-handoff-core/bin/ops-handoff-core.py}
+                python3 -S ${./packages/ops-handoff-core/tests/test_ops_handoff_core.py} \
+                  ${./packages/ops-handoff-core} "$out/python-test"
+                ops-handoff-core generate \
+                  --role-catalog ${./packages/ops-handoff-core/tests/fixtures/role-catalog.md} \
+                  --topology ${./packages/ops-handoff-core/tests/fixtures/organization-topology.a2ui.jsonl} \
+                  --command-board ${./packages/ops-handoff-core/tests/fixtures/command-board.a2ui.jsonl} \
+                  --request ${./packages/ops-handoff-core/tests/fixtures/REQUEST.md} \
+                  --source-manifest ${./packages/ops-handoff-core/tests/fixtures/source-manifest.json} \
+                  --runtime-manifest ${./packages/ops-handoff-core/tests/fixtures/runtime-manifest.json} \
+                  --merge-target ${./packages/ops-handoff-core/tests/fixtures/merge-target.json} \
+                  --thread-roster ${./packages/ops-handoff-core/tests/fixtures/thread-roster.json} \
+                  --out-dir "$out/generated/handoff" \
+                  --json > "$out/generate.json"
+                ops-handoff-core validate \
+                  --handoff-dir "$out/generated/handoff" \
+                  --no-role-body-sentinel FULL_ROLE_CATALOG_BODY_SENTINEL > "$out/validate.json"
+                printf 'merge-review-pass\nok\n' > "$out/verdict.txt"
+                printf '# run report\nok\n' > "$out/RUN_REPORT.md"
+                printf 'artifact\n' > "$out/artifact.txt"
+                ops-handoff-core import-result \
+                  --thread-function merge-review \
+                  --artifact "$out/artifact.txt" \
+                  --run-report "$out/RUN_REPORT.md" \
+                  --verdict-file "$out/verdict.txt" \
+                  --claim-path "$out/result-claim.jsonl" \
+                  --json > "$out/import.json"
+                grep -q '"status": "handoff-generated"' "$out/generate.json"
+                grep -q '"status": "handoff-valid"' "$out/validate.json"
+                grep -q '"status": "handoff-result-imported"' "$out/import.json"
+                grep -q '"localizerApproval": false' "$out/import.json"
+                grep -q '"current": "handoff-created"' "$out/generated/handoff/HANDOFF_MANIFEST.json"
+                grep -q '"terminal": false' "$out/generated/handoff/HANDOFF_MANIFEST.json"
+                grep -q '"transportReadbackIsApproval": false' "$out/generated/handoff/HANDOFF_MANIFEST.json"
+                test -s "$out/result-claim.jsonl"
+                test -f "$out/generated/handoff/THREADS/impl-work/BOOTSTRAP.md"
+                test -f "$out/generated/handoff/THREADS/impl-review/REVIEW_CHECKLIST.md"
+                test -f "$out/generated/handoff/THREADS/merge-work/EXPECTED_OUTPUT.md"
+                test -f "$out/generated/handoff/THREADS/merge-review/MERGE_REVIEW_CHECKLIST.md"
+                grep -q 'threadFunction: impl-work' "$out/generated/handoff/THREADS/impl-work/BOOTSTRAP.md"
+                grep -q 'threadFunction: impl-review' "$out/generated/handoff/THREADS/impl-review/BOOTSTRAP.md"
+                grep -q 'threadFunction: merge-work' "$out/generated/handoff/THREADS/merge-work/BOOTSTRAP.md"
+                grep -q 'threadFunction: merge-review' "$out/generated/handoff/THREADS/merge-review/BOOTSTRAP.md"
+                ! grep -R FULL_ROLE_CATALOG_BODY_SENTINEL "$out/generated/handoff/THREADS"
+                ! grep -R 'project-source-put\|project-thread-create\|project-artifact-fetch' "$out/generated/handoff/THREADS"
+              '';
+          ops-src-runtime-pack =
+            pkgs.runCommand "ops-src-runtime-pack-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.git
+                  pkgs.gnutar
+                  pkgs.gzip
+                  pkgs.nix
+                  pkgs.python3
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-src-runtime-pack
+                ];
+              }
+              ''
+                mkdir -p "$out"
+                python3 -m py_compile ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py}
+                python3 -S ${./packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py} \
+                  ${./packages/ops-src-runtime-pack} "$out/python-test" > "$out/test.log"
+              '';
           ops-thread-fsm =
             pkgs.runCommand "ops-thread-fsm-check"
               {
@@ -254,7 +349,12 @@
                 chmod -R u+w ./ops-thread-fsm-src
                 python3 -S ./ops-thread-fsm-src/tests/test_ops_thread_fsm.py > "$out/test.log"
                 ops-thread-fsm next --state-kind request-sent --dry-run --json > "$out/next.json"
+                ops-thread-fsm next --state-kind handoff-created --dry-run --json > "$out/handoff-created.json"
+                printf '{"policyFresh":true,"canonicalNoDrift":true,"mergeReviewPass":true,"localGatePass":true,"runReportPresent":true}\n' > "$out/localize-input.json"
+                ops-thread-fsm classify-localize --input "$out/localize-input.json" --json > "$out/localize-ready.json"
                 grep -q '"writes": false' "$out/next.json"
+                grep -q '"stateKind": "localizer-ready"' "$out/localize-ready.json"
+                grep -q 'non-terminal' "$out/handoff-created.json"
                 grep -q 'sleep 900' "$out/next.json"
                 touch "$out/done"
               '';
@@ -324,6 +424,7 @@
                 test -x "$(command -v project-thread-readback)"
                 test -x "$(command -v project-artifact-fetch)"
                 test -x "$(command -v project-transport-claim)"
+                test -x "$(command -v project-handoff-preflight)"
                 test -x "$(command -v project-transport-run)"
                 test -x "$(command -v cdp-bridge)"
                 cdp-bridge --help > "$out/cdp-bridge-help.txt" 2>&1
@@ -332,6 +433,16 @@
                 mkdir -p "$out/transport"
                 printf 'hello\n' > "$out/transport/source.txt"
                 printf 'use Project Source artifact\n' > "$out/transport/prompt.txt"
+                cat > "$out/transport/thread-roster.json" <<'EOF'
+                {
+                  "threads": [
+                    {"actorId":"actor.chatgpt.impl-work","parentActor":"actor.codex.project","threadFunction":"impl-work"},
+                    {"actorId":"actor.chatgpt.impl-review","parentActor":"actor.codex.project","threadFunction":"impl-review"},
+                    {"actorId":"actor.chatgpt.merge-work","parentActor":"actor.codex.project","threadFunction":"merge-work"},
+                    {"actorId":"actor.chatgpt.merge-review","parentActor":"actor.codex.project","threadFunction":"merge-review"}
+                  ]
+                }
+                EOF
                 project-transport-doctor --offline --out-path "$out/transport/doctor.json" > "$out/transport/doctor.stdout"
                 ! project-transport-doctor --offline --project-url 'https://chatgpt.com/g/g-p-test/project' --out-path "$out/transport/doctor-offline-project.json" > "$out/transport/doctor-offline-project.stdout"
                 project-transport-doctor --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --out-path "$out/transport/doctor-project-dry-run.json" > "$out/transport/doctor-project-dry-run.stdout"
@@ -347,9 +458,19 @@
                 )" --out-dir "$out/transport" > "$out/transport/thread-send-long.json"
                 project-thread-readback --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --id target-test --markers source.txt --out-dir "$out/transport" > "$out/transport/readback.json"
                 project-artifact-fetch --dry-run --name result.zip --url 'https://chatgpt.com/g/g-p-test/c/test' --out-dir "$out/transport" > "$out/transport/artifact-fetch.json"
+                project-handoff-preflight \
+                  --dry-run \
+                  --project-url 'https://chatgpt.com/g/g-p-test/project' \
+                  --thread-roster "$out/transport/thread-roster.json" \
+                  --source-file "$out/transport/source.txt" \
+                  --bootstrap-artifact "$out/transport/prompt.txt" \
+                  --expected-artifact result.zip \
+                  --out-dir "$out/transport" > "$out/transport/handoff-preflight.json"
                 project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run" > "$out/transport/run.json"
                 ! project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run-wrong-shape" > "$out/transport/run-wrong-shape.json"
                 project-transport-claim --input "$out/transport/run/transport-result.json" --claim-path "$out/transport/claim.jsonl" > "$out/transport/claim.json"
+                grep -q '"status": "dry-run-ready"' "$out/transport/handoff-preflight.json"
+                grep -q '"threadAttachmentFallbackAllowed": false' "$out/transport/handoff-preflight.json"
                 test -f "$out/transport/run/TRANSPORT_RUN_REPORT.md"
                 test -s "$out/transport/claim.jsonl"
                 grep -q '"semanticApproval": false' "$out/transport/run/transport-result.json"

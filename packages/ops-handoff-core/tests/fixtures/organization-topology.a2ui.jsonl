@@ -1,0 +1,2 @@
+{"version":"v0.9","updateDataModel":{"surfaceId":"organization-topology","path":"/nodes/parent","value":{"kind":"organization.node.v1","id":"actor.codex.project-operator","roleId":"role.projectOperator"}}}
+{"version":"v0.9","updateDataModel":{"surfaceId":"organization-topology","path":"/nodes/impl-work","value":{"kind":"organization.node.v1","id":"actor.chatgpt.impl-work","roleId":"role.chatgpt.thread"}}}

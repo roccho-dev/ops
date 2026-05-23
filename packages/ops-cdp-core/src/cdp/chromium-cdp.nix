@@ -158,6 +158,7 @@
         project-thread-readback = { subcommand = "thread-readback"; };
         project-artifact-fetch = { subcommand = "artifact-fetch"; };
         project-transport-claim = { subcommand = "claim"; };
+        project-handoff-preflight = { subcommand = "handoff-preflight"; };
         project-transport-run = { subcommand = "run"; };
       };
 

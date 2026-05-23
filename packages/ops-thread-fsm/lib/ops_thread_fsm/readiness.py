@@ -88,3 +88,96 @@ def cmd_check_ready(args: Any) -> int:
     report = build_ready_report(args)
     _emit(report, bool(getattr(args, "json", False)))
     return 0 if report["ready"] else 1
+
+
+def _truthy(value: Any) -> bool:
+    return value is True or (isinstance(value, str) and value.strip().lower() in {"true", "yes", "ok", "pass", "present"})
+
+
+def _get_bool(value: dict[str, Any], *keys: str) -> bool:
+    for key in keys:
+        if key in value:
+            return _truthy(value[key])
+    return False
+
+
+def build_localize_report(args: Any) -> dict[str, Any]:
+    value = _read(args.input)
+    if not isinstance(value, dict):
+        value = {}
+    evidence = value.get("evidence", {}) if isinstance(value.get("evidence"), dict) else value
+    policy_fresh = _get_bool(evidence, "policyFresh", "latestPolicyRead", "policyReadFresh")
+    canonical_fresh = _get_bool(evidence, "canonicalNoDrift", "canonicalHeadMatchesReviewBase", "noDrift")
+    merge_review_pass = _get_bool(evidence, "mergeReviewPass", "merge-review-pass", "mergeReviewPassReceived")
+    local_gate = _get_bool(evidence, "localGatePass", "localGateOk")
+    run_report = _get_bool(evidence, "runReportPresent", "runReportReadable") or readable_file(value.get("runReport"))
+    project_handoff = _get_bool(evidence, "projectHandoffSent", "projectTransportOk")
+    project_review_ready = _get_bool(evidence, "projectReviewReady", "reviewArtifactPresent")
+    local_handoff = _get_bool(evidence, "localHandoffReady", "handoffManifestPresent")
+
+    if not policy_fresh:
+        state = "stale-policy-claim"
+        ready = False
+        owner = "claim-writer"
+        missing = ["policyFresh"]
+    elif not canonical_fresh:
+        state = "stale-canonical-head"
+        ready = False
+        owner = "localizer-or-parentActor"
+        missing = ["canonicalNoDrift"]
+    elif merge_review_pass and local_gate and run_report:
+        state = "localizer-ready"
+        ready = True
+        owner = "parentActor"
+        missing = []
+    elif merge_review_pass:
+        state = "merge-review-pass-received"
+        ready = False
+        owner = "localizer-or-parentActor"
+        missing = [item for item, ok in (("localGatePass", local_gate), ("runReportPresent", run_report)) if not ok]
+    elif project_review_ready:
+        state = "project-review-ready"
+        ready = False
+        owner = "merge-review"
+        missing = ["mergeReviewPass"]
+    elif project_handoff:
+        state = "project-handoff-sent"
+        ready = False
+        owner = "project-operator"
+        missing = ["projectReviewReady", "mergeReviewPass"]
+    elif local_handoff:
+        state = "local-handoff-ready"
+        ready = False
+        owner = "impl-review-or-merge-review"
+        missing = ["mergeReviewPass"]
+    else:
+        state = "blocked-transport"
+        ready = False
+        owner = "ops-cdp-core-or-handoff-owner"
+        missing = ["projectHandoffSent or localHandoffReady"]
+
+    return {
+        "kind": "ops-thread-fsm.localizeReadiness.v1",
+        "ready": ready,
+        "stateKind": state,
+        "requiredOwner": owner,
+        "missing": missing,
+        "writes": False,
+        "sends": False,
+        "checks": {
+            "policyFresh": policy_fresh,
+            "canonicalNoDrift": canonical_fresh,
+            "mergeReviewPass": merge_review_pass,
+            "localGatePass": local_gate,
+            "runReportPresent": run_report,
+            "projectHandoffSent": project_handoff,
+            "projectReviewReady": project_review_ready,
+            "localHandoffReady": local_handoff,
+        },
+    }
+
+
+def cmd_classify_localize(args: Any) -> int:
+    report = build_localize_report(args)
+    _emit(report, bool(getattr(args, "json", False)))
+    return 0 if report["ready"] else 1

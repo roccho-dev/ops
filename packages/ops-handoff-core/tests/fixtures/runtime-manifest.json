@@ -1,0 +1,8 @@
+{
+  "kind": "runtime.manifest.v1",
+  "system": "x86_64-linux",
+  "nixVersion": "2.34.4",
+  "checks": [
+    "ops-handoff-core"
+  ]
+}

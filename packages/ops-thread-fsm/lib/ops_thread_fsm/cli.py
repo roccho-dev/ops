@@ -67,6 +67,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_json(p)
     p.set_defaults(handler=readiness.cmd_check_ready)
 
+    p = sub.add_parser("classify-localize")
+    p.add_argument("--input", required=True)
+    _add_common_json(p)
+    p.set_defaults(handler=readiness.cmd_classify_localize)
+
     return parser
 
 
