@@ -398,6 +398,19 @@
                 grep -q '"stateKind": "localizer-ready"' "$out/localize-ready.json"
                 grep -q 'non-terminal' "$out/handoff-created.json"
                 grep -q 'sleep 900' "$out/next.json"
+                cat > "$out/discussion.json" <<'EOF'
+                {
+                  "discussionId": "d1",
+                  "proposalRevision": "r3",
+                  "noObjectionsRequiredFrom": ["A", "B"],
+                  "responses": [
+                    {"actorId": "A", "proposalRevision": "r3", "verdict": "NO_UNRESOLVED_OBJECTIONS"},
+                    {"actorId": "B", "proposalRevision": "r3", "verdict": "NO_UNRESOLVED_OBJECTIONS"}
+                  ]
+                }
+                EOF
+                ops-thread-fsm check-discussion --input "$out/discussion.json" --json > "$out/discussion-result.json"
+                grep -q '"classification": "discussion-no-objections-confirmed"' "$out/discussion-result.json"
                 touch "$out/done"
               '';
           ops-tailnet-github-egress =
