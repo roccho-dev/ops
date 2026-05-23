@@ -1,0 +1,22 @@
+{
+  "kind": "packageArchitectureMap.inventory.v1",
+  "groups": [
+    {
+      "kind": "group",
+      "id": "root",
+      "label": "root",
+      "children": [
+        {
+          "id": "known",
+          "label": "known"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "known",
+      "to": "missing"
+    }
+  ]
+}

@@ -217,15 +217,24 @@
                   --inventory ${./packages/package-architecture-map/tests/a2ui-agent-status.inventory.json} \
                   --out-dir "$out/dist" \
                   --name a2ui-agent-status > "$out/stdout.json"
+                package-architecture-map \
+                  --inventory ${./packages/package-architecture-map/tests/a2ui-agent-status.inventory.json} \
+                  --validate-only > "$out/valid.json"
                 test -s "$out/dist/latest.mmd"
                 test -s "$out/dist/maps/a2ui-agent-status.mmd"
                 test -s "$out/dist/index.html"
                 test -s "$out/dist/manifest.json"
+                grep -q '"ok": true' "$out/valid.json"
                 grep -q 'subgraph workspace' "$out/dist/latest.mmd"
                 grep -q 'agent-status-view' "$out/dist/latest.mmd"
                 grep -q 'future-only' "$out/dist/latest.mmd"
                 grep -q 'forbidden: canonical state' "$out/dist/latest.mmd"
                 grep -q '"generatedIsAuthority": false' "$out/dist/manifest.json"
+                ! package-architecture-map \
+                  --inventory ${./packages/package-architecture-map/tests/invalid-edge.inventory.json} \
+                  --validate-only > "$out/invalid.stdout" 2> "$out/invalid.json"
+                grep -q '"ok": false' "$out/invalid.json"
+                grep -q 'edge to references unknown node: missing' "$out/invalid.json"
                 package-architecture-map \
                   ${./packages/package-architecture-map/tests/a2ui-agent-status.inventory.json} \
                   --stdout > "$out/stdout.mmd"
