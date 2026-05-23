@@ -38,4 +38,16 @@ class T(unittest.TestCase):
   x=s.j(*a);s.assertTrue(x["readyForMergeReview"]);s.assertFalse(x["mergeReady"])
   x=s.j(*a[:-1],"--merge-review",s.f("mr.json",{"text":"review-pass 合格"}),"--target","merge-ready","--json");s.assertFalse(x["mergeReady"])
   x=s.j(*a[:-1],"--merge-review",s.f("mr2.json",{"text":"merge-review-pass\nok"}),"--target","merge-ready","--json");s.assertTrue(x["mergeReady"])
+ def test_discussion_same_revision_gate(s):
+  base={"discussionId":"d1","proposalRevision":"r3","noObjectionsRequiredFrom":["A","B"]}
+  ok=dict(base,responses=[{"actorId":"A","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"},{"actorId":"B","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"}])
+  x=s.j("check-discussion","--input",s.f("d-ok.json",ok),"--json");s.assertEqual(x["classification"],"discussion-no-objections-confirmed");s.assertTrue(x["discussionComplete"])
+  missing=dict(base,responses=[{"actorId":"A","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"}])
+  x=s.j("check-discussion","--input",s.f("d-missing.json",missing),"--json");s.assertEqual(x["classification"],"discussion-response-required");s.assertEqual(x["missingCounterparties"],["B"])
+  stale=dict(base,responses=[{"actorId":"A","proposalRevision":"r2","verdict":"NO_UNRESOLVED_OBJECTIONS"},{"actorId":"B","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"}])
+  x=s.j("check-discussion","--input",s.f("d-stale.json",stale),"--json");s.assertEqual(x["classification"],"discussion-response-required");s.assertEqual(x["missingCounterparties"],["A"])
+  obj=dict(base,responses=[{"actorId":"A","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"},{"actorId":"B","proposalRevision":"r3","verdict":"UNRESOLVED_OBJECTIONS","objections":[{"objectionId":"B1","objectionText":"missing continuation states"}]}])
+  x=s.j("check-discussion","--input",s.f("d-obj.json",obj),"--json");s.assertEqual(x["classification"],"discussion-objections-present");s.assertFalse(x["discussionComplete"])
+  parent=dict(base,responses=[{"actorId":"A","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"},{"actorId":"B","proposalRevision":"r3","verdict":"UNRESOLVED_OBJECTIONS","objections":[{"objectionId":"B2","objectionText":"needs user choice","requiresParentDecision":True}]}])
+  x=s.j("check-discussion","--input",s.f("d-parent.json",parent),"--json");s.assertEqual(x["classification"],"discussion-blocked-needs-parent")
 if __name__=="__main__":unittest.main()
