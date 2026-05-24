@@ -113,6 +113,8 @@
         chromium-cdp-upload-chatgpt-file = { script = "upload-chatgpt-file.mjs"; };
         chromium-cdp-upload-project-source-text = { script = "chromium-cdp-upload-project-source-text.mjs"; };
         chromium-cdp-upload-project-source-file = { script = "chromium-cdp-upload-project-source-file.mjs"; };
+        chromium-cdp-project-source-list = { script = "chromium-cdp-project-source-list.mjs"; };
+        chromium-cdp-project-source-delete = { script = "chromium-cdp-project-source-delete.mjs"; };
         chromium-cdp-project-access-probe = { script = "chromium-cdp-project-access-probe.mjs"; };
         chromium-cdp-project-inventory = { script = "project-inventory.mjs"; };
         chromium-cdp-projectize-thread = { script = "projectize-thread.mjs"; };
@@ -153,6 +155,8 @@
         project-transport-doctor = { subcommand = "doctor"; };
         project-transport-env = { subcommand = "env"; };
         project-source-put = { subcommand = "source-put"; };
+        project-source-list = { subcommand = "source-list"; };
+        project-source-delete = { subcommand = "source-delete"; };
         project-thread-create = { subcommand = "thread-create"; };
         project-thread-send = { subcommand = "thread-send"; };
         project-thread-readback = { subcommand = "thread-readback"; };
