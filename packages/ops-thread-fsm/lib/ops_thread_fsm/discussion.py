@@ -1,7 +1,8 @@
 """Discussion loop checks for ops-thread-fsm.
 
 This module does not run ChatGPT or send messages. It only classifies whether a
-discussion-required task has enough same-revision responses to converge.
+discussion-required task has enough same-revision responses to converge and
+renders controller-owned facilitation actions.
 """
 from __future__ import annotations
 
@@ -70,6 +71,37 @@ def _verdict(response: dict[str, Any]) -> str:
     if first in {NO_OBJECTIONS, UNRESOLVED}:
         return first
     return ""
+
+
+def _text_contains_any(text: str, markers: list[str]) -> bool:
+    haystack = text.lower()
+    return any(marker.lower() in haystack for marker in markers if marker)
+
+
+def _normalize_marker_responses(value: dict[str, Any]) -> list[dict[str, Any]]:
+    accepted = [_token(item) for item in _as_list(value.get("acceptedMarkers")) if _token(item)]
+    rejected = [_token(item) for item in _as_list(value.get("objectionMarkers")) if _token(item)]
+    accepted = accepted or [NO_OBJECTIONS]
+    rejected = rejected or [UNRESOLVED]
+
+    responses = []
+    for response in _as_list(value.get("responses")):
+        if not isinstance(response, dict):
+            continue
+        item = dict(response)
+        if _verdict(item):
+            responses.append(item)
+            continue
+        text = _token(item.get("assistantText") or item.get("text") or item.get("responseText"))
+        has_objection = _text_contains_any(text, rejected)
+        has_acceptance = _text_contains_any(text, accepted)
+        if has_objection:
+            item["verdict"] = UNRESOLVED
+            item.setdefault("objections", [{"objectionText": "objection marker matched"}])
+        elif has_acceptance:
+            item["verdict"] = NO_OBJECTIONS
+        responses.append(item)
+    return responses
 
 
 def check_discussion_value(value: Any) -> dict[str, Any]:
@@ -202,4 +234,159 @@ def check_discussion_value(value: Any) -> dict[str, Any]:
     )
 
 
-__all__ = ["NO_OBJECTIONS", "UNRESOLVED", "check_discussion_value"]
+def _thread_actor_ids(value: dict[str, Any]) -> list[str]:
+    thread_ids = []
+    for thread in _as_list(value.get("threads")):
+        if isinstance(thread, dict):
+            actor_id = _token(thread.get("actorId") or thread.get("actor") or thread.get("thread"))
+            if actor_id:
+                thread_ids.append(actor_id)
+    return thread_ids
+
+
+def _has_purpose_lineage(value: dict[str, Any]) -> bool:
+    lineage = value.get("purposeLineage")
+    if not isinstance(lineage, dict):
+        return False
+    if all(_token(lineage.get(key)) for key in ("purpose", "metaPurpose", "metaMetaPurpose", "metaMetaMetaPurpose")):
+        return True
+    depths = lineage.get("depths") if isinstance(lineage.get("depths"), dict) else lineage
+    return all(_token(depths.get(str(depth)) or depths.get(depth) or depths.get(f"purposeDepth={depth}")) for depth in (3, 2, 1, 0))
+
+
+def _missing_facilitation_fields(value: dict[str, Any]) -> list[str]:
+    missing = []
+    for key in ("discussionId", "proposalRevision"):
+        if not _token(value.get(key)):
+            missing.append(key)
+    if not _token(value.get("versionedProposalRef") or value.get("projectSourceEntrypoint")):
+        missing.append("versionedProposalRef or projectSourceEntrypoint")
+    if not _token(value.get("policySnapshotRef")) and not _as_list(value.get("policyRefs")):
+        missing.append("policySnapshotRef or policyRefs")
+    if not _has_purpose_lineage(value):
+        missing.append("purposeLineage depth 3..0")
+    if not _as_list(value.get("reviewQualityChecks")):
+        missing.append("reviewQualityChecks")
+    if len(_thread_actor_ids(value)) < 2:
+        missing.append("threads[2+] with actorId")
+    return missing
+
+
+def _control_for_thread(value: dict[str, Any], thread: dict[str, Any]) -> dict[str, Any]:
+    actor_id = _token(thread.get("actorId") or thread.get("actor") or thread.get("thread"))
+    thread_function = _token(thread.get("threadFunction") or value.get("threadFunction") or "impl-review")
+    return {
+        "actorId": actor_id,
+        "threadUrl": _token(thread.get("threadUrl") or thread.get("url")),
+        "threadFunction": thread_function,
+        "sendVia": "ops-cdp-core:project-thread-send",
+        "inlinePolicy": "pointer-only",
+        "controlText": "\n".join(
+            [
+                f"role.chatgpt.thread: {thread_function}",
+                "",
+                "Read the Project Source entrypoint: "
+                + _token(value.get("projectSourceEntrypoint") or value.get("versionedProposalRef")),
+                "This is direct cross-discussion. Read peer replies directly, not facilitator synthesis.",
+                "If objections remain, return UNRESOLVED_OBJECTIONS with structured objections.",
+                "If no objections remain for proposalRevision "
+                + _token(value.get("proposalRevision"))
+                + ", return NO_UNRESOLVED_OBJECTIONS.",
+            ]
+        ),
+    }
+
+
+def facilitate_discussion_value(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {
+            "kind": "ops-thread-fsm.discussionFacilitation.v1",
+            "classification": "facilitation-context-incomplete",
+            "missingFields": ["input object"],
+            "writes": False,
+            "sends": False,
+            "nextAction": "provide a discussion facilitation object",
+        }
+
+    missing = _missing_facilitation_fields(value)
+    discussion_id = _token(value.get("discussionId"))
+    revision = _token(value.get("proposalRevision"))
+    required = [_token(item) for item in _as_list(value.get("noObjectionsRequiredFrom")) if _token(item)]
+    required = required or _thread_actor_ids(value)
+
+    if missing:
+        return {
+            "kind": "ops-thread-fsm.discussionFacilitation.v1",
+            "classification": "facilitation-context-incomplete",
+            "discussionId": discussion_id,
+            "proposalRevision": revision,
+            "missingFields": missing,
+            "writes": False,
+            "sends": False,
+            "nextAction": "add the missing Project Source bootstrap fields before starting discussion",
+        }
+
+    normalized = dict(value)
+    normalized["noObjectionsRequiredFrom"] = required
+    normalized["responses"] = _normalize_marker_responses(value)
+    check = check_discussion_value(normalized)
+
+    controls = [_control_for_thread(value, thread) for thread in _as_list(value.get("threads")) if isinstance(thread, dict)]
+    base = {
+        "kind": "ops-thread-fsm.discussionFacilitation.v1",
+        "discussionId": discussion_id,
+        "proposalRevision": revision,
+        "requiredCounterparties": required,
+        "versionedProposalRef": _token(value.get("versionedProposalRef") or value.get("projectSourceEntrypoint")),
+        "policySnapshotRef": _token(value.get("policySnapshotRef")),
+        "projectSourceRequired": True,
+        "writes": False,
+        "sends": False,
+        "transportPackage": "ops-cdp-core",
+        "fsmPackage": "ops-thread-fsm",
+    }
+
+    if check["classification"] == "discussion-no-objections-confirmed":
+        return {
+            **base,
+            "classification": "facilitation-no-objections-confirmed",
+            "discussionComplete": True,
+            "acceptedProposalRef": _token(value.get("versionedProposalRef") or value.get("projectSourceEntrypoint")),
+            "evidence": check["evidence"],
+            "responses": check["responses"],
+            "nextAction": "import this verdict as review evidence; this is not localize, merge, push, or cleanup approval",
+        }
+
+    if check["classification"] == "discussion-objections-present":
+        return {
+            **base,
+            "classification": "facilitation-revision-update-required",
+            "discussionComplete": False,
+            "objections": check["objections"],
+            "responses": check["responses"],
+            "requiredNextArtifact": "new versioned proposal with accepted/rejected/modified objection handling",
+            "nextAction": "create a new proposalRevision in Project Source and run another direct cross-discussion round",
+        }
+
+    if check["classification"] == "discussion-blocked-needs-parent":
+        return {
+            **base,
+            "classification": "facilitation-parent-decision-required",
+            "discussionComplete": False,
+            "objections": check["objections"],
+            "responses": check["responses"],
+            "nextAction": "ask parentActor to decide the needs-parent objection before continuing",
+        }
+
+    return {
+        **base,
+        "classification": "facilitation-round-send-required",
+        "discussionComplete": False,
+        "missingCounterparties": check["missingCounterparties"],
+        "threadControls": controls,
+        "readbackPolicy": "wait >=300s before semantic readback",
+        "nextAction": "upload/update Project Source if needed, send pointer-only controls, wait >=300s, then import assistant replies and re-run",
+    }
+
+
+__all__ = ["NO_OBJECTIONS", "UNRESOLVED", "check_discussion_value", "facilitate_discussion_value"]

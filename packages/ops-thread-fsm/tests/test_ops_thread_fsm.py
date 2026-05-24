@@ -61,4 +61,23 @@ class T(unittest.TestCase):
   x=s.j("check-discussion","--input",s.f("d-obj.json",obj),"--json");s.assertEqual(x["classification"],"discussion-objections-present");s.assertFalse(x["discussionComplete"])
   parent=dict(base,responses=[{"actorId":"A","proposalRevision":"r3","verdict":"NO_UNRESOLVED_OBJECTIONS"},{"actorId":"B","proposalRevision":"r3","verdict":"UNRESOLVED_OBJECTIONS","objections":[{"objectionId":"B2","objectionText":"needs user choice","requiresParentDecision":True}]}])
   x=s.j("check-discussion","--input",s.f("d-parent.json",parent),"--json");s.assertEqual(x["classification"],"discussion-blocked-needs-parent")
+ def test_facilitate_discussion_wrapper(s):
+  base={"discussionId":"d2","proposalRevision":"v4","projectSourceEntrypoint":"ROUND.md","versionedProposalRef":"ROUND.md","policySnapshotRef":"POLICY.md","purposeLineage":{"3":"exact MMD accepted","2":"two-thread review convergence","1":"shared UI/MCP design","0":"recoverable actor/repo operation"},"reviewQualityChecks":["KISS","DRY","SOLID","YAGNI"],"threads":[{"actorId":"A","threadUrl":"https://example/A","threadFunction":"impl-review"},{"actorId":"B","threadUrl":"https://example/B","threadFunction":"impl-review"}]}
+  x=s.j("facilitate-discussion","--input",s.f("fac-start.json",base),"--json")
+  s.assertEqual(x["classification"],"facilitation-round-send-required")
+  s.assertEqual(x["missingCounterparties"],["A","B"])
+  s.assertEqual(len(x["threadControls"]),2)
+  s.assertIn("Project Source",x["nextAction"])
+  ok=dict(base,acceptedMarkers=["exact corrected MMD accepted"],objectionMarkers=["exact corrected MMD has objections"],responses=[{"actorId":"A","proposalRevision":"v4","assistantText":"exact corrected MMD accepted"},{"actorId":"B","proposalRevision":"v4","assistantText":"proposalVersion: accepted\nexact corrected MMD accepted"}])
+  x=s.j("facilitate-discussion","--input",s.f("fac-ok.json",ok),"--json")
+  s.assertEqual(x["classification"],"facilitation-no-objections-confirmed")
+  s.assertTrue(x["discussionComplete"])
+  obj=dict(base,acceptedMarkers=["accepted"],objectionMarkers=["has objections"],responses=[{"actorId":"A","proposalRevision":"v4","assistantText":"accepted"},{"actorId":"B","proposalRevision":"v4","assistantText":"has objections","objections":[{"objectionText":"label unclear"}]}])
+  x=s.j("facilitate-discussion","--input",s.f("fac-obj.json",obj),"--json")
+  s.assertEqual(x["classification"],"facilitation-revision-update-required")
+  s.assertEqual(x["requiredNextArtifact"],"new versioned proposal with accepted/rejected/modified objection handling")
+ def test_facilitate_discussion_requires_bootstrap_context(s):
+  x=s.j("facilitate-discussion","--input",s.f("fac-missing.json",{"discussionId":"d3","proposalRevision":"v1"}),"--json")
+  s.assertEqual(x["classification"],"facilitation-context-incomplete")
+  s.assertIn("purposeLineage depth 3..0",x["missingFields"])
 if __name__=="__main__":unittest.main()

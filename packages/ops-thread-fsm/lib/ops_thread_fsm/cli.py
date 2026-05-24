@@ -48,6 +48,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_json(p)
     p.set_defaults(handler=core.cmd_check_discussion)
 
+    p = sub.add_parser("facilitate-discussion")
+    p.add_argument("--input", required=True)
+    _add_common_json(p)
+    p.set_defaults(handler=core.cmd_facilitate_discussion)
+
     p = sub.add_parser("render-prompt")
     p.add_argument("--phase", required=True)
     p.add_argument("--request-kind", required=True)

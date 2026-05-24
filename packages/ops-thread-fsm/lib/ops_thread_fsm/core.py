@@ -10,7 +10,7 @@ import sys
 from typing import Any
 
 from .classify import classify_readback_value
-from .discussion import check_discussion_value
+from .discussion import check_discussion_value, facilitate_discussion_value
 from .evidence import delivery_manifest_ok, load_value, readable_file
 from .plan import evaluate_plan_value
 from .state_model import PLAN_ACCEPTED, STATE_KINDS, canonical_state_kind, next_action_for, permissions_for
@@ -95,6 +95,14 @@ def cmd_check_discussion(args: Any) -> int:
     return 1
 
 
+def cmd_facilitate_discussion(args: Any) -> int:
+    result = facilitate_discussion_value(load_value(args.input))
+    emit(result, args.json, "classification")
+    if result["classification"] == "facilitation-no-objections-confirmed":
+        return 0
+    return 1
+
+
 def cmd_render_prompt(args: Any) -> int:
     print(
         "Return materializable full-file artifacts plus RUN_REPORT. "
@@ -138,12 +146,14 @@ __all__ = [
     "cmd_classify_readback",
     "cmd_evaluate_plan",
     "cmd_check_discussion",
+    "cmd_facilitate_discussion",
     "cmd_render_prompt",
     "classify",
     "classify_payload",
     "evaluate",
     "evaluate_plan",
     "check_discussion_value",
+    "facilitate_discussion_value",
     "classify_readback_value",
     "delivery_manifest_ok",
     "load_value",
