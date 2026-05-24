@@ -62,6 +62,26 @@
         exec ${cdpBridge}/bin/cdp-bridge wsurl --addr "$addr" --port "$port"
       '';
 
+      mkProfileLifecycleCommand =
+        { name
+        , subcommand
+        }:
+        pkgs.writeShellScriptBin name ''
+          set -euo pipefail
+          exec ${pkgs.python3}/bin/python3 ${./profile-lifecycle.py} ${subcommand} "$@"
+        '';
+
+      profileLifecycleCommands = {
+        chromium-cdp-profile-seed = { subcommand = "seed"; };
+        chromium-cdp-profile-login-complete = { subcommand = "login-complete"; };
+        chromium-cdp-profile-publish = { subcommand = "publish"; };
+        chromium-cdp-profile-runtime-copy = { subcommand = "runtime-copy"; };
+      };
+
+      profileLifecycleCommandBins = lib.mapAttrs (
+        name: spec: mkProfileLifecycleCommand ({ inherit name; } // spec)
+      ) profileLifecycleCommands;
+
       mkQjsCommand =
         { name
         , script
@@ -187,7 +207,7 @@
           (lib.getBin pkgs.coreutils)
           (lib.getBin pkgs.python3)
           (lib.getBin pkgs.quickjs-ng)
-        ] ++ lib.attrValues qjsCommandBins ++ lib.attrValues projectTransportCommandBins;
+        ] ++ lib.attrValues qjsCommandBins ++ lib.attrValues projectTransportCommandBins ++ lib.attrValues profileLifecycleCommandBins;
       };
 
       launcherPackages = {
@@ -205,14 +225,14 @@
           type = "app";
           program = "${pkg}/bin/${name}";
         }
-      ) (qjsCommandBins // projectTransportCommandBins // {
+      ) (qjsCommandBins // projectTransportCommandBins // profileLifecycleCommandBins // {
         chromium-cdp = chromiumCdp;
         chromium-cdp-wsurl = chromiumCdpWsUrl;
         chromium-cdp-chatgpt-command-map = chromiumCdpChatgptCommandMap;
       });
     in
     {
-      packages = launcherPackages // qjsCommandBins // projectTransportCommandBins;
+      packages = launcherPackages // qjsCommandBins // projectTransportCommandBins // profileLifecycleCommandBins;
       apps = commandApps;
     };
 }

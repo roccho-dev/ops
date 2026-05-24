@@ -485,6 +485,10 @@
                 test -x "$(command -v project-transport-claim)"
                 test -x "$(command -v project-handoff-preflight)"
                 test -x "$(command -v project-transport-run)"
+                test -x "$(command -v chromium-cdp-profile-seed)"
+                test -x "$(command -v chromium-cdp-profile-login-complete)"
+                test -x "$(command -v chromium-cdp-profile-publish)"
+                test -x "$(command -v chromium-cdp-profile-runtime-copy)"
                 test -x "$(command -v cdp-bridge)"
                 cdp-bridge --help > "$out/cdp-bridge-help.txt" 2>&1
                 grep -q 'cdp-bridge wsurl' "$out/cdp-bridge-help.txt"
@@ -531,6 +535,13 @@
                 project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run" > "$out/transport/run.json"
                 ! project-transport-run --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --source-file "$out/transport/source.txt" --prompt-file "$out/transport/prompt.txt" --out-dir "$out/transport/run-wrong-shape" > "$out/transport/run-wrong-shape.json"
                 project-transport-claim --input "$out/transport/run/transport-result.json" --claim-path "$out/transport/claim.jsonl" > "$out/transport/claim.json"
+                mkdir -p "$out/profile"
+                chromium-cdp-profile-seed --profile-dir "$out/profile/seed" > "$out/transport/profile-seed.json"
+                touch "$out/profile/seed/Local State"
+                chromium-cdp-profile-login-complete --profile-dir "$out/profile/seed" > "$out/transport/profile-login-complete.json"
+                ! chromium-cdp-profile-publish --profile-dir "$out/profile/seed" --snapshot-dir "$out/profile/snapshot" > "$out/transport/profile-publish-denied.json"
+                chromium-cdp-profile-publish --profile-dir "$out/profile/seed" --snapshot-dir "$out/profile/snapshot" --allow-copy > "$out/transport/profile-publish.json"
+                chromium-cdp-profile-runtime-copy --snapshot-dir "$out/profile/snapshot" --runtime-dir "$out/profile/runtime" > "$out/transport/profile-runtime-copy.json"
                 grep -q '"status": "dry-run-ready"' "$out/transport/handoff-preflight.json"
                 grep -q '"threadAttachmentFallbackAllowed": false' "$out/transport/handoff-preflight.json"
                 test -f "$out/transport/run/TRANSPORT_RUN_REPORT.md"
@@ -548,6 +559,12 @@
                 grep -q 'offline-project-route-unverified' "$out/transport/doctor-offline-project.json"
                 grep -q 'project-probe-dry-run-ready' "$out/transport/doctor-project-dry-run.json"
                 grep -q 'no-cdp-port-reachable' "$out/transport/env-no-port.json"
+                grep -q 'profile-seed-ready' "$out/transport/profile-seed.json"
+                grep -q 'profile-login-complete-observed' "$out/transport/profile-login-complete.json"
+                grep -q 'publish-not-authorized' "$out/transport/profile-publish-denied.json"
+                grep -q 'profile-snapshot-published' "$out/transport/profile-publish.json"
+                grep -q 'runtime-profile-ready' "$out/transport/profile-runtime-copy.json"
+                grep -q '"sourceMutated": false' "$out/transport/profile-runtime-copy.json"
               '';
           ops-bootstrap = pkgs.runCommand "ops-bootstrap-check" { } ''
             test -e ${self.packages.${pkgs.stdenv.hostPlatform.system}.ops-bootstrap}/share/ops/README
