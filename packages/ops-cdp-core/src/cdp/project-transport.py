@@ -24,6 +24,8 @@ LOW_LEVEL_COMMANDS = [
     "chromium-cdp-chatgpt-doctor",
     "chromium-cdp-project-access-probe",
     "chromium-cdp-upload-project-source-file",
+    "chromium-cdp-project-source-list",
+    "chromium-cdp-project-source-delete",
     "chromium-cdp-create-project-thread",
     "chromium-cdp-send-chatgpt",
     "chromium-cdp-read-thread",
@@ -36,6 +38,8 @@ TRANSPORT_COMMANDS = [
     "project-transport-doctor",
     "project-transport-env",
     "project-source-put",
+    "project-source-list",
+    "project-source-delete",
     "project-thread-create",
     "project-thread-send",
     "project-thread-readback",
@@ -397,6 +401,115 @@ def handle_source_put(args: argparse.Namespace) -> int:
     return maybe_write_out(args, result)
 
 
+def source_list_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[str, Any]:
+    result["projectUrl"] = args.project_url
+    result["projectSourceOnly"] = True
+    if args.dry_run:
+        result.update({
+            "ok": True,
+            "status": "dry-run-ready",
+            "plannedCommand": [
+                "chromium-cdp-project-source-list",
+                "--projectUrl", args.project_url,
+            ],
+        })
+        return result
+    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    list_log = out_dir / "project-source-list.json"
+    cmd = [
+        "chromium-cdp-project-source-list",
+        "--projectUrl", args.project_url,
+        "--outPath", str(list_log),
+        "--addr", args.addr,
+        "--port", str(args.port),
+        "--timeoutMs", str(args.timeout_ms),
+    ]
+    low = run_command(cmd, timeout=max(60, args.timeout_ms // 1000 + 30))
+    parsed = json.loads(list_log.read_text()) if list_log.is_file() else low.get("json")
+    result.update({
+        "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")),
+        "status": "source-list-read" if parsed and parsed.get("ok") else "source-list-not-read",
+        "transportRead": low["returncode"] == 0,
+        "readbackVerified": bool(parsed and parsed.get("ok")),
+        "listLog": str(list_log),
+        "listCommand": low,
+        "sourceList": parsed,
+        "sourceCount": parsed.get("count") if isinstance(parsed, dict) else None,
+    })
+    return result
+
+
+def handle_source_list(args: argparse.Namespace) -> int:
+    result = source_list_result(args, common_result("project-source-list", args))
+    return maybe_write_out(args, result)
+
+
+def source_delete_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[str, Any]:
+    result["projectUrl"] = args.project_url
+    result["title"] = args.title
+    result["reason"] = args.reason
+    result["projectSourceOnly"] = True
+    result["deleteSafety"] = {
+        "exactTitleRequired": True,
+        "allowRemoveFlagRequired": True,
+        "reasonRequired": True,
+        "fuzzyMatchAllowed": False,
+    }
+    if not args.reason:
+        result.update({"ok": False, "status": "missing-reason"})
+        return result
+    if args.dry_run:
+        result.update({
+            "ok": True,
+            "status": "dry-run-ready",
+            "plannedCommand": [
+                "chromium-cdp-project-source-delete",
+                "--projectUrl", args.project_url,
+                "--title", args.title,
+                "--reason", args.reason,
+                "--dryRun",
+            ],
+        })
+        if args.allow_remove:
+            result["plannedCommand"].append("--allow-remove")
+        return result
+    if not args.allow_remove:
+        result.update({"ok": False, "status": "remove-not-authorized", "requiredFlag": "--allow-remove"})
+        return result
+    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    delete_log = out_dir / f"project-source-delete-{args.title}.json"
+    cmd = [
+        "chromium-cdp-project-source-delete",
+        "--projectUrl", args.project_url,
+        "--title", args.title,
+        "--reason", args.reason,
+        "--allow-remove",
+        "--outPath", str(delete_log),
+        "--addr", args.addr,
+        "--port", str(args.port),
+        "--timeoutMs", str(args.timeout_ms),
+    ]
+    low = run_command(cmd, timeout=max(60, args.timeout_ms // 1000 + 30))
+    parsed = json.loads(delete_log.read_text()) if delete_log.is_file() else low.get("json")
+    result.update({
+        "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")),
+        "status": parsed.get("status") if isinstance(parsed, dict) and parsed.get("status") else "source-delete-not-verified",
+        "transportSent": low["returncode"] == 0,
+        "readbackVerified": bool(parsed and parsed.get("ok") and parsed.get("after")),
+        "deleteLog": str(delete_log),
+        "deleteCommand": low,
+        "deleteResult": parsed,
+        "beforeTitleCount": parsed.get("beforeTitleCount") if isinstance(parsed, dict) else None,
+        "afterTitleCount": parsed.get("afterTitleCount") if isinstance(parsed, dict) else None,
+    })
+    return result
+
+
+def handle_source_delete(args: argparse.Namespace) -> int:
+    result = source_delete_result(args, common_result("project-source-delete", args))
+    return maybe_write_out(args, result)
+
+
 def read_prompt(args: argparse.Namespace) -> str:
     if getattr(args, "text_file", None):
         return read_text(args.text_file)
@@ -714,6 +827,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--project-url", "--projectUrl", dest="project_url", required=True)
     p.add_argument("--file", required=True)
     p.set_defaults(func=handle_source_put)
+
+    p = sub.add_parser("source-list")
+    add_common_io(p)
+    add_cdp_common(p)
+    p.add_argument("--project-url", "--projectUrl", dest="project_url", required=True)
+    p.set_defaults(func=handle_source_list)
+
+    p = sub.add_parser("source-delete")
+    add_common_io(p)
+    add_cdp_common(p)
+    p.add_argument("--project-url", "--projectUrl", dest="project_url", required=True)
+    p.add_argument("--title", required=True)
+    p.add_argument("--reason", required=True)
+    p.add_argument("--allow-remove", "--allowRemove", dest="allow_remove", action="store_true")
+    p.set_defaults(func=handle_source_delete)
 
     p = sub.add_parser("thread-create")
     add_common_io(p)

@@ -21,6 +21,8 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 | `project-transport-doctor` | check low-level CDP route command availability and report wrapper visibility |
 | `project-transport-env` | probe CDP address and common ports |
 | `project-source-put` | upload one file to Project Source and require visibility readback |
+| `project-source-list` | list visible Project Source files and write the source inventory |
+| `project-source-delete` | remove one exact-title Project Source file with before/after inventory evidence |
 | `project-thread-create` | create one Project thread from short pointer/control text |
 | `project-thread-send` | send short pointer/control text to an existing thread |
 | `project-thread-readback` | read a thread and require markers |
@@ -32,6 +34,8 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 
 - Project Source is the default payload route.
 - Thread attachment fallback is not used by these commands.
+- Project Source deletion is transport hygiene only. It is not semantic
+  approval, completion approval, or route decision.
 - Inline text is limited to short control, pointers, status, and artifact names.
 - Source, diff, review report, handoff body, and result artifacts must be files.
 - Successful transport is not approval, merge readiness, or completion.
@@ -50,6 +54,8 @@ Use the URL for the door you are opening.
 | command | accepted URL shape | reason |
 |---|---|---|
 | `project-source-put` | Project URL, including `?tab=sources` | this command opens the Project Sources file area |
+| `project-source-list` | Project URL, including `?tab=sources` | this command reads the Project Sources file area |
+| `project-source-delete` | Project URL, including `?tab=sources` | this command opens the Project Sources file area and removes one exact file |
 | `project-thread-create` | base Project URL without `?tab=sources` | this command creates a new Project thread |
 | `project-thread-send` | existing `/c/<thread-id>` URL | this command sends a short pointer/control message to one thread |
 | `project-thread-readback` | existing `/c/<thread-id>` URL, preferably with `--id` | this command reads one target thread |
@@ -59,6 +65,28 @@ If `project-thread-create` or the thread-create phase of `project-transport-run`
 receives `?tab=sources`, it fails with `project-url-wrong-shape`. This is
 intentional: the Project Sources tab is the file-upload door, not the
 thread-creation door.
+
+## Project Source retention
+
+Use `project-source-list` before deleting sources. Use `project-source-delete`
+only for one exact filename at a time:
+
+```sh
+project-source-delete \
+  --project-url "$PROJECT_URL" \
+  --title "OLD_REQUEST.md" \
+  --reason "free Project Source slot after superseding request" \
+  --allow-remove
+```
+
+Deletion is intentionally narrow:
+
+- exact title is required
+- `--reason` is required
+- `--allow-remove` is required for non-dry-run deletion
+- fuzzy matching is not used
+- duplicate exact matches are refused
+- before/after source inventories are recorded in the result JSON
 
 ## Profile and Project access
 
