@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -112,6 +113,80 @@ def project_url_shape_error(project_url: str, purpose: str) -> dict[str, Any] | 
             "forbiddenFor": ["project-thread-create", "project-transport-run thread-create phase"],
         }
     return None
+
+
+def project_source_url_shape_error(project_url: str) -> dict[str, Any] | None:
+    parsed = urlparse(project_url)
+    if parsed.scheme not in {"http", "https"} or parsed.netloc != "chatgpt.com":
+        return {
+            "ok": False,
+            "status": "project-url-wrong-shape",
+            "failureClass": "wrong-url-shape",
+            "reason": "Project Source upload requires a chatgpt.com Project URL",
+            "projectUrl": project_url,
+            "expectedUrlShape": "https://chatgpt.com/g/g-p-<project-id>/<project-name>/project",
+        }
+    if not re.search(r"/g/g-p-[^/]+/(?:[^/]+/)?project$", parsed.path):
+        return {
+            "ok": False,
+            "status": "project-url-wrong-shape",
+            "failureClass": "wrong-url-shape",
+            "reason": "Project Source upload requires a Project URL ending in /project; ?tab=sources is allowed as a query",
+            "projectUrl": project_url,
+            "expectedUrlShape": "https://chatgpt.com/g/g-p-<project-id>/<project-name>/project",
+            "allowedQuery": "tab=sources",
+        }
+    return None
+
+
+SOURCE_PUT_FAILURE_TAXONOMY = [
+    {
+        "status": "local-file-validation-failed",
+        "failureClass": "local-file-validation-failure",
+        "meaning": "The requested local file is missing or is not a regular file.",
+    },
+    {
+        "status": "project-url-wrong-shape",
+        "failureClass": "wrong-url-shape",
+        "meaning": "The URL is not a ChatGPT Project URL for Project Source upload.",
+    },
+    {
+        "status": "project-access-profile-missing",
+        "failureClass": "project-access",
+        "meaning": "The CDP profile did not reach the target Project and appears to require login or access.",
+    },
+    {
+        "status": "source-page-not-loaded",
+        "failureClass": "missing-source-page",
+        "meaning": "The browser target did not load the Project Sources surface.",
+    },
+    {
+        "status": "source-upload-interaction-failed",
+        "failureClass": "upload-interaction-failure",
+        "meaning": "The upload interaction or file chooser failed before visibility could be checked.",
+    },
+    {
+        "status": "source-upload-visibility-readback-failed",
+        "failureClass": "upload-visibility-readback-failure",
+        "meaning": "The upload was attempted but the uploaded file was not visible/readable in Project Source.",
+    },
+    {
+        "status": "source-upload-unknown-failed",
+        "failureClass": "unknown",
+        "meaning": "The wrapper could not classify the failure from available evidence.",
+    },
+]
+
+
+SOURCE_PUT_FAILURE_PRECEDENCE = [
+    "local-file-validation-failure",
+    "wrong-url-shape",
+    "project-access",
+    "missing-source-page",
+    "upload-interaction-failure",
+    "upload-visibility-readback-failure",
+    "unknown",
+]
 
 
 def parse_json_maybe(text: str) -> Any:
@@ -335,6 +410,8 @@ def handle_doctor(args: argparse.Namespace) -> int:
 def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[str, Any]:
     file_path = Path(args.file)
     result["projectUrl"] = args.project_url
+    result["failureTaxonomy"] = SOURCE_PUT_FAILURE_TAXONOMY
+    result["failurePrecedence"] = SOURCE_PUT_FAILURE_PRECEDENCE
     result["file"] = {
         "path": str(file_path),
         "name": file_path.name,
@@ -344,7 +421,15 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
     result["projectSourceOnly"] = True
     result["threadAttachmentFallbackAllowed"] = False
     if not file_path.is_file():
-        result.update({"ok": False, "status": "missing-file"})
+        result.update({
+            "ok": False,
+            "status": "local-file-validation-failed",
+            "legacyStatus": "missing-file",
+            "failureClass": "local-file-validation-failure",
+        })
+        return result
+    if shape_error := project_source_url_shape_error(args.project_url):
+        result.update(shape_error)
         return result
     out_dir = ensure_dir(args.out_dir) or Path.cwd()
     upload_log = out_dir / f"project-source-put-{file_path.name}.json"
@@ -381,15 +466,27 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
     observed_text = json.dumps(parsed or {}, sort_keys=True) + "\n" + low.get("stdout", "") + "\n" + low.get("stderr", "")
     if visible:
         status = "source-upload-visible"
+        failure_class = None
     elif "/auth/login" in observed_text or "login required" in observed_text.lower():
         status = "project-access-profile-missing"
+        failure_class = "project-access"
     elif parsed and parsed.get("target") and parsed["target"].get("url") and "/project" not in str(parsed["target"].get("url")):
         status = "source-page-not-loaded"
+        failure_class = "missing-source-page"
+    elif re.search(r"filechooser|file chooser|not clickable|timed out|timeout|selector", observed_text, re.IGNORECASE):
+        status = "source-upload-interaction-failed"
+        failure_class = "upload-interaction-failure"
+    elif observed_text.strip():
+        status = "source-upload-visibility-readback-failed"
+        failure_class = "upload-visibility-readback-failure"
     else:
-        status = "source-upload-not-visible"
+        status = "source-upload-unknown-failed"
+        failure_class = "unknown"
     result.update({
         "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")) and visible,
         "status": status,
+        "legacyStatus": "source-upload-not-visible" if status == "source-upload-visibility-readback-failed" else None,
+        "failureClass": failure_class,
         "transportSent": low["returncode"] == 0,
         "transportVisible": visible,
         "readbackVerified": visible,
