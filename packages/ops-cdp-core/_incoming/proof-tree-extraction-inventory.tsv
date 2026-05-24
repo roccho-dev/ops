@@ -1,0 +1,9 @@
+proofItem	classification	target	notes
+TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/TRANSPORT_STATUS.md	evidence-only	packages/ops-cdp-core/evidence/profile-route-gate-20260520	raw proof remains outside canonical ops; durable route facts are in report.jsonl and compact evidence
+TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/evidence/transport/source-put-idonly-failed.json	ops-package-work	todo-20260520-source-put-failure-classification	mapped to source-put failure taxonomy work
+TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/evidence/transport/live-profile-project-source-targets.json	ops-package-work	todo-20260520-project-profile-candidate-ranking	mapped to target Project profile candidate ranking
+profile route live Project Source upload/readback proof	evidence-only	packages/ops-cdp-core/evidence/profile-route-gate-20260520	compact proof accepted; no raw browser profile copied
+deprecated flakes/parts/cdp golden route scripts	rejected/no-op	packages/ops-cdp-core/MIGRATION_SOURCE.md	flakes is migration source only, not a second canonical runtime
+seed/login-complete/publish/runtime-copy lifecycle gap	ops-package-work	todo-20260520-profile-bootstrap-lifecycle-canonical	mapped to canonical profile lifecycle command work
+project-transport-run scattered evidence	ops-package-work	todo-20260520-transport-run-evidence-cohesion	mapped to cohesive run evidence directory work
+thread attachment fallback experiments	rejected/no-op	policy Project Source-only rule	thread attachment is not a source/diff/review fallback
