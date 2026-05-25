@@ -457,10 +457,15 @@
           ops-cdp-core =
             pkgs.runCommand "ops-cdp-core-check"
               {
-                nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-cdp-core ];
+                nativeBuildInputs = [
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-cdp-core
+                  pkgs.python3
+                ];
               }
               ''
                 mkdir -p "$out"
+                HQ_CDP_SCRIPT_SRC=${./packages/ops-cdp-core/src/cdp} \
+                  python3 ${./packages/ops-cdp-core/src/cdp/test-project-transport-regressions.py} > "$out/project-transport-regressions.txt"
                 chromium-cdp-chatgpt-command-map > "$out/chatgpt-command-map.md"
                 grep -q 'chromium-cdp-upload-project-source-text' "$out/chatgpt-command-map.md"
                 grep -q 'chromium-cdp-create-project-thread' "$out/chatgpt-command-map.md"

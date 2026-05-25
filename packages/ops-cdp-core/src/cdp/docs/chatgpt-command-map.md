@@ -134,12 +134,12 @@
 | 2worker運用の計画を作る | host git | `chromium-cdp-host-git-two-worker-smoke` | prompt とplan生成 |
 | transport runtime を確認する | transport-only | `project-transport-doctor` | CDP / low-level command / wrapper command の存在確認。意味判断しない |
 | CDP port を調べる | transport-only | `project-transport-env` | 9222/9223/9224 などを probe する |
-| Project Source に置いて見えることを確認する | transport-only | `project-source-put` | thread 添付 fallback なし。Project Source only |
-| Project Source の一覧を確認する | transport-only | `project-source-list` | visible source inventory を JSON で返す。内容承認しない |
+| Project Source に置いて見えることを確認する | transport-only | `project-source-put` | auto で text/file 経路を分ける。visible-only は worker-readable 証明ではない |
+| Project Source の一覧を確認する | transport-only | `project-source-list` | inventory parse。`count:0` と visible hints が矛盾したら `source-list-unreliable` |
 | Project Source から1件削除する | transport-only | `project-source-delete` | exact title、reason、`--allow-remove`、before/after inventory 必須。内容承認しない |
 | Project thread を作る | transport-only | `project-thread-create` | short pointer/control text だけを送る |
 | 既存 Project thread に送る | transport-only | `project-thread-send` | inline 長文を拒否する |
-| Project thread の readback を確認する | transport-only | `project-thread-readback` | marker readback のみ。内容承認しない |
+| Project thread の readback を確認する | transport-only | `project-thread-readback` | 既定では assistant marker だけを合格にする。内容承認しない |
 | artifact を回収して hash を出す | transport-only | `project-artifact-fetch` | `ARTIFACTS_MANIFEST.json` を書く |
 | transport result を claim JSONL に積む | transport-only | `project-transport-claim` | append-only。claim を approval にしない |
 | Project Source -> thread create の通常列を実行する | transport-only | `project-transport-run` | `transport-result.json` と `TRANSPORT_RUN_REPORT.md` を書く |

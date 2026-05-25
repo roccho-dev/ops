@@ -1,0 +1,72 @@
+{
+  "command": "project-thread-readback",
+  "completionApproval": false,
+  "createdAt": "2026-05-25T11:21:46.558716Z",
+  "dryRun": false,
+  "finishedAt": "2026-05-25T11:21:59.991394Z",
+  "kind": "ops.projectTransportResult.v1",
+  "markerRole": "assistant",
+  "markers": [
+    "OPS_HANDOFF_SOURCE_READBACK_TOKEN_20260525T194231JST_a8b2f4d6"
+  ],
+  "matchedHits": [],
+  "matchedMarkers": [],
+  "missingMarkers": [
+    "OPS_HANDOFF_SOURCE_READBACK_TOKEN_20260525T194231JST_a8b2f4d6"
+  ],
+  "ok": false,
+  "readCommand": {
+    "argv": [
+      "chromium-cdp-read-thread",
+      "--url",
+      "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a1428ff-5e84-83a3-bb78-d89c1f445c0f",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "9222",
+      "--waitMs",
+      "300000",
+      "--tail",
+      "5",
+      "--openIfNeeded",
+      "--markers",
+      "OPS_HANDOFF_SOURCE_READBACK_TOKEN_20260525T194231JST_a8b2f4d6"
+    ],
+    "json": {
+      "artifacts": [],
+      "hasPrompt": true,
+      "hits": [],
+      "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a1428ff-5e84-83a3-bb78-d89c1f445c0f",
+      "isStreaming": false,
+      "last": [
+        {
+          "idx": 0,
+          "preview": "Transport-only Project Source readback proof after tool handling fixes.  Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that file, and nothing else.",
+          "role": "user",
+          "textLen": 224
+        },
+        {
+          "idx": 1,
+          "preview": "I couldn\u2019t find handoff-source-readback-20260525T194231JST.txt. The only matching Project Source result available is handoff-source-readback-20260525T193414JST.txt, so I can\u2019t truthfully return a TOKEN value for the requested file.",
+          "role": "assistant",
+          "textLen": 231
+        }
+      ],
+      "msgCount": 2,
+      "readyState": "complete",
+      "stableRounds": 2,
+      "streamWaitRounds": 1,
+      "title": "ChatGPT - test"
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "{\n  \"href\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a1428ff-5e84-83a3-bb78-d89c1f445c0f\",\n  \"title\": \"ChatGPT - test\",\n  \"readyState\": \"complete\",\n  \"msgCount\": 2,\n  \"hasPrompt\": true,\n  \"isStreaming\": false,\n  \"stableRounds\": 2,\n  \"streamWaitRounds\": 1,\n  \"hits\": [],\n  \"last\": [\n    {\n      \"idx\": 0,\n      \"role\": \"user\",\n      \"preview\": \"Transport-only Project Source readback proof after tool handling fixes.  Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that file, and nothing else.\",\n      \"textLen\": 224\n    },\n    {\n      \"idx\": 1,\n      \"role\": \"assistant\",\n      \"preview\": \"I couldn\u2019t find handoff-source-readback-20260525T194231JST.txt. The only matching Project Source result available is handoff-source-readback-20260525T193414JST.txt, so I can\u2019t truthfully return a TOKEN value for the requested file.\",\n      \"textLen\": 231\n    }\n  ],\n  \"artifacts\": []\n}\n"
+  },
+  "readbackVerified": false,
+  "routeDecision": false,
+  "semanticApproval": false,
+  "status": "readback-missing-marker",
+  "stillStreaming": false,
+  "threadUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a1428ff-5e84-83a3-bb78-d89c1f445c0f",
+  "transportRead": true
+}

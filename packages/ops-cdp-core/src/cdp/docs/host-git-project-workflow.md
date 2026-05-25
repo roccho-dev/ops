@@ -443,6 +443,8 @@ host 側は常に検証します。ただし、これは重い意味での全手
 | CDP port が `9222` へ落ちる | `HQ_CHROME_PORT` または `--port` を必ず指定する |
 | Project page が shell/home へ drift する | live project tab の target id を渡す |
 | binary zip を Project Sources へ upload したい | `chromium-cdp-upload-project-source-file` を使う |
+| Project Source file が UI には見えるが worker が読めるか不明 | visible-only で止めず、別 thread の assistant に file 内 nonce/hash を返させる |
+| Project Source list が `count:0` なのに file 名が UI text に見える | empty と扱わず `source-list-unreliable` として worker readback で判定する |
 | Project Source binary zip が worker で使えるか不明 | worker 開始時に visibility / sha256 / `/usr/bin/unzip` / verifier proof を必須にする |
 | Python `zipfile.extractall` で executable bit が落ちる | worker 指示では `/usr/bin/unzip -q` を優先する |
 | Project Source から host へ download できない | Source は入力専用、成果回収は thread artifact に寄せる |
