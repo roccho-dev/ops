@@ -175,6 +175,7 @@
         project-transport-doctor = { subcommand = "doctor"; };
         project-transport-env = { subcommand = "env"; };
         project-source-put = { subcommand = "source-put"; };
+        project-source-put-classify-examples = { subcommand = "source-put-classify-examples"; };
         project-source-list = { subcommand = "source-list"; };
         project-source-delete = { subcommand = "source-delete"; };
         project-thread-create = { subcommand = "thread-create"; };

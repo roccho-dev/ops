@@ -21,6 +21,7 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 | `project-transport-doctor` | check low-level CDP route command availability and report wrapper visibility |
 | `project-transport-env` | probe CDP address and common ports |
 | `project-source-put` | upload one file to Project Source and require visibility readback |
+| `project-source-put-classify-examples` | run offline examples for Project Source upload failure classification |
 | `project-source-list` | list visible Project Source files and write the source inventory |
 | `project-source-delete` | remove one exact-title Project Source file with before/after inventory evidence |
 | `project-thread-create` | create one Project thread from short pointer/control text |
@@ -67,6 +68,28 @@ If `project-thread-create` or the thread-create phase of `project-transport-run`
 receives `?tab=sources`, it fails with `project-url-wrong-shape`. This is
 intentional: the Project Sources tab is the file-upload door, not the
 thread-creation door.
+
+## Project Source upload failure contract
+
+`project-source-put` exposes actor-facing `status` and `failureClass` fields.
+These are part of the wrapper result contract, not private stderr text. Callers
+should branch on `failureClass` first and keep the raw upload output as evidence.
+
+| failureClass | status | meaning |
+|---|---|---|
+| `local-file-validation-failure` | `local-file-validation-failed` | local input file is missing or not a regular file |
+| `wrong-url-shape` | `project-url-wrong-shape` | URL is not a ChatGPT Project URL accepted for Project Source upload |
+| `project-access` | `project-access-profile-missing` | CDP profile reached login or lacked access to the target Project |
+| `missing-source-page` | `source-page-not-loaded` | browser target did not load the Project Sources surface |
+| `upload-interaction-failure` | `source-upload-interaction-failed` | upload interaction or file chooser failed before visibility readback |
+| `upload-visibility-readback-failure` | `source-upload-visibility-readback-failed` | upload was attempted but the file was not visible/readable |
+| `unknown` | `source-upload-unknown-failed` | available evidence did not match a known class |
+
+When lower-level upload output reaches a browser target, `project-source-put`
+also returns `observed.target.id`, `observed.target.title`, and
+`observed.target.url`. The offline
+`project-source-put-classify-examples` command checks the documented classes
+and precedence without contacting ChatGPT.
 
 ## Project Source retention
 
