@@ -1104,6 +1104,103 @@ def write_run_report(out_dir: Path, result: dict[str, Any]) -> Path:
     return path
 
 
+def write_run_evidence_bundle(out_dir: Path, result: dict[str, Any]) -> dict[str, str]:
+    status_path = out_dir / "TRANSPORT_STATUS.jsonl"
+    status_record = {
+        "kind": "ops.projectTransportRunStatus.v1",
+        "createdAt": now_iso(),
+        "ok": result.get("ok"),
+        "status": result.get("status"),
+        "semanticApproval": result.get("semanticApproval"),
+        "completionApproval": result.get("completionApproval"),
+        "routeDecision": result.get("routeDecision"),
+        "stepCount": len(result.get("steps", [])),
+    }
+    status_path.write_text(json.dumps(status_record, sort_keys=True) + "\n")
+
+    knowledge_path = out_dir / "TRANSPORT_KNOWLEDGE.jsonl"
+    knowledge_record = {
+        "kind": "ops.projectTransportRunKnowledge.v1",
+        "createdAt": now_iso(),
+        "summary": "project-transport-run evidence is contained in one run directory",
+        "redactionPolicy": "Do not record secrets, cookies, browser profile contents, or prompt bodies beyond stable file names and hashes.",
+        "manualCollationRequired": False,
+    }
+    knowledge_path.write_text(json.dumps(knowledge_record, sort_keys=True) + "\n")
+
+    artifact_manifest_path = out_dir / "ARTIFACTS_MANIFEST.json"
+    if not artifact_manifest_path.exists():
+        write_json(artifact_manifest_path, {
+            "kind": "ops.projectTransportArtifactsManifest.v1",
+            "artifacts": [],
+            "note": "No downloadable artifacts fetched by project-transport-run.",
+            **DECISION_FLAGS,
+        })
+
+    snapshot_path = out_dir / "transport-result.snapshot.json"
+    write_json(snapshot_path, result)
+
+    index_path = out_dir / "TRANSPORT_RUN_INDEX.md"
+    index_path.write_text("\n".join([
+        "# Project Transport Run Index",
+        "",
+        f"- status: `{result.get('status')}`",
+        f"- ok: `{str(result.get('ok')).lower()}`",
+        "- manualCollationRequired: `false`",
+        "",
+        "## Files",
+        "- `TRANSPORT_RUN_REPORT.md`",
+        "- `transport-result.json` (mutable wrapper output; excluded from stable checksums)",
+        "- `transport-result.snapshot.json`",
+        "- `TRANSPORT_STATUS.jsonl`",
+        "- `TRANSPORT_KNOWLEDGE.jsonl`",
+        "- `ARTIFACTS_MANIFEST.json`",
+        "- `TRANSPORT_RUN_MANIFEST.json`",
+        "- `SHA256SUMS.tsv`",
+        "",
+        "## Boundary",
+        "",
+        "This directory is transport evidence only. It is not semantic approval, completion approval, or route decision.",
+    ]) + "\n")
+
+    manifest_path = out_dir / "TRANSPORT_RUN_MANIFEST.json"
+    stable_excludes = {"TRANSPORT_RUN_MANIFEST.json", "SHA256SUMS.tsv", "transport-result.json"}
+    files = []
+    for file_path in sorted(p for p in out_dir.rglob("*") if p.is_file() and p.name not in stable_excludes):
+        files.append({
+            "path": str(file_path.relative_to(out_dir)),
+            "bytes": file_path.stat().st_size,
+            "sha256": sha256_file(file_path),
+        })
+    write_json(manifest_path, {
+        "kind": "ops.projectTransportRunManifest.v1",
+        "createdAt": now_iso(),
+        "runStatus": result.get("status"),
+        "manualCollationRequired": False,
+        "redactionPolicy": knowledge_record["redactionPolicy"],
+        "stableExcludes": sorted(stable_excludes),
+        "files": files,
+        **DECISION_FLAGS,
+    })
+
+    sha_path = out_dir / "SHA256SUMS.tsv"
+    rows = []
+    checksum_excludes = {"SHA256SUMS.tsv", "transport-result.json"}
+    for file_path in sorted(p for p in out_dir.rglob("*") if p.is_file() and p.name not in checksum_excludes):
+        rows.append(f"{sha256_file(file_path)}\t{file_path.relative_to(out_dir)}")
+    sha_path.write_text("\n".join(rows) + ("\n" if rows else ""))
+
+    return {
+        "statusJsonl": str(status_path),
+        "knowledgeJsonl": str(knowledge_path),
+        "artifactsManifest": str(artifact_manifest_path),
+        "transportResultSnapshot": str(snapshot_path),
+        "sha256Sums": str(sha_path),
+        "manifest": str(manifest_path),
+        "index": str(index_path),
+    }
+
+
 def handle_run(args: argparse.Namespace) -> int:
     result = common_result("project-transport-run", args)
     out_dir = ensure_dir(args.out_dir) or Path.cwd()
@@ -1117,6 +1214,8 @@ def handle_run(args: argparse.Namespace) -> int:
             result["steps"] = steps
             write_run_report(out_dir, result)
             write_json(out_dir / "transport-result.json", result)
+            result["evidenceBundle"] = write_run_evidence_bundle(out_dir, result)
+            write_json(out_dir / "transport-result.json", result)
             return maybe_write_out(args, result)
 
     for source in args.source_file:
@@ -1128,6 +1227,9 @@ def handle_run(args: argparse.Namespace) -> int:
         if not step.get("ok"):
             result.update({"ok": False, "status": "source-put-failed", "steps": steps})
             write_run_report(out_dir, result)
+            write_json(out_dir / "transport-result.json", result)
+            result["evidenceBundle"] = write_run_evidence_bundle(out_dir, result)
+            write_json(out_dir / "transport-result.json", result)
             return maybe_write_out(args, result)
 
     if args.prompt_file or args.text:
@@ -1156,6 +1258,9 @@ def handle_run(args: argparse.Namespace) -> int:
         if not create_result.get("ok"):
             result.update({"ok": False, "status": "thread-create-failed", "steps": steps})
             write_run_report(out_dir, result)
+            write_json(out_dir / "transport-result.json", result)
+            result["evidenceBundle"] = write_run_evidence_bundle(out_dir, result)
+            write_json(out_dir / "transport-result.json", result)
             return maybe_write_out(args, result)
         if create_result.get("threadUrl"):
             result["threadUrl"] = create_result["threadUrl"]
@@ -1192,11 +1297,16 @@ def handle_run(args: argparse.Namespace) -> int:
             if not readback_result.get("ok"):
                 result.update({"ok": False, "status": "thread-readback-failed", "steps": steps})
                 write_run_report(out_dir, result)
+                write_json(out_dir / "transport-result.json", result)
+                result["evidenceBundle"] = write_run_evidence_bundle(out_dir, result)
+                write_json(out_dir / "transport-result.json", result)
                 return maybe_write_out(args, result)
 
     result.update({"ok": True, "status": "transport-run-ready" if args.dry_run else "transport-run-complete", "steps": steps})
     report = write_run_report(out_dir, result)
     result["runReport"] = str(report)
+    write_json(out_dir / "transport-result.json", result)
+    result["evidenceBundle"] = write_run_evidence_bundle(out_dir, result)
     write_json(out_dir / "transport-result.json", result)
     return maybe_write_out(args, result)
 
