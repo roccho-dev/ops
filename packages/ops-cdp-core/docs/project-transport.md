@@ -144,3 +144,32 @@ reject the fresh profile, copy an existing authenticated snapshot into a fresh
 runtime profile, then prove the requested Project URL, Project Source upload,
 thread creation, and delayed readback. This does not prove credential or OTP
 automation.
+
+## Profile lifecycle commands
+
+`ops-cdp-core` owns the profile lifecycle command surface. These commands manage
+local profile directories and snapshots only; they do not enter credentials,
+read cookies, replay credentials, automate OTP, or print secret material.
+
+| command | purpose |
+|---|---|
+| `chromium-cdp-profile-seed --profile-dir <dir>` | create a private seed profile directory and show the next manual Chromium launch command |
+| `chromium-cdp-profile-login-complete --profile-dir <dir>` | check that a manually logged-in profile has observable browser profile material |
+| `chromium-cdp-profile-publish --profile-dir <dir> --snapshot-dir <dir> --allow-copy` | copy an approved seed profile to a published snapshot |
+| `chromium-cdp-profile-runtime-copy --snapshot-dir <dir> --runtime-dir <dir>` | copy the published snapshot to a fresh runtime profile for one transport lane |
+
+The accepted route remains:
+
+```text
+seed profile
+  -> human completes login
+  -> login-complete check
+  -> published snapshot
+  -> runtime copy
+  -> project-transport-doctor --project-url <target Project URL>
+  -> Project Source upload / thread create / delayed readback
+```
+
+`runtime-copy` must not mutate the seed or published snapshot. A copied runtime
+profile is still not proof of Project access until `project-transport-doctor`
+or `project-transport-env` proves the requested Project URL.
