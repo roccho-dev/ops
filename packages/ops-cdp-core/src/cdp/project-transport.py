@@ -189,6 +189,141 @@ SOURCE_PUT_FAILURE_PRECEDENCE = [
 ]
 
 
+def source_put_observed_target(parsed: Any) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        return {"target": None, "sourcesUrl": None, "href": None}
+    target = parsed.get("target") if isinstance(parsed.get("target"), dict) else {}
+    visible = parsed.get("visible") if isinstance(parsed.get("visible"), dict) else {}
+    return {
+        "target": {
+            "id": target.get("id"),
+            "title": target.get("title"),
+            "url": target.get("url"),
+        } if target else None,
+        "sourcesUrl": parsed.get("sourcesUrl") or parsed.get("sources_url"),
+        "href": visible.get("href") or parsed.get("href"),
+    }
+
+
+def classify_source_put_failure(parsed: Any, low: dict[str, Any]) -> dict[str, Any]:
+    low_text = low.get("stdout", "") + "\n" + low.get("stderr", "")
+    observed_text = json.dumps(parsed or {}, sort_keys=True) + "\n" + low_text
+    visible = bool(isinstance(parsed, dict) and parsed.get("visible") and parsed["visible"].get("ok"))
+    observed = source_put_observed_target(parsed)
+    if visible:
+        return {
+            "status": "source-upload-visible",
+            "legacyStatus": None,
+            "failureClass": None,
+            "transportVisible": True,
+            "readbackVerified": True,
+            "observed": observed,
+        }
+    if parsed is None and not low_text.strip():
+        status = "source-upload-unknown-failed"
+        failure_class = "unknown"
+    elif "/auth/login" in observed_text or "login required" in observed_text.lower():
+        status = "project-access-profile-missing"
+        failure_class = "project-access"
+    elif observed.get("target") and observed["target"].get("url") and "/project" not in str(observed["target"].get("url")):
+        status = "source-page-not-loaded"
+        failure_class = "missing-source-page"
+    elif re.search(r"filechooser|file chooser|not clickable|timed out|timeout|selector", observed_text, re.IGNORECASE):
+        status = "source-upload-interaction-failed"
+        failure_class = "upload-interaction-failure"
+    elif observed_text.strip():
+        status = "source-upload-visibility-readback-failed"
+        failure_class = "upload-visibility-readback-failure"
+    else:
+        status = "source-upload-unknown-failed"
+        failure_class = "unknown"
+    return {
+        "status": status,
+        "legacyStatus": "source-upload-not-visible" if status == "source-upload-visibility-readback-failed" else None,
+        "failureClass": failure_class,
+        "transportVisible": False,
+        "readbackVerified": False,
+        "observed": observed,
+    }
+
+
+def source_put_failure_examples() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "project-access",
+            "parsed": {"target": {"id": "t1", "title": "Login", "url": "https://chatgpt.com/auth/login"}},
+            "low": {"returncode": 0, "stdout": "", "stderr": "login required"},
+            "expectedStatus": "project-access-profile-missing",
+            "expectedFailureClass": "project-access",
+        },
+        {
+            "name": "missing-source-page",
+            "parsed": {"target": {"id": "t2", "title": "Chat", "url": "https://chatgpt.com/c/abc"}},
+            "low": {"returncode": 0, "stdout": "", "stderr": ""},
+            "expectedStatus": "source-page-not-loaded",
+            "expectedFailureClass": "missing-source-page",
+        },
+        {
+            "name": "upload-interaction-failure",
+            "parsed": {"target": {"id": "t3", "title": "Project", "url": "https://chatgpt.com/g/g-p-x/name/project"}},
+            "low": {"returncode": 1, "stdout": "", "stderr": "selector not clickable; filechooser timed out"},
+            "expectedStatus": "source-upload-interaction-failed",
+            "expectedFailureClass": "upload-interaction-failure",
+        },
+        {
+            "name": "upload-visibility-readback-failure",
+            "parsed": {
+                "ok": False,
+                "target": {"id": "t4", "title": "Project", "url": "https://chatgpt.com/g/g-p-x/name/project"},
+                "visible": {"ok": False},
+            },
+            "low": {"returncode": 0, "stdout": "upload attempted", "stderr": ""},
+            "expectedStatus": "source-upload-visibility-readback-failed",
+            "expectedFailureClass": "upload-visibility-readback-failure",
+        },
+        {
+            "name": "unknown",
+            "parsed": None,
+            "low": {"returncode": 1, "stdout": "", "stderr": ""},
+            "expectedStatus": "source-upload-unknown-failed",
+            "expectedFailureClass": "unknown",
+        },
+        {
+            "name": "precedence-project-access-before-upload-interaction",
+            "parsed": {"target": {"id": "t5", "title": "Login", "url": "https://chatgpt.com/auth/login"}},
+            "low": {"returncode": 1, "stdout": "", "stderr": "login required; filechooser timed out"},
+            "expectedStatus": "project-access-profile-missing",
+            "expectedFailureClass": "project-access",
+        },
+    ]
+
+
+def handle_source_put_classify_examples(args: argparse.Namespace) -> int:
+    results = []
+    ok = True
+    for case in source_put_failure_examples():
+        got = classify_source_put_failure(case["parsed"], case["low"])
+        passed = got["status"] == case["expectedStatus"] and got["failureClass"] == case["expectedFailureClass"]
+        ok = ok and passed
+        results.append({
+            "name": case["name"],
+            "ok": passed,
+            "expectedStatus": case["expectedStatus"],
+            "actualStatus": got["status"],
+            "expectedFailureClass": case["expectedFailureClass"],
+            "actualFailureClass": got["failureClass"],
+        })
+    result = {
+        "kind": "ops.projectSourcePutFailureClassificationExamples.v1",
+        "ok": ok,
+        "examples": results,
+        "taxonomy": SOURCE_PUT_FAILURE_TAXONOMY,
+        "precedence": SOURCE_PUT_FAILURE_PRECEDENCE,
+        **DECISION_FLAGS,
+    }
+    return maybe_write_out(args, result)
+
+
 def parse_json_maybe(text: str) -> Any:
     text = text.strip()
     if not text:
@@ -462,34 +597,16 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
         parsed = json.loads(upload_log.read_text())
     elif low.get("json") is not None:
         parsed = low["json"]
-    visible = bool(parsed and parsed.get("visible") and parsed["visible"].get("ok"))
-    observed_text = json.dumps(parsed or {}, sort_keys=True) + "\n" + low.get("stdout", "") + "\n" + low.get("stderr", "")
-    if visible:
-        status = "source-upload-visible"
-        failure_class = None
-    elif "/auth/login" in observed_text or "login required" in observed_text.lower():
-        status = "project-access-profile-missing"
-        failure_class = "project-access"
-    elif parsed and parsed.get("target") and parsed["target"].get("url") and "/project" not in str(parsed["target"].get("url")):
-        status = "source-page-not-loaded"
-        failure_class = "missing-source-page"
-    elif re.search(r"filechooser|file chooser|not clickable|timed out|timeout|selector", observed_text, re.IGNORECASE):
-        status = "source-upload-interaction-failed"
-        failure_class = "upload-interaction-failure"
-    elif observed_text.strip():
-        status = "source-upload-visibility-readback-failed"
-        failure_class = "upload-visibility-readback-failure"
-    else:
-        status = "source-upload-unknown-failed"
-        failure_class = "unknown"
+    classification = classify_source_put_failure(parsed, low)
     result.update({
-        "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")) and visible,
-        "status": status,
-        "legacyStatus": "source-upload-not-visible" if status == "source-upload-visibility-readback-failed" else None,
-        "failureClass": failure_class,
+        "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")) and bool(classification["transportVisible"]),
+        "status": classification["status"],
+        "legacyStatus": classification["legacyStatus"],
+        "failureClass": classification["failureClass"],
         "transportSent": low["returncode"] == 0,
-        "transportVisible": visible,
-        "readbackVerified": visible,
+        "transportVisible": classification["transportVisible"],
+        "readbackVerified": classification["readbackVerified"],
+        "observed": classification["observed"],
         "uploadResult": parsed,
     })
     return result
@@ -1109,6 +1226,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--project-url", "--projectUrl", dest="project_url", required=True)
     p.add_argument("--file", required=True)
     p.set_defaults(func=handle_source_put)
+
+    p = sub.add_parser("source-put-classify-examples")
+    add_common_io(p)
+    p.set_defaults(func=handle_source_put_classify_examples)
 
     p = sub.add_parser("source-list")
     add_common_io(p)

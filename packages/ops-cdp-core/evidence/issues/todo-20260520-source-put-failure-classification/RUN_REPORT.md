@@ -20,6 +20,8 @@ visibility failure into a documented taxonomy with `failureClass` and
 Changed files:
 
 - `packages/ops-cdp-core/src/cdp/project-transport.py`
+- `packages/ops-cdp-core/src/cdp/chromium-cdp.nix`
+- `packages/ops-cdp-core/docs/project-transport.md`
 - `flake.nix`
 
 ## Failure taxonomy
@@ -43,6 +45,22 @@ nix build /home/nixos/repos/ops/.worktrees/issue-todo-20260520-source-put-failur
 ```
 
 The check now includes wrong URL shape and missing local file cases.
+
+Additional offline classification examples now cover:
+
+- `project-access`
+- `missing-source-page`
+- `upload-interaction-failure`
+- `upload-visibility-readback-failure`
+- `unknown`
+- precedence when project access and upload interaction evidence both appear
+
+`project-source-put` now returns `observed.target.id`, `observed.target.title`,
+and `observed.target.url` when lower-level output reached a browser target.
+The actor-facing status contract is documented in
+`packages/ops-cdp-core/docs/project-transport.md`.
+
+Observed result on 2026-05-25: pass.
 
 ## Residual risks
 
