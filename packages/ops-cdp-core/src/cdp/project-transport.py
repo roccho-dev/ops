@@ -923,29 +923,8 @@ def write_run_evidence_bundle(out_dir: Path, result: dict[str, Any]) -> dict[str
             **DECISION_FLAGS,
         })
 
-    sha_path = out_dir / "SHA256SUMS.tsv"
-    rows = []
-    for file_path in sorted(p for p in out_dir.rglob("*") if p.is_file() and p.name != "SHA256SUMS.tsv"):
-        rows.append(f"{sha256_file(file_path)}\t{file_path.relative_to(out_dir)}")
-    sha_path.write_text("\n".join(rows) + ("\n" if rows else ""))
-
-    manifest_path = out_dir / "TRANSPORT_RUN_MANIFEST.json"
-    files = []
-    for file_path in sorted(p for p in out_dir.rglob("*") if p.is_file()):
-        files.append({
-            "path": str(file_path.relative_to(out_dir)),
-            "bytes": file_path.stat().st_size,
-            "sha256": sha256_file(file_path),
-        })
-    write_json(manifest_path, {
-        "kind": "ops.projectTransportRunManifest.v1",
-        "createdAt": now_iso(),
-        "runStatus": result.get("status"),
-        "manualCollationRequired": False,
-        "redactionPolicy": knowledge_record["redactionPolicy"],
-        "files": files,
-        **DECISION_FLAGS,
-    })
+    snapshot_path = out_dir / "transport-result.snapshot.json"
+    write_json(snapshot_path, result)
 
     index_path = out_dir / "TRANSPORT_RUN_INDEX.md"
     index_path.write_text("\n".join([
@@ -957,7 +936,8 @@ def write_run_evidence_bundle(out_dir: Path, result: dict[str, Any]) -> dict[str
         "",
         "## Files",
         "- `TRANSPORT_RUN_REPORT.md`",
-        "- `transport-result.json`",
+        "- `transport-result.json` (mutable wrapper output; excluded from stable checksums)",
+        "- `transport-result.snapshot.json`",
         "- `TRANSPORT_STATUS.jsonl`",
         "- `TRANSPORT_KNOWLEDGE.jsonl`",
         "- `ARTIFACTS_MANIFEST.json`",
@@ -969,10 +949,38 @@ def write_run_evidence_bundle(out_dir: Path, result: dict[str, Any]) -> dict[str
         "This directory is transport evidence only. It is not semantic approval, completion approval, or route decision.",
     ]) + "\n")
 
+    manifest_path = out_dir / "TRANSPORT_RUN_MANIFEST.json"
+    stable_excludes = {"TRANSPORT_RUN_MANIFEST.json", "SHA256SUMS.tsv", "transport-result.json"}
+    files = []
+    for file_path in sorted(p for p in out_dir.rglob("*") if p.is_file() and p.name not in stable_excludes):
+        files.append({
+            "path": str(file_path.relative_to(out_dir)),
+            "bytes": file_path.stat().st_size,
+            "sha256": sha256_file(file_path),
+        })
+    write_json(manifest_path, {
+        "kind": "ops.projectTransportRunManifest.v1",
+        "createdAt": now_iso(),
+        "runStatus": result.get("status"),
+        "manualCollationRequired": False,
+        "redactionPolicy": knowledge_record["redactionPolicy"],
+        "stableExcludes": sorted(stable_excludes),
+        "files": files,
+        **DECISION_FLAGS,
+    })
+
+    sha_path = out_dir / "SHA256SUMS.tsv"
+    rows = []
+    checksum_excludes = {"SHA256SUMS.tsv", "transport-result.json"}
+    for file_path in sorted(p for p in out_dir.rglob("*") if p.is_file() and p.name not in checksum_excludes):
+        rows.append(f"{sha256_file(file_path)}\t{file_path.relative_to(out_dir)}")
+    sha_path.write_text("\n".join(rows) + ("\n" if rows else ""))
+
     return {
         "statusJsonl": str(status_path),
         "knowledgeJsonl": str(knowledge_path),
         "artifactsManifest": str(artifact_manifest_path),
+        "transportResultSnapshot": str(snapshot_path),
         "sha256Sums": str(sha_path),
         "manifest": str(manifest_path),
         "index": str(index_path),

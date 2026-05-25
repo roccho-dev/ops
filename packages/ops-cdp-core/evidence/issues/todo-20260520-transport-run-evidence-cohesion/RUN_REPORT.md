@@ -26,7 +26,8 @@ Changed files:
 | file | purpose |
 |---|---|
 | `TRANSPORT_RUN_REPORT.md` | concise human index |
-| `transport-result.json` | wrapper result with non-approval flags |
+| `transport-result.json` | wrapper result with non-approval flags; mutable because `evidenceBundle` is added after bundle generation |
+| `transport-result.snapshot.json` | stable hash-covered wrapper result snapshot |
 | `TRANSPORT_STATUS.jsonl` | machine status row |
 | `TRANSPORT_KNOWLEDGE.jsonl` | redaction/manual-collation policy row |
 | `ARTIFACTS_MANIFEST.json` | artifact manifest, empty when no artifact was fetched |
@@ -43,6 +44,11 @@ nix build /home/nixos/repos/ops/.worktrees/issue-todo-20260520-transport-run-evi
 ```
 
 The check asserts the evidence files exist and that approval flags remain false.
+It also verifies success and failure run directories, requires manifest/checksum
+coverage for `TRANSPORT_RUN_INDEX.md` and `transport-result.snapshot.json`, and
+verifies `SHA256SUMS.tsv` with `sha256sum -c`.
+
+Observed result on 2026-05-25: pass.
 
 ## Residual risks
 
