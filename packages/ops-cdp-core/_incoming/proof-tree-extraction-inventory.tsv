@@ -1,9 +1,19 @@
 proofItem	classification	target	notes
-TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/TRANSPORT_STATUS.md	evidence-only	packages/ops-cdp-core/evidence/profile-route-gate-20260520	raw proof remains outside canonical ops; durable route facts are in report.jsonl and compact evidence
-TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/evidence/transport/source-put-idonly-failed.json	ops-package-work	todo-20260520-source-put-failure-classification	mapped to source-put failure taxonomy work
-TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/evidence/transport/live-profile-project-source-targets.json	ops-package-work	todo-20260520-project-profile-candidate-ranking	mapped to target Project profile candidate ranking
-profile route live Project Source upload/readback proof	evidence-only	packages/ops-cdp-core/evidence/profile-route-gate-20260520	compact proof accepted; no raw browser profile copied
-deprecated flakes/parts/cdp golden route scripts	rejected/no-op	packages/ops-cdp-core/MIGRATION_SOURCE.md	flakes is migration source only, not a second canonical runtime
-seed/login-complete/publish/runtime-copy lifecycle gap	ops-package-work	todo-20260520-profile-bootstrap-lifecycle-canonical	mapped to canonical profile lifecycle command work
-project-transport-run scattered evidence	ops-package-work	todo-20260520-transport-run-evidence-cohesion	mapped to cohesive run evidence directory work
-thread attachment fallback experiments	rejected/no-op	policy Project Source-only rule	thread attachment is not a source/diff/review fallback
+package-owned CDP source files	ops-package-source	packages/ops-cdp-core/_incoming/proof-tree-source-files.tsv	89-line file inventory maps canonical docs, schemas, ChatGPT adapter modules, CDP bridge runtimes, Nix exposure, and command/runtime files already owned by ops-cdp-core.
+TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/TRANSPORT_STATUS.md	evidence-only	packages/ops-cdp-core/evidence/profile-route-gate-20260520	raw proof remains outside canonical ops; durable route facts are in report.jsonl and compact evidence.
+TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/evidence/transport/source-put-idonly-failed.json	ops-package-work	todo-20260520-source-put-failure-classification	mapped to source-put failure taxonomy work.
+TEMPORARY_ops_cdp_repo_consolidation_handoff_20260519T114843Z_DELETE_AFTER_PROJECT_SOURCE_UPLOAD/evidence/transport/live-profile-project-source-targets.json	ops-package-work	todo-20260520-project-profile-candidate-ranking	mapped to target Project profile candidate ranking.
+profile route live Project Source upload/readback proof	evidence-only	packages/ops-cdp-core/evidence/profile-route-gate-20260520	compact proof accepted; no raw browser profile copied.
+deprecated flakes/parts/cdp golden route scripts	migration-source-only	packages/ops-cdp-core/MIGRATION_SOURCE.md	flakes is migration source only, not a second canonical runtime.
+seed/login-complete/publish/runtime-copy lifecycle gap	ops-package-work	todo-20260520-profile-bootstrap-lifecycle-canonical	mapped to canonical profile lifecycle command work.
+project-transport-run scattered evidence	ops-package-work	todo-20260520-transport-run-evidence-cohesion	mapped to cohesive run evidence directory work.
+thread attachment fallback experiments	rejected/no-op	policy Project Source-only rule	thread attachment is not a source/diff/review fallback.
+Project Source upload selector/filechooser failure	ops-package-work	todo-20260520-source-put-failure-classification	mapped to upload-interaction-failure and readback failure taxonomy instead of raw log import.
+Project access/login/profile proof	ops-package-work	todo-20260520-cdp-project-access-probe	mapped to Project access probe route classification.
+Project profile candidate selection	ops-package-work	todo-20260520-project-profile-candidate-ranking	mapped to candidate ranking and no-cross-project accidental route behavior.
+ops-handoff-core split boundary	package-boundary	packages/ops-handoff-core	handoff bundle generation and merge/review package concerns remain in ops-handoff-core, not ops-cdp-core.
+ops-src-runtime-pack split boundary	package-boundary	packages/ops-src-runtime-pack	source/runtime archive packaging remains in ops-src-runtime-pack, not ops-cdp-core.
+optional Chrome service boundary	package-boundary	packages/ops-chrome-cdp-service	long-lived Chrome process/service management remains a separate package concern.
+optional Zig bridge boundary	package-boundary	packages/ops-cdp-zig-lib	Zig bridge implementation may be factored into a separate package when needed; current bridge source remains package-owned runtime.
+HQ/profile secret boundary	rejected/no-op	rejected-raw-source-boundary.tsv	HQ profile state, cookies, downloaded artifacts, nested .git data, and temporary bundles are never absorbed as package source.
+specs contract dependency	specs-contract	packages/ops-cdp-core specs package	package meaning and allowed paths remain governed by specs; this inventory only controls proof-tree extraction.

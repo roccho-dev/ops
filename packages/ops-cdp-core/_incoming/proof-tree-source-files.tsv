@@ -1,0 +1,89 @@
+path	classification	targetPackage	notes
+packages/ops-cdp-core/docs/README.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/docs/project-transport.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/schemas/transport-result.v1.schema.json	package-schema	packages/ops-cdp-core	canonical schema owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/README.md	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/app-adapters.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/cdp-bridge.py	package-runtime	packages/ops-cdp-core	CDP bridge runtime owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/cdp-bridge.zig	package-runtime	packages/ops-cdp-core	CDP bridge runtime owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/cdp-open.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/README.md	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/artifacts.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/download-fetch.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/download-resolve.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/index.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/input.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/ir.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/navigation.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/policies/download.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/project-source-listing.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/project-sources.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/session.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/shared.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chatgpt/target.mjs	package-runtime	packages/ops-cdp-core	ChatGPT adapter module owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-app-login.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-chatgpt-doctor.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-chatgpt-login.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-create-project-thread.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-downloads-quarantine.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-fetch-artifact-strict.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-fetch-artifact.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-git-ref-health.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-host-git-two-worker-smoke.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-host-git-workflow-regression.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-inspect-artifact.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-list-artifacts.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-open-thread.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-package-run-state.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-package-run.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-project-access-probe.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-project-source-delete.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-project-source-list.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-project-source-reread.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-recover-artifact-set.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-source-snapshot-text.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-status.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-thread-ledger.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-upload-project-source-file.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-upload-project-source-text.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-wait-artifacts.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-worker-am-apply.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-worker-apply.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-worker-artifact-validate.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp-worker-merge-queue.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/chromium-cdp.nix	package-runtime	packages/ops-cdp-core	Nix runtime exposure owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/connect.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/default.nix	package-runtime	packages/ops-cdp-core	Nix runtime exposure owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/cdp-errors.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/cdp-preflight.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/cdp-testing.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/chatgpt-command-map.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/host-git-project-workflow.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/package-thread-schemas.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/docs/refactoring-canon-tdd.md	package-doc	packages/ops-cdp-core	canonical docs owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/download-chatgpt-artifacts.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/fs.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/host-git-ops.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/hq-check-ascii.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/hq-dom-model.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/hq-run-manifest.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/hq-threads.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/lib.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/package-run.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/project-inventory.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/project-sources-collect-files.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/project-sources-promote-turn.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/project-sources-roundtrip.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/project-sources-turn-roundtrip.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/project-transport.py	package-runtime	packages/ops-cdp-core	Project transport wrapper owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/projectize-thread.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/read-thread.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/search-chatgpt.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/send-chatgpt.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/session-flow.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/test-cdp-error.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/test-cdp-scripts.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/test-chatgpt-adapter.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/test-chatgpt-ir.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/test-package-run.sh	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
+packages/ops-cdp-core/src/cdp/upload-chatgpt-file.mjs	package-runtime	packages/ops-cdp-core	CDP command/runtime file owned by ops-cdp-core
