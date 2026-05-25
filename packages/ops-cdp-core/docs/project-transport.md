@@ -20,9 +20,9 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 |---|---|
 | `project-transport-doctor` | check low-level CDP route command availability and report wrapper visibility |
 | `project-transport-env` | probe CDP address and common ports |
-| `project-source-put` | upload one file to Project Source and require visibility readback |
+| `project-source-put` | upload one file to Project Source and record visible-only upload evidence |
 | `project-source-put-classify-examples` | run offline examples for Project Source upload failure classification |
-| `project-source-list` | list visible Project Source files and write the source inventory |
+| `project-source-list` | list visible Project Source files, or classify the current UI as unreliable when visible source hints cannot be parsed into rows |
 | `project-source-delete` | remove one exact-title Project Source file with before/after inventory evidence |
 | `project-thread-create` | create one Project thread from short pointer/control text |
 | `project-thread-send` | send short pointer/control text to an existing thread |
@@ -41,6 +41,21 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 - Inline text is limited to short control, pointers, status, and artifact names.
 - Source, diff, review report, handoff body, and result artifacts must be files.
 - Successful transport is not approval, merge readiness, or completion.
+- `project-source-put` visibility is not worker-readable proof. A visible upload
+  is reported as `source-upload-visible-unverified` with
+  `readbackVerified=false`; require `project-thread-readback` or a roundtrip
+  workflow before treating a source as usable by a worker.
+- `project-source-put --upload-mode auto` sends text-like files (`.txt`, `.md`,
+  `.json`, `.jsonl`, `.yaml`, `.toml`, `.csv`, `.tsv`, `.patch`, `.diff`,
+  `.sha256`) through `chromium-cdp-upload-project-source-text`; other suffixes
+  use `chromium-cdp-upload-project-source-file`. Use `--upload-mode file` only
+  when proving binary behavior.
+- `project-source-list` is inventory parsing only. If parsed rows are `0` but
+  file-like source hints are visible in the UI, the wrapper reports
+  `source-list-unreliable` instead of treating the Project as empty.
+- `project-thread-readback` matches markers in assistant messages by default.
+  Use `--marker-role any` only for diagnostics; user-prompt marker hits are not
+  worker-readable proof.
 - `project-handoff-preflight` is structural route/input validation. It does not prove semantic review, localizer readiness, or approval.
 - Individual `nix run .#project-transport-*` commands may not expose sibling
   wrappers in `PATH`; use `nix shell .#ops-cdp-core` or the flake check when

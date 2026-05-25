@@ -1,0 +1,13 @@
+{
+  "policyReadAt": "2026-05-26T04:13:15+09:00",
+  "policyCommit": "2b8d8e896fad630c1deff5c2f9d62c0801619793",
+  "policyFilesRead": [
+    "/home/nixos/repos/policy/AGENTS.md",
+    "/home/nixos/repos/policy/.agents/issue-ledger.md",
+    "/home/nixos/repos/policy/.agents/evidence-integrity.md",
+    "/home/nixos/repos/policy/.agents/transport.md",
+    "/home/nixos/repos/policy/.agents/project-workspace.md"
+  ],
+  "policyHash": "6f8fd90033152092713ebe99637687a8113be9fe0b5a0f4278f4ea10b1a52677",
+  "policyHashManifest": "/home/nixos/repos/ops/issues/evidence/project-source-worker-readable-20260524/policy-selected-20260526T041315.sha256"
+}

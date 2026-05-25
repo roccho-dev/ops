@@ -1,0 +1,237 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+  "target": {
+    "id": "C3AFD0E2F498DE2E6210E7AA0E18B07B",
+    "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+    "title": "ChatGPT - test"
+  },
+  "file": {
+    "path": "/home/nixos/repos/ops/issues/evidence/project-source-worker-readable-20260524/target-project-handoff-20260525/handoff-source-readback-20260525T194231JST.txt",
+    "name": "handoff-source-readback-20260525T194231JST.txt"
+  },
+  "upload": {
+    "ok": true,
+    "selectedMode": "direct",
+    "attempts": [
+      {
+        "mode": "direct",
+        "ok": true,
+        "result": {
+          "selector": "input[type=\"file\"]:not(#upload-files):not(#upload-photos):not(#upload-camera)",
+          "mode": "direct_dom_set_file_input_files",
+          "raw": "{\"ok\":true,\"backendNodeId\":null,\"runtime_enable\":{\"id\":1,\"result\":{}},\"dom_enable\":{\"id\":2,\"result\":{}},\"page_enable\":{\"id\":3,\"result\":{}},\"bring_to_front\":{\"id\":4,\"result\":{}},\"intercept_on\":{\"id\":5,\"result\":{}},\"center\":{\"id\":6,\"result\":{\"result\":{\"type\":\"object\",\"value\":{\"ok\":true,\"selector\":\"input[type=\\\"file\\\"]:not(#upload-files):not(#upload-photos):not(#upload-camera)\",\"x\":280,\"y\":401.5}}}},\"click\":{\"mode\":\"direct\",\"direct\":{\"mode\":\"direct_file_input\",\"nodeId\":85,\"document\":{\"id\":7,\"result\":{\"root\":{\"nodeId\":1,\"backendNodeId\":31,\"nodeType\":9,\"nodeName\":\"#document\",\"localName\":\"\",\"nodeValue\":\"\",\"childNodeCount\":2,\"children\":[{\"nodeId\":2,\"parentId\":1,\"backendNodeId\":71,\"nodeType\":10,\"nodeName\":\"html\",\"localName\":\"\",\"nodeValue\":\"\",\"publicId\":\"\",\"systemId\":\"\"},{\"nodeId\":3,\"parentId\":1,\"backendNodeId\":72,\"nodeType\":1,\"nodeName\":\"HTML\",\"localName\":\"html\",\"nodeValue\":\"\",\"childNodeCount\":2,\"attributes\":[\"lang\",\"en-US\",\"data-build\",\"prod-8117aba90ffac2b43c6118f2fc2eefaac58f816d\",\"data-seq\",\"6844271\",\"data-oled\",\"\",\"data-contrast\",\"default\",\"dir\",\"ltr\",\"class\",\"light\",\"data-chat-theme\",\"default\",\"style\",\"color-scheme: light;\"],\"frameId\":\"C3AFD0E2F498DE2E6210E7AA0E18B07B\"}],\"documentURL\":\"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources\",\"baseURL\":\"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources\",\"xmlVersion\":\"\",\"compatibilityMode\":\"NoQuirksMode\"}}},\"querySelector\":{\"id\":8,\"result\":{\"nodeId\":85}},\"scrollIntoViewIfNeeded\":{\"id\":9,\"result\":{}},\"setFileInputFiles\":{\"id\":10,\"result\":{}},\"dispatchInputChange\":{\"id\":11,\"result\":{\"result\":{\"type\":\"object\",\"value\":{\"ok\":true,\"selector\":\"input[type=\\\"file\\\"]:not(#upload-files):not(#upload-photos):not(#upload-camera)\",\"id\":\"\",\"tag\":\"INPUT\",\"type\":\"file\",\"before\":{\"n\":1,\"names\":[\"handoff-source-readback-20260525T194231JST.txt\"]}}}}}}},\"fileChooserOpened\":null,\"setFileInputFiles\":{\"id\":10,\"result\":{}},\"intercept_off\":{\"id\":12,\"result\":{}},\"verify\":{\"id\":13,\"result\":{\"result\":{\"type\":\"object\",\"value\":{\"href\":\"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources\",\"title\":\"ChatGPT - test\",\"visible\":[{\"name\":\"handoff-source-readback-20260525T194231JST.txt\",\"ok\":true}],\"ok\":true,\"inputs\":[{\"accept\":\"\",\"n\":0,\"names\":[]},{\"accept\":\"image/*\",\"n\":0,\"names\":[]},{\"accept\":\"image/*\",\"n\":0,\"names\":[]},{\"accept\":\"\",\"n\":1,\"names\":[\"handoff-source-readback-20260525T194231JST.txt\"]}],\"has_aria_label_tile\":false}}}}}",
+          "parsed": {
+            "ok": true,
+            "backendNodeId": null,
+            "runtime_enable": {
+              "id": 1,
+              "result": {}
+            },
+            "dom_enable": {
+              "id": 2,
+              "result": {}
+            },
+            "page_enable": {
+              "id": 3,
+              "result": {}
+            },
+            "bring_to_front": {
+              "id": 4,
+              "result": {}
+            },
+            "intercept_on": {
+              "id": 5,
+              "result": {}
+            },
+            "center": {
+              "id": 6,
+              "result": {
+                "result": {
+                  "type": "object",
+                  "value": {
+                    "ok": true,
+                    "selector": "input[type=\"file\"]:not(#upload-files):not(#upload-photos):not(#upload-camera)",
+                    "x": 280,
+                    "y": 401.5
+                  }
+                }
+              }
+            },
+            "click": {
+              "mode": "direct",
+              "direct": {
+                "mode": "direct_file_input",
+                "nodeId": 85,
+                "document": {
+                  "id": 7,
+                  "result": {
+                    "root": {
+                      "nodeId": 1,
+                      "backendNodeId": 31,
+                      "nodeType": 9,
+                      "nodeName": "#document",
+                      "localName": "",
+                      "nodeValue": "",
+                      "childNodeCount": 2,
+                      "children": [
+                        {
+                          "nodeId": 2,
+                          "parentId": 1,
+                          "backendNodeId": 71,
+                          "nodeType": 10,
+                          "nodeName": "html",
+                          "localName": "",
+                          "nodeValue": "",
+                          "publicId": "",
+                          "systemId": ""
+                        },
+                        {
+                          "nodeId": 3,
+                          "parentId": 1,
+                          "backendNodeId": 72,
+                          "nodeType": 1,
+                          "nodeName": "HTML",
+                          "localName": "html",
+                          "nodeValue": "",
+                          "childNodeCount": 2,
+                          "attributes": [
+                            "lang",
+                            "en-US",
+                            "data-build",
+                            "prod-8117aba90ffac2b43c6118f2fc2eefaac58f816d",
+                            "data-seq",
+                            "6844271",
+                            "data-oled",
+                            "",
+                            "data-contrast",
+                            "default",
+                            "dir",
+                            "ltr",
+                            "class",
+                            "light",
+                            "data-chat-theme",
+                            "default",
+                            "style",
+                            "color-scheme: light;"
+                          ],
+                          "frameId": "C3AFD0E2F498DE2E6210E7AA0E18B07B"
+                        }
+                      ],
+                      "documentURL": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+                      "baseURL": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+                      "xmlVersion": "",
+                      "compatibilityMode": "NoQuirksMode"
+                    }
+                  }
+                },
+                "querySelector": {
+                  "id": 8,
+                  "result": {
+                    "nodeId": 85
+                  }
+                },
+                "scrollIntoViewIfNeeded": {
+                  "id": 9,
+                  "result": {}
+                },
+                "setFileInputFiles": {
+                  "id": 10,
+                  "result": {}
+                },
+                "dispatchInputChange": {
+                  "id": 11,
+                  "result": {
+                    "result": {
+                      "type": "object",
+                      "value": {
+                        "ok": true,
+                        "selector": "input[type=\"file\"]:not(#upload-files):not(#upload-photos):not(#upload-camera)",
+                        "id": "",
+                        "tag": "INPUT",
+                        "type": "file",
+                        "before": {
+                          "n": 1,
+                          "names": [
+                            "handoff-source-readback-20260525T194231JST.txt"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "fileChooserOpened": null,
+            "setFileInputFiles": {
+              "id": 10,
+              "result": {}
+            },
+            "intercept_off": {
+              "id": 12,
+              "result": {}
+            },
+            "verify": {
+              "id": 13,
+              "result": {
+                "result": {
+                  "type": "object",
+                  "value": {
+                    "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+                    "title": "ChatGPT - test",
+                    "visible": [
+                      {
+                        "name": "handoff-source-readback-20260525T194231JST.txt",
+                        "ok": true
+                      }
+                    ],
+                    "ok": true,
+                    "inputs": [
+                      {
+                        "accept": "",
+                        "n": 0,
+                        "names": []
+                      },
+                      {
+                        "accept": "image/*",
+                        "n": 0,
+                        "names": []
+                      },
+                      {
+                        "accept": "image/*",
+                        "n": 0,
+                        "names": []
+                      },
+                      {
+                        "accept": "",
+                        "n": 1,
+                        "names": [
+                          "handoff-source-readback-20260525T194231JST.txt"
+                        ]
+                      }
+                    ],
+                    "has_aria_label_tile": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "duplicateConfirm": {
+    "ok": true,
+    "clicked": true,
+    "modalPresent": true
+  },
+  "visible": {
+    "ok": true,
+    "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+    "title": "ChatGPT - test",
+    "inaccessibleHint": false,
+    "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\ntest\nrepo-govern\nevolve-self\nrefactor-policy\nreach-market\nMore\nRecents\nAI派遣業務代行調査\nチケット管理UI統一\nソースコード逆算とデプロイ\nLLM Progress and Challenges\nChatGPT活用法ガイド\nPackage Architecture Map\nHermesの技術的優位\ndify plugin API 変数\nResponses API活用方法\nCodexの圧縮技術\nGit gistとrepo質問\n技術用語の整理\nCodex version up失敗\nNix Cache構築相談\nブラウザランタイム質問\n無理した設計\nnpm quickjs-ng確認\nSkill作成可能性検討\nCaddy 再配信設定\nAI利用の未来\nCodex Windowsアップデート\nAIとサイバーセキュリティ\nlevelsio SQLite 使用方法\nDify境界値テスト\nsakimoriプロキシの説明\nCLIコマンドの読み込み\nKimi WebBridgeとAI操作\npip astgrep 使用问题\nTetsuya Takasawa\nPro\nShare\ntest\n\nExtended Pro\nChats\nSources\nNewest\nAll\nAdd sources\nhandoff-source-readback-20260525T194231JST.txt\nDocument\nhandoff-source-readback-20260525T194231JST.txt\nDocument\nhandoff-source-readback-20260525T193414JST.txt\nDocument · May 25, 2026",
+    "waited_ms": 0
+  }
+}

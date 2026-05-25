@@ -1,0 +1,72 @@
+{
+  "command": "project-thread-readback",
+  "completionApproval": false,
+  "createdAt": "2026-05-25T11:21:56.855770Z",
+  "dryRun": false,
+  "finishedAt": "2026-05-25T11:22:09.983225Z",
+  "kind": "ops.projectTransportResult.v1",
+  "markerRole": "assistant",
+  "markers": [
+    "OPS_HANDOFF_SOURCE_READBACK_TOKEN_20260525T195449JST_e91c7a40"
+  ],
+  "matchedHits": [],
+  "matchedMarkers": [],
+  "missingMarkers": [
+    "OPS_HANDOFF_SOURCE_READBACK_TOKEN_20260525T195449JST_e91c7a40"
+  ],
+  "ok": false,
+  "readCommand": {
+    "argv": [
+      "chromium-cdp-read-thread",
+      "--url",
+      "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a142bc9-03a4-83a5-99e1-1a971962c89f",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "9222",
+      "--waitMs",
+      "300000",
+      "--tail",
+      "5",
+      "--openIfNeeded",
+      "--markers",
+      "OPS_HANDOFF_SOURCE_READBACK_TOKEN_20260525T195449JST_e91c7a40"
+    ],
+    "json": {
+      "artifacts": [],
+      "hasPrompt": true,
+      "hits": [],
+      "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a142bc9-03a4-83a5-99e1-1a971962c89f",
+      "isStreaming": false,
+      "last": [
+        {
+          "idx": 0,
+          "preview": "Transport-only Project Source readback proof using auto text upload.  Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that file, and nothing else.",
+          "role": "user",
+          "textLen": 221
+        },
+        {
+          "idx": 1,
+          "preview": "This content may violate our usage policies.",
+          "role": "assistant",
+          "textLen": 44
+        }
+      ],
+      "msgCount": 2,
+      "readyState": "complete",
+      "stableRounds": 2,
+      "streamWaitRounds": 1,
+      "title": "ChatGPT - test"
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "{\n  \"href\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a142bc9-03a4-83a5-99e1-1a971962c89f\",\n  \"title\": \"ChatGPT - test\",\n  \"readyState\": \"complete\",\n  \"msgCount\": 2,\n  \"hasPrompt\": true,\n  \"isStreaming\": false,\n  \"stableRounds\": 2,\n  \"streamWaitRounds\": 1,\n  \"hits\": [],\n  \"last\": [\n    {\n      \"idx\": 0,\n      \"role\": \"user\",\n      \"preview\": \"Transport-only Project Source readback proof using auto text upload.  Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that file, and nothing else.\",\n      \"textLen\": 221\n    },\n    {\n      \"idx\": 1,\n      \"role\": \"assistant\",\n      \"preview\": \"This content may violate our usage policies.\",\n      \"textLen\": 44\n    }\n  ],\n  \"artifacts\": []\n}\n"
+  },
+  "readbackVerified": false,
+  "routeDecision": false,
+  "semanticApproval": false,
+  "status": "readback-missing-marker",
+  "stillStreaming": false,
+  "threadUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a142bc9-03a4-83a5-99e1-1a971962c89f",
+  "transportRead": true
+}

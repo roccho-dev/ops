@@ -1,0 +1,103 @@
+{
+  "addr": "127.0.0.1",
+  "command": "project-transport-env",
+  "completionApproval": false,
+  "createdAt": "2026-05-25T10:35:57.811703Z",
+  "dryRun": false,
+  "finishedAt": "2026-05-25T10:35:59.481942Z",
+  "kind": "ops.projectTransportResult.v1",
+  "ok": true,
+  "probes": [
+    {
+      "addr": "127.0.0.1",
+      "port": 9222,
+      "tcpConnect": true
+    }
+  ],
+  "projectAccessProbes": [
+    {
+      "addr": "127.0.0.1",
+      "command": {
+        "argv": [
+          "chromium-cdp-project-access-probe",
+          "--projectUrl",
+          "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "9222",
+          "--timeoutMs",
+          "180000",
+          "--json"
+        ],
+        "json": {
+          "addr": "127.0.0.1",
+          "kind": "ops.projectAccessProbe.v1",
+          "ok": true,
+          "page": {
+            "bodySample": "Chat history ChatGPT New chat Search chats Library Apps Codex More GPTs To-Do List Software Architect GPT AskYourPDF Research Assistant Explore GPTs Projects New project test repo-govern evolve-self refactor-policy reach-market More Recents AI\u6d3e\u9063\u696d\u52d9\u4ee3\u884c\u8abf\u67fb \u30c1\u30b1\u30c3\u30c8\u7ba1\u7406UI\u7d71\u4e00 \u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u9006\u7b97\u3068\u30c7\u30d7\u30ed\u30a4 LLM Progress and Challenges ChatGPT\u6d3b\u7528\u6cd5\u30ac\u30a4\u30c9 Package Architecture Map Hermes\u306e\u6280\u8853\u7684\u512a\u4f4d dify plugin API \u5909\u6570 Responses API\u6d3b\u7528\u65b9\u6cd5 Codex\u306e\u5727\u7e2e\u6280\u8853 Git gist\u3068repo\u8cea\u554f \u6280\u8853\u7528\u8a9e\u306e\u6574\u7406 Codex version up\u5931\u6557 Nix Cache\u69cb\u7bc9\u76f8\u8ac7 \u30d6\u30e9\u30a6\u30b6\u30e9\u30f3\u30bf\u30a4\u30e0\u8cea\u554f \u7121\u7406\u3057\u305f\u8a2d\u8a08 npm quickjs-ng\u78ba\u8a8d Skill\u4f5c\u6210\u53ef\u80fd\u6027\u691c\u8a0e Caddy \u518d\u914d\u4fe1\u8a2d\u5b9a AI\u5229\u7528\u306e\u672a\u6765 Codex Windows\u30a2\u30c3\u30d7\u30c7\u30fc\u30c8 AI\u3068\u30b5\u30a4\u30d0\u30fc\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3 levelsio SQLite \u4f7f\u7528\u65b9\u6cd5 Dify\u5883\u754c\u5024\u30c6\u30b9\u30c8 sakimori\u30d7\u30ed\u30ad\u30b7\u306e\u8aac\u660e CLI\u30b3\u30de\u30f3\u30c9\u306e\u8aad\u307f\u8fbc\u307f Kimi WebBridge\u3068AI\u64cd\u4f5c pip astgrep \u4f7f\u7528\u95ee\u9898 Tetsuya Takasawa Pro Share test Extended Pro Chats Sources No chats yet Chats in test will live here",
+            "denied": false,
+            "hasProjectHref": true,
+            "hasProjectShell": true,
+            "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+            "loginActions": [],
+            "loginUrl": false,
+            "readyState": "complete",
+            "title": "ChatGPT - test"
+          },
+          "port": 9222,
+          "projectId": "6a142414377481919abd28fd961296d2",
+          "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+          "reason": "TARGET_PROJECT_ROUTE_VERIFIED",
+          "status": "project-access-ok",
+          "target": {
+            "id": "C3AFD0E2F498DE2E6210E7AA0E18B07B",
+            "title": "ChatGPT - test",
+            "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+          }
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "{\n  \"kind\": \"ops.projectAccessProbe.v1\",\n  \"ok\": true,\n  \"status\": \"project-access-ok\",\n  \"reason\": \"TARGET_PROJECT_ROUTE_VERIFIED\",\n  \"projectUrl\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n  \"projectId\": \"6a142414377481919abd28fd961296d2\",\n  \"addr\": \"127.0.0.1\",\n  \"port\": 9222,\n  \"target\": {\n    \"id\": \"C3AFD0E2F498DE2E6210E7AA0E18B07B\",\n    \"url\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n    \"title\": \"ChatGPT - test\"\n  },\n  \"page\": {\n    \"href\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n    \"title\": \"ChatGPT - test\",\n    \"readyState\": \"complete\",\n    \"hasProjectHref\": true,\n    \"hasProjectShell\": true,\n    \"denied\": false,\n    \"loginUrl\": false,\n    \"loginActions\": [],\n    \"bodySample\": \"Chat history ChatGPT New chat Search chats Library Apps Codex More GPTs To-Do List Software Architect GPT AskYourPDF Research Assistant Explore GPTs Projects New project test repo-govern evolve-self refactor-policy reach-market More Recents AI\u6d3e\u9063\u696d\u52d9\u4ee3\u884c\u8abf\u67fb \u30c1\u30b1\u30c3\u30c8\u7ba1\u7406UI\u7d71\u4e00 \u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u9006\u7b97\u3068\u30c7\u30d7\u30ed\u30a4 LLM Progress and Challenges ChatGPT\u6d3b\u7528\u6cd5\u30ac\u30a4\u30c9 Package Architecture Map Hermes\u306e\u6280\u8853\u7684\u512a\u4f4d dify plugin API \u5909\u6570 Responses API\u6d3b\u7528\u65b9\u6cd5 Codex\u306e\u5727\u7e2e\u6280\u8853 Git gist\u3068repo\u8cea\u554f \u6280\u8853\u7528\u8a9e\u306e\u6574\u7406 Codex version up\u5931\u6557 Nix Cache\u69cb\u7bc9\u76f8\u8ac7 \u30d6\u30e9\u30a6\u30b6\u30e9\u30f3\u30bf\u30a4\u30e0\u8cea\u554f \u7121\u7406\u3057\u305f\u8a2d\u8a08 npm quickjs-ng\u78ba\u8a8d Skill\u4f5c\u6210\u53ef\u80fd\u6027\u691c\u8a0e Caddy \u518d\u914d\u4fe1\u8a2d\u5b9a AI\u5229\u7528\u306e\u672a\u6765 Codex Windows\u30a2\u30c3\u30d7\u30c7\u30fc\u30c8 AI\u3068\u30b5\u30a4\u30d0\u30fc\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3 levelsio SQLite \u4f7f\u7528\u65b9\u6cd5 Dify\u5883\u754c\u5024\u30c6\u30b9\u30c8 sakimori\u30d7\u30ed\u30ad\u30b7\u306e\u8aac\u660e CLI\u30b3\u30de\u30f3\u30c9\u306e\u8aad\u307f\u8fbc\u307f Kimi WebBridge\u3068AI\u64cd\u4f5c pip astgrep \u4f7f\u7528\u95ee\u9898 Tetsuya Takasawa Pro Share test Extended Pro Chats Sources No chats yet Chats in test will live here\"\n  }\n}\n"
+      },
+      "ok": true,
+      "port": 9222,
+      "projectAccess": {
+        "addr": "127.0.0.1",
+        "kind": "ops.projectAccessProbe.v1",
+        "ok": true,
+        "page": {
+          "bodySample": "Chat history ChatGPT New chat Search chats Library Apps Codex More GPTs To-Do List Software Architect GPT AskYourPDF Research Assistant Explore GPTs Projects New project test repo-govern evolve-self refactor-policy reach-market More Recents AI\u6d3e\u9063\u696d\u52d9\u4ee3\u884c\u8abf\u67fb \u30c1\u30b1\u30c3\u30c8\u7ba1\u7406UI\u7d71\u4e00 \u30bd\u30fc\u30b9\u30b3\u30fc\u30c9\u9006\u7b97\u3068\u30c7\u30d7\u30ed\u30a4 LLM Progress and Challenges ChatGPT\u6d3b\u7528\u6cd5\u30ac\u30a4\u30c9 Package Architecture Map Hermes\u306e\u6280\u8853\u7684\u512a\u4f4d dify plugin API \u5909\u6570 Responses API\u6d3b\u7528\u65b9\u6cd5 Codex\u306e\u5727\u7e2e\u6280\u8853 Git gist\u3068repo\u8cea\u554f \u6280\u8853\u7528\u8a9e\u306e\u6574\u7406 Codex version up\u5931\u6557 Nix Cache\u69cb\u7bc9\u76f8\u8ac7 \u30d6\u30e9\u30a6\u30b6\u30e9\u30f3\u30bf\u30a4\u30e0\u8cea\u554f \u7121\u7406\u3057\u305f\u8a2d\u8a08 npm quickjs-ng\u78ba\u8a8d Skill\u4f5c\u6210\u53ef\u80fd\u6027\u691c\u8a0e Caddy \u518d\u914d\u4fe1\u8a2d\u5b9a AI\u5229\u7528\u306e\u672a\u6765 Codex Windows\u30a2\u30c3\u30d7\u30c7\u30fc\u30c8 AI\u3068\u30b5\u30a4\u30d0\u30fc\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3 levelsio SQLite \u4f7f\u7528\u65b9\u6cd5 Dify\u5883\u754c\u5024\u30c6\u30b9\u30c8 sakimori\u30d7\u30ed\u30ad\u30b7\u306e\u8aac\u660e CLI\u30b3\u30de\u30f3\u30c9\u306e\u8aad\u307f\u8fbc\u307f Kimi WebBridge\u3068AI\u64cd\u4f5c pip astgrep \u4f7f\u7528\u95ee\u9898 Tetsuya Takasawa Pro Share test Extended Pro Chats Sources No chats yet Chats in test will live here",
+          "denied": false,
+          "hasProjectHref": true,
+          "hasProjectShell": true,
+          "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+          "loginActions": [],
+          "loginUrl": false,
+          "readyState": "complete",
+          "title": "ChatGPT - test"
+        },
+        "port": 9222,
+        "projectId": "6a142414377481919abd28fd961296d2",
+        "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+        "reason": "TARGET_PROJECT_ROUTE_VERIFIED",
+        "status": "project-access-ok",
+        "target": {
+          "id": "C3AFD0E2F498DE2E6210E7AA0E18B07B",
+          "title": "ChatGPT - test",
+          "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+        }
+      }
+    }
+  ],
+  "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "recommendedRoute": {
+    "addr": "127.0.0.1",
+    "port": 9222,
+    "status": "project-access-ok"
+  },
+  "routeDecision": false,
+  "selectedPort": 9222,
+  "semanticApproval": false,
+  "status": "project-route-recommended"
+}

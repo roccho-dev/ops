@@ -22,10 +22,26 @@ DECISION_FLAGS = {
 
 THREAD_FUNCTIONS = {"impl-work", "impl-review", "merge-work", "merge-review"}
 
+TEXT_SOURCE_SUFFIXES = {
+    ".csv",
+    ".diff",
+    ".json",
+    ".jsonl",
+    ".md",
+    ".patch",
+    ".sha256",
+    ".toml",
+    ".tsv",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
+
 
 LOW_LEVEL_COMMANDS = [
     "chromium-cdp-chatgpt-doctor",
     "chromium-cdp-project-access-probe",
+    "chromium-cdp-upload-project-source-text",
     "chromium-cdp-upload-project-source-file",
     "chromium-cdp-project-source-list",
     "chromium-cdp-project-source-delete",
@@ -72,6 +88,17 @@ def write_json(path: str | Path, value: dict[str, Any]) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def project_source_upload_command(file_path: Path, mode: str) -> str:
+    selected = mode if mode in {"text", "file"} else "auto"
+    if selected == "text":
+        return "chromium-cdp-upload-project-source-text"
+    if selected == "file":
+        return "chromium-cdp-upload-project-source-file"
+    if file_path.suffix.lower() in TEXT_SOURCE_SUFFIXES:
+        return "chromium-cdp-upload-project-source-text"
+    return "chromium-cdp-upload-project-source-file"
 
 
 def sha256_file(path: str | Path) -> str:
@@ -205,18 +232,21 @@ def source_put_observed_target(parsed: Any) -> dict[str, Any]:
     }
 
 
-def classify_source_put_failure(parsed: Any, low: dict[str, Any]) -> dict[str, Any]:
+def classify_source_put_failure(parsed: Any, low: dict[str, Any], expected_file_name: str | None = None) -> dict[str, Any]:
     low_text = low.get("stdout", "") + "\n" + low.get("stderr", "")
     observed_text = json.dumps(parsed or {}, sort_keys=True) + "\n" + low_text
     visible = bool(isinstance(parsed, dict) and parsed.get("visible") and parsed["visible"].get("ok"))
+    if isinstance(parsed, dict) and parsed.get("upload") and parsed["upload"].get("ok"):
+        upload_text_tail = str(parsed.get("upload", {}).get("textTail", ""))
+        visible = visible or (bool(expected_file_name) and str(expected_file_name) in upload_text_tail)
     observed = source_put_observed_target(parsed)
     if visible:
         return {
-            "status": "source-upload-visible",
+            "status": "source-upload-visible-unverified",
             "legacyStatus": None,
             "failureClass": None,
             "transportVisible": True,
-            "readbackVerified": True,
+            "readbackVerified": False,
             "observed": observed,
         }
     if parsed is None and not low_text.strip():
@@ -568,12 +598,16 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
         return result
     out_dir = ensure_dir(args.out_dir) or Path.cwd()
     upload_log = out_dir / f"project-source-put-{file_path.name}.json"
+    upload_mode = getattr(args, "upload_mode", "auto")
+    upload_command = project_source_upload_command(file_path, upload_mode)
+    result["uploadMode"] = upload_mode
+    result["selectedUploadCommand"] = upload_command
     if args.dry_run:
         result.update({
             "ok": True,
             "status": "dry-run-ready",
             "plannedCommand": [
-                "chromium-cdp-upload-project-source-file",
+                upload_command,
                 "--projectUrl", args.project_url,
                 "--file", str(file_path),
                 "--outPath", str(upload_log),
@@ -581,7 +615,7 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
         })
         return result
     cmd = [
-        "chromium-cdp-upload-project-source-file",
+        upload_command,
         "--projectUrl", args.project_url,
         "--file", str(file_path),
         "--outPath", str(upload_log),
@@ -597,7 +631,7 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
         parsed = json.loads(upload_log.read_text())
     elif low.get("json") is not None:
         parsed = low["json"]
-    classification = classify_source_put_failure(parsed, low)
+    classification = classify_source_put_failure(parsed, low, file_path.name)
     result.update({
         "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")) and bool(classification["transportVisible"]),
         "status": classification["status"],
@@ -606,6 +640,8 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
         "transportSent": low["returncode"] == 0,
         "transportVisible": classification["transportVisible"],
         "readbackVerified": classification["readbackVerified"],
+        "workerReadbackVerified": False,
+        "verificationLevel": "visible-only" if classification["transportVisible"] else "none",
         "observed": classification["observed"],
         "uploadResult": parsed,
     })
@@ -642,15 +678,29 @@ def source_list_result(args: argparse.Namespace, result: dict[str, Any]) -> dict
     ]
     low = run_command(cmd, timeout=max(60, args.timeout_ms // 1000 + 30))
     parsed = json.loads(list_log.read_text()) if list_log.is_file() else low.get("json")
+    count = parsed.get("count") if isinstance(parsed, dict) else None
+    hint_count = parsed.get("unparsedVisibleSourceCount") if isinstance(parsed, dict) else None
+    if parsed and parsed.get("ok") and isinstance(count, int) and count > 0:
+        status = "source-list-read"
+    elif parsed and parsed.get("ok") and isinstance(hint_count, int) and hint_count > 0:
+        status = "source-list-unreliable"
+    elif parsed and parsed.get("ok"):
+        status = "source-list-empty"
+    else:
+        status = "source-list-not-read"
     result.update({
-        "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")),
-        "status": "source-list-read" if parsed and parsed.get("ok") else "source-list-not-read",
+        "ok": low["returncode"] == 0 and bool(parsed and parsed.get("ok")) and status != "source-list-unreliable",
+        "status": status,
         "transportRead": low["returncode"] == 0,
-        "readbackVerified": bool(parsed and parsed.get("ok")),
+        "readbackVerified": False,
+        "inventoryParsed": status == "source-list-read",
+        "sourceListUnreliable": status == "source-list-unreliable",
+        "sourceListReliability": status,
         "listLog": str(list_log),
         "listCommand": low,
         "sourceList": parsed,
-        "sourceCount": parsed.get("count") if isinstance(parsed, dict) else None,
+        "sourceCount": count,
+        "unparsedVisibleSourceCount": hint_count,
     })
     return result
 
@@ -838,6 +888,7 @@ def handle_thread_readback(args: argparse.Namespace) -> int:
             "ok": True,
             "status": "dry-run-ready",
             "plannedCommand": ["chromium-cdp-read-thread", "--url", args.url, "--markers", ",".join(args.markers), "--tail", str(args.tail)],
+            "markerRole": args.marker_role,
         })
         return maybe_write_out(args, result)
     cmd = [
@@ -857,14 +908,30 @@ def handle_thread_readback(args: argparse.Namespace) -> int:
     low = run_command(cmd, timeout=max(60, args.wait_ms // 1000 + 60))
     parsed = low.get("json")
     hits = parsed.get("hits", []) if isinstance(parsed, dict) else []
-    found = {h.get("marker") for h in hits if isinstance(h, dict)}
+    filtered_hits = [
+        h for h in hits
+        if isinstance(h, dict) and (args.marker_role == "any" or h.get("role") == args.marker_role)
+    ]
+    found = {h.get("marker") for h in filtered_hits if isinstance(h, dict)}
     missing = [m for m in args.markers if m not in found]
+    still_streaming = bool(isinstance(parsed, dict) and parsed.get("isStreaming"))
+    readback_ok = low["returncode"] == 0 and not missing and not still_streaming
+    if still_streaming:
+        status = "readback-still-streaming"
+    elif readback_ok:
+        status = "readback-verified"
+    else:
+        status = "readback-missing-marker"
     result.update({
-        "ok": low["returncode"] == 0 and not missing,
-        "status": "readback-verified" if low["returncode"] == 0 and not missing else "readback-missing-marker",
+        "ok": readback_ok,
+        "status": status,
         "transportRead": low["returncode"] == 0,
-        "readbackVerified": low["returncode"] == 0 and not missing,
+        "readbackVerified": readback_ok,
         "missingMarkers": missing,
+        "stillStreaming": still_streaming,
+        "markerRole": args.marker_role,
+        "matchedMarkers": sorted(found),
+        "matchedHits": filtered_hits,
         "readCommand": low,
     })
     return maybe_write_out(args, result)
@@ -1241,7 +1308,7 @@ def handle_run(args: argparse.Namespace) -> int:
             create_result.update({"ok": True, "status": "dry-run-ready", "plannedCommand": ["chromium-cdp-create-project-thread", "--projectUrl", args.project_url]})
         else:
             create_args = [
-                "project-thread-create",
+                "thread-create",
                 "--project-url", args.project_url,
                 "--out-dir", str(out_dir),
                 "--addr", args.addr,
@@ -1281,7 +1348,7 @@ def handle_run(args: argparse.Namespace) -> int:
                 })
             elif create_result.get("threadUrl"):
                 readback_args = [
-                    "project-thread-readback",
+                    "thread-readback",
                     "--url", create_result["threadUrl"],
                     "--markers", ",".join(args.readback_marker),
                     "--wait-ms", str(args.readback_wait_ms),
@@ -1335,6 +1402,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_cdp_common(p)
     p.add_argument("--project-url", "--projectUrl", dest="project_url", required=True)
     p.add_argument("--file", required=True)
+    p.add_argument("--upload-mode", "--uploadMode", dest="upload_mode", choices=["auto", "text", "file"], default="auto")
     p.set_defaults(func=handle_source_put)
 
     p = sub.add_parser("source-put-classify-examples")
@@ -1382,6 +1450,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--url", required=True)
     p.add_argument("--id")
     p.add_argument("--markers", type=lambda s: [x for x in s.split(",") if x], default=[])
+    p.add_argument("--marker-role", "--markerRole", dest="marker_role", choices=["assistant", "user", "any"], default="assistant")
     p.add_argument("--wait-ms", "--waitMs", dest="wait_ms", type=int, default=30000)
     p.add_argument("--tail", type=int, default=5)
     p.set_defaults(func=handle_thread_readback)
