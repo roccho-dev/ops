@@ -1,0 +1,9 @@
+rawSource	classification	reason
+browser profile directories	rejected/no-op	Do not absorb cookies, credentials, profile snapshots, or user browser state into ops-cdp-core.
+CDP root runtime directories	rejected/no-op	Do not copy ambient runtime roots; expose only package-owned source and Nix runtime entries.
+generated downloads	rejected/no-op	Downloads are transport evidence or artifacts; they are not package source.
+nested .git directories	rejected/no-op	Do not import nested repositories into a package source tree.
+temporary bundle archives	rejected/no-op	Git bundles and zips are handoff transport; keep them outside canonical package source.
+raw Project artifacts	rejected/no-op	Project artifacts must be reduced to stable evidence, manifest, or issue-specific outputs before adoption.
+raw conversation readback JSON	evidence-only	Keep as evidence only when hashed and scoped; do not make raw thread history package authority.
+deprecated flakes/parts/cdp migration files	migration-source-only	Use only to decide package-owned extraction; do not keep flakes as a second canonical CDP runtime.

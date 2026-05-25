@@ -464,6 +464,12 @@
                 chromium-cdp-chatgpt-command-map > "$out/chatgpt-command-map.md"
                 grep -q 'chromium-cdp-upload-project-source-text' "$out/chatgpt-command-map.md"
                 grep -q 'chromium-cdp-create-project-thread' "$out/chatgpt-command-map.md"
+                test -s ${./packages/ops-cdp-core/_incoming/proof-tree-extraction-inventory.tsv}
+                test -s ${./packages/ops-cdp-core/_incoming/proof-tree-source-files.tsv}
+                test -s ${./packages/ops-cdp-core/_incoming/rejected-raw-source-boundary.tsv}
+                grep -q 'ops-handoff-core split boundary' ${./packages/ops-cdp-core/_incoming/proof-tree-extraction-inventory.tsv}
+                grep -q 'ops-src-runtime-pack split boundary' ${./packages/ops-cdp-core/_incoming/proof-tree-extraction-inventory.tsv}
+                grep -q 'browser profile directories' ${./packages/ops-cdp-core/_incoming/rejected-raw-source-boundary.tsv}
                 test -x "$(command -v chromium-cdp-upload-project-source-text)"
                 test -x "$(command -v chromium-cdp-upload-project-source-file)"
                 test -x "$(command -v chromium-cdp-project-source-list)"
