@@ -85,8 +85,15 @@ function clickSourceActionsExpr(title) {
       let cur = button;
       for (let depth = 0; depth < 12 && cur; depth++) {
         const lines = normalizeLines(cur.innerText || cur.textContent || '');
-        const fileIndex = lines.findIndex((line) => line === 'File' || line.startsWith('File ·'));
-        if (fileIndex > 0 && fileIndex <= 3) return lines[fileIndex - 1] || '';
+        const sourceKindIndex = lines.findIndex((line) =>
+          line === 'File' ||
+          line.startsWith('File ·') ||
+          line === 'Document' ||
+          line.startsWith('Document ·') ||
+          line === 'Zip Archive' ||
+          line.startsWith('Zip Archive ·')
+        );
+        if (sourceKindIndex > 0 && sourceKindIndex <= 3) return lines[sourceKindIndex - 1] || '';
         cur = cur.parentElement;
       }
       return '';
