@@ -13,8 +13,9 @@ createdAt: 2026-05-27T07:20:00+09:00
 
 ## Purpose
 
-Submit the ops-side implementation proposal and proposed closed issue records
-for impl-review. This packet is not localize-ready evidence.
+Submit the ops-side implementation proposal, concrete gate changes, and
+proposed closed issue records for impl-review. This packet is not
+localize-ready evidence.
 
 ## Issue records opened
 
@@ -30,6 +31,19 @@ for impl-review. This packet is not localize-ready evidence.
 The same issueIds have later `closed` records in
 `issues/260527-issue-design-localize.jsonl`. They are proposed latest states for
 review. They are not canonical closure.
+
+## Concrete additions since v3 reject
+
+- `packages/ops-runbook-checks/bin/ops-runbook-checks.py` now includes an
+  `--issue-ledger` fsck mode for current v1 ledgers.
+- `flake.nix` checks the new fsck mode with a v1 supersedes/closure fixture and
+  a separate legacy/non-v1 report fixture.
+- `issues/issue-design-localize-20260527/MIGRATION_INVENTORY.md` inventories
+  current v1, legacy JSONL, Markdown, and evidence paths with preservation and
+  rollback handling.
+- `issues/issue-design-localize-20260527/DEFERRED_DECISIONS.md` records owner,
+  trigger, and required evidence for SQLite/latest index, same-issue
+  concurrency, compression, archive SLA, and Git ref/tree publication.
 
 ## Source evidence
 
@@ -50,8 +64,11 @@ review. They are not canonical closure.
 ## Gates
 
 - `issues/issue-design-localize-20260527/evidence/issue-ledger.log`: pass
+- `issues/issue-design-localize-20260527/evidence/ops-runbook-checks-issue-ledger-fsck.log`: pass
+- `issues/issue-design-localize-20260527/evidence/issue-ledger-fsck-report.json`: pass report
 - `issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log`: pass
+- `issues/issue-design-localize-20260527/evidence/ops-runbook-checks-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/nix-flake-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/git-diff-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/GATE_SHA256SUMS`: recorded

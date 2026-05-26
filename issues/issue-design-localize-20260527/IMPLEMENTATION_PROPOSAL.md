@@ -29,13 +29,23 @@ and private artifacts are not copied into main as the current issue truth.
 
 ## Validation and fsck gate
 
-The active v1 gate for this candidate is the policy issue-ledger validator:
+This candidate keeps the policy issue-ledger validator as the schema/authority
+gate and adds an ops fsck report through the existing `ops-runbook-checks`
+package.
+
+Policy gate:
 
 ```text
 /home/nixos/repos/policy/.agents/tests/check-issue-ledger-jsonl.sh issues/260527-issue-design-localize.jsonl
 ```
 
-For ops use, the gate requirements are:
+Ops fsck gate:
+
+```text
+ops-runbook-checks --issue-ledger issues/260527-issue-design-localize.jsonl --legacy-glob 'issues/*.jsonl' --json
+```
+
+The ops gate validates:
 
 - parse all v1 records;
 - validate schema, status, and recordType consistency;
@@ -45,7 +55,15 @@ For ops use, the gate requirements are:
 - enforce active `targetRepo + suggestedBranch` uniqueness;
 - report legacy/non-v1 records separately from current v1 validation.
 
+The checked-in fsck evidence is:
+
+- `issues/issue-design-localize-20260527/evidence/issue-ledger-fsck-report.json`
+- `issues/issue-design-localize-20260527/evidence/ops-runbook-checks-issue-ledger-fsck.log`
+
 ## Migration plan
+
+The checked-in migration inventory is
+`issues/issue-design-localize-20260527/MIGRATION_INVENTORY.md`.
 
 1. Keep existing Markdown issues and legacy JSONL files as evidence.
 2. Add v1 records for active work before changing implementation state.
@@ -89,6 +107,9 @@ localizer approval, push approval, cleanup approval, or canonical issue
 closure.
 
 ## Deferred choices
+
+The checked-in decision table is
+`issues/issue-design-localize-20260527/DEFERRED_DECISIONS.md`.
 
 The following remain design choices with owners and triggers, not hidden
 requirements for this candidate:

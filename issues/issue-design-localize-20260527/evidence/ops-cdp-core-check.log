@@ -1,5 +1,5 @@
 command: nix build .#checks.x86_64-linux.ops-cdp-core --no-link
-startedAt: 2026-05-26T22:21:45Z
+startedAt: 2026-05-26T23:30:56Z
 warning: Git tree '/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527' is dirty
-finishedAt: 2026-05-26T22:22:05Z
+finishedAt: 2026-05-26T23:31:05Z
 exitStatus: 0

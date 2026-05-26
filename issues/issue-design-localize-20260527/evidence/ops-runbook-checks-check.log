@@ -1,0 +1,8 @@
+command: nix build .#checks.x86_64-linux.ops-runbook-checks --no-link
+startedAt: 2026-05-26T23:30:52Z
+warning: Git tree '/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527' is dirty
+this derivation will be built:
+  /nix/store/jh97z6sxjv9m4bwcrbsjsdd54cj8gg0y-ops-runbook-checks-check.drv
+building '/nix/store/jh97z6sxjv9m4bwcrbsjsdd54cj8gg0y-ops-runbook-checks-check.drv'...
+finishedAt: 2026-05-26T23:30:56Z
+exitStatus: 0

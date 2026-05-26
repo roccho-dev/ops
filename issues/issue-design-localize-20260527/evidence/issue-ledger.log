@@ -1,5 +1,5 @@
 command: bash /home/nixos/repos/policy/.agents/tests/check-issue-ledger-jsonl.sh /home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527/issues/260527-issue-design-localize.jsonl
-startedAt: 2026-05-26T22:21:44Z
+startedAt: 2026-05-26T23:30:51Z
 ok - issue ledger records validate: 12 records
 ok - latest issue state uses recordedAt and supersedes, not file line order
 ok - recordType and status combinations are consistent
@@ -9,5 +9,5 @@ ok - blocked records carry required owner and resolution
 ok - closed records carry satisfied criteria and evidence
 ok - active suggested branches are unique per targetRepo
 issue-ledger-jsonl-gate-pass
-finishedAt: 2026-05-26T22:21:45Z
+finishedAt: 2026-05-26T23:30:52Z
 exitStatus: 0

@@ -1,5 +1,8 @@
-4ff8d00245ba5293bdbd9535a1bc89cbf8aae2aec0086a5a8da6a1355ad8e7f1  issues/issue-design-localize-20260527/evidence/git-diff-check.log
-ec900138cbf4da6d952a71b5d8bfa4cb43aa8aa6fd626d0a67878c260b846b4b  issues/issue-design-localize-20260527/evidence/issue-ledger.log
-8811bb708779fc59be4b9266628b9905b2653e75f84c10536f33aa22801e889f  issues/issue-design-localize-20260527/evidence/nix-flake-check.log
-9406694c2fc0c34953b7aab4d6f466aae286f3ed4bd3f134a1834a4e72d11a84  issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log
-ccb7406d849bd7ce489ac710a3bf7b44bb4c7edeca524a87a097b59a7d9d79f8  issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log
+001bf768f1de159f61a10604b58d10b58d6681e317790bafb72bf0ee56e22df2  issues/issue-design-localize-20260527/evidence/git-diff-check.log
+b134ac7a9872980d231dc9de84c86c9b6b2e6aba5d4e8c01b9cb9a91a5fe4b89  issues/issue-design-localize-20260527/evidence/issue-ledger.log
+08bc74e879a8ce023e13d93a0946a6667e605c4aceac4fbce1b74936ccb49eb4  issues/issue-design-localize-20260527/evidence/nix-flake-check.log
+f4e49c2d80a3ee449a7d24d2e40a2be4263f34556dff805fd514e7a65d72eeb6  issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log
+d7a10d8d612a605dfc5fcf00e74f20039e4d3d48b95ad62bf59a05e4fc0b1559  issues/issue-design-localize-20260527/evidence/ops-runbook-checks-check.log
+355a49f1b2ca39c792445cb0b3692b992ec660a609f283ea7f25066f188e904d  issues/issue-design-localize-20260527/evidence/ops-runbook-checks-issue-ledger-fsck.log
+4fcb6c9aba4321faca6661ffa52dae3e651d1076598568f54c5d4b750827cd57  issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log
+2ba2b1e12e38d8202b82210188364950724e46bef3db71705a8c21cc891eaead  issues/issue-design-localize-20260527/evidence/issue-ledger-fsck-report.json
