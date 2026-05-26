@@ -12,7 +12,10 @@ createdAt: 2026-05-27T04:39:30+09:00
 
 ## Purpose
 
-Localize the ops-side issue records from the two-thread discussion. These records split the operation work into local issue ledger design, gates, migration, Project Source proof, discussion FSM hardening, and deferred backend/archive choices.
+Localize the ops-side implementation proposal and proposed closed issue records
+from the two-thread discussion. These records split the operation work into
+local issue ledger design, gates, migration, Project Source proof, discussion
+FSM hardening, and deferred backend/archive choices.
 
 ## Issue records opened
 
@@ -22,6 +25,12 @@ Localize the ops-side issue records from the two-thread discussion. These record
 - `ops.cdp-project-source-worker-readable-proof`
 - `ops.thread-fsm-discussion-classification-hardening`
 - `ops.issue-ledger-backend-concurrency-and-archive-deferred`
+
+## Proposed closed records
+
+The same issueIds have later `closed` records in
+`issues/260527-issue-design-localize.jsonl`. They are proposed latest states for
+review/localization, not canonical closure.
 
 ## Source evidence
 
@@ -40,9 +49,15 @@ Localize the ops-side issue records from the two-thread discussion. These record
 ## Gates
 
 - `issues/issue-design-localize-20260527/evidence/issue-ledger.log`: pass
+- `issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log`: pass
+- `issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/nix-flake-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/git-diff-check.log`: pass
 - `issues/issue-design-localize-20260527/evidence/GATE_SHA256SUMS`: recorded
+
+## Implementation proposal
+
+- `issues/issue-design-localize-20260527/IMPLEMENTATION_PROPOSAL.md`
 
 ## State
 

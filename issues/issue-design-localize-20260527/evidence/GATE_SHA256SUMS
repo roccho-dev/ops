@@ -1,3 +1,5 @@
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  issues/issue-design-localize-20260527/evidence/git-diff-check.log
-6325a205ba0744a40ff263cf8cb55f3ab31dc7edfb61eef78694dcf87bc16624  issues/issue-design-localize-20260527/evidence/issue-ledger.log
-527ed2ed3abe7309bdffe41f83e1e82a472891e4c916d7dc1f8c8b66b7f38151  issues/issue-design-localize-20260527/evidence/nix-flake-check.log
+d7c452a62a1e51ef6d70e77748e8c72a38aab5d3ad38e51d2c6906fcd3a25cc9  issues/issue-design-localize-20260527/evidence/issue-ledger.log
+5b56916651c143078adc585928fe7712bd81c922ec4293a3bbf71cee00bfb86f  issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log
+5b56916651c143078adc585928fe7712bd81c922ec4293a3bbf71cee00bfb86f  issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log
+ddd20eb6410a35cf55cfba76f789c2fee127ee6d0142bc5232c1d2466803f8e7  issues/issue-design-localize-20260527/evidence/nix-flake-check.log

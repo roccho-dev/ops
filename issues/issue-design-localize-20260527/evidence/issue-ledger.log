@@ -1,4 +1,4 @@
-ok - issue ledger records validate: 6 records
+ok - issue ledger records validate: 12 records
 ok - latest issue state uses recordedAt and supersedes, not file line order
 ok - recordType and status combinations are consistent
 ok - status-specific required and forbidden fields are enforced

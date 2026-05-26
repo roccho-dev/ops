@@ -1,2 +1,3 @@
+warning: Git tree '/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527' is dirty
 warning: The check omitted these incompatible systems: aarch64-linux
 Use '--all-systems' to check all.
