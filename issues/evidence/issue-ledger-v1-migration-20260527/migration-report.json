@@ -1,0 +1,66 @@
+{
+  "files": [
+    {
+      "afterSha256": "20527adbc2345f1dd9e702dd590c9afc011bd1f15e83dc54d907cef2389008e8",
+      "beforeSha256": "feb5b86416165a91330d94d8350080324a82d4090e114a54f8cf3836b9f0f8b1",
+      "legacyRecordsMigrated": 1,
+      "path": "issues/260519.jsonl",
+      "records": 1,
+      "v1RecordsPreserved": 0
+    },
+    {
+      "afterSha256": "105c00058689a5f0160ba7fc7564a435b7d06b352105e388fe785cf3ab02626d",
+      "beforeSha256": "3ba6ce9be6810e9ddf744ac737e89a9f7994360698e19cbc5275f4bc20c854a1",
+      "legacyRecordsMigrated": 7,
+      "path": "issues/260520.jsonl",
+      "records": 7,
+      "v1RecordsPreserved": 0
+    },
+    {
+      "afterSha256": "32e824cb8862bc98286c96f8b4cf6247139d301fca0913c9a2e322daa7cc53d8",
+      "beforeSha256": "79346bed563495c50e51c526d753a83fb7f2f7a45dd11395be193f68226b7ca2",
+      "legacyRecordsMigrated": 3,
+      "path": "issues/260522.jsonl",
+      "records": 3,
+      "v1RecordsPreserved": 0
+    },
+    {
+      "afterSha256": "7f017d8d0a0531e2eabb88d788066f3febbc8af0d23b1e55c4963ce90bf02672",
+      "beforeSha256": "aada80cfbb1210ab10ce4a9466b2e2645414b6be2790ea8e15a87a4b94ff6233",
+      "legacyRecordsMigrated": 16,
+      "path": "issues/260523-governance-md-migration.jsonl",
+      "records": 16,
+      "v1RecordsPreserved": 0
+    },
+    {
+      "afterSha256": "2154cf5aa083925460274b589a35cf01629adfa96c3f3854e47b54e97c41d947",
+      "beforeSha256": "2154cf5aa083925460274b589a35cf01629adfa96c3f3854e47b54e97c41d947",
+      "legacyRecordsMigrated": 0,
+      "path": "issues/260524.jsonl",
+      "records": 1,
+      "v1RecordsPreserved": 1
+    },
+    {
+      "afterSha256": "050bf38617785983c2cc512d03035f12a713eb1a8dd3ad757c964b4fca225a94",
+      "beforeSha256": "050bf38617785983c2cc512d03035f12a713eb1a8dd3ad757c964b4fca225a94",
+      "legacyRecordsMigrated": 0,
+      "path": "issues/260525.jsonl",
+      "records": 4,
+      "v1RecordsPreserved": 4
+    },
+    {
+      "afterSha256": "a795d780990cd419a4cb578c99cec58e2dc726931e325cd93faeb032d89a59ae",
+      "beforeSha256": "a795d780990cd419a4cb578c99cec58e2dc726931e325cd93faeb032d89a59ae",
+      "legacyRecordsMigrated": 0,
+      "path": "issues/260526.jsonl",
+      "records": 4,
+      "v1RecordsPreserved": 4
+    }
+  ],
+  "legacyRecordsMigrated": 27,
+  "migratedAt": "2026-05-27T06:00:01+09:00",
+  "migrationIssue": "ops.issue-ledger-v1-migration",
+  "repo": "ops",
+  "v1RecordsPreserved": 9,
+  "worktree": "/home/nixos/repos/ops/.worktrees/issue-ledger-v1-migration-20260527"
+}
