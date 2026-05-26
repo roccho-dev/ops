@@ -1,21 +1,20 @@
-# Ops issue-design localize-ready report
+# Ops issue-design impl-review packet
 
-createdAt: 2026-05-27T04:39:30+09:00
+createdAt: 2026-05-27T07:20:00+09:00
 
 ## Scope
 
 - repo: `/home/nixos/repos/ops`
 - base branch: `main`
+- base head: `4c903a0eea596d31665f78046614871071559cd2`
 - candidate branch: `codex/ops-issue-design-localize-20260527`
 - worktree: `/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527`
 - issue records: `issues/260527-issue-design-localize.jsonl`
 
 ## Purpose
 
-Localize the ops-side implementation proposal and proposed closed issue records
-from the two-thread discussion. These records split the operation work into
-local issue ledger design, gates, migration, Project Source proof, discussion
-FSM hardening, and deferred backend/archive choices.
+Submit the ops-side implementation proposal and proposed closed issue records
+for impl-review. This packet is not localize-ready evidence.
 
 ## Issue records opened
 
@@ -30,7 +29,7 @@ FSM hardening, and deferred backend/archive choices.
 
 The same issueIds have later `closed` records in
 `issues/260527-issue-design-localize.jsonl`. They are proposed latest states for
-review/localization, not canonical closure.
+review. They are not canonical closure.
 
 ## Source evidence
 
@@ -43,6 +42,8 @@ review/localization, not canonical closure.
 
 - This candidate opens ops-owned work only.
 - It does not close the already identified implementation issues by itself.
+- It requires impl-review before merge-review.
+- It is not ready for localizer action before impl-review-pass, merge-review-pass, post-merge-review preflight, and the required parent/localizer authorization.
 - It does not merge, push, clean up, or approve canonical closure.
 - Large raw Project evidence remains evidence input, not approval.
 
@@ -62,5 +63,5 @@ review/localization, not canonical closure.
 ## State
 
 ```text
-ready-for-localizer
+ready-for-impl-review
 ```

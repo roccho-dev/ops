@@ -1,5 +1,5 @@
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  issues/issue-design-localize-20260527/evidence/git-diff-check.log
-d7c452a62a1e51ef6d70e77748e8c72a38aab5d3ad38e51d2c6906fcd3a25cc9  issues/issue-design-localize-20260527/evidence/issue-ledger.log
-5b56916651c143078adc585928fe7712bd81c922ec4293a3bbf71cee00bfb86f  issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log
-5b56916651c143078adc585928fe7712bd81c922ec4293a3bbf71cee00bfb86f  issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log
-ddd20eb6410a35cf55cfba76f789c2fee127ee6d0142bc5232c1d2466803f8e7  issues/issue-design-localize-20260527/evidence/nix-flake-check.log
+4ff8d00245ba5293bdbd9535a1bc89cbf8aae2aec0086a5a8da6a1355ad8e7f1  issues/issue-design-localize-20260527/evidence/git-diff-check.log
+ec900138cbf4da6d952a71b5d8bfa4cb43aa8aa6fd626d0a67878c260b846b4b  issues/issue-design-localize-20260527/evidence/issue-ledger.log
+8811bb708779fc59be4b9266628b9905b2653e75f84c10536f33aa22801e889f  issues/issue-design-localize-20260527/evidence/nix-flake-check.log
+9406694c2fc0c34953b7aab4d6f466aae286f3ed4bd3f134a1834a4e72d11a84  issues/issue-design-localize-20260527/evidence/ops-cdp-core-check.log
+ccb7406d849bd7ce489ac710a3bf7b44bb4c7edeca524a87a097b59a7d9d79f8  issues/issue-design-localize-20260527/evidence/ops-thread-fsm-check.log

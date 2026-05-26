@@ -1,1 +1,5 @@
+command: nix build .#checks.x86_64-linux.ops-thread-fsm --no-link
+startedAt: 2026-05-26T22:22:05Z
 warning: Git tree '/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527' is dirty
+finishedAt: 2026-05-26T22:22:09Z
+exitStatus: 0

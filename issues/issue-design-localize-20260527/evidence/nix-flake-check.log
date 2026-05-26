@@ -1,3 +1,7 @@
+command: nix flake check --no-write-lock-file --quiet
+startedAt: 2026-05-26T22:22:09Z
 warning: Git tree '/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527' is dirty
 warning: The check omitted these incompatible systems: aarch64-linux
 Use '--all-systems' to check all.
+finishedAt: 2026-05-26T22:22:53Z
+exitStatus: 0

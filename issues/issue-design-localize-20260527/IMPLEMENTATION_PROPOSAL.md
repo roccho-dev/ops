@@ -6,7 +6,7 @@ createdAt: 2026-05-27T05:10:00+09:00
 
 - repo: `/home/nixos/repos/ops`
 - branch: `codex/ops-issue-design-localize-20260527`
-- base: `8d064517f4a827c6043e53c832152d3a696e204a`
+- base: `4c903a0eea596d31665f78046614871071559cd2`
 - issue records: `issues/260527-issue-design-localize.jsonl`
 
 ## What this proposal closes
