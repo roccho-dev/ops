@@ -1,0 +1,44 @@
+{
+  "kind": "ops-thread-fsm.discussionCheck.v1",
+  "classification": "discussion-no-objections-confirmed",
+  "stateKind": "discussion-no-objections-confirmed",
+  "nextStateKind": "discussion-no-objections-confirmed",
+  "discussionId": "issue-ledger-policy-design-20260526",
+  "proposalRevision": "v2",
+  "discussionComplete": true,
+  "missingCounterparties": [],
+  "objections": [],
+  "responses": [
+    {
+      "actorId": "issue-policy-review-A",
+      "proposalRevision": "v2",
+      "verdict": "NO_UNRESOLVED_OBJECTIONS",
+      "unresolvedObjections": []
+    },
+    {
+      "actorId": "issue-policy-review-B",
+      "proposalRevision": "v2",
+      "verdict": "NO_UNRESOLVED_OBJECTIONS",
+      "unresolvedObjections": []
+    }
+  ],
+  "evidence": [
+    "same-revision-no-objections:issue-policy-review-A,issue-policy-review-B"
+  ],
+  "retry": false,
+  "retryReason": null,
+  "permissions": {
+    "createWorktree": false,
+    "implement": false,
+    "returnArtifact": false,
+    "sendReview": false,
+    "readyForMergeReview": false,
+    "mergeReady": false,
+    "canonicalMerge": false,
+    "push": false,
+    "overwrite": false
+  },
+  "writes": false,
+  "sends": false,
+  "nextAction": "discussion converged for this revision; not implementation or merge approval"
+}

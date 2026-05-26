@@ -1,0 +1,106 @@
+{
+  "ok": true,
+  "reason": null,
+  "target": {
+    "id": "6F6D59A4DCFB006A6119ED20A277F6CF",
+    "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+    "title": "issue-policy - Issue Ledger Policy Review"
+  },
+  "before": {
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+    "title": "issue-policy - Issue Ledger Policy Review",
+    "readyState": "complete",
+    "prompt": {
+      "tag": "DIV",
+      "id": "prompt-textarea",
+      "aria": "Chat with ChatGPT",
+      "testid": "",
+      "role": "textbox",
+      "disabled": false,
+      "valueLen": 0,
+      "rect": {
+        "x": 328,
+        "y": 460.5,
+        "width": 219.84375,
+        "height": 40
+      },
+      "center": {
+        "x": 437.921875,
+        "y": 480.5
+      },
+      "contentEditable": true
+    },
+    "send": null,
+    "stop": null,
+    "ok": true
+  },
+  "project_url_check": {
+    "projectId": "6a14c47959e081918f5367643db37898",
+    "threadProjectId": "6a14c47959e081918f5367643db37898-issue-policy"
+  },
+  "dom_model_preflight": {
+    "found": false,
+    "model_text": "",
+    "model_aria": "",
+    "pro_model": true,
+    "extended_pro_model": true,
+    "extended_pro_text": "Extended Pro",
+    "profile_text": "",
+    "pro_plan_badge": false
+  },
+  "allow_generating": false,
+  "afterType": {
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+    "title": "issue-policy - Issue Ledger Policy Review",
+    "readyState": "complete",
+    "prompt": {
+      "tag": "DIV",
+      "id": "prompt-textarea",
+      "aria": "Chat with ChatGPT",
+      "testid": "",
+      "role": "textbox",
+      "disabled": false,
+      "valueLen": 737,
+      "rect": {
+        "x": 295.94525146484375,
+        "y": 102.53939819335938,
+        "width": 463,
+        "height": 544
+      },
+      "center": {
+        "x": 527.4452514648438,
+        "y": 374.5393981933594
+      },
+      "contentEditable": true
+    },
+    "send": {
+      "tag": "BUTTON",
+      "id": "composer-submit-button",
+      "aria": "Send prompt",
+      "testid": "send-button",
+      "role": "",
+      "disabled": false,
+      "valueLen": 0,
+      "rect": {
+        "x": 743,
+        "y": 455.15802001953125,
+        "width": 36,
+        "height": 36
+      },
+      "center": {
+        "x": 761,
+        "y": 473.15802001953125
+      },
+      "contentEditable": false
+    },
+    "stop": null,
+    "ok": true
+  },
+  "send": {
+    "how": "click_send"
+  },
+  "after": {
+    "ok": true,
+    "len": 0
+  }
+}

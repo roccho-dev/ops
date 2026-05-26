@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+  "target": {
+    "id": "E913552D2F9A1F591D82D507F58B2FD0",
+    "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+    "title": ""
+  },
+  "file": {
+    "path": "/home/nixos/repos/ops/issues/evidence/issue-ledger-policy-design-discussion-20260526/THREAD_A_REPLY_V1.md",
+    "name": "THREAD_A_REPLY_V1.md"
+  },
+  "upload": {
+    "ok": true,
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+    "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nheal-ourselves\nwebmcp-a2ui\nissue-policy\nui-agent-base\nevolve-ourselves\nMore\nRecents\nAI派遣業務代行調査\nチケット管理UI統一\nLLM Progress and Challenges\nChatGPT活用法ガイド\nPackage Architecture Map\nHermesの技術的優位\ndify plugin API 変数\nResponses API活用方法\nCodexの圧縮技術\nGit gistとrepo質問\n技術用語の整理\nCodex version up失敗\nNix Cache構築相談\nブラウザランタイム質問\n無理した設計\nnpm quickjs-ng確認\nSkill作成可能性検討\nCaddy 再配信設定\nAI利用の未来\nCodex Windowsアップデート\nAIとサイバーセキュリティ\nlevelsio SQLite 使用方法\nDify境界値テスト\nsakimoriプロキシの説明\nCLIコマンドの読み込み\nKimi WebBridgeとAI操作\npip astgrep 使用问题\nWebMCPで作成可能か\nTetsuya Takasawa\nPro\nShare\nissue-policy\n\nExtended Pro\nChats\nSources\nNewest\nAll\nAdd sources\nTHREAD_A_REPLY_V1.md\nFile",
+    "waited_ms": 1576
+  }
+}

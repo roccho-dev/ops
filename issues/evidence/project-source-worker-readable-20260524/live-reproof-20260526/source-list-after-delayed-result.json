@@ -1,0 +1,76 @@
+{
+  "command": "project-source-list",
+  "completionApproval": false,
+  "createdAt": "2026-05-25T20:44:06.478464Z",
+  "dryRun": false,
+  "finishedAt": "2026-05-25T20:45:09.992367Z",
+  "inventoryParsed": false,
+  "kind": "ops.projectTransportResult.v1",
+  "listCommand": {
+    "argv": [
+      "chromium-cdp-project-source-list",
+      "--projectUrl",
+      "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+      "--outPath",
+      "/home/nixos/repos/ops/project-source-list.json",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "9222",
+      "--timeoutMs",
+      "180000"
+    ],
+    "json": {
+      "count": 0,
+      "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+      "ok": true,
+      "parserStatus": "empty-or-no-visible-source-hints",
+      "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+      "sources": [],
+      "sourcesUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+      "target": {
+        "id": "5050680EBFF3D304E6DE0431075793F7",
+        "title": "ChatGPT - test",
+        "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+      },
+      "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nheal-ourselves\ntest\nx-plus\nwebmcp-a2ui\nui-agent-base\nMore\nRecents\nAI\u6d3e\u9063\u696d\u52d9\u4ee3\u884c\u8abf\u67fb\n\u30c1\u30b1\u30c3\u30c8\u7ba1\u7406UI\u7d71\u4e00\nLLM Progress and Challenges\nChatGPT\u6d3b\u7528\u6cd5\u30ac\u30a4\u30c9\nPackage Architecture Map\nHermes\u306e\u6280\u8853\u7684\u512a\u4f4d\ndify plugin API \u5909\u6570\nResponses API\u6d3b\u7528\u65b9\u6cd5\nCodex\u306e\u5727\u7e2e\u6280\u8853\nGit gist\u3068repo\u8cea\u554f\n\u6280\u8853\u7528\u8a9e\u306e\u6574\u7406\nCodex version up\u5931\u6557\nNix Cache\u69cb\u7bc9\u76f8\u8ac7\n\u30d6\u30e9\u30a6\u30b6\u30e9\u30f3\u30bf\u30a4\u30e0\u8cea\u554f\n\u7121\u7406\u3057\u305f\u8a2d\u8a08\nnpm quickjs-ng\u78ba\u8a8d\nSkill\u4f5c\u6210\u53ef\u80fd\u6027\u691c\u8a0e\nCaddy \u518d\u914d\u4fe1\u8a2d\u5b9a\nAI\u5229\u7528\u306e\u672a\u6765\nCodex Windows\u30a2\u30c3\u30d7\u30c7\u30fc\u30c8\nAI\u3068\u30b5\u30a4\u30d0\u30fc\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\nlevelsio SQLite \u4f7f\u7528\u65b9\u6cd5\nDify\u5883\u754c\u5024\u30c6\u30b9\u30c8\nsakimori\u30d7\u30ed\u30ad\u30b7\u306e\u8aac\u660e\nCLI\u30b3\u30de\u30f3\u30c9\u306e\u8aad\u307f\u8fbc\u307f\nKimi WebBridge\u3068AI\u64cd\u4f5c\npip astgrep \u4f7f\u7528\u95ee\u9898\nWebMCP\u3067\u4f5c\u6210\u53ef\u80fd\u304b\nTetsuya Takasawa\nPro\nShare\ntest\n\nExtended Pro\nChats\nSources\nMARK_NOT_FOUND\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present\nMay 26\nFile Readback Request\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260525T193414JST.txt. Reply with exactly the READBACK_MARK value from that file if present, o\nMay 25\nFile Token Request\nTransport-only Project Source readback proof using auto text upload. Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that fi\nMay 25\nFile Token Request\nTransport-only Project Source readback proof after tool handling fixes. Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that\nMay 25",
+      "title": "ChatGPT - test",
+      "unparsedVisibleSourceCount": 0,
+      "unparsedVisibleSourceHints": []
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "{\n  \"ok\": true,\n  \"projectUrl\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n  \"sourcesUrl\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources\",\n  \"target\": {\n    \"id\": \"5050680EBFF3D304E6DE0431075793F7\",\n    \"url\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n    \"title\": \"ChatGPT - test\"\n  },\n  \"href\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n  \"title\": \"ChatGPT - test\",\n  \"count\": 0,\n  \"sources\": [],\n  \"parserStatus\": \"empty-or-no-visible-source-hints\",\n  \"unparsedVisibleSourceCount\": 0,\n  \"unparsedVisibleSourceHints\": [],\n  \"textTail\": \"Chat history\\nChatGPT\\nNew chat\\nSearch chats\\nLibrary\\nApps\\nCodex\\nMore\\nGPTs\\nTo-Do List\\nSoftware Architect GPT\\nAskYourPDF Research Assistant\\nExplore GPTs\\nProjects\\nNew project\\nheal-ourselves\\ntest\\nx-plus\\nwebmcp-a2ui\\nui-agent-base\\nMore\\nRecents\\nAI\u6d3e\u9063\u696d\u52d9\u4ee3\u884c\u8abf\u67fb\\n\u30c1\u30b1\u30c3\u30c8\u7ba1\u7406UI\u7d71\u4e00\\nLLM Progress and Challenges\\nChatGPT\u6d3b\u7528\u6cd5\u30ac\u30a4\u30c9\\nPackage Architecture Map\\nHermes\u306e\u6280\u8853\u7684\u512a\u4f4d\\ndify plugin API \u5909\u6570\\nResponses API\u6d3b\u7528\u65b9\u6cd5\\nCodex\u306e\u5727\u7e2e\u6280\u8853\\nGit gist\u3068repo\u8cea\u554f\\n\u6280\u8853\u7528\u8a9e\u306e\u6574\u7406\\nCodex version up\u5931\u6557\\nNix Cache\u69cb\u7bc9\u76f8\u8ac7\\n\u30d6\u30e9\u30a6\u30b6\u30e9\u30f3\u30bf\u30a4\u30e0\u8cea\u554f\\n\u7121\u7406\u3057\u305f\u8a2d\u8a08\\nnpm quickjs-ng\u78ba\u8a8d\\nSkill\u4f5c\u6210\u53ef\u80fd\u6027\u691c\u8a0e\\nCaddy \u518d\u914d\u4fe1\u8a2d\u5b9a\\nAI\u5229\u7528\u306e\u672a\u6765\\nCodex Windows\u30a2\u30c3\u30d7\u30c7\u30fc\u30c8\\nAI\u3068\u30b5\u30a4\u30d0\u30fc\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\\nlevelsio SQLite \u4f7f\u7528\u65b9\u6cd5\\nDify\u5883\u754c\u5024\u30c6\u30b9\u30c8\\nsakimori\u30d7\u30ed\u30ad\u30b7\u306e\u8aac\u660e\\nCLI\u30b3\u30de\u30f3\u30c9\u306e\u8aad\u307f\u8fbc\u307f\\nKimi WebBridge\u3068AI\u64cd\u4f5c\\npip astgrep \u4f7f\u7528\u95ee\u9898\\nWebMCP\u3067\u4f5c\u6210\u53ef\u80fd\u304b\\nTetsuya Takasawa\\nPro\\nShare\\ntest\\n\\nExtended Pro\\nChats\\nSources\\nMARK_NOT_FOUND\\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present\\nMay 26\\nFile Readback Request\\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260525T193414JST.txt. Reply with exactly the READBACK_MARK value from that file if present, o\\nMay 25\\nFile Token Request\\nTransport-only Project Source readback proof using auto text upload. Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that fi\\nMay 25\\nFile Token Request\\nTransport-only Project Source readback proof after tool handling fixes. Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that\\nMay 25\"\n}\n"
+  },
+  "listLog": "/home/nixos/repos/ops/project-source-list.json",
+  "ok": true,
+  "projectSourceOnly": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "readbackVerified": false,
+  "routeDecision": false,
+  "semanticApproval": false,
+  "sourceCount": 0,
+  "sourceList": {
+    "count": 0,
+    "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+    "ok": true,
+    "parserStatus": "empty-or-no-visible-source-hints",
+    "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+    "sources": [],
+    "sourcesUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+    "target": {
+      "id": "5050680EBFF3D304E6DE0431075793F7",
+      "title": "ChatGPT - test",
+      "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+    },
+    "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nheal-ourselves\ntest\nx-plus\nwebmcp-a2ui\nui-agent-base\nMore\nRecents\nAI\u6d3e\u9063\u696d\u52d9\u4ee3\u884c\u8abf\u67fb\n\u30c1\u30b1\u30c3\u30c8\u7ba1\u7406UI\u7d71\u4e00\nLLM Progress and Challenges\nChatGPT\u6d3b\u7528\u6cd5\u30ac\u30a4\u30c9\nPackage Architecture Map\nHermes\u306e\u6280\u8853\u7684\u512a\u4f4d\ndify plugin API \u5909\u6570\nResponses API\u6d3b\u7528\u65b9\u6cd5\nCodex\u306e\u5727\u7e2e\u6280\u8853\nGit gist\u3068repo\u8cea\u554f\n\u6280\u8853\u7528\u8a9e\u306e\u6574\u7406\nCodex version up\u5931\u6557\nNix Cache\u69cb\u7bc9\u76f8\u8ac7\n\u30d6\u30e9\u30a6\u30b6\u30e9\u30f3\u30bf\u30a4\u30e0\u8cea\u554f\n\u7121\u7406\u3057\u305f\u8a2d\u8a08\nnpm quickjs-ng\u78ba\u8a8d\nSkill\u4f5c\u6210\u53ef\u80fd\u6027\u691c\u8a0e\nCaddy \u518d\u914d\u4fe1\u8a2d\u5b9a\nAI\u5229\u7528\u306e\u672a\u6765\nCodex Windows\u30a2\u30c3\u30d7\u30c7\u30fc\u30c8\nAI\u3068\u30b5\u30a4\u30d0\u30fc\u30bb\u30ad\u30e5\u30ea\u30c6\u30a3\nlevelsio SQLite \u4f7f\u7528\u65b9\u6cd5\nDify\u5883\u754c\u5024\u30c6\u30b9\u30c8\nsakimori\u30d7\u30ed\u30ad\u30b7\u306e\u8aac\u660e\nCLI\u30b3\u30de\u30f3\u30c9\u306e\u8aad\u307f\u8fbc\u307f\nKimi WebBridge\u3068AI\u64cd\u4f5c\npip astgrep \u4f7f\u7528\u95ee\u9898\nWebMCP\u3067\u4f5c\u6210\u53ef\u80fd\u304b\nTetsuya Takasawa\nPro\nShare\ntest\n\nExtended Pro\nChats\nSources\nMARK_NOT_FOUND\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present\nMay 26\nFile Readback Request\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260525T193414JST.txt. Reply with exactly the READBACK_MARK value from that file if present, o\nMay 25\nFile Token Request\nTransport-only Project Source readback proof using auto text upload. Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that fi\nMay 25\nFile Token Request\nTransport-only Project Source readback proof after tool handling fixes. Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that\nMay 25",
+    "title": "ChatGPT - test",
+    "unparsedVisibleSourceCount": 0,
+    "unparsedVisibleSourceHints": []
+  },
+  "sourceListReliability": "source-list-empty",
+  "sourceListUnreliable": false,
+  "status": "source-list-empty",
+  "transportRead": true,
+  "unparsedVisibleSourceCount": 0
+}

@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+  "target": {
+    "id": "E157352FC5C324DC0DF438E7D03394BF",
+    "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+    "title": "ChatGPT - issue-policy"
+  },
+  "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+  "title": "ChatGPT - issue-policy",
+  "count": 3,
+  "sources": [
+    {
+      "index": 0,
+      "title": "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+      "kindLine": "File · May 26, 2026",
+      "lines": [
+        "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+        "File · May 26, 2026"
+      ],
+      "sourceActions": {
+        "x": 759.5,
+        "y": 388,
+        "width": 42,
+        "height": 42
+      }
+    },
+    {
+      "index": 1,
+      "title": "THREAD_A_REPLY_V1.md",
+      "kindLine": "File · May 26, 2026",
+      "lines": [
+        "THREAD_A_REPLY_V1.md",
+        "File · May 26, 2026"
+      ],
+      "sourceActions": {
+        "x": 759.5,
+        "y": 453,
+        "width": 42,
+        "height": 42
+      }
+    },
+    {
+      "index": 2,
+      "title": "THREAD_B_REPLY_V1.md",
+      "kindLine": "File · May 26, 2026",
+      "lines": [
+        "THREAD_B_REPLY_V1.md",
+        "File · May 26, 2026"
+      ],
+      "sourceActions": {
+        "x": 759.5,
+        "y": 518,
+        "width": 42,
+        "height": 42
+      }
+    }
+  ],
+  "parserStatus": "parsed-source-actions",
+  "unparsedVisibleSourceCount": 0,
+  "unparsedVisibleSourceHints": [],
+  "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nissue-policy\nheal-ourselves\nevolve-ourselves\nshopping\nwebmcp-a2ui\nMore\nRecents\nQuickJS-NGとBoa比較\nAeyeScan DAST 実施概要\nAI派遣業務代行調査\nチケット管理UI統一\nLLM Progress and Challenges\nChatGPT活用法ガイド\nPackage Architecture Map\nHermesの技術的優位\ndify plugin API 変数\nResponses API活用方法\nCodexの圧縮技術\nGit gistとrepo質問\n技術用語の整理\nCodex version up失敗\nNix Cache構築相談\nブラウザランタイム質問\n無理した設計\nnpm quickjs-ng確認\nSkill作成可能性検討\nCaddy 再配信設定\nAI利用の未来\nCodex Windowsアップデート\nAIとサイバーセキュリティ\nlevelsio SQLite 使用方法\nDify境界値テスト\nsakimoriプロキシの説明\nCLIコマンドの読み込み\nKimi WebBridgeとAI操作\nTetsuya Takasawa\nPro\nShare\nissue-policy\n\nExtended Pro\nChats\nSources\nNewest\nAll\nAdd sources\nISSUE_LEDGER_POLICY_DISCUSSION_V2.md\nFile · May 26, 2026\nTHREAD_A_REPLY_V1.md\nFile · May 26, 2026\nTHREAD_B_REPLY_V1.md\nFile · May 26, 2026\nFile already exists\n\nA file with the name ISSUE_LEDGER_POLICY_DISCUSSION_V2.md already exists.\n\nUpload anyway\nCancel"
+}

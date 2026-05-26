@@ -1,0 +1,27 @@
+{
+  "ts_utc": "2026-05-26T09:26:57.243Z",
+  "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+  "projectUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+  "project_url_check": {
+    "projectId": "6a14c47959e081918f5367643db37898",
+    "threadProjectId": "6a14c47959e081918f5367643db37898-issue-policy"
+  },
+  "target": {
+    "id": "6F6D59A4DCFB006A6119ED20A277F6CF",
+    "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+    "title": "issue-policy - Issue Ledger Policy Review"
+  },
+  "dom_model": {
+    "found": false,
+    "model_text": "",
+    "model_aria": "",
+    "pro_model": true,
+    "extended_pro_model": true,
+    "extended_pro_text": "Extended Pro",
+    "profile_text": "",
+    "pro_plan_badge": false
+  },
+  "require_dom_pro": false,
+  "allow_generating": false,
+  "text_len": 718
+}

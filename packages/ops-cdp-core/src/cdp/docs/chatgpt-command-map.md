@@ -133,9 +133,9 @@
 | worker branch を順にmergeする | host git | `chromium-cdp-worker-merge-queue` | host repo 正本へ統合 |
 | 2worker運用の計画を作る | host git | `chromium-cdp-host-git-two-worker-smoke` | prompt とplan生成 |
 | transport runtime を確認する | transport-only | `project-transport-doctor` | CDP / low-level command / wrapper command の存在確認。意味判断しない |
-| CDP port を調べる | transport-only | `project-transport-env` | 9222/9223/9224 などを probe する |
+| CDP port を調べる | transport-only | `project-transport-env` | 9222/9223/9224 などを probe する。`project-route-not-verified` は probe 結果であり、同一 run の upload/thread/delayed assistant readback 成功を上書きしない |
 | Project Source に置いて見えることを確認する | transport-only | `project-source-put` | auto で text/file 経路を分ける。visible-only は worker-readable 証明ではない |
-| Project Source の一覧を確認する | transport-only | `project-source-list` | inventory parse。`count:0` と visible hints が矛盾したら `source-list-unreliable` |
+| Project Source の一覧を確認する | transport-only | `project-source-list` | inventory parse。`count:0` と visible hints が矛盾したら `source-list-unreliable`。`source-list-empty` も worker-readable 不在の証明ではない |
 | Project Source から1件削除する | transport-only | `project-source-delete` | exact title、reason、`--allow-remove`、before/after inventory 必須。内容承認しない |
 | Project thread を作る | transport-only | `project-thread-create` | short pointer/control text だけを送る |
 | 既存 Project thread に送る | transport-only | `project-thread-send` | inline 長文を拒否する |

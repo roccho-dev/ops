@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+  "target": {
+    "id": "45F129354D1801C2FC3B5E485DE2D1BA",
+    "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+    "title": "ChatGPT - test"
+  },
+  "file": {
+    "path": "/home/nixos/repos/ops/issues/evidence/project-source-worker-readable-20260524/live-reproof-20260526/source/handoff-source-readback-20260526-live-reproof.txt",
+    "name": "handoff-source-readback-20260526-live-reproof.txt"
+  },
+  "upload": {
+    "ok": true,
+    "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+    "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nheal-ourselves\nx-plus\nwebmcp-a2ui\nui-agent-base\nrepo-govern\ntest\nMore\nRecents\nAI派遣業務代行調査\nチケット管理UI統一\nLLM Progress and Challenges\nChatGPT活用法ガイド\nPackage Architecture Map\nHermesの技術的優位\ndify plugin API 変数\nResponses API活用方法\nCodexの圧縮技術\nGit gistとrepo質問\n技術用語の整理\nCodex version up失敗\nNix Cache構築相談\nブラウザランタイム質問\n無理した設計\nnpm quickjs-ng確認\nSkill作成可能性検討\nCaddy 再配信設定\nAI利用の未来\nCodex Windowsアップデート\nAIとサイバーセキュリティ\nlevelsio SQLite 使用方法\nDify境界値テスト\nsakimoriプロキシの説明\nCLIコマンドの読み込み\nKimi WebBridgeとAI操作\npip astgrep 使用问题\nWebMCPで作成可能か\nTetsuya Takasawa\nPro\nShare\ntest\n\nExtended Pro\nhandoff-source-readback-20260526-live-reproof.txt\nDocument\nChats\nSources\nFile Readback Request\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260525T193414JST.txt. Reply with exactly the READBACK_MARK value from that file if present, o\nMay 25\nFile Token Request\nTransport-only Project Source readback proof using auto text upload. Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that fi\nMay 25\nFile Token Request\nTransport-only Project Source readback proof after tool handling fixes. Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that\nMay 25",
+    "waited_ms": 123
+  }
+}

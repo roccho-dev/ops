@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+  "target": {
+    "id": "BBC763654171227B1C488D2302FC3E78",
+    "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+    "title": "ChatGPT - issue-policy"
+  },
+  "file": {
+    "path": "/home/nixos/repos/ops/issues/evidence/issue-ledger-policy-design-discussion-20260526/THREAD_B_PEER_REVIEW_V1.md",
+    "name": "THREAD_B_PEER_REVIEW_V1.md"
+  },
+  "upload": {
+    "ok": true,
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+    "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nevolve-ourselves\nshopping\nheal-ourselves\nwebmcp-a2ui\nissue-policy\nMore\nRecents\nQuickJS-NGとBoa比較\nAeyeScan DAST 実施概要\nAI派遣業務代行調査\nチケット管理UI統一\nLLM Progress and Challenges\nChatGPT活用法ガイド\nPackage Architecture Map\nHermesの技術的優位\ndify plugin API 変数\nResponses API活用方法\nCodexの圧縮技術\nGit gistとrepo質問\n技術用語の整理\nCodex version up失敗\nNix Cache構築相談\nブラウザランタイム質問\n無理した設計\nnpm quickjs-ng確認\nSkill作成可能性検討\nCaddy 再配信設定\nAI利用の未来\nCodex Windowsアップデート\nAIとサイバーセキュリティ\nlevelsio SQLite 使用方法\nDify境界値テスト\nsakimoriプロキシの説明\nCLIコマンドの読み込み\nKimi WebBridgeとAI操作\nTetsuya Takasawa\nPro\nShare\nissue-policy\n\nExtended Pro\nISSUE_LEDGER_POLICY_DISCUSSION_V2.md\nFile\nTHREAD_A_PEER_REVIEW_V1.md\nFile\nTHREAD_B_PEER_REVIEW_V1.md\nFile\nChats\nSources\nIssue Ledger Policy Review\nrole.chatgpt.thread: impl-review actorId: issue-policy-review-B discussionId: issue-ledger-policy-design-20260526 proposalRevision: v1-peer Read Project Source file THREAD_A_REPLY_V1.md, then compare\nMay 26\nPolicy Review Discussion\nrole.chatgpt.thread: impl-review actorId: issue-policy-review-A discussionId: issue-ledger-policy-design-20260526 proposalRevision: v1-peer Read Project Source file THREAD_B_REPLY_V1.md, then compare\nMay 26",
+    "waited_ms": 163
+  }
+}

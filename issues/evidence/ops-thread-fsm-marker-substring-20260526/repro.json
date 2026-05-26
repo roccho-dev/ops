@@ -1,0 +1,60 @@
+{
+  "kind": "ops.issueEvidence.v1",
+  "issueId": "ops.thread-fsm-marker-substring",
+  "createdAt": "2026-05-26T05:53:47+09:00",
+  "command": "nix shell nixpkgs#python3 --command env PYTHONPATH=/home/nixos/repos/ops/packages/ops-thread-fsm/lib python3 -",
+  "input": {
+    "discussionId": "proof",
+    "proposalRevision": "r1",
+    "versionedProposalRef": "ProjectSource:proposal-r1.md",
+    "policySnapshotRef": "policy-snapshot",
+    "purposeLineage": {
+      "purpose": "p3",
+      "metaPurpose": "p2",
+      "metaMetaPurpose": "p1",
+      "metaMetaMetaPurpose": "p0"
+    },
+    "reviewQualityChecks": [
+      "same revision"
+    ],
+    "threads": [
+      {
+        "actorId": "A"
+      },
+      {
+        "actorId": "B"
+      }
+    ],
+    "responses": [
+      {
+        "actorId": "A",
+        "proposalRevision": "r1",
+        "assistantText": "NO_UNRESOLVED_OBJECTIONS"
+      },
+      {
+        "actorId": "B",
+        "proposalRevision": "r1",
+        "assistantText": "NO_UNRESOLVED_OBJECTIONS"
+      }
+    ]
+  },
+  "observed": {
+    "classification": "facilitation-revision-update-required",
+    "objections": [
+      {
+        "actorId": "A",
+        "proposalRevision": "r1",
+        "objectionText": "objection marker matched"
+      },
+      {
+        "actorId": "B",
+        "proposalRevision": "r1",
+        "objectionText": "objection marker matched"
+      }
+    ]
+  },
+  "expected": {
+    "classification": "facilitation-no-objections-confirmed"
+  },
+  "diagnosis": "NO_UNRESOLVED_OBJECTIONS contains UNRESOLVED_OBJECTIONS as a substring, so marker fallback treats an acceptance marker as an objection marker."
+}

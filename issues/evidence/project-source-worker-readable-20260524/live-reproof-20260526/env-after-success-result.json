@@ -1,0 +1,99 @@
+{
+  "addr": "127.0.0.1",
+  "command": "project-transport-env",
+  "completionApproval": false,
+  "createdAt": "2026-05-25T20:44:06.640507Z",
+  "dryRun": false,
+  "finishedAt": "2026-05-25T20:44:09.283366Z",
+  "kind": "ops.projectTransportResult.v1",
+  "ok": false,
+  "probes": [
+    {
+      "addr": "127.0.0.1",
+      "port": 9222,
+      "tcpConnect": true
+    }
+  ],
+  "projectAccessProbes": [
+    {
+      "addr": "127.0.0.1",
+      "command": {
+        "argv": [
+          "chromium-cdp-project-access-probe",
+          "--projectUrl",
+          "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+          "--addr",
+          "127.0.0.1",
+          "--port",
+          "9222",
+          "--timeoutMs",
+          "180000",
+          "--json"
+        ],
+        "json": {
+          "addr": "127.0.0.1",
+          "kind": "ops.projectAccessProbe.v1",
+          "ok": false,
+          "page": {
+            "bodySample": "Chat history ChatGPT New chat Search chats Library Apps Codex More Tetsuya Takasawa Pro",
+            "denied": false,
+            "hasProjectHref": true,
+            "hasProjectShell": false,
+            "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+            "loginActions": [],
+            "loginUrl": false,
+            "readyState": "complete",
+            "title": "ChatGPT"
+          },
+          "port": 9222,
+          "projectId": "6a142414377481919abd28fd961296d2",
+          "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+          "reason": "TARGET_PROJECT_SHELL_NOT_VISIBLE",
+          "status": "project-access-shell-missing",
+          "target": {
+            "id": "5050680EBFF3D304E6DE0431075793F7",
+            "title": "ChatGPT",
+            "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+          }
+        },
+        "returncode": 1,
+        "stderr": "",
+        "stdout": "{\n  \"kind\": \"ops.projectAccessProbe.v1\",\n  \"ok\": false,\n  \"status\": \"project-access-shell-missing\",\n  \"reason\": \"TARGET_PROJECT_SHELL_NOT_VISIBLE\",\n  \"projectUrl\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n  \"projectId\": \"6a142414377481919abd28fd961296d2\",\n  \"addr\": \"127.0.0.1\",\n  \"port\": 9222,\n  \"target\": {\n    \"id\": \"5050680EBFF3D304E6DE0431075793F7\",\n    \"url\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n    \"title\": \"ChatGPT\"\n  },\n  \"page\": {\n    \"href\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project\",\n    \"title\": \"ChatGPT\",\n    \"readyState\": \"complete\",\n    \"hasProjectHref\": true,\n    \"hasProjectShell\": false,\n    \"denied\": false,\n    \"loginUrl\": false,\n    \"loginActions\": [],\n    \"bodySample\": \"Chat history ChatGPT New chat Search chats Library Apps Codex More Tetsuya Takasawa Pro\"\n  }\n}\n"
+      },
+      "ok": false,
+      "port": 9222,
+      "projectAccess": {
+        "addr": "127.0.0.1",
+        "kind": "ops.projectAccessProbe.v1",
+        "ok": false,
+        "page": {
+          "bodySample": "Chat history ChatGPT New chat Search chats Library Apps Codex More Tetsuya Takasawa Pro",
+          "denied": false,
+          "hasProjectHref": true,
+          "hasProjectShell": false,
+          "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+          "loginActions": [],
+          "loginUrl": false,
+          "readyState": "complete",
+          "title": "ChatGPT"
+        },
+        "port": 9222,
+        "projectId": "6a142414377481919abd28fd961296d2",
+        "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+        "reason": "TARGET_PROJECT_SHELL_NOT_VISIBLE",
+        "status": "project-access-shell-missing",
+        "target": {
+          "id": "5050680EBFF3D304E6DE0431075793F7",
+          "title": "ChatGPT",
+          "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+        }
+      }
+    }
+  ],
+  "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "recommendedRoute": null,
+  "routeDecision": false,
+  "selectedPort": 9222,
+  "semanticApproval": false,
+  "status": "project-route-not-verified"
+}

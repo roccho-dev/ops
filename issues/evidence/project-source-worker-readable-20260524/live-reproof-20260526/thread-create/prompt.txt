@@ -1,0 +1,1 @@
+Transport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present. If the file or value is not visible to you, reply MARK_NOT_FOUND. This is not a secret token request.

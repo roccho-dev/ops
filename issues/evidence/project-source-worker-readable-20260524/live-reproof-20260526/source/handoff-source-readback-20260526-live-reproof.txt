@@ -1,0 +1,3 @@
+READBACK_MARK=READBACK_MARK_20260526_LIVE_REPROOF_A
+PURPOSE=live proof for currently blocked project-source-worker-readable-upload issue
+CREATED_AT=2026-05-26T00:00:00+09:00

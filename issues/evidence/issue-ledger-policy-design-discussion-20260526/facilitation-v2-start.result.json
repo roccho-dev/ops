@@ -1,0 +1,42 @@
+{
+  "kind": "ops-thread-fsm.discussionFacilitation.v1",
+  "discussionId": "issue-ledger-policy-design-20260526",
+  "proposalRevision": "v2",
+  "requiredCounterparties": [
+    "issue-policy-review-A",
+    "issue-policy-review-B"
+  ],
+  "versionedProposalRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+  "policySnapshotRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V1.md",
+  "projectSourceRequired": true,
+  "writes": false,
+  "sends": false,
+  "transportPackage": "ops-cdp-core",
+  "fsmPackage": "ops-thread-fsm",
+  "classification": "facilitation-round-send-required",
+  "discussionComplete": false,
+  "missingCounterparties": [
+    "issue-policy-review-A",
+    "issue-policy-review-B"
+  ],
+  "threadControls": [
+    {
+      "actorId": "issue-policy-review-A",
+      "threadUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c789-f6a0-83a2-9a8b-a8aacb99d7d5",
+      "threadFunction": "impl-review",
+      "sendVia": "ops-cdp-core:project-thread-send",
+      "inlinePolicy": "pointer-only",
+      "controlText": "role.chatgpt.thread: impl-review\n\nRead the Project Source entrypoint: ISSUE_LEDGER_POLICY_DISCUSSION_V2.md\nThis is direct cross-discussion. Read peer replies directly, not facilitator synthesis.\nIf objections remain, return UNRESOLVED_OBJECTIONS with structured objections.\nIf no objections remain for proposalRevision v2, return NO_UNRESOLVED_OBJECTIONS."
+    },
+    {
+      "actorId": "issue-policy-review-B",
+      "threadUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+      "threadFunction": "impl-review",
+      "sendVia": "ops-cdp-core:project-thread-send",
+      "inlinePolicy": "pointer-only",
+      "controlText": "role.chatgpt.thread: impl-review\n\nRead the Project Source entrypoint: ISSUE_LEDGER_POLICY_DISCUSSION_V2.md\nThis is direct cross-discussion. Read peer replies directly, not facilitator synthesis.\nIf objections remain, return UNRESOLVED_OBJECTIONS with structured objections.\nIf no objections remain for proposalRevision v2, return NO_UNRESOLVED_OBJECTIONS."
+    }
+  ],
+  "readbackPolicy": "wait >=300s before semantic readback",
+  "nextAction": "upload/update Project Source if needed, send pointer-only controls, wait >=300s, then import assistant replies and re-run"
+}

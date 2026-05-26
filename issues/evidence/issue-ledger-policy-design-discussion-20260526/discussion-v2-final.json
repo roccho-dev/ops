@@ -1,0 +1,53 @@
+{
+  "discussionId": "issue-ledger-policy-design-20260526",
+  "proposalRevision": "v2",
+  "projectSourceEntrypoint": "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+  "versionedProposalRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+  "policySnapshotRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V1.md",
+  "purposeLineage": {
+    "3": "Discuss whether policy issue-ledger rules and real repo issue designs are misaligned, starting from agenda enumeration.",
+    "2": "Keep repo work queues usable for local workers, review, merge, and recovery without creating misleading gates or unbounded repo bloat.",
+    "1": "Keep ChatGPT/Codex/local repos operating under durable actor workflow with evidence, append-only claims, and clean handoff.",
+    "0": "Make local repo development recoverable, verifiable, and mergeable."
+  },
+  "reviewQualityChecks": [
+    "handback and rework reduction",
+    "unreviewed merge prevention",
+    "handoff clarity",
+    "evidence reuse",
+    "KISS",
+    "DRY",
+    "SOLID",
+    "YAGNI"
+  ],
+  "noObjectionsRequiredFrom": [
+    "issue-policy-review-A",
+    "issue-policy-review-B"
+  ],
+  "threads": [
+    {
+      "actorId": "issue-policy-review-A",
+      "threadUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c789-f6a0-83a2-9a8b-a8aacb99d7d5",
+      "threadFunction": "impl-review"
+    },
+    {
+      "actorId": "issue-policy-review-B",
+      "threadUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+      "threadFunction": "impl-review"
+    }
+  ],
+  "responses": [
+    {
+      "actorId": "issue-policy-review-A",
+      "proposalRevision": "v2",
+      "verdict": "NO_UNRESOLVED_OBJECTIONS",
+      "unresolvedObjections": []
+    },
+    {
+      "actorId": "issue-policy-review-B",
+      "proposalRevision": "v2",
+      "verdict": "NO_UNRESOLVED_OBJECTIONS",
+      "unresolvedObjections": []
+    }
+  ]
+}

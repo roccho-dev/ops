@@ -20,6 +20,10 @@ DECISION_FLAGS = {
     "routeDecision": False,
 }
 
+WORKER_READBACK_AUTHORITY = "delayed-assistant-readback"
+ROUTE_PROBE_AUTHORITY = "advisory-target-project-probe"
+SOURCE_LIST_AUTHORITY = "advisory-project-source-inventory-probe"
+
 THREAD_FUNCTIONS = {"impl-work", "impl-review", "merge-work", "merge-review"}
 
 TEXT_SOURCE_SUFFIXES = {
@@ -122,6 +126,43 @@ def common_result(command: str, args: argparse.Namespace) -> dict[str, Any]:
         "createdAt": now_iso(),
         "dryRun": bool(getattr(args, "dry_run", False)),
         **DECISION_FLAGS,
+    }
+
+
+def classify_transport_proof_steps(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    source_put_ok = any(step.get("command") == "project-source-put" and step.get("ok") for step in steps)
+    thread_create_ok = any(step.get("command") == "project-thread-create" and step.get("ok") for step in steps)
+    assistant_readback_ok = any(
+        step.get("command") == "project-thread-readback"
+        and step.get("ok")
+        and step.get("readbackVerified")
+        and step.get("markerRole", "assistant") == "assistant"
+        for step in steps
+    )
+    env_statuses = [
+        step.get("status")
+        for step in steps
+        if step.get("command") == "project-transport-env" and step.get("status")
+    ]
+    source_list_statuses = [
+        step.get("status")
+        for step in steps
+        if step.get("command") == "project-source-list" and step.get("status")
+    ]
+    worker_readable = source_put_ok and thread_create_ok and assistant_readback_ok
+    return {
+        "kind": "ops.projectTransportProofSummary.v1",
+        "workerReadableProof": worker_readable,
+        "workerReadableProofAuthority": WORKER_READBACK_AUTHORITY,
+        "routeProbeAuthority": ROUTE_PROBE_AUTHORITY,
+        "sourceListAuthority": SOURCE_LIST_AUTHORITY,
+        "routeProbeCanOverrideWorkerReadback": False,
+        "sourceListCanOverrideWorkerReadback": False,
+        "sourcePutOk": source_put_ok,
+        "threadCreateOk": thread_create_ok,
+        "assistantReadbackOk": assistant_readback_ok,
+        "envProbeStatuses": env_statuses,
+        "sourceListStatuses": source_list_statuses,
     }
 
 
@@ -475,6 +516,10 @@ def handle_env(args: argparse.Namespace) -> int:
         "status": status,
         "addr": args.addr,
         "projectUrl": args.project_url,
+        "probeAuthority": ROUTE_PROBE_AUTHORITY,
+        "workerReadableProofAuthority": WORKER_READBACK_AUTHORITY,
+        "canOverrideWorkerReadback": False,
+        "sameRunReadbackOverridePolicy": "A failed or inconclusive route probe is advisory once same-run Project Source upload, thread creation, and delayed assistant readback prove worker-readable source.",
         "probes": probes,
         "projectAccessProbes": project_probes,
         "selectedPort": next((p["port"] for p in reachable), None),
@@ -641,6 +686,7 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
         "transportVisible": classification["transportVisible"],
         "readbackVerified": classification["readbackVerified"],
         "workerReadbackVerified": False,
+        "workerReadableProofAuthority": WORKER_READBACK_AUTHORITY,
         "verificationLevel": "visible-only" if classification["transportVisible"] else "none",
         "observed": classification["observed"],
         "uploadResult": parsed,
@@ -696,6 +742,11 @@ def source_list_result(args: argparse.Namespace, result: dict[str, Any]) -> dict
         "inventoryParsed": status == "source-list-read",
         "sourceListUnreliable": status == "source-list-unreliable",
         "sourceListReliability": status,
+        "sourceListAuthority": SOURCE_LIST_AUTHORITY,
+        "workerReadableProofAuthority": WORKER_READBACK_AUTHORITY,
+        "sourceAbsenceAuthoritative": False,
+        "canOverrideWorkerReadback": False,
+        "sameRunReadbackOverridePolicy": "Project Source inventory parsing is advisory and cannot prove source absence when delayed assistant readback from the same run proves worker-readable source.",
         "listLog": str(list_log),
         "listCommand": low,
         "sourceList": parsed,
@@ -1369,7 +1420,12 @@ def handle_run(args: argparse.Namespace) -> int:
                 write_json(out_dir / "transport-result.json", result)
                 return maybe_write_out(args, result)
 
-    result.update({"ok": True, "status": "transport-run-ready" if args.dry_run else "transport-run-complete", "steps": steps})
+    result.update({
+        "ok": True,
+        "status": "transport-run-ready" if args.dry_run else "transport-run-complete",
+        "steps": steps,
+        "transportProof": classify_transport_proof_steps(steps),
+    })
     report = write_run_report(out_dir, result)
     result["runReport"] = str(report)
     write_json(out_dir / "transport-result.json", result)

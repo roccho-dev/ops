@@ -53,6 +53,9 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 - `project-source-list` is inventory parsing only. If parsed rows are `0` but
   file-like source hints are visible in the UI, the wrapper reports
   `source-list-unreliable` instead of treating the Project as empty.
+  `source-list-empty` and `source-list-unreliable` are advisory inventory probe
+  states; they cannot override a same-run delayed assistant readback that proves
+  the source was worker-readable.
 - `project-thread-readback` matches markers in assistant messages by default.
   Use `--marker-role any` only for diagnostics; user-prompt marker hits are not
   worker-readable proof.
@@ -149,6 +152,9 @@ Expected behavior:
 - a fresh unauthenticated profile must not produce a `recommendedRoute`
 - a route is complete only after Project Source upload, Project thread creation,
   and delayed thread readback prove that the target Project can read the source
+- `project-route-not-verified` is a probe result, not a global blocker, when the
+  same run has Project Source upload, Project thread creation, and delayed
+  assistant readback evidence. The readback is the worker-readable proof.
 
 Do not give actors alternate legacy/script/proof paths as normal instructions.
 The normal route is this package's Project transport wrapper surface.

@@ -1,0 +1,108 @@
+{
+  "ok": true,
+  "addr": "127.0.0.1",
+  "port": 9234,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+  "requestedTargetId": null,
+  "targetId": "D11CE693333A4BD3128703600AD79D49",
+  "projectId": "6a14c47959e081918f5367643db37898",
+  "before": {
+    "ok": true,
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+    "title": "ChatGPT - issue-policy",
+    "readyState": "complete",
+    "prompt": {
+      "id": "prompt-textarea",
+      "tag": "DIV",
+      "aria": "New chat in issue-policy",
+      "testid": "",
+      "role": "textbox",
+      "disabled": false,
+      "contentEditable": true,
+      "visible": true,
+      "center": {
+        "x": 426.921875,
+        "y": 235.5
+      },
+      "rect": {
+        "x": 331.5,
+        "y": 215.5,
+        "width": 190.84375,
+        "height": 40
+      }
+    },
+    "send": null,
+    "stop": null,
+    "waited_ms": 1154
+  },
+  "dom_model_preflight": {
+    "found": false,
+    "model_text": "",
+    "model_aria": "",
+    "pro_model": true,
+    "extended_pro_model": true,
+    "extended_pro_text": "Extended Pro",
+    "profile_text": "",
+    "pro_plan_badge": false
+  },
+  "afterType": {
+    "ok": true,
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+    "title": "ChatGPT - issue-policy",
+    "readyState": "complete",
+    "prompt": {
+      "id": "prompt-textarea",
+      "tag": "DIV",
+      "aria": "New chat in issue-policy",
+      "testid": "",
+      "role": "textbox",
+      "disabled": false,
+      "contentEditable": true,
+      "visible": true,
+      "center": {
+        "x": 421.921875,
+        "y": 276.5
+      },
+      "rect": {
+        "x": 331.5,
+        "y": -199.5,
+        "width": 180.84375,
+        "height": 952
+      }
+    },
+    "send": {
+      "id": "composer-submit-button",
+      "tag": "BUTTON",
+      "aria": "Send prompt",
+      "testid": "send-button",
+      "role": "",
+      "disabled": false,
+      "contentEditable": false,
+      "visible": true,
+      "center": {
+        "x": 737.5,
+        "y": 276.9375
+      },
+      "rect": {
+        "x": 719.5,
+        "y": 258.9375,
+        "width": 36,
+        "height": 36
+      }
+    },
+    "stop": null
+  },
+  "created": {
+    "ok": true,
+    "waited_ms": 3029,
+    "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+    "title": "ChatGPT - issue-policy",
+    "conversationId": "6a14c7e1-6564-83a2-940a-75e04d51513a"
+  },
+  "threadUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898-issue-policy/c/6a14c7e1-6564-83a2-940a-75e04d51513a",
+  "conversationId": "6a14c7e1-6564-83a2-940a-75e04d51513a",
+  "project_url_check": {
+    "projectId": "6a14c47959e081918f5367643db37898",
+    "threadProjectId": "6a14c47959e081918f5367643db37898-issue-policy"
+  }
+}

@@ -1,0 +1,13 @@
+role.chatgpt.thread: impl-review
+actorId: issue-policy-review-A
+discussionId: issue-ledger-policy-design-20260526
+proposalRevision: v1-peer
+
+Read Project Source file THREAD_B_REPLY_V1.md, then compare it with your own THREAD_A_REPLY_V1.md and ISSUE_LEDGER_POLICY_DISCUSSION_V1.md.
+Return PEER_REVIEW with:
+1. strongest points from B,
+2. objections to B,
+3. agenda items to add/remove/rename,
+4. whether v1 should become a policy patch, repo-local design task, migration task, or remain discussion-only,
+5. unresolved objections.
+Do not claim impl-review-pass.

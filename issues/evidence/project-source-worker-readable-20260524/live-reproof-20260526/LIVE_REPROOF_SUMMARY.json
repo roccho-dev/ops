@@ -1,0 +1,47 @@
+{
+  "kind": "ops.projectSourceWorkerReadableLiveReproof.v1",
+  "issueId": "ops.project-source-worker-readable-upload",
+  "conclusion": "fresh Project Source worker readback succeeded; ledger blocked status is stale for the target-handoff criterion, but route probe/source-list consistency still needs follow-up",
+  "sourceFile": "handoff-source-readback-20260526-live-reproof.txt",
+  "upload": {
+    "ok": true,
+    "uploadOk": true,
+    "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+    "target": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project"
+  },
+  "thread": {
+    "ok": true,
+    "threadUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a14b299-e6cc-83a9-aedc-9f3ac14df6af",
+    "conversationId": "6a14b299-e6cc-83a9-aedc-9f3ac14df6af"
+  },
+  "delayedReadback": {
+    "ok": true,
+    "status": "readback-verified",
+    "markerRole": "assistant",
+    "matchedMarkers": [
+      "READBACK_MARK_20260526_LIVE_REPROOF_A"
+    ],
+    "assistantHit": {
+      "idx": 1,
+      "marker": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+      "preview": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+      "role": "assistant",
+      "textLen": 37
+    },
+    "semanticApproval": false,
+    "completionApproval": false
+  },
+  "routeProbe": {
+    "ok": false,
+    "status": "project-route-not-verified",
+    "recommendedRoute": null,
+    "projectAccessStatus": "project-access-shell-missing",
+    "reason": "TARGET_PROJECT_SHELL_NOT_VISIBLE"
+  },
+  "sourceList": {
+    "ok": true,
+    "status": "source-list-empty",
+    "sourceCount": 0,
+    "sourceListReliability": "source-list-empty"
+  }
+}

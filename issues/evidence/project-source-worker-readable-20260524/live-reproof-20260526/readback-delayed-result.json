@@ -1,0 +1,96 @@
+{
+  "command": "project-thread-readback",
+  "completionApproval": false,
+  "createdAt": "2026-05-25T20:44:06.502810Z",
+  "dryRun": false,
+  "finishedAt": "2026-05-25T20:44:17.140990Z",
+  "kind": "ops.projectTransportResult.v1",
+  "markerRole": "assistant",
+  "markers": [
+    "READBACK_MARK_20260526_LIVE_REPROOF_A"
+  ],
+  "matchedHits": [
+    {
+      "idx": 1,
+      "marker": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+      "preview": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+      "role": "assistant",
+      "textLen": 37
+    }
+  ],
+  "matchedMarkers": [
+    "READBACK_MARK_20260526_LIVE_REPROOF_A"
+  ],
+  "missingMarkers": [],
+  "ok": true,
+  "readCommand": {
+    "argv": [
+      "chromium-cdp-read-thread",
+      "--url",
+      "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a14b299-e6cc-83a9-aedc-9f3ac14df6af",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "9222",
+      "--waitMs",
+      "300000",
+      "--tail",
+      "8",
+      "--openIfNeeded",
+      "--markers",
+      "READBACK_MARK_20260526_LIVE_REPROOF_A"
+    ],
+    "json": {
+      "artifacts": [
+        {
+          "href": "",
+          "kind": "chip",
+          "label": "handoff-source-readback-20260526-live-reproof.txt",
+          "match": "button",
+          "name": "handoff-source-readback-20260526-live-reproof.txt"
+        }
+      ],
+      "hasPrompt": true,
+      "hits": [
+        {
+          "idx": 1,
+          "marker": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+          "preview": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+          "role": "assistant",
+          "textLen": 37
+        }
+      ],
+      "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a14b299-e6cc-83a9-aedc-9f3ac14df6af",
+      "isStreaming": false,
+      "last": [
+        {
+          "idx": 0,
+          "preview": "handoff-source-readback-20260526-live-reproof.txt Document Transport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present. If the file or value is not visible to you, reply MARK_NOT_FOUND. This is not a secret token request.",
+          "role": "user",
+          "textLen": 362
+        },
+        {
+          "idx": 1,
+          "preview": "READBACK_MARK_20260526_LIVE_REPROOF_A",
+          "role": "assistant",
+          "textLen": 37
+        }
+      ],
+      "msgCount": 2,
+      "readyState": "complete",
+      "stableRounds": 2,
+      "streamWaitRounds": 1,
+      "title": "ChatGPT - test"
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "{\n  \"href\": \"https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a14b299-e6cc-83a9-aedc-9f3ac14df6af\",\n  \"title\": \"ChatGPT - test\",\n  \"readyState\": \"complete\",\n  \"msgCount\": 2,\n  \"hasPrompt\": true,\n  \"isStreaming\": false,\n  \"stableRounds\": 2,\n  \"streamWaitRounds\": 1,\n  \"hits\": [\n    {\n      \"marker\": \"READBACK_MARK_20260526_LIVE_REPROOF_A\",\n      \"idx\": 1,\n      \"role\": \"assistant\",\n      \"preview\": \"READBACK_MARK_20260526_LIVE_REPROOF_A\",\n      \"textLen\": 37\n    }\n  ],\n  \"last\": [\n    {\n      \"idx\": 0,\n      \"role\": \"user\",\n      \"preview\": \"handoff-source-readback-20260526-live-reproof.txt Document Transport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present. If the file or value is not visible to you, reply MARK_NOT_FOUND. This is not a secret token request.\",\n      \"textLen\": 362\n    },\n    {\n      \"idx\": 1,\n      \"role\": \"assistant\",\n      \"preview\": \"READBACK_MARK_20260526_LIVE_REPROOF_A\",\n      \"textLen\": 37\n    }\n  ],\n  \"artifacts\": [\n    {\n      \"name\": \"handoff-source-readback-20260526-live-reproof.txt\",\n      \"kind\": \"chip\",\n      \"label\": \"handoff-source-readback-20260526-live-reproof.txt\",\n      \"href\": \"\",\n      \"match\": \"button\"\n    }\n  ]\n}\n"
+  },
+  "readbackVerified": true,
+  "routeDecision": false,
+  "semanticApproval": false,
+  "status": "readback-verified",
+  "stillStreaming": false,
+  "threadUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2-test/c/6a14b299-e6cc-83a9-aedc-9f3ac14df6af",
+  "transportRead": true
+}

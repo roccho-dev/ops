@@ -110,6 +110,9 @@ def test_source_list_unreliable_is_not_success(pt):
         assert result["status"] == "source-list-unreliable"
         assert result["readbackVerified"] is False
         assert result["sourceListUnreliable"] is True
+        assert result["sourceListAuthority"] == "advisory-project-source-inventory-probe"
+        assert result["sourceAbsenceAuthoritative"] is False
+        assert result["canOverrideWorkerReadback"] is False
 
 
 def test_thread_readback_filters_to_assistant_hits(pt):
@@ -211,6 +214,26 @@ def test_browser_parser_regression_terms_are_present():
     assert "streamWaitRounds" in read_thread_src
 
 
+def test_same_run_worker_readback_beats_env_and_list_probe_false_negatives(pt):
+    summary = pt.classify_transport_proof_steps([
+        {"command": "project-source-put", "ok": True, "readbackVerified": False},
+        {"command": "project-thread-create", "ok": True, "threadUrl": "https://chatgpt.com/g/g-p-test/c/abc"},
+        {
+            "command": "project-thread-readback",
+            "ok": True,
+            "readbackVerified": True,
+            "markerRole": "assistant",
+            "matchedMarkers": ["READBACK_MARK_20260526_LIVE_REPROOF_A"],
+        },
+        {"command": "project-transport-env", "ok": False, "status": "project-route-not-verified"},
+        {"command": "project-source-list", "ok": True, "status": "source-list-empty", "sourceCount": 0},
+    ])
+    assert summary["workerReadableProof"] is True
+    assert summary["workerReadableProofAuthority"] == "delayed-assistant-readback"
+    assert summary["routeProbeCanOverrideWorkerReadback"] is False
+    assert summary["sourceListCanOverrideWorkerReadback"] is False
+
+
 def main():
     pt = load_project_transport()
     test_upload_command_selection(pt)
@@ -219,6 +242,7 @@ def main():
     test_thread_readback_filters_to_assistant_hits(pt)
     test_thread_readback_rejects_user_only_and_streaming(pt)
     test_browser_parser_regression_terms_are_present()
+    test_same_run_worker_readback_beats_env_and_list_probe_false_negatives(pt)
     print("PASS: project transport false-positive regression tests")
 
 

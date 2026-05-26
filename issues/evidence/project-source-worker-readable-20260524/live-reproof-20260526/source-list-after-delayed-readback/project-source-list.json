@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+  "target": {
+    "id": "5050680EBFF3D304E6DE0431075793F7",
+    "url": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project?tab=sources",
+    "title": ""
+  },
+  "href": "https://chatgpt.com/g/g-p-6a142414377481919abd28fd961296d2/project",
+  "title": "ChatGPT - test",
+  "count": 0,
+  "sources": [],
+  "parserStatus": "empty-or-no-visible-source-hints",
+  "unparsedVisibleSourceCount": 0,
+  "unparsedVisibleSourceHints": [],
+  "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nGPTs\nTo-Do List\nSoftware Architect GPT\nAskYourPDF Research Assistant\nExplore GPTs\nProjects\nNew project\nheal-ourselves\ntest\nx-plus\nwebmcp-a2ui\nui-agent-base\nMore\nRecents\nAI派遣業務代行調査\nチケット管理UI統一\nLLM Progress and Challenges\nChatGPT活用法ガイド\nPackage Architecture Map\nHermesの技術的優位\ndify plugin API 変数\nResponses API活用方法\nCodexの圧縮技術\nGit gistとrepo質問\n技術用語の整理\nCodex version up失敗\nNix Cache構築相談\nブラウザランタイム質問\n無理した設計\nnpm quickjs-ng確認\nSkill作成可能性検討\nCaddy 再配信設定\nAI利用の未来\nCodex Windowsアップデート\nAIとサイバーセキュリティ\nlevelsio SQLite 使用方法\nDify境界値テスト\nsakimoriプロキシの説明\nCLIコマンドの読み込み\nKimi WebBridgeとAI操作\npip astgrep 使用问题\nWebMCPで作成可能か\nTetsuya Takasawa\nPro\nShare\ntest\n\nExtended Pro\nChats\nSources\nMARK_NOT_FOUND\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260526-live-reproof.txt. Reply with exactly the READBACK_MARK value from that file if present\nMay 26\nFile Readback Request\nTransport-only Project Source readback proof. Read the Project Source file named handoff-source-readback-20260525T193414JST.txt. Reply with exactly the READBACK_MARK value from that file if present, o\nMay 25\nFile Token Request\nTransport-only Project Source readback proof using auto text upload. Read the Project Source file named handoff-source-readback-20260525T195449JST.txt. Reply with exactly the TOKEN value from that fi\nMay 25\nFile Token Request\nTransport-only Project Source readback proof after tool handling fixes. Read the Project Source file named handoff-source-readback-20260525T194231JST.txt. Reply with exactly the TOKEN value from that\nMay 25"
+}

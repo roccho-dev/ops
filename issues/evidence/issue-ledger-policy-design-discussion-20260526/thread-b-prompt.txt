@@ -1,0 +1,9 @@
+role.chatgpt.thread: impl-review
+actorId: issue-policy-review-B
+discussionId: issue-ledger-policy-design-20260526
+proposalRevision: v1
+
+Read Project Source file ISSUE_LEDGER_POLICY_DISCUSSION_V1.md.
+Start with agenda enumeration. Do not claim impl-review-pass.
+Return the required sections: AGENDA, POSITION, POLICY_GAPS, REPO_DESIGN_GAPS, MIGRATION_PLAN, RISKS, OPEN_QUESTIONS.
+Focus especially on whether Git-managed issues, large issue/evidence volume, and compression/archive solutions should change policy or repo-local issue design. Challenge likely blind spots in A-style process assumptions.

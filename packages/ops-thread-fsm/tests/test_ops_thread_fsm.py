@@ -76,6 +76,12 @@ class T(unittest.TestCase):
   x=s.j("facilitate-discussion","--input",s.f("fac-obj.json",obj),"--json")
   s.assertEqual(x["classification"],"facilitation-revision-update-required")
   s.assertEqual(x["requiredNextArtifact"],"new versioned proposal with accepted/rejected/modified objection handling")
+  no_obj=dict(base,responses=[{"actorId":"A","proposalRevision":"v4","assistantText":"VERDICT_JSON: {\"verdict\":\"NO_UNRESOLVED_OBJECTIONS\"}"},{"actorId":"B","proposalRevision":"v4","assistantText":"NO_UNRESOLVED_OBJECTIONS"}])
+  x=s.j("facilitate-discussion","--input",s.f("fac-no-obj.json",no_obj),"--json")
+  s.assertEqual(x["classification"],"facilitation-no-objections-confirmed")
+  real_obj=dict(base,responses=[{"actorId":"A","proposalRevision":"v4","assistantText":"NO_UNRESOLVED_OBJECTIONS"},{"actorId":"B","proposalRevision":"v4","assistantText":"UNRESOLVED_OBJECTIONS"}])
+  x=s.j("facilitate-discussion","--input",s.f("fac-real-obj.json",real_obj),"--json")
+  s.assertEqual(x["classification"],"facilitation-revision-update-required")
  def test_facilitate_discussion_requires_bootstrap_context(s):
   x=s.j("facilitate-discussion","--input",s.f("fac-missing.json",{"discussionId":"d3","proposalRevision":"v1"}),"--json")
   s.assertEqual(x["classification"],"facilitation-context-incomplete")

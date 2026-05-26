@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "projectUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+  "sourcesUrl": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+  "target": {
+    "id": "BBC763654171227B1C488D2302FC3E78",
+    "url": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project",
+    "title": "ChatGPT - issue-policy"
+  },
+  "href": "https://chatgpt.com/g/g-p-6a14c47959e081918f5367643db37898/project?tab=sources",
+  "title": "ChatGPT - issue-policy",
+  "count": 2,
+  "sources": [
+    {
+      "index": 0,
+      "title": "THREAD_A_REPLY_V1.md",
+      "kindLine": "File · May 26, 2026",
+      "lines": [
+        "THREAD_A_REPLY_V1.md",
+        "File · May 26, 2026"
+      ],
+      "sourceActions": {
+        "x": 759.5,
+        "y": 439,
+        "width": 42,
+        "height": 42
+      }
+    },
+    {
+      "index": 1,
+      "title": "THREAD_B_REPLY_V1.md",
+      "kindLine": "File · May 26, 2026",
+      "lines": [
+        "THREAD_B_REPLY_V1.md",
+        "File · May 26, 2026"
+      ],
+      "sourceActions": {
+        "x": 759.5,
+        "y": 504,
+        "width": 42,
+        "height": 42
+      }
+    }
+  ],
+  "parserStatus": "parsed-source-actions",
+  "unparsedVisibleSourceCount": 0,
+  "unparsedVisibleSourceHints": [],
+  "textTail": "Chat history\nChatGPT\nNew chat\nSearch chats\nLibrary\nApps\nCodex\nMore\nTetsuya Takasawa\nPro\nShare\nissue-policy\n\nExtended Pro\nChats\nSources\nNewest\nAll\nAdd sources\nTHREAD_A_REPLY_V1.md\nFile · May 26, 2026\nTHREAD_B_REPLY_V1.md\nFile · May 26, 2026"
+}

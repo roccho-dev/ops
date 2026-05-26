@@ -1,0 +1,35 @@
+{
+  "kind": "ops.oneWorktreeActiveIssuesHandoff.v1",
+  "createdAt": "2026-05-26T20:50:00+09:00",
+  "repo": "/home/nixos/repos/ops",
+  "worktree": "/home/nixos/repos/ops/.worktrees/one-worktree-all-active-issues-20260526",
+  "branch": "codex/one-worktree-all-active-issues-20260526",
+  "baseHead": "8d064517f4a827c6043e53c832152d3a696e204a",
+  "candidateHead": null,
+  "issueRecords": [
+    "issues/260526.jsonl"
+  ],
+  "closedIssueIds": [
+    "ops.project-source-worker-readable-upload",
+    "ops.thread-fsm-marker-substring"
+  ],
+  "runReport": "issues/evidence/one-worktree-all-active-issues-20260526/RUN_REPORT.md",
+  "gateEvidence": [
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/ops-thread-fsm-unit.log",
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/ops-cdp-core-transport-regressions.log",
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/nix-build-ops-thread-fsm-check.log",
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/nix-build-ops-cdp-core-check.log",
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/issue-ledger-v1-chain.log",
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/git-diff-check.log",
+    "issues/evidence/one-worktree-all-active-issues-20260526/gates/nix-flake-check.log"
+  ],
+  "approvalState": {
+    "semanticApproval": false,
+    "completionApproval": false,
+    "implReviewPass": false,
+    "mergeReviewPass": false,
+    "canonicalMerge": false,
+    "push": false,
+    "cleanup": false
+  }
+}

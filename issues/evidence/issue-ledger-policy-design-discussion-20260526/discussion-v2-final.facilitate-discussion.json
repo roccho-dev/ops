@@ -1,0 +1,37 @@
+{
+  "kind": "ops-thread-fsm.discussionFacilitation.v1",
+  "discussionId": "issue-ledger-policy-design-20260526",
+  "proposalRevision": "v2",
+  "requiredCounterparties": [
+    "issue-policy-review-A",
+    "issue-policy-review-B"
+  ],
+  "versionedProposalRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+  "policySnapshotRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V1.md",
+  "projectSourceRequired": true,
+  "writes": false,
+  "sends": false,
+  "transportPackage": "ops-cdp-core",
+  "fsmPackage": "ops-thread-fsm",
+  "classification": "facilitation-no-objections-confirmed",
+  "discussionComplete": true,
+  "acceptedProposalRef": "ISSUE_LEDGER_POLICY_DISCUSSION_V2.md",
+  "evidence": [
+    "same-revision-no-objections:issue-policy-review-A,issue-policy-review-B"
+  ],
+  "responses": [
+    {
+      "actorId": "issue-policy-review-A",
+      "proposalRevision": "v2",
+      "verdict": "NO_UNRESOLVED_OBJECTIONS",
+      "unresolvedObjections": []
+    },
+    {
+      "actorId": "issue-policy-review-B",
+      "proposalRevision": "v2",
+      "verdict": "NO_UNRESOLVED_OBJECTIONS",
+      "unresolvedObjections": []
+    }
+  ],
+  "nextAction": "import this verdict as review evidence; this is not localize, merge, push, or cleanup approval"
+}

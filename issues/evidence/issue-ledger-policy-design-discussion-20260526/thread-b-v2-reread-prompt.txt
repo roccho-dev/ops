@@ -1,0 +1,16 @@
+role.chatgpt.thread: impl-review
+actorId: issue-policy-review-B
+
+Project Source was refreshed with file-mode uploads.
+Re-read proposalRevision `v2` from Project Source:
+- `ISSUE_LEDGER_POLICY_DISCUSSION_V2.md`
+- `ISSUE_LEDGER_POLICY_DISCUSSION_V1.md`
+- `THREAD_A_REPLY_V1.md`
+- `THREAD_B_REPLY_V1.md`
+- `THREAD_A_PEER_REVIEW_V1.md`
+- `THREAD_B_PEER_REVIEW_V1.md`
+
+Return exactly one top-level `VERDICT_JSON:` line for proposalRevision `v2`.
+If the prior unreadable-file objection is resolved and no other objection remains, return `NO_UNRESOLVED_OBJECTIONS`.
+If any required file is still unreadable or any objection remains, return `UNRESOLVED_OBJECTIONS` with structured objections.
+Do not claim `impl-review-pass`.

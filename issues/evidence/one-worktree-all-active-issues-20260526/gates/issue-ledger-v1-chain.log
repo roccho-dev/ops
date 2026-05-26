@@ -1,0 +1,9 @@
+ok - issue ledger records validate: 9 records
+ok - latest issue state uses recordedAt and supersedes, not file line order
+ok - recordType and status combinations are consistent
+ok - status-specific required and forbidden fields are enforced
+ok - localized-handoff remains non-closed handoff state
+ok - blocked records carry required owner and resolution
+ok - closed records carry satisfied criteria and evidence
+ok - active suggested branches are unique per targetRepo
+issue-ledger-jsonl-gate-pass

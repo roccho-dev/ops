@@ -6,6 +6,7 @@ renders controller-owned facilitation actions.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .state_model import next_action_for, permissions_for
@@ -73,9 +74,18 @@ def _verdict(response: dict[str, Any]) -> str:
     return ""
 
 
+def _text_contains_marker(text: str, marker: str) -> bool:
+    marker = _token(marker)
+    if not marker:
+        return False
+    if marker in {line.strip() for line in text.splitlines()}:
+        return True
+    pattern = rf"(?<![A-Za-z0-9_]){re.escape(marker)}(?![A-Za-z0-9_])"
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
+
+
 def _text_contains_any(text: str, markers: list[str]) -> bool:
-    haystack = text.lower()
-    return any(marker.lower() in haystack for marker in markers if marker)
+    return any(_text_contains_marker(text, marker) for marker in markers)
 
 
 def _normalize_marker_responses(value: dict[str, Any]) -> list[dict[str, Any]]:
