@@ -280,6 +280,21 @@
                 grep -q '"capability": "tailnet.github.egressPush"' "$out/report.json"
                 grep -q '"capability": "authority.completeApproved"' "$out/report.json"
                 test "$(grep -c '"not-proven-by-static-check"' "$out/report.json")" -eq 6
+                mkdir -p "$out/issue-ledger"
+                cat > "$out/issue-ledger/current.jsonl" <<'EOF'
+                {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"ops-runbook-checks-fixture-opened","issueId":"ops.runbook-checks-fixture","recordedAt":"2026-05-27T00:00:00+00:00","recordType":"opened","status":"open","title":"Fixture issue","issueKind":"test","sourceRepo":"ops","targetRepo":"ops","priority":"P3","suggestedBranch":"codex/fixture","dependsOn":[],"allowedPaths":["issues/**"],"forbiddenActions":["Do not use this fixture as approval."],"closeCriteria":["Fixture close criterion."],"requiredEvidence":["Fixture evidence."],"supersedes":[],"evidence":["fixture"]}
+                {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"ops-runbook-checks-fixture-closed","issueId":"ops.runbook-checks-fixture","recordedAt":"2026-05-27T00:01:00+00:00","recordType":"closed","status":"closed","title":"Fixture issue","issueKind":"test","sourceRepo":"ops","targetRepo":"ops","priority":"P3","suggestedBranch":"codex/fixture","dependsOn":[],"allowedPaths":["issues/**"],"forbiddenActions":["Do not use this fixture as approval."],"closeCriteria":["Fixture close criterion."],"requiredEvidence":["Fixture evidence."],"supersedes":["ops-runbook-checks-fixture-opened"],"evidence":["fixture"],"closure":{"closedAt":"2026-05-27T00:01:00+00:00","satisfiedCloseCriteria":["Fixture close criterion."],"evidence":["fixture"]}}
+                EOF
+                cat > "$out/issue-ledger/legacy.jsonl" <<'EOF'
+                {"id":"legacy-fixture","status":"open","kind":"legacy"}
+                EOF
+                ops-runbook-checks \
+                  --issue-ledger "$out/issue-ledger/current.jsonl" \
+                  --legacy-glob "$out/issue-ledger/*.jsonl" \
+                  --json > "$out/issue-ledger-fsck.json"
+                grep -q '"classification": "issue-ledger-fsck-pass"' "$out/issue-ledger-fsck.json"
+                grep -q '"legacyOrNonV1Records": 1' "$out/issue-ledger-fsck.json"
+                grep -q '"ops.runbook-checks-fixture"' "$out/issue-ledger-fsck.json"
                 cp -R ${./packages/ops-runbook-checks/tests/root} "$out/legacy-token-root"
                 chmod -R u+w "$out/legacy-token-root"
                 cat >> "$out/legacy-token-root/AGENTS.md" <<'EOF'
