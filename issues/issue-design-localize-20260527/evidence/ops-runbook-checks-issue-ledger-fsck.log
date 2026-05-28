@@ -1,0 +1,144 @@
+command: nix run .#ops-runbook-checks -- --issue-ledger issues/260527-issue-design-localize.jsonl --legacy-glob issues/*.jsonl --json
+startedAt: 2026-05-26T23:29:11Z
+warning: Git tree '/home/nixos/repos/ops/.worktrees/ops-issue-design-localize-20260527' is dirty
+{
+  "kind": "ops.issueLedgerFsck.report.v1",
+  "classification": "issue-ledger-fsck-pass",
+  "ok": true,
+  "currentLedgers": [
+    "issues/260527-issue-design-localize.jsonl"
+  ],
+  "legacyScope": [
+    "issues/*.jsonl"
+  ],
+  "currentValidation": {
+    "ok": true,
+    "failures": [],
+    "recordCount": 12,
+    "latestStates": {
+      "ops.cdp-project-source-worker-readable-proof": {
+        "recordId": "ops-cdp-project-source-worker-readable-proof-closed-20260527T051503+0900",
+        "status": "closed",
+        "recordedAt": "2026-05-27T05:15:03+09:00",
+        "suggestedBranch": "codex/ops-issue-design-localize-20260527"
+      },
+      "ops.issue-ledger-backend-concurrency-and-archive-deferred": {
+        "recordId": "ops-issue-ledger-backend-concurrency-and-archive-deferred-closed-20260527T051505+0900",
+        "status": "closed",
+        "recordedAt": "2026-05-27T05:15:05+09:00",
+        "suggestedBranch": "codex/ops-issue-design-localize-20260527"
+      },
+      "ops.issue-ledger-local-design": {
+        "recordId": "ops-issue-ledger-local-design-closed-20260527T051500+0900",
+        "status": "closed",
+        "recordedAt": "2026-05-27T05:15:00+09:00",
+        "suggestedBranch": "codex/ops-issue-design-localize-20260527"
+      },
+      "ops.issue-ledger-migration-plan": {
+        "recordId": "ops-issue-ledger-migration-plan-closed-20260527T051502+0900",
+        "status": "closed",
+        "recordedAt": "2026-05-27T05:15:02+09:00",
+        "suggestedBranch": "codex/ops-issue-design-localize-20260527"
+      },
+      "ops.issue-ledger-validation-fsck-and-divergence-gates": {
+        "recordId": "ops-issue-ledger-validation-fsck-and-divergence-gates-closed-20260527T051501+0900",
+        "status": "closed",
+        "recordedAt": "2026-05-27T05:15:01+09:00",
+        "suggestedBranch": "codex/ops-issue-design-localize-20260527"
+      },
+      "ops.thread-fsm-discussion-classification-hardening": {
+        "recordId": "ops-thread-fsm-discussion-classification-hardening-closed-20260527T051504+0900",
+        "status": "closed",
+        "recordedAt": "2026-05-27T05:15:04+09:00",
+        "suggestedBranch": "codex/ops-issue-design-localize-20260527"
+      }
+    },
+    "checks": [
+      "required v1 fields",
+      "recordType/status consistency",
+      "timezone-aware recordedAt",
+      "recordId uniqueness",
+      "issue recordedAt uniqueness",
+      "supersedes existence and issue match",
+      "latest state selected by recordedAt plus supersedes",
+      "blocked records carry blocker fields",
+      "closed records carry closure fields and all criteria",
+      "active targetRepo/suggestedBranch uniqueness"
+    ]
+  },
+  "legacyReports": [
+    {
+      "path": "issues/260519.jsonl",
+      "records": 1,
+      "v1Records": 0,
+      "legacyOrNonV1Records": 1,
+      "parseFailures": [],
+      "classification": "legacy-or-mixed",
+      "validationAffectsCurrentV1": false
+    },
+    {
+      "path": "issues/260520.jsonl",
+      "records": 7,
+      "v1Records": 0,
+      "legacyOrNonV1Records": 7,
+      "parseFailures": [],
+      "classification": "legacy-or-mixed",
+      "validationAffectsCurrentV1": false
+    },
+    {
+      "path": "issues/260522.jsonl",
+      "records": 3,
+      "v1Records": 0,
+      "legacyOrNonV1Records": 3,
+      "parseFailures": [],
+      "classification": "legacy-or-mixed",
+      "validationAffectsCurrentV1": false
+    },
+    {
+      "path": "issues/260523-governance-md-migration.jsonl",
+      "records": 16,
+      "v1Records": 0,
+      "legacyOrNonV1Records": 16,
+      "parseFailures": [],
+      "classification": "legacy-or-mixed",
+      "validationAffectsCurrentV1": false
+    },
+    {
+      "path": "issues/260524.jsonl",
+      "records": 1,
+      "v1Records": 1,
+      "legacyOrNonV1Records": 0,
+      "parseFailures": [],
+      "classification": "current-v1",
+      "validationAffectsCurrentV1": false
+    },
+    {
+      "path": "issues/260525.jsonl",
+      "records": 4,
+      "v1Records": 4,
+      "legacyOrNonV1Records": 0,
+      "parseFailures": [],
+      "classification": "current-v1",
+      "validationAffectsCurrentV1": false
+    },
+    {
+      "path": "issues/260526.jsonl",
+      "records": 4,
+      "v1Records": 4,
+      "legacyOrNonV1Records": 0,
+      "parseFailures": [],
+      "classification": "current-v1",
+      "validationAffectsCurrentV1": false
+    }
+  ],
+  "doesNotProve": [
+    "semantic issue closure approval",
+    "impl-review-pass",
+    "merge-review-pass",
+    "canonical merge",
+    "remote push",
+    "complete-approved"
+  ]
+}
+finishedAt: 2026-05-26T23:29:11Z
+exitStatus: 0
