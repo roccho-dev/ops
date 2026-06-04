@@ -7,6 +7,13 @@
       url = "git+file:///home/nixos/repos/specs?ref=refs/heads/main&rev=35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # 分離可能な build 定義 package(append-only jsonl -> nix snapshot/module)。
+    # flake.lock が snapshot。defs.jsonl 追記後 `nix flake update ops-build-defs` で再 snapshot。
+    # 将来 ops から分離する場合は url を ssh://…/ops-build-defs.git に差し替えるのみ。
+    ops-build-defs = {
+      url = "path:./packages/ops-build-defs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -14,6 +21,7 @@
       self,
       nixpkgs,
       specs,
+      ops-build-defs,
     }:
     let
       systems = [
@@ -31,6 +39,13 @@
           cdp = cdpFor pkgs;
         in
         rec {
+          # ops-build-defs(分離可能 package)を consume して ops を build する。
+          # snapshot package を再公開 + nix module(lib.snapshot)から環境を構成(pure-eval, IFD なし)。
+          ops-build-defs-snapshot = ops-build-defs.packages.${pkgs.stdenv.hostPlatform.system}.snapshot;
+          ops-tools-from-defs = pkgs.buildEnv {
+            name = "ops-tools-from-defs";
+            paths = map (a: pkgs.${a}) ops-build-defs.lib.snapshot.nixpkgAttrs;
+          };
           ops-artifact-materialize = pkgs.writeShellApplication {
             name = "ops-artifact-materialize";
             runtimeInputs = [ pkgs.python3 ];
