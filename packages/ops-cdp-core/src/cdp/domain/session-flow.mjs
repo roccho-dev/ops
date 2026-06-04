@@ -1,6 +1,7 @@
-import { getDefaultAddr, cdpList } from "./lib.mjs";
-import { probeCdpPorts, requireCdp } from "./connect.mjs";
-import { findAdapterTarget, getAppAdapter } from "./app-adapters.mjs";
+import { getDefaultAddr } from "../core/config.mjs";
+import { cdpList } from "../core/cdp-client.mjs";
+import { probeCdpPorts, requireCdp } from "../core/connect.mjs";
+import { findAdapterTarget, getAppAdapter } from "../app-adapters.mjs";
 
 function scoreStatus(status) {
   switch (String(status || "")) {

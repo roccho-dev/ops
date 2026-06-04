@@ -18,20 +18,20 @@
 //     --name repo.bundle \
 //     --port 9223
 
-import * as std from "qjs:std";
-import { locateFileChipExpr, mouseClick, navigateChatGptTarget, openOrCreateChatGptTarget, scrollToBottomExpr } from "./chatgpt/index.mjs";
-import { fetchResolvedDownloadTargets } from "./chatgpt/download-fetch.mjs";
-import { resolveNamedDownloadTargetsWithPolicy } from "./chatgpt/download-resolve.mjs";
+import * as std from "./core/std.mjs";
+import { locateFileChipExpr, mouseClick, navigateChatGptTarget, openOrCreateChatGptTarget, scrollToBottomExpr } from "./domain/chatgpt/index.mjs";
+import { fetchResolvedDownloadTargets } from "./domain/chatgpt/download-fetch.mjs";
+import { resolveNamedDownloadTargetsWithPolicy } from "./domain/chatgpt/download-resolve.mjs";
 import {
   isFreshIr,
   loadIr,
   materializeDownloadResolveIr,
   projectDownloadResolveFromIr,
   saveIr,
-} from "./chatgpt/ir.mjs";
-import { DOWNLOAD_POLICY, buildDownloadFetchPolicy, buildDownloadResolvePolicy } from "./chatgpt/policies/download.mjs";
-import { requireCdp } from "./connect.mjs";
-import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, mkdirp, tryStat } from "./fs.mjs";
+} from "./domain/chatgpt/ir.mjs";
+import { DOWNLOAD_POLICY, buildDownloadFetchPolicy, buildDownloadResolvePolicy } from "./domain/chatgpt/policies/download.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, mkdirp, tryStat } from "./core/io.mjs";
 import {
   cdpCall,
   cdpEvaluate,

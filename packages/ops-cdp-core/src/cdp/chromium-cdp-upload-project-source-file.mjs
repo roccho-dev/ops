@@ -15,7 +15,7 @@ import {
   runToString,
   sleepMs,
 } from "./lib.mjs";
-import { pickProjectSourcesTarget, projectSourcesHrefMatches, projectSourcesUrl, waitForProjectSourcesUrlExpr, waitForProjectSourceVisibleExpr } from "./chatgpt/project-sources.mjs";
+import { pickProjectSourcesTarget, projectSourcesHrefMatches, projectSourcesUrl, waitForProjectSourcesUrlExpr, waitForProjectSourceVisibleExpr } from "./domain/chatgpt/project-sources.mjs";
 
 function usage() {
   std.err.puts(

@@ -16,6 +16,24 @@
         "type": "github"
       }
     },
+    "nodejs-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1780219051,
+        "narHash": "sha256-NiSZXr7eYvoMC6VX9e08DXd7OrKAIE0TPs9Yxg0zPSs=",
+        "ref": "refs/tags/v26.3.0",
+        "rev": "b7e6a5d37e7a14ef0f2cc95214b95d66c4081415",
+        "revCount": 46972,
+        "type": "git",
+        "url": "https://github.com/nodejs/node"
+      },
+      "original": {
+        "ref": "refs/tags/v26.3.0",
+        "rev": "b7e6a5d37e7a14ef0f2cc95214b95d66c4081415",
+        "type": "git",
+        "url": "https://github.com/nodejs/node"
+      }
+    },
     "ops-build-defs": {
       "inputs": {
         "nixpkgs": [
@@ -35,6 +53,7 @@
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
+        "nodejs-src": "nodejs-src",
         "ops-build-defs": "ops-build-defs",
         "specs": "specs"
       }

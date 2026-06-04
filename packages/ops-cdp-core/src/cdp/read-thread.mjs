@@ -11,11 +11,11 @@
 //   qjs --std -m read-thread.mjs \
 //     --url "https://chatgpt.com/c/<thread>" --tail 5 --waitMs 30000
 
-import * as std from "qjs:std";
-import { listDownloadArtifactsExpr, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
-import { isFreshIr, loadIr, materializeThreadIr, projectReadThreadResultFromIr, saveIr } from "./chatgpt/ir.mjs";
-import { requireCdp } from "./connect.mjs";
-import { requireRecommendedSession } from "./session-flow.mjs";
+import * as std from "./core/std.mjs";
+import { listDownloadArtifactsExpr, openOrCreateChatGptTarget, requireChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { isFreshIr, loadIr, materializeThreadIr, projectReadThreadResultFromIr, saveIr } from "./domain/chatgpt/ir.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { requireRecommendedSession } from "./domain/session-flow.mjs";
 import {
   cdpCall,
   cdpEvaluate,

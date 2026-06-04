@@ -14,6 +14,13 @@
       url = "path:./packages/ops-build-defs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # G2 nodejs-only: node26 を nixpkgs(max nodejs_25)ではなく git+https から取得 (DEC-20260604-node26-via-git-https-from-source)。
+    # nodejs/node に flake.nix は無いため flake=false のソース入力 + 自前 derivation(ソースビルド)。
+    # v26.3.0 を commit rev で pin し可変タグの供給網リスクを排除 (DC-N-05)。
+    nodejs-src = {
+      url = "git+https://github.com/nodejs/node?ref=refs/tags/v26.3.0&rev=b7e6a5d37e7a14ef0f2cc95214b95d66c4081415";
+      flake = false;
+    };
   };
 
   outputs =
@@ -22,6 +29,7 @@
       nixpkgs,
       specs,
       ops-build-defs,
+      nodejs-src,
     }:
     let
       systems = [
@@ -31,6 +39,18 @@
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
       cdpFor =
         pkgs: (import ./packages/ops-cdp-core/src/cdp/chromium-cdp.nix { }).perSystem { inherit pkgs; };
+      # node26 を git+https ソースからビルド。nixpkgs の nodejs ビルド式(_25=直近 major)を
+      # 土台に src/version を差し替える標準手法。major またぎで旧 patch は適合しないため除去 (DC-N-03)。
+      # 注: ソースビルドは build-time に python/gyp 等を要する (DC-N-02) — これは builder toolchain であり
+      # 'node-only' の runtime purity 対象外 (DC-M-08 の境界定義に従う)。
+      nodejs26For =
+        pkgs:
+        pkgs.nodejs_25.overrideAttrs (old: {
+          pname = "nodejs";
+          version = "26.3.0";
+          src = nodejs-src;
+          patches = [ ];
+        });
     in
     {
       packages = forEachSystem (
@@ -53,6 +73,8 @@
             name = "ops-tools-from-defs";
             paths = map (a: pkgs.${a}) ops-build-defs.lib.snapshot.nixpkgAttrs;
           };
+          # G2: nodejs-only 移行の runtime 基盤。git+https 取得の node v26.3.0。
+          nodejs26 = nodejs26For pkgs;
           ops-artifact-materialize = pkgs.writeShellApplication {
             name = "ops-artifact-materialize";
             runtimeInputs = [ pkgs.python3 ];

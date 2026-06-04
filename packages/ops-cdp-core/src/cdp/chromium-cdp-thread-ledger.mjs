@@ -1,8 +1,8 @@
-import * as std from "qjs:std";
+import * as std from "./core/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
-import { fileSize, nowIso, pathExists, readJson, writeJson } from "./host-git-ops.mjs";
-import { mkdirp } from "./fs.mjs";
+import { fileSize, nowIso, pathExists, readJson, writeJson } from "./core/host-git.mjs";
+import { mkdirp } from "./core/io.mjs";
 
 const KIND = "cdp.threadLedger.v1";
 

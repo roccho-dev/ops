@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./core/std.mjs";
 
 import { getDefaultAddr, getDefaultPort, parseArgs, run } from "./lib.mjs";
 import {
@@ -11,8 +11,8 @@ import {
   runCapture,
   shellQuote,
   writeJson,
-} from "./host-git-ops.mjs";
-import { mkdirp } from "./fs.mjs";
+} from "./core/host-git.mjs";
+import { mkdirp } from "./core/io.mjs";
 
 const KIND = "cdp.packageRun.v1";
 const REVIEW_RESULT_SCHEMA = "cdp.packageReview.v1";

@@ -17,10 +17,10 @@
 //     --file /home/nixos/tmp/hq_project_cross_thread_probe.txt \
 //     --outDir /tmp/hq_project_roundtrip
 
-import * as std from "qjs:std";
-import { SELECTORS, extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
-import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, mkdirp, tryStat } from "./fs.mjs";
+import * as std from "./core/std.mjs";
+import { SELECTORS, extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, mkdirp, tryStat } from "./core/io.mjs";
 import {
   cdpCall,
   cdpEvaluate,

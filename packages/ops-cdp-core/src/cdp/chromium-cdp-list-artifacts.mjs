@@ -1,10 +1,10 @@
-import * as std from "qjs:std";
+import * as std from "./core/std.mjs";
 import { getDefaultAddr, parseArgs, run } from "./lib.mjs";
-import { listDownloadArtifactsExpr, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
-import { loadIr, projectReadThreadResultFromIr } from "./chatgpt/ir.mjs";
+import { listDownloadArtifactsExpr, openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { loadIr, projectReadThreadResultFromIr } from "./domain/chatgpt/ir.mjs";
 import { mkCaller } from "./lib.mjs";
-import { requireRecommendedSession } from "./session-flow.mjs";
-import { requireCdp } from "./connect.mjs";
+import { requireRecommendedSession } from "./domain/session-flow.mjs";
+import { requireCdp } from "./core/connect.mjs";
 
 function usage() {
   std.err.puts("usage: qjs --std -m chromium-cdp-list-artifacts.mjs [--url <chatgpt-thread-url> | --irPath <path>] [--addr 127.0.0.1] [--port <n>] [--json]\n");

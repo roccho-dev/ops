@@ -1,7 +1,7 @@
-import * as os from "qjs:os";
-import * as std from "qjs:std";
+import * as os from "./os.mjs";
+import * as std from "./std.mjs";
 
-import { buildDownloadedNameRegex, listMatchingFiles, mkdirp, moveFile } from "./fs.mjs";
+import { buildDownloadedNameRegex, listMatchingFiles, mkdirp, moveFile } from "./io.mjs";
 
 export function shellQuote(value) {
   return `'${String(value || "").replace(/'/g, `'"'"'`)}'`;

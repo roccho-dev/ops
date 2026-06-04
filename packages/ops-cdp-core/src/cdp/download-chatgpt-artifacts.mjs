@@ -12,25 +12,25 @@
 //     (2) watching the filesystem for the new file to appear
 //     (3) copying/moving it into an output directory with a stable name
 
-import * as std from "qjs:std";
+import * as std from "./core/std.mjs";
 import {
   extractConversationId,
   listPageTargets,
   locateDownloadArtifactExpr,
   previewTargets,
-} from "./chatgpt/index.mjs";
-import { fetchResolvedDownloadTargets } from "./chatgpt/download-fetch.mjs";
-import { resolveNamedDownloadTargetsWithPolicy } from "./chatgpt/download-resolve.mjs";
+} from "./domain/chatgpt/index.mjs";
+import { fetchResolvedDownloadTargets } from "./domain/chatgpt/download-fetch.mjs";
+import { resolveNamedDownloadTargetsWithPolicy } from "./domain/chatgpt/download-resolve.mjs";
 import {
   isFreshIr,
   loadIr,
   materializeDownloadResolveIr,
   projectDownloadResolveFromIr,
   saveIr,
-} from "./chatgpt/ir.mjs";
-import { DOWNLOAD_POLICY, buildDownloadFetchPolicy, buildDownloadResolvePolicy } from "./chatgpt/policies/download.mjs";
-import { requireCdp } from "./connect.mjs";
-import { buildDownloadedNameRegex, listMatchingFiles, mkdirp } from "./fs.mjs";
+} from "./domain/chatgpt/ir.mjs";
+import { DOWNLOAD_POLICY, buildDownloadFetchPolicy, buildDownloadResolvePolicy } from "./domain/chatgpt/policies/download.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { buildDownloadedNameRegex, listMatchingFiles, mkdirp } from "./core/io.mjs";
 import {
   cdpCall,
   cdpEvaluate,

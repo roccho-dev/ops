@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "../../core/std.mjs";
 
 import { extractConversationId, extractProjectId } from "./shared.mjs";
 

@@ -3,13 +3,15 @@
 // This handles the case where a response names files in a markdown table, but
 // ChatGPT does not expose them as real downloadable artifact chips.
 
-import * as os from "qjs:os";
-import * as std from "qjs:std";
+import * as os from "./core/os.mjs";
+import * as std from "./core/std.mjs";
+import zip from "./core/zip.mjs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 
-import { extractConversationId, listPageTargets, previewTargets } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
-import { buildDownloadedNameRegex, copyFile, joinPath, listDir, mkdirp, tryStat } from "./fs.mjs";
-import { basename, fileSha256, fileSize, pathExists, runCapture, writeJson } from "./host-git-ops.mjs";
+import { extractConversationId, listPageTargets, previewTargets } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { buildDownloadedNameRegex, copyFile, joinPath, listDir, mkdirp, tryStat } from "./core/io.mjs";
+import { basename, fileSha256, fileSize, pathExists, runCapture, writeJson } from "./core/host-git.mjs";
 import { cdpCall, getDefaultAddr, getDefaultPort, mkCaller, parseArgs, run, sleepMs } from "./lib.mjs";
 
 function usage() {
@@ -302,59 +304,45 @@ function tmpPath(prefix) {
 }
 
 function materializeFromZip(sourceZip, outDir, names) {
-  const python = String(std.getenv("HQ_CDP_PYTHON") || "python3");
-  const scriptPath = tmpPath("artifact_materialize") + ".py";
-  const script = String.raw`
-import json, os, shutil, sys, zipfile
+  // 脱python: python zipfile を node 純正 zip(qjs-compat/zip.mjs)で置換。
+  mkdirSync(outDir, { recursive: true });
+  const allEntries = zip.entries(sourceZip);
+  const entryNames = allEntries.map((e) => e.name);
+  let manifest = {};
+  if (entryNames.includes("result.manifest.json")) {
+    manifest = JSON.parse(zip.readEntry(sourceZip, "result.manifest.json").toString("utf8"));
+  }
+  const packages = Array.isArray(manifest.packages) ? manifest.packages.map(String) : [];
 
-source_zip, out_dir = sys.argv[1:3]
-names = sys.argv[3:]
-os.makedirs(out_dir, exist_ok=True)
+  for (const name of names) {
+    const outPath = joinPath(outDir, name);
+    if (basename(sourceZip) === name) {
+      if (!pathExists(outPath)) copyFileSync(sourceZip, outPath);
+      continue;
+    }
+    if (name.endsWith(".acceptance-report.json")) {
+      const entry = "spec/package-graph/acceptance-report.json";
+      if (!entryNames.includes(entry)) continue;
+      writeFileSync(outPath, zip.readEntry(sourceZip, entry));
+      continue;
+    }
+    if (name.endsWith(".spec-package-set.zip")) {
+      if (!packages.length) continue;
+      const includePrefixes = ["spec/package-graph/", ...packages.map((p) => `spec/packages/${p}/`)];
+      const includeExact = new Set(["result.manifest.json", "README.package-spec-v0.3.0.md"]);
+      const items = [];
+      for (const e of [...entryNames].sort()) {
+        const eNorm = e.replace(/\\/g, "/");
+        if (includeExact.has(eNorm) || includePrefixes.some((p) => eNorm.startsWith(p))) {
+          const meta = allEntries.find((x) => x.name === e);
+          items.push({ name: eNorm, data: zip.readEntry(sourceZip, e), externalAttr: meta ? meta.externalAttr : 0 });
+        }
+      }
+      zip.writeZip(outPath, items);
+    }
+  }
 
-def norm(path):
-    return path.replace("\\\\", "/")
-
-with zipfile.ZipFile(source_zip) as zin:
-    entries = zin.namelist()
-    manifest = {}
-    if "result.manifest.json" in entries:
-        manifest = json.loads(zin.read("result.manifest.json").decode("utf-8"))
-    packages = [str(x) for x in manifest.get("packages", [])]
-
-    for name in names:
-        out_path = os.path.join(out_dir, name)
-        if os.path.basename(source_zip) == name:
-            if not os.path.exists(out_path):
-                shutil.copyfile(source_zip, out_path)
-            continue
-
-        if name.endswith(".acceptance-report.json"):
-            entry = "spec/package-graph/acceptance-report.json"
-            if entry not in entries: continue
-            with open(out_path, "wb") as f:
-                f.write(zin.read(entry))
-            continue
-
-        if name.endswith(".spec-package-set.zip"):
-            if not packages: continue
-            include_prefixes = ["spec/package-graph/"] + [f"spec/packages/{pkg}/" for pkg in packages]
-            include_exact = {"result.manifest.json", "README.package-spec-v0.3.0.md"}
-            with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
-                for entry in sorted(entries):
-                    e = norm(entry)
-                    if e in include_exact or any(e.startswith(prefix) for prefix in include_prefixes):
-                        info = zipfile.ZipInfo(e)
-                        info.date_time = (1980, 1, 1, 0, 0, 0)
-                        info.compress_type = zipfile.ZIP_DEFLATED
-                        try:
-                            info.external_attr = zin.getinfo(entry).external_attr
-                        except Exception:
-                            pass
-                        zout.writestr(info, zin.read(entry))
-`;
-  std.writeFile(scriptPath, script);
-  try {
-    runCapture([python, scriptPath, sourceZip, outDir, ...names]);
+  {
     const rows = [];
     for (const name of names) {
       const path = joinPath(outDir, name);
@@ -378,8 +366,6 @@ with zipfile.ZipFile(source_zip) as zin:
       rows.push({ name, ok: true, source: "materialized_checksums", path, size: fileSize(path), sha256: fileSha256(path) });
     }
     return rows;
-  } finally {
-    try { os.remove(scriptPath); } catch {}
   }
 }
 

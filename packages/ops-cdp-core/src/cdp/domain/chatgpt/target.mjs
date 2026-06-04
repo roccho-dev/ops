@@ -1,5 +1,5 @@
-import { requireCdp } from "../connect.mjs";
-import { cdpCall, cdpList, pollUntil } from "../lib.mjs";
+import { requireCdp } from "../../core/connect.mjs";
+import { cdpCall, cdpList, pollUntil } from "../../lib.mjs";
 import { getChatGptPageState, navigateChatGptTarget } from "./navigation.mjs";
 import { buildLoginRequiredMessage, isLoginRequired, probeChatGptTarget } from "./session.mjs";
 import {

@@ -1,9 +1,9 @@
-import * as os from "qjs:os";
-import * as std from "qjs:std";
+import * as os from "./core/os.mjs";
+import * as std from "./core/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
-import { fileSha256, gitRevParse, pathExists, readJson, runCapture } from "./host-git-ops.mjs";
-import { mkdirp } from "./fs.mjs";
+import { fileSha256, gitRevParse, pathExists, readJson, runCapture } from "./core/host-git.mjs";
+import { mkdirp } from "./core/io.mjs";
 
 function usage() {
   std.err.puts(

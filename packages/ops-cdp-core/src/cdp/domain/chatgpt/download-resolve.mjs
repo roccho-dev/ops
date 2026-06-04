@@ -1,6 +1,6 @@
 import { locateDownloadArtifactExpr, locateFileChipExpr } from "./artifacts.mjs";
 import { scrollToBottomExpr } from "./input.mjs";
-import { sleepMs } from "../lib.mjs";
+import { sleepMs } from "../../lib.mjs";
 
 function semanticLocator(loc, name) {
   const row = loc || {};

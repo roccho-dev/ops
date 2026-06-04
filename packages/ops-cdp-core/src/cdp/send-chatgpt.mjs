@@ -18,11 +18,11 @@ import {
   sleepMs,
 } from "./lib.mjs";
 
-import * as std from "qjs:std";
-import * as os from "qjs:os";
+import * as std from "./core/std.mjs";
+import * as os from "./core/os.mjs";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
-import { SELECTORS, assertProjectThreadUrlMatchesProject, keyTap, mouseClick, requireChatGptTarget } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
+import { SELECTORS, assertProjectThreadUrlMatchesProject, keyTap, mouseClick, requireChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
 
 function usage() {
   std.err.puts(

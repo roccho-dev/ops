@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./core/std.mjs";
 
 import { getDefaultAddr, getDefaultPort, parseArgs, run, runToString, sleepMs } from "./lib.mjs";
 

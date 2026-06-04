@@ -1,5 +1,5 @@
-import * as std from "qjs:std";
-import * as os from "qjs:os";
+import * as std from "./std.mjs";
+import * as os from "./os.mjs";
 
 function shellQuote(value) {
   return `'${String(value || "").replace(/'/g, `'"'"'`)}'`;
