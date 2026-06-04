@@ -16,9 +16,26 @@
         "type": "github"
       }
     },
+    "ops-build-defs": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "path": "./packages/ops-build-defs",
+        "type": "path"
+      },
+      "original": {
+        "path": "./packages/ops-build-defs",
+        "type": "path"
+      },
+      "parent": []
+    },
     "root": {
       "inputs": {
         "nixpkgs": "nixpkgs",
+        "ops-build-defs": "ops-build-defs",
         "specs": "specs"
       }
     },
