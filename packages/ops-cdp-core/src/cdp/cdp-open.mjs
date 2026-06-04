@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
 import { requireCdp } from "./connect.mjs";
 import { getDefaultAddr, getDefaultPort, parseArgs, run } from "./lib.mjs";

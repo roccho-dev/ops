@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { getDefaultAddr, parseArgs, run } from "./lib.mjs";
 import { listDownloadArtifactsExpr, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
 import { loadIr, projectReadThreadResultFromIr } from "./chatgpt/ir.mjs";

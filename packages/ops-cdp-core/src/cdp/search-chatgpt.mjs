@@ -4,7 +4,7 @@
 //   qjs --std -m search-chatgpt.mjs --search "query" [--target-id ID] [--addr ADDR] [--port PORT]
 //   qjs --std -m search-chatgpt.mjs --read URL [--target-id ID] [--addr ADDR] [--port PORT]
 
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { cdpCall, cdpEvaluate, parseArgs, run, sleepMs, getDefaultAddr, getDefaultPort } from "./lib.mjs";
 import { SELECTORS, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
 import {

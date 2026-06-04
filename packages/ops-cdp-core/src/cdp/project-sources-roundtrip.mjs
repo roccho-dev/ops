@@ -17,7 +17,7 @@
 //     --file /home/nixos/tmp/hq_project_cross_thread_probe.txt \
 //     --outDir /tmp/hq_project_roundtrip
 
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { SELECTORS, extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
 import { requireCdp } from "./connect.mjs";
 import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, mkdirp, tryStat } from "./fs.mjs";

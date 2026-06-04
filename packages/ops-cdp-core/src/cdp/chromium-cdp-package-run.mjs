@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
 import { applyPackageArtifacts, PACKAGE_ARTIFACT_FORMATS, validatePackageArtifacts } from "./package-run.mjs";

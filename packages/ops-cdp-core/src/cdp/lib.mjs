@@ -1,8 +1,8 @@
-import * as std from "qjs:std";
-import * as os from "qjs:os";
+import * as std from "./qjs-compat/std.mjs";
+import * as os from "./qjs-compat/os.mjs";
 
 // ESM helpers for driving Chromium CDP without jq/node.
-// Runtime: quickjs-ng (qjs) in ESM mode; std/os imported from qjs:std and qjs:os.
+// Runtime: quickjs-ng (qjs) in ESM mode; std/os imported from ./qjs-compat/std.mjs and ./qjs-compat/os.mjs.
 
 const DOC_BASE = "cdp://docs/cdp-errors.md";
 

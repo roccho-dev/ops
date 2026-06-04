@@ -1,9 +1,6 @@
-import * as std from "qjs:std";
-import { parseArgs, run, runToString } from "./lib.mjs";
-
-function getPythonExe() {
-  return String(std.getenv("HQ_CDP_PYTHON") || "python3");
-}
+import * as std from "./qjs-compat/std.mjs";
+import { parseArgs, run } from "./lib.mjs";
+import zip from "./qjs-compat/zip.mjs";
 
 function usage() {
   std.err.puts("usage: qjs --std -m chromium-cdp-inspect-artifact.mjs --path <file> [--json]\n");
@@ -23,14 +20,9 @@ function buildArgs(argv) {
 }
 
 function inspectZip(path) {
-  const py = [
-    "import json, sys, zipfile",
-    `p = ${JSON.stringify(String(path || ""))}`,
-    "with zipfile.ZipFile(p) as z:",
-    "  rows = [{\"name\": n, \"size\": z.getinfo(n).file_size} for n in z.namelist()]",
-    "  print(json.dumps({\"kind\": \"zip\", \"entries\": rows, \"entryCount\": len(rows)}, ensure_ascii=False))",
-  ].join("\n");
-  return JSON.parse(runToString([getPythonExe(), "-c", py]));
+  // 脱python: zipfile を node 純正 zip reader(中央ディレクトリ)で置換。
+  const rows = zip.entrySizes(String(path || ""));
+  return { kind: "zip", entries: rows, entryCount: rows.length };
 }
 
 function inspectText(path) {

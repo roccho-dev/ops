@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
 import { ensureCleanGitWorktree, ensureGitInfoExclude, git, gitRevParse, runCapture } from "./host-git-ops.mjs";

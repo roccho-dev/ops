@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { cdpList, cdpVersion, cdpWsUrl, getDefaultAddr, getDefaultPort, runToString } from "./lib.mjs";
 
 const DEFAULT_SCAN_PORTS = [9222, 9223, 9224, 9225];

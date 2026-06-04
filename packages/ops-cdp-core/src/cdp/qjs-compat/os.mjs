@@ -1,4 +1,4 @@
-// qjs:os -> node 互換 shim。
+// os module (quickjs os 互換) -> node 互換 shim。
 // qjs os.* は [result, errno] タプル or errno を返す慣習。node fs は throw するため変換する。
 import * as fs from "node:fs";
 

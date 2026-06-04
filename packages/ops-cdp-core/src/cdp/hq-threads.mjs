@@ -14,8 +14,8 @@ import {
   sleepMs,
 } from "./lib.mjs";
 
-import * as std from "qjs:std";
-import * as os from "qjs:os";
+import * as std from "./qjs-compat/std.mjs";
+import * as os from "./qjs-compat/os.mjs";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
 import { SELECTORS, extractConversationId, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
 import { requireCdp } from "./connect.mjs";

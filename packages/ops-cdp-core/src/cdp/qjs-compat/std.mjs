@@ -1,4 +1,4 @@
-// qjs:std -> node 互換 shim。
+// std module (quickjs std 互換) -> node 互換 shim。
 // 破壊的ユースケース対応: DC-M-02/DC-S-10(同期 stdout で順序保証・truncation 防止),
 // DC-S-09(utf8 明示), DC-M-13(popen は shell 経由で 2>&1 等を保持)。
 import * as fs from "node:fs";

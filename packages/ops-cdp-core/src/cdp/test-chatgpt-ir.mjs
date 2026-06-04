@@ -1,4 +1,4 @@
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 
 import {
   CHATGPT_DOWNLOAD_IR_SCHEMA,

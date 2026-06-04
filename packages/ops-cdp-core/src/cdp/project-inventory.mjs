@@ -14,7 +14,7 @@
 //     --url "https://chatgpt.com/" \
 //     --outDir /tmp/hq_project_inventory
 
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { extractConversationId, extractProjectId, openOrCreateChatGptTarget, scrollToBottomExpr } from "./chatgpt/index.mjs";
 import { isFreshIr, loadIr, materializeInventoryIr, projectInventoryFromIr, saveIr } from "./chatgpt/ir.mjs";
 import { requireCdp } from "./connect.mjs";

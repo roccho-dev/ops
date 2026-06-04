@@ -18,8 +18,8 @@
 //     --projectId "<projectId>" \
 //     --outPath /tmp/projectize.json
 
-import * as std from "qjs:std";
-import * as os from "qjs:os";
+import * as std from "./qjs-compat/std.mjs";
+import * as os from "./qjs-compat/os.mjs";
 import { extractConversationId, extractProjectId, mouseClick, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
 import { requireCdp } from "./connect.mjs";
 import {

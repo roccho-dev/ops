@@ -11,7 +11,7 @@
 //   qjs --std -m read-thread.mjs \
 //     --url "https://chatgpt.com/c/<thread>" --tail 5 --waitMs 30000
 
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { listDownloadArtifactsExpr, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
 import { isFreshIr, loadIr, materializeThreadIr, projectReadThreadResultFromIr, saveIr } from "./chatgpt/ir.mjs";
 import { requireCdp } from "./connect.mjs";

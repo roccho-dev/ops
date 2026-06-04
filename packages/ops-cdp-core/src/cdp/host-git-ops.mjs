@@ -1,5 +1,5 @@
-import * as os from "qjs:os";
-import * as std from "qjs:std";
+import * as os from "./qjs-compat/os.mjs";
+import * as std from "./qjs-compat/std.mjs";
 
 import { buildDownloadedNameRegex, listMatchingFiles, mkdirp, moveFile } from "./fs.mjs";
 

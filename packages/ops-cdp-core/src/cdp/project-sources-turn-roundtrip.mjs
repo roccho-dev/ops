@@ -27,7 +27,7 @@
 //     --title "TXTROUNDTRIP_20260312T120000Z_abcd" \
 //     --outDir /tmp/hq_turn_roundtrip
 
-import * as std from "qjs:std";
+import * as std from "./qjs-compat/std.mjs";
 import { SELECTORS, extractConversationId, keyTap, mouseClick, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
 import { requireCdp } from "./connect.mjs";
 import { mkdirp } from "./fs.mjs";

@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-// `qjs --std -m <script> [args...]` 互換の node 製 CLI。
+// `qjs --std -m <script> [args...]` 互換の node 製 launcher。
 // 既存の launcher/test が組み立てる qjs コマンド列をそのまま受け、node で実行する。
-// qjs 固有フラグ(--std / -m)は読み飛ばし、hooks(qjs:std/os 解決)と global std/os/scriptArgs を整えて script を import する。
-import { register } from "node:module";
+// qjs 固有フラグ(--std / -m)は読み飛ばし、global std/os/scriptArgs を整えて script を import する。
+// (qjs: import は相対 ./qjs-compat/*.mjs へ書換済のため loader hook は不要)
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import * as std from "./std.mjs";
 import * as os from "./os.mjs";
 
-register("./hooks.mjs", import.meta.url);
 globalThis.std = std;
 globalThis.os = os;
 
