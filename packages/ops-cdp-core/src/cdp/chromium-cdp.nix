@@ -147,8 +147,8 @@
         }:
         pkgs.writeShellScriptBin name ''
           set -euo pipefail
-          export PATH=${lib.makeBinPath ([ cdpBridge pkgs.coreutils pkgs.python3 pkgs.nodejs ] ++ lib.attrValues qjsCommandBins)}:$PATH
-          exec ${pkgs.python3}/bin/python3 ${cdpScriptSrc}/project-transport.py ${subcommand} "$@"
+          export PATH=${lib.makeBinPath ([ cdpBridge pkgs.coreutils pkgs.nodejs ] ++ lib.attrValues qjsCommandBins)}:$PATH
+          exec ${nodeBin} ${cdpScriptSrc}/project-transport.mjs ${subcommand} "$@"
         '';
 
       projectTransportCommands = {
@@ -185,7 +185,6 @@
           cdpBridge
           (lib.getBin pkgs.git)
           (lib.getBin pkgs.coreutils)
-          (lib.getBin pkgs.python3)
           (lib.getBin pkgs.nodejs)
         ] ++ lib.attrValues qjsCommandBins ++ lib.attrValues projectTransportCommandBins;
       };
