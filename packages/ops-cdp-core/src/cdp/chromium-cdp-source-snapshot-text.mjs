@@ -1,4 +1,4 @@
-import * as std from "./qjs-compat/std.mjs";
+import * as std from "./core/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
 import { fileSha256, fileSize, git, gitRevParse, nowIso, runCapture, writeJson } from "./core/host-git.mjs";

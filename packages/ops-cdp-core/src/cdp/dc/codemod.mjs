@@ -9,11 +9,12 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // 移設定義(SRC からの相対)。ディレクトリは subpath を保持して移動。
 const MOVES = {
-  "connect.mjs": "core/connect.mjs",
-  "fs.mjs": "core/io.mjs",
-  "host-git-ops.mjs": "core/host-git.mjs",
-  "session-flow.mjs": "domain/session-flow.mjs",
-  "chatgpt": "domain/chatgpt",
+  "qjs-compat/zip.mjs": "core/zip.mjs",
+  "qjs-compat/std.mjs": "core/std.mjs",
+  "qjs-compat/os.mjs": "core/os.mjs",
+  "qjs-compat/qjs-cli.mjs": "cli/qjs-cli.mjs",
+  "qjs-compat/register.mjs": "cli/register.mjs",
+  "qjs-compat/purity-check.mjs": "dc/purity-check.mjs",
 };
 
 function listMjs(dir) {

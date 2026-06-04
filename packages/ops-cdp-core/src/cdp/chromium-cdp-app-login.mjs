@@ -1,4 +1,4 @@
-import * as std from "./qjs-compat/std.mjs";
+import * as std from "./core/std.mjs";
 import { cdpList, getDefaultAddr, getDefaultPort, parseArgs, run } from "./lib.mjs";
 import { findAdapterTarget, getAppAdapter, listAppAdapterNames } from "./app-adapters.mjs";
 

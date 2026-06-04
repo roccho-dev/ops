@@ -13,7 +13,6 @@
         mkdir -p $out/lib
         cp -r ${./core} $out/lib/core
         cp -r ${./cli} $out/lib/cli
-        cp -r ${./qjs-compat} $out/lib/qjs-compat
         cp ${./lib.mjs} $out/lib/lib.mjs
       '';
       opsChatgptAdapterLib = pkgs.runCommand "ops-chatgpt-adapter-lib" { } ''
@@ -24,7 +23,7 @@
       cliApp = pkgs.runCommand "ops-cdp-cli-app" { } ''
         cp -r ${builtins.path { path = ./.; name = "cdp-full"; }} $out
         chmod -R u+w $out
-        rm -rf $out/core $out/domain $out/cli $out/qjs-compat $out/lib.mjs
+        rm -rf $out/core $out/domain $out/cli $out/lib.mjs
       '';
       # nix-assembly: cli/app に lib を相対配置で vendoring → 現行と同一レイアウト・同一挙動。
       cdpScriptSrc = pkgs.runCommand "chromium-cdp-src" { } ''
@@ -32,7 +31,6 @@
         chmod -R u+w $out
         cp -r ${opsCdpCoreLib}/lib/core $out/core
         cp -r ${opsCdpCoreLib}/lib/cli $out/cli
-        cp -r ${opsCdpCoreLib}/lib/qjs-compat $out/qjs-compat
         cp ${opsCdpCoreLib}/lib/lib.mjs $out/lib.mjs
         cp -r ${opsChatgptAdapterLib}/lib/domain $out/domain
       '';
@@ -48,7 +46,7 @@
 
       # qjs --std -m <script> 互換の node launcher(global std/os/scriptArgs 注入)。
       qjsCliBin = pkgs.writeShellScriptBin "qjs-cli" ''
-        exec ${nodeBin} ${cdpScriptSrc}/qjs-compat/qjs-cli.mjs "$@"
+        exec ${nodeBin} ${cdpScriptSrc}/cli/qjs-cli.mjs "$@"
       '';
       cdpBridge = pkgs.symlinkJoin {
         name = "cdp-bridge";

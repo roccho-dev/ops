@@ -1,5 +1,5 @@
-import * as os from "./qjs-compat/os.mjs";
-import * as std from "./qjs-compat/std.mjs";
+import * as os from "./core/os.mjs";
+import * as std from "./core/std.mjs";
 import { getDefaultAddr, getDefaultPort, parseArgs, run, runToString } from "./lib.mjs";
 import { requireRecommendedSession } from "./domain/session-flow.mjs";
 import { openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";

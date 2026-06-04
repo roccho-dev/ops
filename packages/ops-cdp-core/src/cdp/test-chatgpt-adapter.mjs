@@ -1,4 +1,4 @@
-import * as std from "./qjs-compat/std.mjs";
+import * as std from "./core/std.mjs";
 
 import * as adapter from "./domain/chatgpt/index.mjs";
 import { clickSandboxLinkExpr, listDownloadArtifactsExpr, locateDownloadArtifactExpr, locateFileChipExpr } from "./domain/chatgpt/artifacts.mjs";

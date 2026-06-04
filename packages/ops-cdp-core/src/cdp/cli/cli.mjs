@@ -1,6 +1,6 @@
 // cli: CLI 足場(parseArgs + run harness)。lib ではない(exit/argv/usage を扱う層)。
 // Phase2 で lib に依存する cli package へ移設予定。
-import * as std from "../qjs-compat/std.mjs";
+import * as std from "../core/std.mjs";
 
 function cloneDefaultValue(value) {
   if (Array.isArray(value)) return value.slice();

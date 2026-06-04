@@ -1,6 +1,6 @@
-import * as std from "./qjs-compat/std.mjs";
+import * as std from "./core/std.mjs";
 import { parseArgs, run } from "./lib.mjs";
-import zip from "./qjs-compat/zip.mjs";
+import zip from "./core/zip.mjs";
 
 function usage() {
   std.err.puts("usage: qjs --std -m chromium-cdp-inspect-artifact.mjs --path <file> [--json]\n");

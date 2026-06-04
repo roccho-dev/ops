@@ -12,7 +12,7 @@
 //     (2) watching the filesystem for the new file to appear
 //     (3) copying/moving it into an output directory with a stable name
 
-import * as std from "./qjs-compat/std.mjs";
+import * as std from "./core/std.mjs";
 import {
   extractConversationId,
   listPageTargets,

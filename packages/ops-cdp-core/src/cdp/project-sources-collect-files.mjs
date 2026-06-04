@@ -18,7 +18,7 @@
 //     --name repo.bundle \
 //     --port 9223
 
-import * as std from "./qjs-compat/std.mjs";
+import * as std from "./core/std.mjs";
 import { locateFileChipExpr, mouseClick, navigateChatGptTarget, openOrCreateChatGptTarget, scrollToBottomExpr } from "./domain/chatgpt/index.mjs";
 import { fetchResolvedDownloadTargets } from "./domain/chatgpt/download-fetch.mjs";
 import { resolveNamedDownloadTargetsWithPolicy } from "./domain/chatgpt/download-resolve.mjs";

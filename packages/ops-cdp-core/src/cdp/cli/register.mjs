@@ -1,8 +1,8 @@
 // node --import 用プリロード。
 // qjs --std 互換の global std/os/scriptArgs を注入する。
 // (ソースの qjs: import は相対 ./qjs-compat/*.mjs へ書換済のため、ESM loader hook は不要)
-import * as std from "./std.mjs";
-import * as os from "./os.mjs";
+import * as std from "../core/std.mjs";
+import * as os from "../core/os.mjs";
 
 globalThis.std = std;
 globalThis.os = os;

@@ -18,8 +18,8 @@ import {
   sleepMs,
 } from "./lib.mjs";
 
-import * as std from "./qjs-compat/std.mjs";
-import * as os from "./qjs-compat/os.mjs";
+import * as std from "./core/std.mjs";
+import * as os from "./core/os.mjs";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
 import { SELECTORS, assertProjectThreadUrlMatchesProject, keyTap, mouseClick, requireChatGptTarget } from "./domain/chatgpt/index.mjs";
 import { requireCdp } from "./core/connect.mjs";

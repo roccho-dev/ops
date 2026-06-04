@@ -1,5 +1,5 @@
 // core/config: 環境変数由来の設定(addr/port/headless/profile)。ドメイン知識ゼロ。
-import * as std from "../qjs-compat/std.mjs";
+import * as std from "./std.mjs";
 
 export function getDefaultAddr() {
   return std.getenv("HQ_CHROME_ADDR") || "127.0.0.1";

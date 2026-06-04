@@ -16,8 +16,8 @@
 //     --needle "SOURCE_ID: worktree-foo-001" \
 //     --port 9223
 
-import * as std from "./qjs-compat/std.mjs";
-import * as os from "./qjs-compat/os.mjs";
+import * as std from "./core/std.mjs";
+import * as os from "./core/os.mjs";
 import { mouseClick, openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
 import { requireCdp } from "./core/connect.mjs";
 import {

@@ -12,7 +12,7 @@ function walk(dir) {
   for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = resolve(dir, ent.name);
     if (ent.isDirectory()) {
-      if (ent.name === "node_modules" || ent.name === ".git") continue;
+      if (ent.name === "node_modules" || ent.name === ".git" || ent.name === "dc") continue;
       walk(p);
       continue;
     }

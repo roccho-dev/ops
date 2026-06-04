@@ -1,6 +1,6 @@
 // core/proc: シェル実行 + 同期 sleep。ドメイン知識ゼロ。
-import * as std from "../qjs-compat/std.mjs";
-import * as os from "../qjs-compat/os.mjs";
+import * as std from "./std.mjs";
+import * as os from "./os.mjs";
 
 let nextTmpId = 0;
 

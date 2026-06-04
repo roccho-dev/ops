@@ -1,4 +1,4 @@
-import * as std from "../../qjs-compat/std.mjs";
+import * as std from "../../core/std.mjs";
 import { clickSandboxLinkExpr, locateDownloadArtifactExpr, locateFileChipExpr } from "./artifacts.mjs";
 import { mouseClick } from "./input.mjs";
 import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, moveFile, tryStat } from "../../core/io.mjs";

@@ -1,5 +1,5 @@
-import * as std from './qjs-compat/std.mjs';
-import * as os from './qjs-compat/os.mjs';
+import * as std from './core/std.mjs';
+import * as os from './core/os.mjs';
 
 import { CdpError } from "./lib.mjs";
 import { assertProjectThreadUrlMatchesProject, projectIdsCompatible } from "./domain/chatgpt/shared.mjs";

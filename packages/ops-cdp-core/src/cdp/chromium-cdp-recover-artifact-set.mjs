@@ -3,9 +3,9 @@
 // This handles the case where a response names files in a markdown table, but
 // ChatGPT does not expose them as real downloadable artifact chips.
 
-import * as os from "./qjs-compat/os.mjs";
-import * as std from "./qjs-compat/std.mjs";
-import zip from "./qjs-compat/zip.mjs";
+import * as os from "./core/os.mjs";
+import * as std from "./core/std.mjs";
+import zip from "./core/zip.mjs";
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 
 import { extractConversationId, listPageTargets, previewTargets } from "./domain/chatgpt/index.mjs";

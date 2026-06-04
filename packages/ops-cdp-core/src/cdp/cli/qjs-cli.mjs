@@ -5,8 +5,8 @@
 // (qjs: import は相対 ./qjs-compat/*.mjs へ書換済のため loader hook は不要)
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import * as std from "./std.mjs";
-import * as os from "./os.mjs";
+import * as std from "../core/std.mjs";
+import * as os from "../core/os.mjs";
 
 globalThis.std = std;
 globalThis.os = os;
