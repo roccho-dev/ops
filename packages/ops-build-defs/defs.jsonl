@@ -2,3 +2,4 @@
 {"kind":"nixpkg","attr":"coreutils"}
 {"kind":"hash","name":"sample-src","sha256":"sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}
 {"kind":"nixpkg","attr":"hello"}
+{"kind":"nixpkg","attr":"which"}
