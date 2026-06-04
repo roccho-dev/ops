@@ -1,8 +1,8 @@
 import * as std from "./qjs-compat/std.mjs";
 
 import { getDefaultAddr, getDefaultPort, parseArgs, run, runToString } from "./lib.mjs";
-import { mkdirp } from "./fs.mjs";
-import { fileSha256, fileSize, quarantineDownloadNames, nowIso, pathExists } from "./host-git-ops.mjs";
+import { mkdirp } from "./core/io.mjs";
+import { fileSha256, fileSize, quarantineDownloadNames, nowIso, pathExists } from "./core/host-git.mjs";
 
 function getScriptModulePath(name) {
   const root = String(std.getenv("HQ_CDP_SCRIPT_SRC") || "");

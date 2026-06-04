@@ -1,7 +1,7 @@
 import * as std from "./qjs-compat/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
-import { pathExists, runCapture, shellQuote } from "./host-git-ops.mjs";
+import { pathExists, runCapture, shellQuote } from "./core/host-git.mjs";
 
 function usage() {
   std.err.puts(

@@ -20,8 +20,8 @@
 
 import * as std from "./qjs-compat/std.mjs";
 import * as os from "./qjs-compat/os.mjs";
-import { extractConversationId, extractProjectId, mouseClick, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
+import { extractConversationId, extractProjectId, mouseClick, openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
 import {
   cdpCall,
   cdpEvaluate,

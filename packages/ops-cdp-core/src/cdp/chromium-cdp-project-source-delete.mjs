@@ -15,8 +15,8 @@ import {
   projectSourcesHrefMatches,
   projectSourcesUrl,
   waitForProjectSourcesUrlExpr,
-} from "./chatgpt/project-sources.mjs";
-import { listProjectSources, waitForProjectSourcesLoadedExpr } from "./chatgpt/project-source-listing.mjs";
+} from "./domain/chatgpt/project-sources.mjs";
+import { listProjectSources, waitForProjectSourcesLoadedExpr } from "./domain/chatgpt/project-source-listing.mjs";
 
 function usage() {
   std.err.puts(

@@ -21,8 +21,8 @@ import {
 import * as std from "./qjs-compat/std.mjs";
 import * as os from "./qjs-compat/os.mjs";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
-import { SELECTORS, assertProjectThreadUrlMatchesProject, keyTap, mouseClick, requireChatGptTarget } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
+import { SELECTORS, assertProjectThreadUrlMatchesProject, keyTap, mouseClick, requireChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
 
 function usage() {
   std.err.puts(

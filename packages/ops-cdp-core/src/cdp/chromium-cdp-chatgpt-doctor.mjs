@@ -1,6 +1,6 @@
 import * as std from "./qjs-compat/std.mjs";
 import { getDefaultAddr, parseArgs, run } from "./lib.mjs";
-import { selectRecommendedSession } from "./session-flow.mjs";
+import { selectRecommendedSession } from "./domain/session-flow.mjs";
 
 function usage() {
   std.err.puts("usage: qjs --std -m chromium-cdp-chatgpt-doctor.mjs [--addr 127.0.0.1] [--json]\n");

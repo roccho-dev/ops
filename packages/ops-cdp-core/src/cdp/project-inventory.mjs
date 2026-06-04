@@ -15,10 +15,10 @@
 //     --outDir /tmp/hq_project_inventory
 
 import * as std from "./qjs-compat/std.mjs";
-import { extractConversationId, extractProjectId, openOrCreateChatGptTarget, scrollToBottomExpr } from "./chatgpt/index.mjs";
-import { isFreshIr, loadIr, materializeInventoryIr, projectInventoryFromIr, saveIr } from "./chatgpt/ir.mjs";
-import { requireCdp } from "./connect.mjs";
-import { joinPath, mkdirp } from "./fs.mjs";
+import { extractConversationId, extractProjectId, openOrCreateChatGptTarget, scrollToBottomExpr } from "./domain/chatgpt/index.mjs";
+import { isFreshIr, loadIr, materializeInventoryIr, projectInventoryFromIr, saveIr } from "./domain/chatgpt/ir.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { joinPath, mkdirp } from "./core/io.mjs";
 import {
   cdpCall,
   cdpEvaluate,

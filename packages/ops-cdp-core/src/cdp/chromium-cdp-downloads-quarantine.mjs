@@ -1,7 +1,7 @@
 import * as std from "./qjs-compat/std.mjs";
 
 import { getDefaultAddr, parseArgs, run } from "./lib.mjs";
-import { quarantineDownloadNames, nowIso } from "./host-git-ops.mjs";
+import { quarantineDownloadNames, nowIso } from "./core/host-git.mjs";
 
 function usage() {
   std.err.puts(

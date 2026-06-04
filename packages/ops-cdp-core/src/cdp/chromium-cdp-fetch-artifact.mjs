@@ -1,9 +1,9 @@
 import * as os from "./qjs-compat/os.mjs";
 import * as std from "./qjs-compat/std.mjs";
 import { getDefaultAddr, getDefaultPort, parseArgs, run, runToString } from "./lib.mjs";
-import { requireRecommendedSession } from "./session-flow.mjs";
-import { openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
+import { requireRecommendedSession } from "./domain/session-flow.mjs";
+import { openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
 
 function getScriptModulePath(name) {
   const root = String(std.getenv("HQ_CDP_SCRIPT_SRC") || "");

@@ -8,10 +8,10 @@ import * as std from "./qjs-compat/std.mjs";
 import zip from "./qjs-compat/zip.mjs";
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 
-import { extractConversationId, listPageTargets, previewTargets } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
-import { buildDownloadedNameRegex, copyFile, joinPath, listDir, mkdirp, tryStat } from "./fs.mjs";
-import { basename, fileSha256, fileSize, pathExists, runCapture, writeJson } from "./host-git-ops.mjs";
+import { extractConversationId, listPageTargets, previewTargets } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { buildDownloadedNameRegex, copyFile, joinPath, listDir, mkdirp, tryStat } from "./core/io.mjs";
+import { basename, fileSha256, fileSize, pathExists, runCapture, writeJson } from "./core/host-git.mjs";
 import { cdpCall, getDefaultAddr, getDefaultPort, mkCaller, parseArgs, run, sleepMs } from "./lib.mjs";
 
 function usage() {

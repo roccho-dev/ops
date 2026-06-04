@@ -28,9 +28,9 @@
 //     --outDir /tmp/hq_turn_roundtrip
 
 import * as std from "./qjs-compat/std.mjs";
-import { SELECTORS, extractConversationId, keyTap, mouseClick, openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
-import { requireCdp } from "./connect.mjs";
-import { mkdirp } from "./fs.mjs";
+import { SELECTORS, extractConversationId, keyTap, mouseClick, openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireCdp } from "./core/connect.mjs";
+import { mkdirp } from "./core/io.mjs";
 import {
   cdpCall,
   cdpEvaluate,

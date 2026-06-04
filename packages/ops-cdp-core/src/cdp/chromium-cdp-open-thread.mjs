@@ -1,8 +1,8 @@
 import * as std from "./qjs-compat/std.mjs";
 import { getDefaultAddr, parseArgs, run } from "./lib.mjs";
-import { openOrCreateChatGptTarget } from "./chatgpt/index.mjs";
-import { requireRecommendedSession } from "./session-flow.mjs";
-import { requireCdp } from "./connect.mjs";
+import { openOrCreateChatGptTarget } from "./domain/chatgpt/index.mjs";
+import { requireRecommendedSession } from "./domain/session-flow.mjs";
+import { requireCdp } from "./core/connect.mjs";
 
 function usage() {
   std.err.puts("usage: qjs --std -m chromium-cdp-open-thread.mjs --url <chatgpt-thread-url> [--addr 127.0.0.1] [--port <n>] [--json]\n");

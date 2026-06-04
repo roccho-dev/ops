@@ -1,8 +1,8 @@
-import * as std from "../qjs-compat/std.mjs";
+import * as std from "../../qjs-compat/std.mjs";
 import { clickSandboxLinkExpr, locateDownloadArtifactExpr, locateFileChipExpr } from "./artifacts.mjs";
 import { mouseClick } from "./input.mjs";
-import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, moveFile, tryStat } from "../fs.mjs";
-import { runToString, sleepMs } from "../lib.mjs";
+import { buildDownloadedNameRegex, copyFile, joinPath, listMatchingFiles, moveFile, tryStat } from "../../core/io.mjs";
+import { runToString, sleepMs } from "../../lib.mjs";
 
 function shellQuote(value) {
   return "'" + String(value || "").replace(/'/g, "'\\''") + "'";

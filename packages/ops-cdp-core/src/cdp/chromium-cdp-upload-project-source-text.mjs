@@ -13,7 +13,7 @@ import {
   getDefaultPort,
   sleepMs,
 } from "./lib.mjs";
-import { pickProjectSourcesTarget, projectSourcesHrefMatches, projectSourcesUrl, waitForProjectSourcesUrlExpr } from "./chatgpt/project-sources.mjs";
+import { pickProjectSourcesTarget, projectSourcesHrefMatches, projectSourcesUrl, waitForProjectSourcesUrlExpr } from "./domain/chatgpt/project-sources.mjs";
 
 function usage() {
   std.err.puts(

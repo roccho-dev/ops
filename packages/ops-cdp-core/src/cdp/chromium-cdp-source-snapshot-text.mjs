@@ -1,8 +1,8 @@
 import * as std from "./qjs-compat/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
-import { fileSha256, fileSize, git, gitRevParse, nowIso, runCapture, writeJson } from "./host-git-ops.mjs";
-import { mkdirp } from "./fs.mjs";
+import { fileSha256, fileSize, git, gitRevParse, nowIso, runCapture, writeJson } from "./core/host-git.mjs";
+import { mkdirp } from "./core/io.mjs";
 
 function usage() {
   std.err.puts(

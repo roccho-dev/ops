@@ -1,4 +1,4 @@
-import { cdpEvaluate } from "../lib.mjs";
+import { cdpEvaluate } from "../../lib.mjs";
 
 export function listProjectSourcesExpr() {
   return `(() => {

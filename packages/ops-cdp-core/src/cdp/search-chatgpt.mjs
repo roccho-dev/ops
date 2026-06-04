@@ -6,7 +6,7 @@
 
 import * as std from "./qjs-compat/std.mjs";
 import { cdpCall, cdpEvaluate, parseArgs, run, sleepMs, getDefaultAddr, getDefaultPort } from "./lib.mjs";
-import { SELECTORS, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
+import { SELECTORS, openOrCreateChatGptTarget, requireChatGptTarget } from "./domain/chatgpt/index.mjs";
 import {
   isFreshIr,
   loadIr,
@@ -15,8 +15,8 @@ import {
   projectReadThreadResultFromIr,
   projectSearchResultFromIr,
   saveIr,
-} from "./chatgpt/ir.mjs";
-import { requireCdp } from "./connect.mjs";
+} from "./domain/chatgpt/ir.mjs";
+import { requireCdp } from "./core/connect.mjs";
 
 const SEARCH_INPUT_SELECTORS = [
   "input[placeholder='Search chats...']",

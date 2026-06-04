@@ -10,7 +10,7 @@ import {
   pathExists,
   readJson,
   runCapture,
-} from "./host-git-ops.mjs";
+} from "./core/host-git.mjs";
 
 export const PACKAGE_ARTIFACT_FORMATS = ["patch", "mbox", "bundle"];
 

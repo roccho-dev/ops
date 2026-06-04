@@ -2,7 +2,7 @@ import * as os from "./qjs-compat/os.mjs";
 import * as std from "./qjs-compat/std.mjs";
 
 import { getDefaultAddr, getDefaultPort, parseArgs, run, runToString, sleepMs } from "./lib.mjs";
-import { assertProjectThreadUrlMatchesProject, extractProjectId } from "./chatgpt/index.mjs";
+import { assertProjectThreadUrlMatchesProject, extractProjectId } from "./domain/chatgpt/index.mjs";
 
 function getScriptModulePath(name) {
   const root = String(std.getenv("HQ_CDP_SCRIPT_SRC") || "");

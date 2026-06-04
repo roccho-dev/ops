@@ -1,4 +1,4 @@
-import { cdpCall, cdpEvaluate, pollUntil } from "../lib.mjs";
+import { cdpCall, cdpEvaluate, pollUntil } from "../../lib.mjs";
 import { CHATGPT_BASE, normalizeAbsUrl, urlsMatch } from "./shared.mjs";
 
 function pageStateExpr() {

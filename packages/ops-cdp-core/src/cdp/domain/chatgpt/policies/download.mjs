@@ -1,4 +1,4 @@
-import * as std from "../../qjs-compat/std.mjs";
+import * as std from "../../../qjs-compat/std.mjs";
 
 function envBool(name, fallback) {
   const raw = std.getenv(name);

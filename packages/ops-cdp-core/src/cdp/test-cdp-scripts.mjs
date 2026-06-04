@@ -2,13 +2,13 @@ import * as std from './qjs-compat/std.mjs';
 import * as os from './qjs-compat/os.mjs';
 
 import { CdpError } from "./lib.mjs";
-import { assertProjectThreadUrlMatchesProject, projectIdsCompatible } from "./chatgpt/shared.mjs";
+import { assertProjectThreadUrlMatchesProject, projectIdsCompatible } from "./domain/chatgpt/shared.mjs";
 import {
   materializeThreadIr,
   materializeDownloadResolveIr,
   materializeInventoryIr,
   materializeSearchIr,
-} from "./chatgpt/ir.mjs";
+} from "./domain/chatgpt/ir.mjs";
 
 let passed = 0;
 let failed = 0;

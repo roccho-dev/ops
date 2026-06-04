@@ -1,7 +1,7 @@
 import * as std from "./qjs-compat/std.mjs";
-import { requireCdp } from "./connect.mjs";
+import { requireCdp } from "./core/connect.mjs";
 import { getDefaultAddr, getDefaultPort, mkCaller, parseArgs, run, sleepMs } from "./lib.mjs";
-import { assertProjectThreadUrlMatchesProject, extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget, requireChatGptTarget } from "./chatgpt/index.mjs";
+import { assertProjectThreadUrlMatchesProject, extractConversationId, extractProjectId, keyTap, mouseClick, openOrCreateChatGptTarget, requireChatGptTarget } from "./domain/chatgpt/index.mjs";
 import { waitForDomModelExpr } from "./hq-dom-model.mjs";
 
 function usage() {

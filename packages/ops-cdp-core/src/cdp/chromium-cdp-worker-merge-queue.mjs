@@ -1,7 +1,7 @@
 import * as std from "./qjs-compat/std.mjs";
 
 import { parseArgs, run } from "./lib.mjs";
-import { ensureCleanGitWorktree, ensureGitInfoExclude, git, gitRevParse, runCapture } from "./host-git-ops.mjs";
+import { ensureCleanGitWorktree, ensureGitInfoExclude, git, gitRevParse, runCapture } from "./core/host-git.mjs";
 
 function usage() {
   std.err.puts(

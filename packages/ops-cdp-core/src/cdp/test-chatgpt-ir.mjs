@@ -17,9 +17,9 @@ import {
   projectReadThreadResultFromIr,
   projectSearchResultFromIr,
   projectThreadsIndexFromIr,
-} from "./chatgpt/ir.mjs";
-import { DOWNLOAD_POLICY, buildDownloadFetchPolicy, buildDownloadResolvePolicy } from "./chatgpt/policies/download.mjs";
-import { rankSessions } from "./session-flow.mjs";
+} from "./domain/chatgpt/ir.mjs";
+import { DOWNLOAD_POLICY, buildDownloadFetchPolicy, buildDownloadResolvePolicy } from "./domain/chatgpt/policies/download.mjs";
+import { rankSessions } from "./domain/session-flow.mjs";
 
 let passed = 0;
 let failed = 0;

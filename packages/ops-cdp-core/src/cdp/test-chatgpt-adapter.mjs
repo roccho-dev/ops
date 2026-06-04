@@ -1,12 +1,12 @@
 import * as std from "./qjs-compat/std.mjs";
 
-import * as adapter from "./chatgpt/index.mjs";
-import { clickSandboxLinkExpr, listDownloadArtifactsExpr, locateDownloadArtifactExpr, locateFileChipExpr } from "./chatgpt/artifacts.mjs";
-import { keyTap, mouseClick, scrollToBottomExpr } from "./chatgpt/input.mjs";
-import { getChatGptPageState, navigateChatGptTarget } from "./chatgpt/navigation.mjs";
-import { pickProjectSourcesTarget, projectSourcesUrl, waitForProjectSourceVisibleExpr, waitForProjectSourcesUrlExpr } from "./chatgpt/project-sources.mjs";
-import { probeChatGptTarget } from "./chatgpt/session.mjs";
-import { openOrCreateChatGptTarget, requireChatGptTarget, shouldReuseAnyChatGptTarget } from "./chatgpt/target.mjs";
+import * as adapter from "./domain/chatgpt/index.mjs";
+import { clickSandboxLinkExpr, listDownloadArtifactsExpr, locateDownloadArtifactExpr, locateFileChipExpr } from "./domain/chatgpt/artifacts.mjs";
+import { keyTap, mouseClick, scrollToBottomExpr } from "./domain/chatgpt/input.mjs";
+import { getChatGptPageState, navigateChatGptTarget } from "./domain/chatgpt/navigation.mjs";
+import { pickProjectSourcesTarget, projectSourcesUrl, waitForProjectSourceVisibleExpr, waitForProjectSourcesUrlExpr } from "./domain/chatgpt/project-sources.mjs";
+import { probeChatGptTarget } from "./domain/chatgpt/session.mjs";
+import { openOrCreateChatGptTarget, requireChatGptTarget, shouldReuseAnyChatGptTarget } from "./domain/chatgpt/target.mjs";
 import {
   CHATGPT_BASE,
   CONV_ID_RE,
@@ -17,7 +17,7 @@ import {
   listPageTargets,
   pickTargetByUrl,
   previewTargets,
-} from "./chatgpt/shared.mjs";
+} from "./domain/chatgpt/shared.mjs";
 
 let passed = 0;
 let failed = 0;
