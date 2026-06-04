@@ -2,6 +2,10 @@
   # ops 内 自己完結 PoC: jsonl -> nix output(package only) -> 同 ops が consume の閉路を証明。
   # 4原則: KISS(最小) / DRY(data.jsonl 単一ソース) / SOLID(from-jsonl=生成, consumes=検証 の単一責務) / YAGNI(汎用化しない)。
   # apps / devShells は出さない(specs outputReviewGate: packages/checks のみ許可に整合)。
+  #
+  # TODO(adrs): 理想は adrs repo の jsonl から「必要な jsonl だけ」を import して構築する機構。
+  #   方針変更により当面は ops のみで完結(cross-repo の adrs import は保留)。
+  #   cf. data.jsonl の id=todo-adrs-selective-import。
   description = "ops PoC: jsonl -> package-only nix output -> consumed within ops (self-contained closure)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

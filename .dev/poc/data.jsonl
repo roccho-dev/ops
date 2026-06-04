@@ -1,3 +1,4 @@
 {"id":"poc-1","kind":"sample","note":"jsonl is the only data input"}
 {"id":"poc-2","kind":"sample","note":"immutable / append-only"}
 {"id":"poc-3","kind":"sample","note":"nix output is package-only"}
+{"id":"todo-adrs-selective-import","kind":"todo","note":"理想: adrs repo の jsonl から『必要な jsonl だけ』を import して構築する機構。方針変更により当面は ops のみで完結(cross-repo の adrs import は保留=本TODO)。"}
