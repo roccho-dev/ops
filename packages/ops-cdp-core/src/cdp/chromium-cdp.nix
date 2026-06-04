@@ -7,10 +7,35 @@
 
       chromiumPkg = pkgs.chromium;
       nodeBin = lib.getExe pkgs.nodejs;
-      cdpScriptSrc = builtins.path {
-        path = ./.;
-        name = "chromium-cdp-src";
-      };
+      # package 境界 = 実 nix derivation(specs: ops-cdp-core lib / ops-chatgpt-adapter)。
+      # 越境結合は ${dep} store-path 補間で vendoring(npm/node_modules 不使用、相対 import で解決)。
+      opsCdpCoreLib = pkgs.runCommand "ops-cdp-core-lib" { } ''
+        mkdir -p $out/lib
+        cp -r ${./core} $out/lib/core
+        cp -r ${./cli} $out/lib/cli
+        cp -r ${./qjs-compat} $out/lib/qjs-compat
+        cp ${./lib.mjs} $out/lib/lib.mjs
+      '';
+      opsChatgptAdapterLib = pkgs.runCommand "ops-chatgpt-adapter-lib" { } ''
+        mkdir -p $out/lib
+        cp -r ${./domain} $out/lib/domain
+      '';
+      # cli/app 残余 = 全体から lib(core/domain/cli/qjs-compat/lib.mjs)を除いたもの。
+      cliApp = pkgs.runCommand "ops-cdp-cli-app" { } ''
+        cp -r ${builtins.path { path = ./.; name = "cdp-full"; }} $out
+        chmod -R u+w $out
+        rm -rf $out/core $out/domain $out/cli $out/qjs-compat $out/lib.mjs
+      '';
+      # nix-assembly: cli/app に lib を相対配置で vendoring → 現行と同一レイアウト・同一挙動。
+      cdpScriptSrc = pkgs.runCommand "chromium-cdp-src" { } ''
+        cp -r ${cliApp} $out
+        chmod -R u+w $out
+        cp -r ${opsCdpCoreLib}/lib/core $out/core
+        cp -r ${opsCdpCoreLib}/lib/cli $out/cli
+        cp -r ${opsCdpCoreLib}/lib/qjs-compat $out/qjs-compat
+        cp ${opsCdpCoreLib}/lib/lib.mjs $out/lib.mjs
+        cp -r ${opsChatgptAdapterLib}/lib/domain $out/domain
+      '';
 
       # 脱python/zig: CDP bridge を node 版へ置換(実 chromium で version/wsurl/list/new/close/call 検証済)。
       cdpBridgeCommand = pkgs.writeShellApplication {
@@ -197,6 +222,9 @@
         cdp-bridge = cdpBridge;
         chromium-cdp-tools = cdp;
         cdp = cdp;
+        # specs package 境界(lib derivation 出力)。run-tree はこれらを vendoring して組む。
+        ops-cdp-core-lib = opsCdpCoreLib;
+        ops-chatgpt-adapter-lib = opsChatgptAdapterLib;
       };
 
       commandApps = lib.mapAttrs (
