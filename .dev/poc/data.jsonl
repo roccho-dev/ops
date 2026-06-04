@@ -1,0 +1,3 @@
+{"id":"poc-1","kind":"sample","note":"jsonl is the only data input"}
+{"id":"poc-2","kind":"sample","note":"immutable / append-only"}
+{"id":"poc-3","kind":"sample","note":"nix output is package-only"}
