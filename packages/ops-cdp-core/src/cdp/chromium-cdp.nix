@@ -6,19 +6,25 @@
       inherit (pkgs) lib;
 
       chromiumPkg = pkgs.chromium;
-      qjs = lib.getExe' pkgs.quickjs-ng "qjs";
+      nodeBin = lib.getExe pkgs.nodejs;
       cdpScriptSrc = builtins.path {
         path = ./.;
         name = "chromium-cdp-src";
       };
 
+      # 脱python/zig: CDP bridge を node 版へ置換(実 chromium で version/wsurl/list/new/close/call 検証済)。
       cdpBridgeCommand = pkgs.writeShellApplication {
         name = "cdp-bridge";
-        runtimeInputs = [ pkgs.python3 ];
+        runtimeInputs = [ pkgs.nodejs ];
         text = ''
-          exec ${pkgs.python3}/bin/python3 ${./cdp-bridge.py} "$@"
+          exec ${nodeBin} ${./cdp-bridge.mjs} "$@"
         '';
       };
+
+      # qjs --std -m <script> 互換の node launcher(global std/os/scriptArgs 注入)。
+      qjsCliBin = pkgs.writeShellScriptBin "qjs-cli" ''
+        exec ${nodeBin} ${cdpScriptSrc}/qjs-compat/qjs-cli.mjs "$@"
+      '';
       cdpBridge = pkgs.symlinkJoin {
         name = "cdp-bridge";
         paths = [ cdpBridgeCommand ];
@@ -72,9 +78,9 @@
           set -euo pipefail
           export PATH=${lib.makeBinPath pathPkgs}:$PATH
           export HQ_CDP_SCRIPT_SRC=${cdpScriptSrc}
-          export HQ_CDP_QJS=${qjs}
+          export HQ_CDP_QJS=${qjsCliBin}/bin/qjs-cli
           ${extraEnv}
-          exec ${qjs} --std -m ${cdpScriptSrc}/${script} "$@"
+          exec ${qjsCliBin}/bin/qjs-cli --std -m ${cdpScriptSrc}/${script} "$@"
         '';
 
       qjsCommands = {
@@ -93,19 +99,13 @@
         chromium-cdp-fetch-artifact-strict = { script = "chromium-cdp-fetch-artifact-strict.mjs"; pathPkgs = [ cdpBridge pkgs.coreutils ]; };
         chromium-cdp-recover-artifact-set = {
           script = "chromium-cdp-recover-artifact-set.mjs";
-          pathPkgs = [ cdpBridge pkgs.coreutils pkgs.python3 ];
-          extraEnv = ''
-            export HQ_CDP_PYTHON=${lib.getExe pkgs.python3}
-          '';
+          pathPkgs = [ cdpBridge pkgs.coreutils ];
         };
         chromium-cdp-wait-artifacts = { script = "chromium-cdp-wait-artifacts.mjs"; };
         chromium-cdp-downloads-quarantine = { script = "chromium-cdp-downloads-quarantine.mjs"; pathPkgs = [ pkgs.coreutils ]; };
         chromium-cdp-inspect-artifact = {
           script = "chromium-cdp-inspect-artifact.mjs";
-          pathPkgs = [ pkgs.python3 ];
-          extraEnv = ''
-            export HQ_CDP_PYTHON=${lib.getExe pkgs.python3}
-          '';
+          pathPkgs = [ pkgs.coreutils ];
         };
 
         chromium-cdp-create-project-thread = { script = "chromium-cdp-create-project-thread.mjs"; };
@@ -147,7 +147,7 @@
         }:
         pkgs.writeShellScriptBin name ''
           set -euo pipefail
-          export PATH=${lib.makeBinPath ([ cdpBridge pkgs.coreutils pkgs.python3 pkgs.quickjs-ng ] ++ lib.attrValues qjsCommandBins)}:$PATH
+          export PATH=${lib.makeBinPath ([ cdpBridge pkgs.coreutils pkgs.python3 pkgs.nodejs ] ++ lib.attrValues qjsCommandBins)}:$PATH
           exec ${pkgs.python3}/bin/python3 ${cdpScriptSrc}/project-transport.py ${subcommand} "$@"
         '';
 
@@ -186,7 +186,7 @@
           (lib.getBin pkgs.git)
           (lib.getBin pkgs.coreutils)
           (lib.getBin pkgs.python3)
-          (lib.getBin pkgs.quickjs-ng)
+          (lib.getBin pkgs.nodejs)
         ] ++ lib.attrValues qjsCommandBins ++ lib.attrValues projectTransportCommandBins;
       };
 
