@@ -31,6 +31,13 @@
           cdp = cdpFor pkgs;
         in
         rec {
+          # ops 自己完結 PoC(.dev 廃止し ops 本体へ統合): jsonl を入力に package のみを生成。
+          # KISS/DRY/SOLID/YAGNI 徹底。consume は checks.poc-consumes。
+          poc-from-jsonl =
+            pkgs.runCommand "poc-from-jsonl" { nativeBuildInputs = [ pkgs.jq ]; } ''
+              mkdir -p "$out"
+              jq -s '{ count: length, ids: [ .[].id ] }' ${./packages/ops-selfcontained-poc/data.jsonl} > "$out/result.json"
+            '';
           ops-artifact-materialize = pkgs.writeShellApplication {
             name = "ops-artifact-materialize";
             runtimeInputs = [ pkgs.python3 ];
@@ -177,6 +184,15 @@
           proveFeatContractLint = proveFeatGate "contract-lint";
         in
         {
+          # ops 本体 flake が jsonl 由来 package を consume = ops 自己完結の閉路(外部 input なし)
+          poc-consumes =
+            pkgs.runCommand "poc-consumes" { nativeBuildInputs = [ pkgs.jq ]; } ''
+              got=$(jq -r '.count' ${self.packages.${system}.poc-from-jsonl}/result.json)
+              want=$(jq -s 'length' ${./packages/ops-selfcontained-poc/data.jsonl})
+              test "$got" = "$want"
+              mkdir -p "$out"
+              echo "closed: count=$got matches jsonl ($want) — ops self-contained (no .dev, no external input)" > "$out/proof.txt"
+            '';
           prove-feat-structure = proveFeatStructure;
           prove-feat-format = proveFeatFormat;
           prove-feat-deadnix = proveFeatDeadnix;

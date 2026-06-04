@@ -1,16 +1,18 @@
 # ops PoC — jsonl → nix output(package only) → ops consume の自己完結証明
 
 adrs proposal `raw-20260604-ops-jsonl-nix-selfcontained` の proof。
+**ops 本体 flake に統合**(`.dev/` は使わない。ops の慣習どおり `packages/` + ルート `flake.nix`)。
 
 ## 主張
-ops 内で、**jsonl を唯一の入力**として **nix output を package のみ**で生成し、その output を **同 ops が consume** して**閉路が外部 input なしに成立**することを示す。
+ops 内で、**jsonl を唯一の入力**として **nix output を package のみ**で生成し、その output を **同 ops の本体 flake が consume** して**閉路が外部 input なしに成立**することを示す(横の sub-flake ではなく ops 本体で完結)。
 
-## 構成(閉路)
+## 構成(閉路) — すべて ops ルート flake.nix
 ```
-data.jsonl ──(jq fold)──> packages.<sys>.poc-from-jsonl ($out/result.json)
-                                   │ consume
-                                   ▼
-                          checks.<sys>.poc-consumes  (jsonl由来と一致を検証)
+packages/ops-selfcontained-poc/data.jsonl
+   ──(jq fold)──> packages.<sys>.poc-from-jsonl ($out/result.json)
+                         │ consume
+                         ▼
+                  checks.<sys>.poc-consumes  (jsonl由来と一致を検証)
 ```
 
 ## 証明コマンド
