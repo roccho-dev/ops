@@ -45,7 +45,7 @@
       # 'node-only' の runtime purity 対象外 (DC-M-08 の境界定義に従う)。
       nodejs26For =
         pkgs:
-        pkgs.nodejs_25.overrideAttrs (old: {
+        pkgs.nodejs_25.overrideAttrs (_: {
           pname = "nodejs";
           version = "26.3.0";
           src = nodejs-src;
@@ -61,11 +61,10 @@
         rec {
           # ops 自己完結 PoC(.dev 廃止し ops 本体へ統合): jsonl を入力に package のみを生成。
           # KISS/DRY/SOLID/YAGNI 徹底。consume は checks.poc-consumes。
-          poc-from-jsonl =
-            pkgs.runCommand "poc-from-jsonl" { nativeBuildInputs = [ pkgs.jq ]; } ''
-              mkdir -p "$out"
-              jq -s '{ count: length, ids: [ .[].id ] }' ${./packages/ops-selfcontained-poc/data.jsonl} > "$out/result.json"
-            '';
+          poc-from-jsonl = pkgs.runCommand "poc-from-jsonl" { nativeBuildInputs = [ pkgs.jq ]; } ''
+            mkdir -p "$out"
+            jq -s '{ count: length, ids: [ .[].id ] }' ${./packages/ops-selfcontained-poc/data.jsonl} > "$out/result.json"
+          '';
           # ops-build-defs(分離可能 package)を consume して ops を build する。
           # snapshot package を再公開 + nix module(lib.snapshot)から環境を構成(pure-eval, IFD なし)。
           ops-build-defs-snapshot = ops-build-defs.packages.${pkgs.stdenv.hostPlatform.system}.snapshot;
@@ -222,14 +221,13 @@
         in
         {
           # ops 本体 flake が jsonl 由来 package を consume = ops 自己完結の閉路(外部 input なし)
-          poc-consumes =
-            pkgs.runCommand "poc-consumes" { nativeBuildInputs = [ pkgs.jq ]; } ''
-              got=$(jq -r '.count' ${self.packages.${system}.poc-from-jsonl}/result.json)
-              want=$(jq -s 'length' ${./packages/ops-selfcontained-poc/data.jsonl})
-              test "$got" = "$want"
-              mkdir -p "$out"
-              echo "closed: count=$got matches jsonl ($want) — ops self-contained (no .dev, no external input)" > "$out/proof.txt"
-            '';
+          poc-consumes = pkgs.runCommand "poc-consumes" { nativeBuildInputs = [ pkgs.jq ]; } ''
+            got=$(jq -r '.count' ${self.packages.${system}.poc-from-jsonl}/result.json)
+            want=$(jq -s 'length' ${./packages/ops-selfcontained-poc/data.jsonl})
+            test "$got" = "$want"
+            mkdir -p "$out"
+            echo "closed: count=$got matches jsonl ($want) — ops self-contained (no .dev, no external input)" > "$out/proof.txt"
+          '';
           prove-feat-structure = proveFeatStructure;
           prove-feat-format = proveFeatFormat;
           prove-feat-deadnix = proveFeatDeadnix;
@@ -567,10 +565,7 @@
                 project-thread-create --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project' --text-file "$out/transport/prompt.txt" --out-dir "$out/transport" > "$out/transport/thread-create.json"
                 ! project-thread-create --dry-run --project-url 'https://chatgpt.com/g/g-p-test/project?tab=sources' --text-file "$out/transport/prompt.txt" --out-dir "$out/transport" > "$out/transport/thread-create-sources-tab.json"
                 project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --project-url 'https://chatgpt.com/g/g-p-test/project' --text 'artifact: source.txt' --out-dir "$out/transport" > "$out/transport/thread-send.json"
-                ! project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --text "$(python3 - <<'PY'
-                print('x' * 2100)
-                PY
-                )" --out-dir "$out/transport" > "$out/transport/thread-send-long.json"
+                ! project-thread-send --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --text "$(head -c 2100 /dev/zero | tr '\0' x)" --out-dir "$out/transport" > "$out/transport/thread-send-long.json"
                 project-thread-readback --dry-run --url 'https://chatgpt.com/g/g-p-test/c/test' --id target-test --markers source.txt --out-dir "$out/transport" > "$out/transport/readback.json"
                 project-artifact-fetch --dry-run --name result.zip --url 'https://chatgpt.com/g/g-p-test/c/test' --out-dir "$out/transport" > "$out/transport/artifact-fetch.json"
                 project-handoff-preflight \

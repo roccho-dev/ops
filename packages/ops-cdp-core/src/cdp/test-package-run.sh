@@ -71,12 +71,14 @@ EOF_JSON
   --json > "$root/bundle.json"
 git -C "$bundle_wt" show HEAD:file.txt | grep -qx 'new'
 
-python3 - <<PY
-import json, pathlib
-root = pathlib.Path('$root')
-for name in ['patch', 'mbox', 'bundle']:
-    data = json.loads((root / f'{name}.json').read_text())
-    assert data['ok'] is True, data
-    assert data['applied']['ok'] is True, data
-print('PASS: package-run patch/mbox/bundle host orchestration')
-PY
+node -e '
+const fs = require("fs");
+const path = require("path");
+const root = process.argv[1];
+for (const name of ["patch", "mbox", "bundle"]) {
+  const data = JSON.parse(fs.readFileSync(path.join(root, name + ".json"), "utf8"));
+  if (data.ok !== true) throw new Error("ok!=true: " + JSON.stringify(data));
+  if (!data.applied || data.applied.ok !== true) throw new Error("applied.ok!=true: " + JSON.stringify(data));
+}
+console.log("PASS: package-run patch/mbox/bundle host orchestration");
+' "$root"
