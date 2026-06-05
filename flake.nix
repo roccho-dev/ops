@@ -80,6 +80,16 @@
               exec ${pkgs.python3}/bin/python3 ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py} "$@"
             '';
           };
+          ops-portable-runtime-pack = pkgs.writeShellApplication {
+            name = "ops-portable-runtime-pack";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.python3
+            ];
+            text = ''
+              exec ${pkgs.python3}/bin/python3 ${./packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py} "$@"
+            '';
+          };
           ops-thread-fsm = pkgs.writeShellApplication {
             name = "ops-thread-fsm";
             runtimeInputs = [ pkgs.python3 ];
@@ -391,6 +401,56 @@
                 python3 -m py_compile ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py}
                 python3 -S ${./packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py} \
                   ${./packages/ops-src-runtime-pack} "$out/python-test" > "$out/test.log"
+              '';
+          ops-portable-runtime-pack =
+            pkgs.runCommand "ops-portable-runtime-pack-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-handoff-core
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-portable-runtime-pack
+                ];
+              }
+              ''
+                mkdir -p "$out"
+                python3 -m py_compile ${./packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py}
+                python3 -S ${./packages/ops-portable-runtime-pack/tests/test_ops_portable_runtime_pack.py} \
+                  ${./packages/ops-portable-runtime-pack} "$out/python-test" > "$out/test.log"
+                cat > "$out/tool-spec.json" <<EOF
+                {
+                  "tools": [
+                    {
+                      "name": "portable-fixture",
+                      "source": "${pkgs.hello}/bin/hello",
+                      "env": {},
+                      "smoke": ["--version"]
+                    }
+                  ]
+                }
+                EOF
+                ops-portable-runtime-pack create \
+                  --target-system x86_64-linux \
+                  --tool-spec "$out/tool-spec.json" \
+                  --out-dir "$out/runtime-pack" > "$out/create.json"
+                ops-portable-runtime-pack validate \
+                  --pack-dir "$out/runtime-pack" > "$out/validate-runtime.json"
+                ops-handoff-core generate \
+                  --role-catalog ${./packages/ops-handoff-core/tests/fixtures/role-catalog.md} \
+                  --topology ${./packages/ops-handoff-core/tests/fixtures/organization-topology.a2ui.jsonl} \
+                  --command-board ${./packages/ops-handoff-core/tests/fixtures/command-board.a2ui.jsonl} \
+                  --request ${./packages/ops-handoff-core/tests/fixtures/REQUEST.md} \
+                  --source-manifest ${./packages/ops-handoff-core/tests/fixtures/source-manifest.json} \
+                  --runtime-manifest "$out/runtime-pack/MANIFEST.json" \
+                  --merge-target ${./packages/ops-handoff-core/tests/fixtures/merge-target.json} \
+                  --thread-roster ${./packages/ops-handoff-core/tests/fixtures/thread-roster.json} \
+                  --out-dir "$out/handoff" \
+                  --json > "$out/handoff-generate.json"
+                ops-handoff-core validate \
+                  --handoff-dir "$out/handoff" > "$out/handoff-validate.json"
+                grep -q '"status": "portable-runtime-pack-created"' "$out/create.json"
+                grep -q '"status": "portable-runtime-pack-valid"' "$out/validate-runtime.json"
+                grep -q '"status": "handoff-generated"' "$out/handoff-generate.json"
+                grep -q '"status": "handoff-valid"' "$out/handoff-validate.json"
               '';
           ops-thread-fsm =
             pkgs.runCommand "ops-thread-fsm-check"
