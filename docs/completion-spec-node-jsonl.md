@@ -56,3 +56,12 @@ Agent は「node へ書き換えた」だけでは**報告に値しない**。�
 - Phase B: flake.nix 汎用インタプリタ化 + build/*.jsonl 整備(全 package を jsonl 駆動へ)。
 - Phase C: purity check 常設 + nodejs26 実ビルド検証。
 - 各 Agent DoD = 担当分の gate 充足。gen0 が diff/`nix flake check`/purity/挙動同値をレビューし赤は差し戻し。
+
+## 最終完成系(hybrid・2026-06-05 ユーザ指示で再定義)
+**「純 node」ではなく「意味的にデグレしない範囲で node、劣化箇所は py 据え置きで proposal から除外」**。
+- 合否基準 = `docs/semantic-destructive-cases-100.md` の **100 個の意味的破壊ユースケース**(構造試験は不可)。
+- 各 package を、該当ケースで **旧 .py(git 復元)↔ 新 .mjs を同一入力実行 → 意味的同値を実証**。
+- 同値を担保できず、根が **node に無い battery の自前実装(主に tarfile / csv)** の package は **py 据え置き=proposal から一切除外**:`build/runtime.jsonl` に `{"kind":"runtime","id":"python","from":"python3"}` を追加、当該 `build/packages.jsonl` 行を `runtime:"python"` にし、その .py を復元・.mjs を撤回。
+- 修正可能な差(re 方言 / ensure_ascii / ISO 時刻 / 安定ソート 等)は **node を直して再実証**。
+- purity(gate#5)は **node runtime package には node-only を強制、`runtime:"python"` 宣言 package のみ py を許容**(明示境界)。gate#1 は「宣言 node 群で python3=0」に緩和。
+- 完成系 tree = 100 ケースが該当 package で **実証検証済み** + node 群=意味的同値 + py 据え置き群=明示分離、で `nix flake check` 全 green。
