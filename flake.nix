@@ -138,23 +138,23 @@
               pkgs.iproute2
               pkgs.openssh
               pkgs.procps
-              pkgs.python3
+              pkgs.nodejs
               pkgs.sudo
               pkgs.tailscale
             ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-tailnet-github-egress/bin/ops-tailnet-github-egress.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-tailnet-github-egress/bin/ops-tailnet-github-egress.mjs} "$@"
             '';
           };
           git-push-tailnet = pkgs.writeShellApplication {
             name = "git-push-tailnet";
             runtimeInputs = [
               pkgs.git
-              pkgs.python3
+              pkgs.nodejs
               ops-tailnet-github-egress
             ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-tailnet-github-egress/bin/git-push-tailnet} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-tailnet-github-egress/bin/git-push-tailnet.mjs} "$@"
             '';
           };
           prove-feat = pkgs.writeShellApplication {
@@ -163,7 +163,7 @@
               pkgs.deadnix
               pkgs.git
               pkgs.nixfmt
-              pkgs.python3
+              pkgs.nodejs
             ];
             text = ''
               export PROVE_FEAT_SPEC_CATALOG="${
@@ -172,19 +172,19 @@
               export PROVE_FEAT_SPEC_PLACEMENT_TABLE="${
                 specs.packages.${pkgs.stdenv.hostPlatform.system}.spec
               }/share/spec/placement-table.json"
-              exec ${pkgs.python3}/bin/python3 ${./packages/prove-feat/bin/prove-feat.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/prove-feat/bin/prove-feat.mjs} "$@"
             '';
           };
           ops-refs-vault = pkgs.writeShellApplication {
             name = "ops-refs-vault";
             runtimeInputs = [
               pkgs.git
-              pkgs.python3
+              pkgs.nodejs
               git-push-tailnet
               ops-tailnet-github-egress
             ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-refs-vault/bin/ops-refs-vault.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-refs-vault/bin/ops-refs-vault.mjs} "$@"
             '';
           };
           ops-bootstrap = pkgs.runCommand "ops-bootstrap" { } ''
@@ -469,7 +469,7 @@
               {
                 nativeBuildInputs = [
                   pkgs.git
-                  pkgs.python3
+                  pkgs.nodejs
                   self.packages.${pkgs.stdenv.hostPlatform.system}.ops-tailnet-github-egress
                   self.packages.${pkgs.stdenv.hostPlatform.system}.git-push-tailnet
                   pkgs.gnugrep
@@ -486,8 +486,8 @@
                 grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-push-local-app-connector-long.sh}
                 grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-restore-ref-app-connector-long.sh}
                 ! grep -R "print \$1; exit" ${./packages/ops-tailnet-github-egress/snippets}
-                GIT_PUSH_TAILNET_SCRIPT=${./packages/ops-tailnet-github-egress/bin/git-push-tailnet} \
-                  python3 -S ${./packages/ops-tailnet-github-egress/tests/test_git_push_tailnet.py} > "$out/git-push-tailnet.log"
+                GIT_PUSH_TAILNET_SCRIPT=${./packages/ops-tailnet-github-egress/bin/git-push-tailnet.mjs} \
+                  node ${./packages/ops-tailnet-github-egress/tests/test_git_push_tailnet.mjs} > "$out/git-push-tailnet.log"
               '';
           ops-refs-vault =
             pkgs.runCommand "ops-refs-vault-check"
