@@ -479,7 +479,10 @@ def command_found(name: str) -> dict[str, Any]:
 
 def handle_env(args: argparse.Namespace) -> int:
     result = common_result("project-transport-env", args)
-    ports = args.ports or [9222, 9223, 9224]
+    default_ports = [9222, 9223, 9224]
+    if int(args.port) not in default_ports:
+        default_ports.append(int(args.port))
+    ports = args.ports or default_ports
     probes = []
     for port in ports:
         row = {"addr": args.addr, "port": port, "tcpConnect": False}

@@ -166,6 +166,26 @@ def test_source_put_inner_log_uses_out_path_parent(pt):
         assert str(tmp_path / "project-source-put-REQUEST.md.json") in captured[0]
 
 
+def test_env_default_ports_include_requested_port(pt):
+    captured = []
+
+    def fake_create_connection(target, timeout=None):
+        captured.append(target)
+        raise OSError("closed")
+
+    def fake_write(_args, _result):
+        return 1
+
+    args = ns(port=9226, ports=None, connect_timeout_sec=0.01, project_url=None)
+    with patched(pt.socket, "create_connection", fake_create_connection), patched(pt, "maybe_write_out", fake_write):
+        pt.handle_env(args)
+
+    assert ("127.0.0.1", 9222) in captured
+    assert ("127.0.0.1", 9223) in captured
+    assert ("127.0.0.1", 9224) in captured
+    assert ("127.0.0.1", 9226) in captured
+
+
 def test_thread_readback_filters_to_assistant_hits(pt):
     captured = []
 
@@ -292,6 +312,7 @@ def main():
     test_source_list_unreliable_is_not_success(pt)
     test_source_list_inner_log_uses_out_path_parent(pt)
     test_source_put_inner_log_uses_out_path_parent(pt)
+    test_env_default_ports_include_requested_port(pt)
     test_thread_readback_filters_to_assistant_hits(pt)
     test_thread_readback_rejects_user_only_and_streaming(pt)
     test_browser_parser_regression_terms_are_present()
