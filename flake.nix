@@ -125,10 +125,9 @@
           };
           ops-thread-fsm = pkgs.writeShellApplication {
             name = "ops-thread-fsm";
-            runtimeInputs = [ pkgs.python3 ];
+            runtimeInputs = [ pkgs.nodejs ];
             text = ''
-              export PYTHONPATH="${./packages/ops-thread-fsm/lib}''${PYTHONPATH:+:}''${PYTHONPATH:-}"
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-thread-fsm/bin/ops-thread-fsm} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-thread-fsm}/bin/ops-thread-fsm.mjs "$@"
             '';
           };
           ops-tailnet-github-egress = pkgs.writeShellApplication {
@@ -432,7 +431,7 @@
             pkgs.runCommand "ops-thread-fsm-check"
               {
                 nativeBuildInputs = [
-                  pkgs.python3
+                  pkgs.nodejs
                   self.packages.${pkgs.stdenv.hostPlatform.system}.ops-thread-fsm
                 ];
               }
@@ -440,7 +439,8 @@
                 mkdir -p "$out"
                 cp -R ${./packages/ops-thread-fsm} ./ops-thread-fsm-src
                 chmod -R u+w ./ops-thread-fsm-src
-                python3 -S ./ops-thread-fsm-src/tests/test_ops_thread_fsm.py > "$out/test.log"
+                node --check ./ops-thread-fsm-src/bin/ops-thread-fsm.mjs
+                node ./ops-thread-fsm-src/tests/test_ops_thread_fsm.mjs > "$out/test.log"
                 ops-thread-fsm next --state-kind request-sent --dry-run --json > "$out/next.json"
                 ops-thread-fsm next --state-kind handoff-created --dry-run --json > "$out/handoff-created.json"
                 printf '{"policyFresh":true,"canonicalNoDrift":true,"mergeReviewPass":true,"localGatePass":true,"runReportPresent":true}\n' > "$out/localize-input.json"

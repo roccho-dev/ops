@@ -34,9 +34,14 @@ flake.nix: `build/*.jsonl` を読み(pure-eval, readFile+fromJSON)、
 
 ## 変換ルール(.py→.mjs, 1 package ずつ)
 - `bin/<n>.py` の挙動を **同値**で `bin/<n>.mjs`(node, ESM, stdlib のみ: fs/path/process/child_process)へ移植。argparse→ 手書き/`util.parseArgs`、json→ JSON、subprocess→ child_process、re→ RegExp(方言差注意)。
-- その package の **既存 check(checks.<sys>.<n>)が node 版でも PASS**(挙動同値)を必須。
 - 日本語/encoding は utf8 明示、整数は必要なら BigInt(精度)。未await/unhandledRejection→非0 exit を入れる。
 - flake.nix の当該 package を python3→node に(最終的には build/packages.jsonl 駆動へ)。
+
+## ★実証試験(必須・コード変更だけの報告は無価値)
+Agent は「node へ書き換えた」だけでは**報告に値しない**。以下の**実証**を Agent 自身が行い、**具体的証拠**を報告に含めること:
+1. **挙動同値の実証(.py 削除前に)**: 旧 `.py` と新 `.mjs` を**同一入力**(その check のテスト入力 + 代表ケース)で実行し、**stdout / 出力ファイルが byte 同値**であることを `diff` で示す(差分ゼロ)。.py を既に消した場合は `git show HEAD:<path>.py` で復元して比較。→ 「同値である」証拠(diff 結果)を報告。
+2. **check 緑の実証**: `nix build …#checks.x86_64-linux.<n>` を実走し exit 0 + **store path** を報告。
+3. 上記2つの**証拠が無い報告は却下**(gen0 は独立に再実行して突合する)。挙動が違えば STOP し差分を報告。
 
 ## 受け入れ gate(gen0 がレビューで突合)
 1. `grep -r 'exec .*python3' flake.nix` = 0、logic 層に `*.py`/`qjs:`/`*.zig` = 0。
