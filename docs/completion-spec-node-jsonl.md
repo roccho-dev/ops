@@ -47,7 +47,7 @@ Agent は「node へ書き換えた」だけでは**報告に値しない**。�
 1. `grep -r 'exec .*python3' flake.nix` = 0、logic 層に `*.py`/`qjs:`/`*.zig` = 0。
 2. 全 package/check が build/*.jsonl の fold で生成(flake.nix に per-package 手書き derivation なし)。
 3. `nix flake check`(path:claude-proposed)= **全 green**(各 package の挙動同値 check 含む)。
-4. **`nix build .#packages.x86_64-linux.nodejs26` 実ビルド成功**(eval だけ不可。DC-N-03)。
+4. ~~**`nix build .#packages.x86_64-linux.nodejs26` 実ビルド成功**(eval だけ不可。DC-N-03)。~~ **【中断 2026-06-05 ユーザ指示「nodejs 移行は一旦中断、jsonl nix build にフォーカス」】** — nodejs26 を本物の v26.3.0 で実ビルドする修正(既知 break: override が 25.9.0 を生む)は保留。packages の runtime は `pkgs.nodejs` のまま。focus は gate #2(jsonl-build)。
 5. **purity check**(checks に常設): logic 層の `.py`/`qjs:`/`.zig`/`python3` を検出したら fail。
 6. append-only(build/*.jsonl, defs.jsonl)/ packages・checks のみ(apps/devShells 無)/ KISS・DRY・SOLID・YAGNI。
 

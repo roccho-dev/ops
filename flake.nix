@@ -37,8 +37,114 @@
         "aarch64-linux"
       ];
       forEachSystem = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      lib = nixpkgs.lib;
       cdpFor =
         pkgs: (import ./packages/ops-cdp-core/src/cdp/chromium-cdp.nix { }).perSystem { inherit pkgs; };
+      # 汎用 jsonl インタプリタ(Phase B / 完成系 goal ②)。
+      # build/*.jsonl の宣言を fold して packages/checks を生成する。flake.nix は一度だけ書き、
+      # package 追加 = build/packages.jsonl に 1 行 + .mjs(per-package 手書き derivation なし)。
+      # pure-eval / IFD なし: builtins.readFile + builtins.fromJSON のみ(import-from-derivation 不使用)。
+      srcRoot = ./.;
+      readJsonl =
+        path:
+        map builtins.fromJSON (
+          builtins.filter (l: l != "") (lib.splitString "\n" (builtins.readFile path))
+        );
+      runtimeDecls = readJsonl ./build/runtime.jsonl;
+      packageDecls = readJsonl ./build/packages.jsonl;
+      checkDecls = readJsonl ./build/checks.jsonl;
+      # runtime id -> nixpkgs attr 名(例: node -> nodejs)。
+      runtimeAttrById = builtins.listToAttrs (
+        map (r: {
+          name = r.id;
+          value = r.from;
+        }) runtimeDecls
+      );
+      # build/*.jsonl から system ごとの packages を生成する。
+      # genPkgs は rec: ops package 同士の依存(git-push-tailnet -> ops-tailnet-github-egress 等)を解決する。
+      mkGeneratedPackages =
+        pkgs:
+        let
+          nodeAttr = runtimeAttrById.node;
+          nodeRuntime = pkgs.${nodeAttr};
+          # dep トークンを derivation に解決:
+          #   "node"          -> runtime(nodejs)
+          #   生成 package 名 -> その package(他 ops package への依存)
+          #   それ以外        -> nixpkgs attr(dotted path 可: "glibc.bin")
+          resolveDep =
+            genPkgs: dep:
+            if dep == "node" then
+              nodeRuntime
+            else if builtins.hasAttr dep genPkgs then
+              genPkgs.${dep}
+            else
+              lib.getAttrFromPath (lib.splitString "." dep) pkgs;
+          # env 宣言を export 行に: {name,path} は source path を store path へ、{name,value} は literal。
+          envLine =
+            e:
+            if e ? path then
+              ''export ${e.name}="${srcRoot + "/${e.path}"}"''
+            else
+              ''export ${e.name}="${e.value}"'';
+          # entry(repo 相対, packages/<dir>/bin/<file>.mjs)を package source DIR + DIR 内 path に分解。
+          # DIR ごと store に入れることで bin/*.mjs が sibling(../lib/*.mjs)を import.meta.url 経由で
+          # 解決できる(例: ops-thread-fsm の bin -> ../lib/cli.mjs)。
+          entryDirOf = entry: lib.concatStringsSep "/" (lib.init (lib.init (lib.splitString "/" entry)));
+          entryRelOf =
+            entry:
+            let
+              parts = lib.splitString "/" entry;
+              n = builtins.length parts;
+            in
+            lib.concatStringsSep "/" (lib.sublist (n - 2) 2 parts);
+          mkPackage =
+            genPkgs: decl:
+            let
+              envText = lib.concatMapStringsSep "\n" envLine decl.env;
+              pkgDir = srcRoot + "/${entryDirOf decl.entry}";
+              entryRel = entryRelOf decl.entry;
+            in
+            pkgs.writeShellApplication {
+              name = decl.bin;
+              runtimeInputs = map (resolveDep genPkgs) decl.deps;
+              text =
+                (if decl.env == [ ] then "" else envText + "\n")
+                + ''exec ${nodeRuntime}/bin/node ${pkgDir}/${entryRel} "$@"'';
+            };
+        in
+        lib.fix (
+          genPkgs:
+          builtins.listToAttrs (
+            map (decl: {
+              name = decl.name;
+              value = mkPackage genPkgs decl;
+            }) packageDecls
+          )
+        );
+      # build/checks.jsonl から system ごとの checks を生成する(node script を実行し self-assert)。
+      # deps: 生成 package 名 -> その package(PATH 投入)/ それ以外 -> nixpkgs attr。
+      mkGeneratedChecks =
+        pkgs: genPkgs:
+        let
+          resolveCheckDep =
+            dep:
+            if builtins.hasAttr dep genPkgs then
+              genPkgs.${dep}
+            else
+              lib.getAttrFromPath (lib.splitString "." dep) pkgs;
+        in
+        builtins.listToAttrs (
+          map (decl: {
+            name = decl.name;
+            value =
+              pkgs.runCommand "${decl.name}-check" { nativeBuildInputs = map resolveCheckDep decl.deps; }
+                ''
+                  mkdir -p "$out"
+                  node ${srcRoot + "/${decl.script}"}
+                  touch "$out/ok"
+                '';
+          }) checkDecls
+        );
       # node26 を git+https ソースからビルド。nixpkgs の nodejs ビルド式(_25=直近 major)を
       # 土台に src/version を差し替える標準手法。major またぎで旧 patch は適合しないため除去 (DC-N-03)。
       # 注: ソースビルドは build-time に python/gyp 等を要する (DC-N-02) — これは builder toolchain であり
@@ -57,8 +163,12 @@
         pkgs:
         let
           cdp = cdpFor pkgs;
+          # ★goal ②: 通常 package(11 本中の node CLI 群)は build/packages.jsonl の fold で生成。
+          # per-package 手書き derivation なし。下の explicit 群は schema に収まらない特例のみ。
+          generated = mkGeneratedPackages pkgs;
         in
-        rec {
+        generated
+        // rec {
           # ops 自己完結 PoC(.dev 廃止し ops 本体へ統合): jsonl を入力に package のみを生成。
           # KISS/DRY/SOLID/YAGNI 徹底。consume は checks.poc-consumes。
           poc-from-jsonl = pkgs.runCommand "poc-from-jsonl" { nativeBuildInputs = [ pkgs.jq ]; } ''
@@ -74,89 +184,8 @@
           };
           # G2: nodejs-only 移行の runtime 基盤。git+https 取得の node v26.3.0。
           nodejs26 = nodejs26For pkgs;
-          ops-artifact-materialize = pkgs.writeShellApplication {
-            name = "ops-artifact-materialize";
-            runtimeInputs = [ pkgs.nodejs ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-artifact-materialize/bin/ops-artifact-materialize.mjs} "$@"
-            '';
-          };
-          ops-knowledge-intake = pkgs.writeShellApplication {
-            name = "ops-knowledge-intake";
-            runtimeInputs = [ pkgs.nodejs ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-knowledge-intake/bin/ops-knowledge-intake.mjs} "$@"
-            '';
-          };
-          package-architecture-map = pkgs.writeShellApplication {
-            name = "package-architecture-map";
-            runtimeInputs = [ pkgs.nodejs ];
-            text = ''
-              export PACKAGE_ARCHITECTURE_MAP_VIEWER="${./packages/package-architecture-map/viewer/index.html}"
-              exec ${pkgs.nodejs}/bin/node ${./packages/package-architecture-map/bin/package-architecture-map.mjs} "$@"
-            '';
-          };
-          ops-runbook-checks = pkgs.writeShellApplication {
-            name = "ops-runbook-checks";
-            runtimeInputs = [ pkgs.nodejs ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-runbook-checks/bin/ops-runbook-checks.mjs} "$@"
-            '';
-          };
-          ops-handoff-core = pkgs.writeShellApplication {
-            name = "ops-handoff-core";
-            runtimeInputs = [ pkgs.nodejs ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-handoff-core/bin/ops-handoff-core.mjs} "$@"
-            '';
-          };
-          ops-src-runtime-pack = pkgs.writeShellApplication {
-            name = "ops-src-runtime-pack";
-            runtimeInputs = [
-              pkgs.git
-              pkgs.gnutar
-              pkgs.gzip
-              pkgs.nix
-              pkgs.nodejs
-            ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.mjs} "$@"
-            '';
-          };
-          ops-thread-fsm = pkgs.writeShellApplication {
-            name = "ops-thread-fsm";
-            runtimeInputs = [ pkgs.nodejs ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-thread-fsm}/bin/ops-thread-fsm.mjs "$@"
-            '';
-          };
-          ops-tailnet-github-egress = pkgs.writeShellApplication {
-            name = "ops-tailnet-github-egress";
-            runtimeInputs = [
-              pkgs.git
-              pkgs.glibc.bin
-              pkgs.iproute2
-              pkgs.openssh
-              pkgs.procps
-              pkgs.nodejs
-              pkgs.sudo
-              pkgs.tailscale
-            ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-tailnet-github-egress/bin/ops-tailnet-github-egress.mjs} "$@"
-            '';
-          };
-          git-push-tailnet = pkgs.writeShellApplication {
-            name = "git-push-tailnet";
-            runtimeInputs = [
-              pkgs.git
-              pkgs.nodejs
-              ops-tailnet-github-egress
-            ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-tailnet-github-egress/bin/git-push-tailnet.mjs} "$@"
-            '';
-          };
+          # 特例: prove-feat は env が flake input(specs)由来の store path 参照であり
+          # build/packages.jsonl の静的 path/value schema に収まらないため explicit に残す。
           prove-feat = pkgs.writeShellApplication {
             name = "prove-feat";
             runtimeInputs = [
@@ -173,18 +202,6 @@
                 specs.packages.${pkgs.stdenv.hostPlatform.system}.spec
               }/share/spec/placement-table.json"
               exec ${pkgs.nodejs}/bin/node ${./packages/prove-feat/bin/prove-feat.mjs} "$@"
-            '';
-          };
-          ops-refs-vault = pkgs.writeShellApplication {
-            name = "ops-refs-vault";
-            runtimeInputs = [
-              pkgs.git
-              pkgs.nodejs
-              git-push-tailnet
-              ops-tailnet-github-egress
-            ];
-            text = ''
-              exec ${pkgs.nodejs}/bin/node ${./packages/ops-refs-vault/bin/ops-refs-vault.mjs} "$@"
             '';
           };
           ops-bootstrap = pkgs.runCommand "ops-bootstrap" { } ''
@@ -217,8 +234,12 @@
           proveFeatFormat = proveFeatGate "format";
           proveFeatDeadnix = proveFeatGate "deadnix";
           proveFeatContractLint = proveFeatGate "contract-lint";
+          # ★goal ②: build/checks.jsonl の fold で生成する simple node-script check。
+          # deps は ops package 名 -> self.packages の該当 package(PATH 投入)/ それ以外 -> nixpkgs attr。
+          generatedChecks = mkGeneratedChecks pkgs self.packages.${system};
         in
-        {
+        generatedChecks
+        // {
           # ops 本体 flake が jsonl 由来 package を consume = ops 自己完結の閉路(外部 input なし)
           poc-consumes = pkgs.runCommand "poc-consumes" { nativeBuildInputs = [ pkgs.jq ]; } ''
             got=$(jq -r '.count' ${self.packages.${system}.poc-from-jsonl}/result.json)
@@ -494,6 +515,32 @@
                 ! grep -R "print \$1; exit" ${./packages/ops-tailnet-github-egress/snippets}
                 GIT_PUSH_TAILNET_SCRIPT=${./packages/ops-tailnet-github-egress/bin/git-push-tailnet.mjs} \
                   node ${./packages/ops-tailnet-github-egress/tests/test_git_push_tailnet.mjs} > "$out/git-push-tailnet.log"
+              '';
+          # git-push-tailnet は build/packages.jsonl の fold で生成される package。
+          # spec implements.json が独立 output として宣言するため、その build 済 binary を直接
+          # 起動する per-output 挙動 check を明示で持つ(contract-lint の declared-output 配線契約を満たす)。
+          git-push-tailnet =
+            pkgs.runCommand "git-push-tailnet-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.git
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.git-push-tailnet
+                  pkgs.gnugrep
+                ];
+              }
+              ''
+                mkdir -p "$out"
+                export HOME="$out/home"
+                mkdir -p "$HOME"
+                # 起動 = build 済 binary が起動し sibling lib(../lib)を解決できることの実証。
+                # 非 GitHub remote の repo では package 自身のポリシーで非 0 終了する(deterministic)。
+                git init -q "$out/repo"
+                git -C "$out/repo" remote add origin "ssh://example.invalid/repo.git"
+                if (cd "$out/repo" && git-push-tailnet) > "$out/run.log" 2>&1; then
+                  echo "git-push-tailnet unexpectedly succeeded against non-GitHub remote" >&2
+                  exit 1
+                fi
+                grep -q 'non-GitHub remote' "$out/run.log"
               '';
           ops-refs-vault =
             pkgs.runCommand "ops-refs-vault-check"
