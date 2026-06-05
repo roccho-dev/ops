@@ -83,9 +83,9 @@
           };
           ops-knowledge-intake = pkgs.writeShellApplication {
             name = "ops-knowledge-intake";
-            runtimeInputs = [ pkgs.python3 ];
+            runtimeInputs = [ pkgs.nodejs ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-knowledge-intake/bin/ops-knowledge-intake.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-knowledge-intake/bin/ops-knowledge-intake.mjs} "$@"
             '';
           };
           package-architecture-map = pkgs.writeShellApplication {
