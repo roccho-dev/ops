@@ -227,6 +227,12 @@
             mkdir -p "$out"
             echo "closed: count=$got matches jsonl ($want) — ops self-contained (no .dev, no external input)" > "$out/proof.txt"
           '';
+          # gate #5: repo-wide node-only purity。logic 層に *.py/*.pyc/*.zig/qjs: import/
+          # python3・qjs 起動が混入したら fail(stray .pyc の再混入を CI で捕捉)。
+          purity = pkgs.runCommand "ops-purity-check" { nativeBuildInputs = [ pkgs.nodejs ]; } ''
+            mkdir -p "$out"
+            node ${./packages/ops-purity/bin/purity.mjs} ${./.} > "$out/report.txt"
+          '';
           prove-feat-structure = proveFeatStructure;
           prove-feat-format = proveFeatFormat;
           prove-feat-deadnix = proveFeatDeadnix;
