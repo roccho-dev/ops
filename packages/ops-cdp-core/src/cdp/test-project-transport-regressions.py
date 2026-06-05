@@ -186,6 +186,110 @@ def test_env_default_ports_include_requested_port(pt):
     assert ("127.0.0.1", 9226) in captured
 
 
+def test_thread_create_inner_log_uses_out_path_parent(pt):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        out_path = tmp_path / "wrapper-result.json"
+        captured = []
+        results = []
+
+        def fake_run(cmd, timeout=None):
+            captured.append(cmd)
+            return {
+                "argv": cmd,
+                "returncode": 0,
+                "stdout": "",
+                "stderr": "",
+                "json": {"ok": True, "threadUrl": "https://chatgpt.com/g/g-p-test/c/thread", "conversationId": "thread"},
+            }
+
+        def fake_write(_args, result):
+            results.append(result)
+            return 0 if result.get("ok") else 1
+
+        args = ns(out_path=str(out_path), out_dir=None, text="read source", text_file=None)
+        with patched(pt, "run_command", fake_run), patched(pt, "maybe_write_out", fake_write):
+            rc = pt.handle_thread_create(args)
+
+        assert rc == 0
+        assert str(tmp_path / "project-thread-create.json") in captured[0]
+        assert results[-1]["createLog"] == str(tmp_path / "project-thread-create.json")
+
+
+def test_thread_send_out_dir_uses_out_path_parent(pt):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        out_path = tmp_path / "wrapper-result.json"
+        captured = []
+        results = []
+
+        def fake_run(cmd, timeout=None):
+            captured.append(cmd)
+            return {"argv": cmd, "returncode": 0, "stdout": "", "stderr": "", "json": {"ok": True}}
+
+        def fake_write(_args, result):
+            results.append(result)
+            return 0 if result.get("ok") else 1
+
+        args = ns(
+            out_path=str(out_path),
+            out_dir=None,
+            url="https://chatgpt.com/g/g-p-test/c/thread",
+            text="continue",
+            text_file=None,
+            max_inline_length=2000,
+        )
+        with patched(pt, "run_command", fake_run), patched(pt, "maybe_write_out", fake_write):
+            rc = pt.handle_thread_send(args)
+
+        assert rc == 0
+        assert str(tmp_path / "send") in captured[0]
+        assert results[-1]["sendOutDir"] == str(tmp_path / "send")
+
+
+def test_source_delete_inner_log_uses_out_path_parent(pt):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        out_path = tmp_path / "wrapper-result.json"
+        captured = []
+
+        def fake_run(cmd, timeout=None):
+            captured.append(cmd)
+            return {"argv": cmd, "returncode": 0, "stdout": "", "stderr": "", "json": {"ok": True, "status": "source-deleted"}}
+
+        args = ns(out_path=str(out_path), out_dir=None, title="OLD.md", reason="test cleanup", allow_remove=True)
+        with patched(pt, "run_command", fake_run):
+            result = pt.source_delete_result(args, pt.common_result("project-source-delete", args))
+
+        assert result["ok"] is True
+        assert str(tmp_path / "project-source-delete-OLD.md.json") in captured[0]
+        assert result["deleteLog"] == str(tmp_path / "project-source-delete-OLD.md.json")
+
+
+def test_artifact_fetch_out_dir_uses_out_path_parent(pt):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        out_path = tmp_path / "wrapper-result.json"
+        captured = []
+        results = []
+
+        def fake_run(cmd, timeout=None):
+            captured.append(cmd)
+            return {"argv": cmd, "returncode": 0, "stdout": "", "stderr": "", "json": {"name": "result.json", "sha256": "abc", "outPath": str(tmp_path / "result.json")}}
+
+        def fake_write(_args, result):
+            results.append(result)
+            return 0 if result.get("ok") else 1
+
+        args = ns(out_path=str(out_path), out_dir=None, name="result.json", url="https://chatgpt.com/g/g-p-test/c/thread", ir_path=None)
+        with patched(pt, "run_command", fake_run), patched(pt, "maybe_write_out", fake_write):
+            rc = pt.handle_artifact_fetch(args)
+
+        assert rc == 0
+        assert str(tmp_path) in captured[0]
+        assert results[-1]["outDir"] == str(tmp_path)
+
+
 def test_thread_readback_filters_to_assistant_hits(pt):
     captured = []
 
@@ -313,6 +417,10 @@ def main():
     test_source_list_inner_log_uses_out_path_parent(pt)
     test_source_put_inner_log_uses_out_path_parent(pt)
     test_env_default_ports_include_requested_port(pt)
+    test_thread_create_inner_log_uses_out_path_parent(pt)
+    test_thread_send_out_dir_uses_out_path_parent(pt)
+    test_source_delete_inner_log_uses_out_path_parent(pt)
+    test_artifact_fetch_out_dir_uses_out_path_parent(pt)
     test_thread_readback_filters_to_assistant_hits(pt)
     test_thread_readback_rejects_user_only_and_streaming(pt)
     test_browser_parser_regression_terms_are_present()

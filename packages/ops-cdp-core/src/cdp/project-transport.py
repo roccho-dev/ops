@@ -820,8 +820,9 @@ def source_delete_result(args: argparse.Namespace, result: dict[str, Any]) -> di
     if not args.allow_remove:
         result.update({"ok": False, "status": "remove-not-authorized", "requiredFlag": "--allow-remove"})
         return result
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     delete_log = out_dir / f"project-source-delete-{args.title}.json"
+    remove_stale_file(delete_log)
     cmd = [
         "chromium-cdp-project-source-delete",
         "--projectUrl", args.project_url,
@@ -872,8 +873,9 @@ def handle_thread_create(args: argparse.Namespace) -> int:
     if not text:
         result.update({"ok": False, "status": "empty-prompt"})
         return maybe_write_out(args, result)
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     create_log = out_dir / "project-thread-create.json"
+    remove_stale_file(create_log)
     if args.dry_run:
         result.update({
             "ok": True,
@@ -924,7 +926,7 @@ def handle_thread_send(args: argparse.Namespace) -> int:
     if len(text) > args.max_inline_length:
         result.update({"ok": False, "status": "inline-too-long", "reason": "upload payload to Project Source and send a pointer only"})
         return maybe_write_out(args, result)
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     send_dir = out_dir / "send"
     if args.dry_run:
         result.update({
@@ -1017,7 +1019,7 @@ def handle_thread_readback(args: argparse.Namespace) -> int:
 
 def handle_artifact_fetch(args: argparse.Namespace) -> int:
     result = common_result("project-artifact-fetch", args)
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     result["artifactName"] = args.name
     result["outDir"] = str(out_dir)
     if args.dry_run:
@@ -1348,7 +1350,7 @@ def write_run_evidence_bundle(out_dir: Path, result: dict[str, Any]) -> dict[str
 
 def handle_run(args: argparse.Namespace) -> int:
     result = common_result("project-transport-run", args)
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     result["projectUrl"] = args.project_url
     result["outDir"] = str(out_dir)
     steps: list[dict[str, Any]] = []
