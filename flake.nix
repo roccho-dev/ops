@@ -76,9 +76,9 @@
           nodejs26 = nodejs26For pkgs;
           ops-artifact-materialize = pkgs.writeShellApplication {
             name = "ops-artifact-materialize";
-            runtimeInputs = [ pkgs.python3 ];
+            runtimeInputs = [ pkgs.nodejs ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-artifact-materialize/bin/ops-artifact-materialize.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-artifact-materialize/bin/ops-artifact-materialize.mjs} "$@"
             '';
           };
           ops-knowledge-intake = pkgs.writeShellApplication {
@@ -90,24 +90,24 @@
           };
           package-architecture-map = pkgs.writeShellApplication {
             name = "package-architecture-map";
-            runtimeInputs = [ pkgs.python3 ];
+            runtimeInputs = [ pkgs.nodejs ];
             text = ''
               export PACKAGE_ARCHITECTURE_MAP_VIEWER="${./packages/package-architecture-map/viewer/index.html}"
-              exec ${pkgs.python3}/bin/python3 ${./packages/package-architecture-map/bin/package-architecture-map.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/package-architecture-map/bin/package-architecture-map.mjs} "$@"
             '';
           };
           ops-runbook-checks = pkgs.writeShellApplication {
             name = "ops-runbook-checks";
-            runtimeInputs = [ pkgs.python3 ];
+            runtimeInputs = [ pkgs.nodejs ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-runbook-checks/bin/ops-runbook-checks.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-runbook-checks/bin/ops-runbook-checks.mjs} "$@"
             '';
           };
           ops-handoff-core = pkgs.writeShellApplication {
             name = "ops-handoff-core";
-            runtimeInputs = [ pkgs.python3 ];
+            runtimeInputs = [ pkgs.nodejs ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-handoff-core/bin/ops-handoff-core.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-handoff-core/bin/ops-handoff-core.mjs} "$@"
             '';
           };
           ops-src-runtime-pack = pkgs.writeShellApplication {
@@ -117,10 +117,10 @@
               pkgs.gnutar
               pkgs.gzip
               pkgs.nix
-              pkgs.python3
+              pkgs.nodejs
             ];
             text = ''
-              exec ${pkgs.python3}/bin/python3 ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py} "$@"
+              exec ${pkgs.nodejs}/bin/node ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.mjs} "$@"
             '';
           };
           ops-thread-fsm = pkgs.writeShellApplication {
@@ -357,16 +357,16 @@
             pkgs.runCommand "ops-handoff-core-check"
               {
                 nativeBuildInputs = [
-                  pkgs.python3
+                  pkgs.nodejs
                   pkgs.gnugrep
                   self.packages.${pkgs.stdenv.hostPlatform.system}.ops-handoff-core
                 ];
               }
               ''
                 mkdir -p "$out/generated"
-                python3 -m py_compile ${./packages/ops-handoff-core/bin/ops-handoff-core.py}
-                python3 -S ${./packages/ops-handoff-core/tests/test_ops_handoff_core.py} \
-                  ${./packages/ops-handoff-core} "$out/python-test"
+                node --check ${./packages/ops-handoff-core/bin/ops-handoff-core.mjs}
+                node ${./packages/ops-handoff-core/tests/test_ops_handoff_core.mjs} \
+                  ${./packages/ops-handoff-core} "$out/node-test"
                 ops-handoff-core generate \
                   --role-catalog ${./packages/ops-handoff-core/tests/fixtures/role-catalog.md} \
                   --topology ${./packages/ops-handoff-core/tests/fixtures/organization-topology.a2ui.jsonl} \
@@ -418,15 +418,15 @@
                   pkgs.gnutar
                   pkgs.gzip
                   pkgs.nix
-                  pkgs.python3
+                  pkgs.nodejs
                   self.packages.${pkgs.stdenv.hostPlatform.system}.ops-src-runtime-pack
                 ];
               }
               ''
                 mkdir -p "$out"
-                python3 -m py_compile ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py}
-                python3 -S ${./packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py} \
-                  ${./packages/ops-src-runtime-pack} "$out/python-test" > "$out/test.log"
+                node --check ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.mjs}
+                node ${./packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.mjs} \
+                  ${./packages/ops-src-runtime-pack} "$out/node-test" > "$out/test.log"
               '';
           ops-thread-fsm =
             pkgs.runCommand "ops-thread-fsm-check"
