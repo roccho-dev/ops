@@ -84,6 +84,25 @@ def ensure_dir(path: str | Path | None) -> Path | None:
     return p
 
 
+def command_out_dir(args: argparse.Namespace) -> Path:
+    explicit = ensure_dir(getattr(args, "out_dir", None))
+    if explicit:
+        return explicit
+    out_path = getattr(args, "out_path", None)
+    if out_path:
+        parent = Path(out_path).expanduser().parent
+        parent.mkdir(parents=True, exist_ok=True)
+        return parent
+    return Path.cwd()
+
+
+def remove_stale_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def read_text(path: str | Path) -> str:
     return Path(path).read_text()
 
@@ -296,6 +315,9 @@ def classify_source_put_failure(parsed: Any, low: dict[str, Any], expected_file_
     elif "/auth/login" in observed_text or "login required" in observed_text.lower():
         status = "project-access-profile-missing"
         failure_class = "project-access"
+    elif "project sources page did not load" in observed_text.lower() or "href=about:blank" in observed_text.lower():
+        status = "source-page-not-loaded"
+        failure_class = "missing-source-page"
     elif observed.get("target") and observed["target"].get("url") and "/project" not in str(observed["target"].get("url")):
         status = "source-page-not-loaded"
         failure_class = "missing-source-page"
@@ -641,8 +663,9 @@ def source_put_result(args: argparse.Namespace, result: dict[str, Any]) -> dict[
     if shape_error := project_source_url_shape_error(args.project_url):
         result.update(shape_error)
         return result
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     upload_log = out_dir / f"project-source-put-{file_path.name}.json"
+    remove_stale_file(upload_log)
     upload_mode = getattr(args, "upload_mode", "auto")
     upload_command = project_source_upload_command(file_path, upload_mode)
     result["uploadMode"] = upload_mode
@@ -712,8 +735,9 @@ def source_list_result(args: argparse.Namespace, result: dict[str, Any]) -> dict
             ],
         })
         return result
-    out_dir = ensure_dir(args.out_dir) or Path.cwd()
+    out_dir = command_out_dir(args)
     list_log = out_dir / "project-source-list.json"
+    remove_stale_file(list_log)
     cmd = [
         "chromium-cdp-project-source-list",
         "--projectUrl", args.project_url,

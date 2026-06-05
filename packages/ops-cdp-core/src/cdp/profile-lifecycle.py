@@ -15,6 +15,16 @@ DECISION_FLAGS = {
     "routeDecision": False,
 }
 
+PROFILE_COPY_IGNORE_NAMES = {
+    "SingletonCookie",
+    "SingletonLock",
+    "SingletonSocket",
+}
+
+PROFILE_COPY_IGNORE_PREFIXES = (
+    ".org.chromium.",
+)
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -49,6 +59,14 @@ def chmod_private(path: Path) -> None:
         pass
 
 
+def ignore_runtime_profile_files(_dir: str, names: list[str]) -> set[str]:
+    ignored: set[str] = set()
+    for name in names:
+        if name in PROFILE_COPY_IGNORE_NAMES or any(name.startswith(prefix) for prefix in PROFILE_COPY_IGNORE_PREFIXES):
+            ignored.add(name)
+    return ignored
+
+
 def copy_profile_tree(src: Path, dst: Path, replace: bool) -> None:
     if src.resolve() == dst.resolve():
         raise ValueError("source and destination must differ")
@@ -56,7 +74,7 @@ def copy_profile_tree(src: Path, dst: Path, replace: bool) -> None:
         if not replace:
             raise FileExistsError(f"destination exists: {dst}")
         shutil.rmtree(dst)
-    shutil.copytree(src, dst, symlinks=False)
+    shutil.copytree(src, dst, symlinks=False, ignore=ignore_runtime_profile_files)
     chmod_private(dst)
 
 

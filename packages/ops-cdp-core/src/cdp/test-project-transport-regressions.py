@@ -115,6 +115,57 @@ def test_source_list_unreliable_is_not_success(pt):
         assert result["canOverrideWorkerReadback"] is False
 
 
+def test_source_list_inner_log_uses_out_path_parent(pt):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        out_path = tmp_path / "wrapper-result.json"
+        captured = []
+
+        def fake_run(cmd, timeout=None):
+            captured.append(cmd)
+            return {
+                "argv": cmd,
+                "returncode": 0,
+                "stdout": "",
+                "stderr": "",
+                "json": {"ok": True, "count": 0, "sources": []},
+            }
+
+        args = ns(out_path=str(out_path), out_dir=None)
+        with patched(pt, "run_command", fake_run):
+            result = pt.source_list_result(args, pt.common_result("project-source-list", args))
+
+        assert result["status"] == "source-list-empty"
+        assert str(tmp_path / "project-source-list.json") in captured[0]
+
+
+def test_source_put_inner_log_uses_out_path_parent(pt):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "REQUEST.md"
+        source.write_text("request\n")
+        out_path = tmp_path / "wrapper-result.json"
+        captured = []
+
+        def fake_run(cmd, timeout=None):
+            captured.append(cmd)
+            return {
+                "argv": cmd,
+                "returncode": 1,
+                "stdout": "",
+                "stderr": "project sources page did not load: href=about:blank",
+                "json": None,
+            }
+
+        args = ns(file=str(source), out_path=str(out_path), out_dir=None, upload_mode="auto")
+        with patched(pt, "run_command", fake_run):
+            result = pt.source_put_result(args, pt.common_result("project-source-put", args))
+
+        assert result["ok"] is False
+        assert result["status"] == "source-page-not-loaded"
+        assert str(tmp_path / "project-source-put-REQUEST.md.json") in captured[0]
+
+
 def test_thread_readback_filters_to_assistant_hits(pt):
     captured = []
 
@@ -239,6 +290,8 @@ def main():
     test_upload_command_selection(pt)
     test_visible_upload_is_not_worker_readback(pt)
     test_source_list_unreliable_is_not_success(pt)
+    test_source_list_inner_log_uses_out_path_parent(pt)
+    test_source_put_inner_log_uses_out_path_parent(pt)
     test_thread_readback_filters_to_assistant_hits(pt)
     test_thread_readback_rejects_user_only_and_streaming(pt)
     test_browser_parser_regression_terms_are_present()
