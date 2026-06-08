@@ -61,20 +61,26 @@
         }) runtimeDecls
       );
       # build/*.jsonl から system ごとの packages を生成する。
-      # genPkgs は rec: ops package 同士の依存(git-push-tailnet -> ops-tailnet-github-egress 等)を解決する。
+      # genPkgs は rec: ops package 同士の依存(他 ops package を deps トークンで参照)を解決する。
       mkGeneratedPackages =
         pkgs:
         let
-          nodeAttr = runtimeAttrById.node;
-          nodeRuntime = pkgs.${nodeAttr};
+          # runtime id -> その runtime derivation(build/runtime.jsonl 由来)。
+          #   node   -> pkgs.nodejs,  python -> pkgs.python3
+          runtimeDrvById = builtins.mapAttrs (_id: attr: pkgs.${attr}) runtimeAttrById;
+          # 各 runtime の exec 前置(decl.runtime が選択する): entry を起動する binary。
+          runtimeExecById = {
+            node = rt: entry: ''exec ${rt}/bin/node ${entry} "$@"'';
+            python = rt: entry: ''exec ${rt}/bin/python3 ${entry} "$@"'';
+          };
           # dep トークンを derivation に解決:
-          #   "node"          -> runtime(nodejs)
-          #   生成 package 名 -> その package(他 ops package への依存)
-          #   それ以外        -> nixpkgs attr(dotted path 可: "glibc.bin")
+          #   "node" / "python" -> その runtime derivation
+          #   生成 package 名    -> その package(他 ops package への依存)
+          #   それ以外           -> nixpkgs attr(dotted path 可: "glibc.bin")
           resolveDep =
             genPkgs: dep:
-            if dep == "node" then
-              nodeRuntime
+            if builtins.hasAttr dep runtimeDrvById then
+              runtimeDrvById.${dep}
             else if builtins.hasAttr dep genPkgs then
               genPkgs.${dep}
             else
@@ -103,13 +109,14 @@
               envText = lib.concatMapStringsSep "\n" envLine decl.env;
               pkgDir = srcRoot + "/${entryDirOf decl.entry}";
               entryRel = entryRelOf decl.entry;
+              # decl.runtime が exec 前置と runtime derivation を選択(node / python)。
+              rt = runtimeDrvById.${decl.runtime};
+              execLine = runtimeExecById.${decl.runtime} rt "${pkgDir}/${entryRel}";
             in
             pkgs.writeShellApplication {
               name = decl.bin;
               runtimeInputs = map (resolveDep genPkgs) decl.deps;
-              text =
-                (if decl.env == [ ] then "" else envText + "\n")
-                + ''exec ${nodeRuntime}/bin/node ${pkgDir}/${entryRel} "$@"'';
+              text = (if decl.env == [ ] then "" else envText + "\n") + execLine;
             };
         in
         lib.fix (
@@ -436,6 +443,8 @@
                 ! grep -R FULL_ROLE_CATALOG_BODY_SENTINEL "$out/generated/handoff/THREADS"
                 ! grep -R 'project-source-put\|project-thread-create\|project-artifact-fetch' "$out/generated/handoff/THREADS"
               '';
+          # STAY-PY: ops-src-runtime-pack は tarfile/gzip 依存で py 据え置き(runtime:"python")。
+          # check は package binary(python3 を exec する)経由で実 python ツールを走らせる。
           ops-src-runtime-pack =
             pkgs.runCommand "ops-src-runtime-pack-check"
               {
@@ -444,15 +453,35 @@
                   pkgs.gnutar
                   pkgs.gzip
                   pkgs.nix
-                  pkgs.nodejs
+                  pkgs.python3
                   self.packages.${pkgs.stdenv.hostPlatform.system}.ops-src-runtime-pack
                 ];
               }
               ''
                 mkdir -p "$out"
-                node --check ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.mjs}
-                node ${./packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.mjs} \
-                  ${./packages/ops-src-runtime-pack} "$out/node-test" > "$out/test.log"
+                python3 -m py_compile ${./packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py}
+                # 静的挙動テスト(python tool を sys.executable で起動)。
+                python3 -S ${./packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py} \
+                  ${./packages/ops-src-runtime-pack} "$out/py-test" > "$out/test.log"
+                # 生成 package binary(python3 を exec する wrapper)自体を起動し real 挙動を実証。
+                export HOME="$out/home"
+                mkdir -p "$HOME"
+                git init -q "$out/repo"
+                git -C "$out/repo" config user.email "ops-src-runtime-pack@example.invalid"
+                git -C "$out/repo" config user.name "ops-src-runtime-pack"
+                printf 'fixture source\n' > "$out/repo/README.md"
+                git -C "$out/repo" add README.md
+                git -C "$out/repo" -c commit.gpgsign=false commit -q -m fixture
+                ops-src-runtime-pack create \
+                  --repo-root "$out/repo" \
+                  --package-name fixture \
+                  --installable .#fixture \
+                  --metadata-only \
+                  --out-dir "$out/pack" \
+                  --json > "$out/create.json"
+                ops-src-runtime-pack validate --pack-dir "$out/pack" --json > "$out/validate.json"
+                grep -q '"status": "src-runtime-pack-created"' "$out/create.json"
+                grep -q '"status": "src-runtime-pack-valid"' "$out/validate.json"
               '';
           ops-thread-fsm =
             pkgs.runCommand "ops-thread-fsm-check"
@@ -490,57 +519,6 @@
                 ops-thread-fsm check-discussion --input "$out/discussion.json" --json > "$out/discussion-result.json"
                 grep -q '"classification": "discussion-no-objections-confirmed"' "$out/discussion-result.json"
                 touch "$out/done"
-              '';
-          ops-tailnet-github-egress =
-            pkgs.runCommand "ops-tailnet-github-egress-check"
-              {
-                nativeBuildInputs = [
-                  pkgs.git
-                  pkgs.nodejs
-                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-tailnet-github-egress
-                  self.packages.${pkgs.stdenv.hostPlatform.system}.git-push-tailnet
-                  pkgs.gnugrep
-                ];
-              }
-              ''
-                mkdir -p "$out"
-                ops-tailnet-github-egress policy --json > "$out/policy.json"
-                grep -q '"connectorTag": "tag:github"' "$out/policy.json"
-                grep -q 'route-gated local git push' "$out/policy.json"
-                grep -q 'tcp_mtu_probing' "$out/policy.json"
-                grep -q 'all resolved github.com IPv4' ${./packages/ops-tailnet-github-egress/tests/offline-contract.txt}
-                grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-route-check.sh}
-                grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-push-local-app-connector-long.sh}
-                grep -q -- '--print-selected-ip' ${./packages/ops-tailnet-github-egress/snippets/github-restore-ref-app-connector-long.sh}
-                ! grep -R "print \$1; exit" ${./packages/ops-tailnet-github-egress/snippets}
-                GIT_PUSH_TAILNET_SCRIPT=${./packages/ops-tailnet-github-egress/bin/git-push-tailnet.mjs} \
-                  node ${./packages/ops-tailnet-github-egress/tests/test_git_push_tailnet.mjs} > "$out/git-push-tailnet.log"
-              '';
-          # git-push-tailnet は build/packages.jsonl の fold で生成される package。
-          # spec implements.json が独立 output として宣言するため、その build 済 binary を直接
-          # 起動する per-output 挙動 check を明示で持つ(contract-lint の declared-output 配線契約を満たす)。
-          git-push-tailnet =
-            pkgs.runCommand "git-push-tailnet-check"
-              {
-                nativeBuildInputs = [
-                  pkgs.git
-                  self.packages.${pkgs.stdenv.hostPlatform.system}.git-push-tailnet
-                  pkgs.gnugrep
-                ];
-              }
-              ''
-                mkdir -p "$out"
-                export HOME="$out/home"
-                mkdir -p "$HOME"
-                # 起動 = build 済 binary が起動し sibling lib(../lib)を解決できることの実証。
-                # 非 GitHub remote の repo では package 自身のポリシーで非 0 終了する(deterministic)。
-                git init -q "$out/repo"
-                git -C "$out/repo" remote add origin "ssh://example.invalid/repo.git"
-                if (cd "$out/repo" && git-push-tailnet) > "$out/run.log" 2>&1; then
-                  echo "git-push-tailnet unexpectedly succeeded against non-GitHub remote" >&2
-                  exit 1
-                fi
-                grep -q 'non-GitHub remote' "$out/run.log"
               '';
           ops-refs-vault =
             pkgs.runCommand "ops-refs-vault-check"

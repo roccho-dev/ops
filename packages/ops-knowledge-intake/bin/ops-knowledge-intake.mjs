@@ -43,30 +43,102 @@ const PROMOTABLE_ROLES = new Set([
   "b64_payload",
 ]);
 
+// Faithful reader compatible with Python csv.DictReader(f, delimiter="\t").
+// csv dialect defaults: quotechar='"', doublequote=True ("" -> literal "),
+// QUOTE_MINIMAL. Handles quoted fields, embedded tabs and embedded newlines
+// inside quotes. Records are split on row boundaries (newlines NOT inside a
+// quoted field). Python's reader treats \r\n / \r / \n as row terminators.
+//
+// DictReader semantics: header row -> fieldnames; per data row, zip names with
+// cells; missing cells -> restval (None -> ""); extra cells -> restkey (None).
+// The Python wrapper does {k: (v or "") for k,v in row.items()}, so we coerce
+// all values (incl. the restkey list) to "" when falsy is irrelevant here —
+// classify() only reads named string keys. We keep named keys as strings.
+function parseCsvRecords(text, delimiter) {
+  const records = [];
+  let field = "";
+  let record = [];
+  let inQuotes = false;
+  let fieldStarted = false; // whether the current field has begun (for leading quote detection)
+  let i = 0;
+  const n = text.length;
+  const pushField = () => {
+    record.push(field);
+    field = "";
+    fieldStarted = false;
+  };
+  const pushRecord = () => {
+    pushField();
+    records.push(record);
+    record = [];
+  };
+  while (i < n) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i += 1;
+        continue;
+      }
+      field += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' && !fieldStarted) {
+      // quote at start of field opens a quoted field
+      inQuotes = true;
+      fieldStarted = true;
+      i += 1;
+      continue;
+    }
+    if (ch === delimiter) {
+      pushField();
+      i += 1;
+      continue;
+    }
+    if (ch === "\r") {
+      // \r or \r\n terminates a record
+      pushRecord();
+      i += text[i + 1] === "\n" ? 2 : 1;
+      continue;
+    }
+    if (ch === "\n") {
+      pushRecord();
+      i += 1;
+      continue;
+    }
+    field += ch;
+    fieldStarted = true;
+    i += 1;
+  }
+  // flush trailing field/record if any content was accumulated.
+  // Python csv ignores a final empty line (no trailing empty record).
+  if (field !== "" || record.length > 0) {
+    pushRecord();
+  }
+  return records;
+}
+
 function loadRows(filePath) {
   const text = fs.readFileSync(filePath, { encoding: "utf-8" });
-  // Python csv with delimiter="\t". The input has no embedded tabs/quotes in
-  // fields, so a line/tab split matches Python's csv.DictReader here.
-  // Strip a single trailing newline (Python csv ignores the final empty line).
-  let body = text;
-  if (body.endsWith("\r\n")) body = body.slice(0, -2);
-  else if (body.endsWith("\n")) body = body.slice(0, -1);
-  if (body === "") {
+  const records = parseCsvRecords(text, "\t");
+  if (records.length === 0 || records[0].length === 0 || (records[0].length === 1 && records[0][0] === "")) {
     throw new Error(`empty TSV: ${filePath}`);
   }
-  const lines = body.split("\n");
-  if (lines.length === 0 || lines[0] === "") {
-    throw new Error(`empty TSV: ${filePath}`);
-  }
-  const header = lines[0].split("\t");
+  const header = records[0];
   const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (line === "") continue;
-    const cells = line.split("\t");
+  for (let r = 1; r < records.length; r++) {
+    const cells = records[r];
     const row = {};
     for (let j = 0; j < header.length; j++) {
-      row[header[j]] = cells[j] !== undefined && cells[j] !== null ? cells[j] : "";
+      // DictReader restval None -> Python wrapper coerces to "".
+      const v = j < cells.length ? cells[j] : "";
+      row[header[j]] = v;
     }
     rows.push(row);
   }
@@ -196,16 +268,85 @@ function extract(rows) {
   return records;
 }
 
+// Encode one field the way Python csv.writer (QUOTE_MINIMAL, doublequote=True)
+// does: quote the field iff it contains the delimiter, the quotechar, CR or LF;
+// internal quotechar is doubled. A field's symptom can carry an embedded tab or
+// newline (it embeds basename), so faithful quoting is required for byte parity.
+function csvField(value, delimiter) {
+  const s = value === null || value === undefined ? "" : String(value);
+  const needsQuote = s.includes(delimiter) || s.includes('"') || s.includes("\n") || s.includes("\r");
+  if (!needsQuote) return s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
 function writeTsv(filePath, records) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const parts = [FIELDNAMES.join("\t")];
+  const enc = (line) => line.map((c) => csvField(c, "\t")).join("\t");
+  const parts = [enc(FIELDNAMES)];
   for (const record of records) {
-    parts.push(FIELDNAMES.map((f) => record[f]).join("\t"));
+    parts.push(enc(FIELDNAMES.map((f) => record[f])));
   }
   // DictWriter with lineterminator="\n" and writeheader + writerows:
   // each row (including header) is followed by "\n".
   const text = parts.map((line) => line + "\n").join("");
   fs.writeFileSync(filePath, text, { encoding: "utf-8" });
+}
+
+// --- Python json.dumps(indent=2) serializer (ensure_ascii=True, NO sort_keys) ---
+function jsonString(s) {
+  let out = '"';
+  for (const ch of s) {
+    const code = ch.codePointAt(0);
+    if (ch === '"') out += '\\"';
+    else if (ch === "\\") out += "\\\\";
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (ch === "\b") out += "\\b";
+    else if (ch === "\f") out += "\\f";
+    else if (code < 0x20) out += "\\u" + code.toString(16).padStart(4, "0");
+    else if (code < 0x7f) out += ch;
+    else if (code > 0xffff) {
+      const c = code - 0x10000;
+      const hi = 0xd800 + (c >> 10);
+      const lo = 0xdc00 + (c & 0x3ff);
+      out += "\\u" + hi.toString(16).padStart(4, "0") + "\\u" + lo.toString(16).padStart(4, "0");
+    } else {
+      out += "\\u" + code.toString(16).padStart(4, "0");
+    }
+  }
+  return out + '"';
+}
+
+function ser(value, indent, depth) {
+  if (value === null || value === undefined) return "null";
+  const t = typeof value;
+  if (t === "string") return jsonString(value);
+  if (t === "boolean") return value ? "true" : "false";
+  if (t === "number") return String(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const pad = " ".repeat(indent * (depth + 1));
+    const closePad = " ".repeat(indent * depth);
+    return "[\n" + value.map((v) => pad + ser(v, indent, depth + 1)).join(",\n") + "\n" + closePad + "]";
+  }
+  const keys = Object.keys(value);
+  if (keys.length === 0) return "{}";
+  const pad = " ".repeat(indent * (depth + 1));
+  const closePad = " ".repeat(indent * depth);
+  return (
+    "{\n" +
+    keys.map((k) => pad + jsonString(k) + ": " + ser(value[k], indent, depth + 1)).join(",\n") +
+    "\n" +
+    closePad +
+    "}"
+  );
+}
+
+// Python json.dumps(value, indent=2) — ensure_ascii=True, no sort_keys.
+// byKind/byAppliesTo are pre-sorted (see sortedObj) so insertion order == python.
+function dumps2(value) {
+  return ser(value, 2, 0);
 }
 
 function counter(values) {
@@ -257,9 +398,9 @@ function main(argv) {
   const records = extract(rows);
   writeTsv(values.out, records);
   const summary = summarize(records);
-  // Python json.dumps(indent=2) — JSON.stringify with indent 2 matches for
-  // ASCII keys/values used here.
-  const summaryText = JSON.stringify(summary, null, 2);
+  // Python json.dumps(indent=2), ensure_ascii=True, no sort_keys (byKind/
+  // byAppliesTo are already sorted). Non-ASCII applies_to -> \uXXXX like python.
+  const summaryText = dumps2(summary);
   if (values["json-summary"]) {
     fs.writeFileSync(values["json-summary"], summaryText + "\n", { encoding: "utf-8" });
   }

@@ -3,8 +3,6 @@
 {"kind":"package","name":"package-architecture-map","runtime":"node","entry":"packages/package-architecture-map/bin/package-architecture-map.mjs","bin":"package-architecture-map","deps":["node"],"env":[{"name":"PACKAGE_ARCHITECTURE_MAP_VIEWER","path":"packages/package-architecture-map/viewer/index.html"}]}
 {"kind":"package","name":"ops-runbook-checks","runtime":"node","entry":"packages/ops-runbook-checks/bin/ops-runbook-checks.mjs","bin":"ops-runbook-checks","deps":["node"],"env":[]}
 {"kind":"package","name":"ops-handoff-core","runtime":"node","entry":"packages/ops-handoff-core/bin/ops-handoff-core.mjs","bin":"ops-handoff-core","deps":["node"],"env":[]}
-{"kind":"package","name":"ops-src-runtime-pack","runtime":"node","entry":"packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.mjs","bin":"ops-src-runtime-pack","deps":["git","gnutar","gzip","nix","node"],"env":[]}
+{"kind":"package","name":"ops-src-runtime-pack","runtime":"python","entry":"packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py","bin":"ops-src-runtime-pack","deps":["git","gnutar","gzip","nix","python"],"env":[]}
 {"kind":"package","name":"ops-thread-fsm","runtime":"node","entry":"packages/ops-thread-fsm/bin/ops-thread-fsm.mjs","bin":"ops-thread-fsm","deps":["node"],"env":[]}
-{"kind":"package","name":"ops-tailnet-github-egress","runtime":"node","entry":"packages/ops-tailnet-github-egress/bin/ops-tailnet-github-egress.mjs","bin":"ops-tailnet-github-egress","deps":["git","glibc.bin","iproute2","openssh","procps","node","sudo","tailscale"],"env":[]}
-{"kind":"package","name":"git-push-tailnet","runtime":"node","entry":"packages/ops-tailnet-github-egress/bin/git-push-tailnet.mjs","bin":"git-push-tailnet","deps":["git","node","ops-tailnet-github-egress"],"env":[]}
-{"kind":"package","name":"ops-refs-vault","runtime":"node","entry":"packages/ops-refs-vault/bin/ops-refs-vault.mjs","bin":"ops-refs-vault","deps":["git","node","git-push-tailnet","ops-tailnet-github-egress"],"env":[]}
+{"kind":"package","name":"ops-refs-vault","runtime":"node","entry":"packages/ops-refs-vault/bin/ops-refs-vault.mjs","bin":"ops-refs-vault","deps":["git","node"],"env":[]}

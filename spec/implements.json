@@ -76,17 +76,6 @@
       ]
     },
     {
-      "package": "ops-tailnet-github-egress",
-      "contractId": "spec.packages.ops-tailnet-github-egress.v1",
-      "outputs": [
-        "packages.<system>.ops-tailnet-github-egress",
-        "packages.<system>.git-push-tailnet"
-      ],
-      "checks": [
-        "checks.<system>.ops-tailnet-github-egress"
-      ]
-    },
-    {
       "package": "ops-refs-vault",
       "contractId": "spec.packages.ops-refs-vault.v1",
       "outputs": [

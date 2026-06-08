@@ -37,6 +37,64 @@ function fail(message) {
   process.exit(1);
 }
 
+// --- Python json.dumps(indent=2) serializer (ensure_ascii=True, NO sort_keys) ---
+// Mirrors json.dumps default: non-ASCII -> \uXXXX (surrogate pairs for astral),
+// keys kept in insertion order (sort_keys absent), 2-space indent.
+function jsonString(s) {
+  let out = '"';
+  for (const ch of s) {
+    const code = ch.codePointAt(0);
+    if (ch === '"') out += '\\"';
+    else if (ch === "\\") out += "\\\\";
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (ch === "\b") out += "\\b";
+    else if (ch === "\f") out += "\\f";
+    else if (code < 0x20) out += "\\u" + code.toString(16).padStart(4, "0");
+    else if (code < 0x7f) out += ch;
+    else if (code > 0xffff) {
+      const c = code - 0x10000;
+      const hi = 0xd800 + (c >> 10);
+      const lo = 0xdc00 + (c & 0x3ff);
+      out += "\\u" + hi.toString(16).padStart(4, "0") + "\\u" + lo.toString(16).padStart(4, "0");
+    } else {
+      out += "\\u" + code.toString(16).padStart(4, "0");
+    }
+  }
+  return out + '"';
+}
+
+function ser(value, indent, depth) {
+  if (value === null || value === undefined) return "null";
+  const t = typeof value;
+  if (t === "string") return jsonString(value);
+  if (t === "boolean") return value ? "true" : "false";
+  if (t === "number") return String(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const pad = " ".repeat(indent * (depth + 1));
+    const closePad = " ".repeat(indent * depth);
+    return "[\n" + value.map((v) => pad + ser(v, indent, depth + 1)).join(",\n") + "\n" + closePad + "]";
+  }
+  const keys = Object.keys(value);
+  if (keys.length === 0) return "{}";
+  const pad = " ".repeat(indent * (depth + 1));
+  const closePad = " ".repeat(indent * depth);
+  return (
+    "{\n" +
+    keys.map((k) => pad + jsonString(k) + ": " + ser(value[k], indent, depth + 1)).join(",\n") +
+    "\n" +
+    closePad +
+    "}"
+  );
+}
+
+// Python json.dumps(value, indent=2) — ensure_ascii=True, no sort_keys.
+function dumps2(value) {
+  return ser(value, 2, 0);
+}
+
 function readInputText(filePath) {
   const raw = fs.readFileSync(filePath, { encoding: "utf-8" });
   let doc;
@@ -201,7 +259,7 @@ function materialize(inputPath, outDir, strictCount) {
   };
   fs.writeFileSync(
     path.join(outDir, "MATERIALIZE_MANIFEST.json"),
-    JSON.stringify(manifest, null, 2) + "\n",
+    dumps2(manifest) + "\n",
     { encoding: "utf-8" },
   );
   if (failed.length) {
@@ -239,18 +297,14 @@ function main(argv) {
 
   const manifest = materialize(values.input, values["out-dir"], Boolean(values["strict-count"]));
   if (values.json) {
-    process.stdout.write(JSON.stringify(manifest, null, 2) + "\n");
+    process.stdout.write(dumps2(manifest) + "\n");
   } else {
     process.stdout.write(
-      JSON.stringify(
-        {
-          ok: manifest.ok,
-          count: manifest.count,
-          manifest: path.join(values["out-dir"], "MATERIALIZE_MANIFEST.json"),
-        },
-        null,
-        2,
-      ) + "\n",
+      dumps2({
+        ok: manifest.ok,
+        count: manifest.count,
+        manifest: path.join(values["out-dir"], "MATERIALIZE_MANIFEST.json"),
+      }) + "\n",
     );
   }
   return manifest.ok ? 0 : 1;
