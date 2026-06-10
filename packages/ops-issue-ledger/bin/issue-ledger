@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+set -eu
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PKG=$(CDPATH= cd -- "$HERE/.." && pwd)
+export PYTHONPATH="$PKG/src${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m ops_issue_ledger.cli "$@"

@@ -9,3 +9,5 @@
 {"kind":"package","name":"adrs-obligation-compiler","runtime":"python","entry":"packages/adrs-obligation-compiler/bin/adrs-obligation-compiler.py","bin":"adrs-obligation-compiler","deps":["python"],"env":[]}
 {"kind":"package","name":"ops-portable-runtime-pack","runtime":"python","entry":"packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py","bin":"ops-portable-runtime-pack","deps":["python"],"env":[]}
 {"kind":"package","name":"ops-specsless-readiness","runtime":"python","entry":"packages/ops-specsless-readiness/bin/ops-specsless-readiness.py","bin":"ops-specsless-readiness","deps":["python"],"env":[]}
+{"kind":"package","name":"ops-issue-ledger","runtime":"python","entry":"packages/ops-issue-ledger/bin/ops-issue-ledger","pythonModule":"ops_issue_ledger.cli","pythonPath":"src","bin":"ops-issue-ledger","deps":["python"],"env":[]}
+{"kind":"package","name":"issue-ledger","runtime":"python","entry":"packages/ops-issue-ledger/bin/issue-ledger","pythonModule":"ops_issue_ledger.cli","pythonPath":"src","bin":"issue-ledger","deps":["python"],"env":[]}
