@@ -6,3 +6,4 @@
 {"kind":"package","name":"ops-src-runtime-pack","runtime":"python","entry":"packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py","bin":"ops-src-runtime-pack","deps":["git","gnutar","gzip","nix","python"],"env":[]}
 {"kind":"package","name":"ops-thread-fsm","runtime":"node","entry":"packages/ops-thread-fsm/bin/ops-thread-fsm.mjs","bin":"ops-thread-fsm","deps":["node"],"env":[]}
 {"kind":"package","name":"ops-refs-vault","runtime":"node","entry":"packages/ops-refs-vault/bin/ops-refs-vault.mjs","bin":"ops-refs-vault","deps":["git","node"],"env":[]}
+{"kind":"package","name":"adrs-obligation-compiler","runtime":"python","entry":"packages/adrs-obligation-compiler/bin/adrs-obligation-compiler.py","bin":"adrs-obligation-compiler","deps":["python"],"env":[]}
