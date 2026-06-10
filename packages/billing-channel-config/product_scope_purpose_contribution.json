@@ -1,0 +1,130 @@
+{
+  "kind": "billing-channel-config.productScopePurposeContribution.v1",
+  "date": "2026-06-06",
+  "proposal": "billing-channel-config-lib-core-port-product-scope-purpose-contribution-rebased",
+  "principle": "Product must know and serve the upper purpose, but only through its product scope.",
+  "ultimatePurpose": "CEO/owner perspective: build a high-value corporation through low-cost, high-margin, recursive software products and make a future sale possible.",
+  "productScope": "billing-channel-config selects billing channels, validates catalog/request constraints, exposes an adapter port, and proves example glue from test-root.",
+  "directContributionGenerations": [
+    "Meta^0",
+    "Meta^1",
+    "Meta^2",
+    "Meta^3",
+    "Meta^4",
+    "Meta^5",
+    "Meta^6"
+  ],
+  "indirectContributionGenerations": [
+    "Meta^7",
+    "Meta^8",
+    "Meta^9",
+    "Meta^10"
+  ],
+  "purposeRows": [
+    {
+      "generation": "Meta^0",
+      "purpose": "課金チャネル追加可能なlibを得る",
+      "productScopeContribution": "商品、金額、cadence、provider状態から課金channelを選ぶcoreを持つ。",
+      "contributionType": "direct",
+      "productScopeBoundary": "billing-channel selection / validation / adapter port only",
+      "failureIfMissing": "課金口追加がLP、API、手動運用へ分散し、属人化する。"
+    },
+    {
+      "generation": "Meta^1",
+      "purpose": "Stripe/PAY.JP/銀行振込/手動請求を差し替える",
+      "productScopeContribution": "providerをcatalog行にし、adapterはportの外へ置く。",
+      "contributionType": "direct",
+      "productScopeBoundary": "provider choice is data; runtime integration is outside",
+      "failureIfMissing": "決済会社の審査、障害、手数料変化で販売停止しやすい。"
+    },
+    {
+      "generation": "Meta^2",
+      "purpose": "商品に合う請求口を安全に選ぶ",
+      "productScopeContribution": "amount/currency/cadence/customer/provider blockを選択前に検査する。",
+      "contributionType": "direct",
+      "productScopeBoundary": "eligibility guard only; no live payment state",
+      "failureIfMissing": "高額B2Bが不適切なcheckoutへ流れ、未収や手戻りが増える。"
+    },
+    {
+      "generation": "Meta^3",
+      "purpose": "課金判断を型化する",
+      "productScopeContribution": "判断を会話や画面ではなくcatalog + pure core + testsへ置く。",
+      "contributionType": "direct",
+      "productScopeBoundary": "catalog authority only; generated views are projections",
+      "failureIfMissing": "何が正本かわからず、DDや引継ぎで説明できない。"
+    },
+    {
+      "generation": "Meta^4",
+      "purpose": "少ないメンタルモデルで運用する",
+      "productScopeContribution": "coreは選択、portは契約、adapterはglue、exampleは非正本に分ける。",
+      "contributionType": "direct",
+      "productScopeBoundary": "core/port split; no secret/webhook/network",
+      "failureIfMissing": "billing変更ごとに人間判断が増え、低コスト運用が壊れる。"
+    },
+    {
+      "generation": "Meta^5",
+      "purpose": "商品実験と課金導線追加を速くする",
+      "productScopeContribution": "新channelをcatalog patch + adapter glue + testで追加できる。",
+      "contributionType": "direct",
+      "productScopeBoundary": "extension contract; runtime promotion is separate",
+      "failureIfMissing": "新商品や新価格の実験速度が決済実装に縛られる。"
+    },
+    {
+      "generation": "Meta^6",
+      "purpose": "破壊的ケースを回帰資産にする",
+      "productScopeContribution": "D01-D32の破綻をtest/diagnosticに固定する。",
+      "contributionType": "direct",
+      "productScopeBoundary": "billing-channel failures only",
+      "failureIfMissing": "同じ請求、fallback、adapter事故が再発する。"
+    },
+    {
+      "generation": "Meta^7",
+      "purpose": "低コスト・高利益率software productにする",
+      "productScopeContribution": "課金口追加と請求ミス削減により、粗利を守る。",
+      "contributionType": "indirect",
+      "productScopeBoundary": "billing leverage only; product-market fit is outside",
+      "failureIfMissing": "売上が伸びても運用費や請求事故が先に増える。"
+    },
+    {
+      "generation": "Meta^8",
+      "purpose": "software設計を組織設計へ接続する",
+      "productScopeContribution": "CFO/COO/CTO境界をbilling core、port、adapter、evidenceに分ける。",
+      "contributionType": "indirect",
+      "productScopeBoundary": "billing organization slice only",
+      "failureIfMissing": "責務が混ざり、少人数でCXO機能を回しにくい。"
+    },
+    {
+      "generation": "Meta^9",
+      "purpose": "高価値法人を構築する",
+      "productScopeContribution": "回収導線の再現性、移管性、provider optionalityを作る。",
+      "contributionType": "indirect",
+      "productScopeBoundary": "billing DD evidence only",
+      "failureIfMissing": "買い手が課金導線を属人運用・単一障害点と見る。"
+    },
+    {
+      "generation": "Meta^10",
+      "purpose": "高価値法人を売却し流動性を作る",
+      "productScopeContribution": "課金channelが追加、停止、移行可能である証跡として間接寄与する。",
+      "contributionType": "indirect",
+      "productScopeBoundary": "does not complete corporation, DD, accounting, legal, or exit transaction",
+      "failureIfMissing": "売却価値への寄与を過剰主張するか、逆に目的非接続な技術作業になる。"
+    }
+  ],
+  "notInProductScope": [
+    "corporate identity, ownership, capital table, board governance",
+    "LOI, SPA, APA, valuation, price adjustment, earnout",
+    "tax filing, accounting ledger, revenue recognition, reconciliation",
+    "legal compliance policies, refund policies, privacy, regulated-industry review",
+    "live Stripe/PAY.JP SDK, secrets, webhooks, idempotency, retry, provider state",
+    "management KPI exports such as revenue, churn, LTV, unpaid receivables"
+  ],
+  "rejectIf": [
+    "claims product is purpose-ignorant",
+    "claims this package completes high-value corporation or sale readiness",
+    "moves CEO/owner objective, legal, accounting, or DD workflow into billing-channel core",
+    "moves secrets/webhooks/live invoice state into lib catalog",
+    "lets provider adapter override selected channel/provider authority",
+    "treats generated LP/admin UI as billing authority"
+  ],
+  "mergeDecision": "mergeable_as_product_scope_contribution"
+}

@@ -1,0 +1,172 @@
+{
+  "kind": "billing-channel-config.saleableCorporationPurposeGate.v1",
+  "date": "2026-06-05",
+  "proposal": "billing-channel-config-lib-core-port-destructive-hardened",
+  "ultimateAssumption": "Meta^10 purpose is building a saleable corporation and completing a future sale.",
+  "decision": "allow_as_billing_channel_subsystem_only",
+  "notAllowedAs": "complete_saleable_corporation_proposal",
+  "requiredScopePhrase": "This proposal is a billing-channel subsystem proposal, not a full corporate saleability proposal.",
+  "purposeRows": [
+    {
+      "generation": "Meta^0",
+      "purpose": "課金チャネル追加可能な billing-channel-config lib/core-port package を得る",
+      "abstraction": "implementation asset",
+      "proposalContribution": "商品・価格・cadence・provider候補・fallbackをcatalog authorityへ集約し、coreで選択、portでadapter glue可能にする。",
+      "saleableCorporationContribution": "売れる瞬間に回収口を増やせるため、初期売上・商品検証・請求導線の立ち上げ速度に寄与する。",
+      "ddContribution": "商品構成、価格表、決済手段、請求方法の説明資料になる。",
+      "failureIfMissing": "新チャネル追加のたびにLP/API/請求運用へ分散修正が発生し、回収口が属人化する。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^1",
+      "purpose": "Stripe/PAY.JP/銀行振込/手動請求/future provider を差し替え可能にする",
+      "abstraction": "provider optionality",
+      "proposalContribution": "providerをpackage主語にせずchannel catalogの行とし、adapterはport越しのexample/test-root参照に留める。",
+      "saleableCorporationContribution": "特定決済会社への過度依存を下げ、審査・障害・地域展開・買い手側標準への切替余地を残す。",
+      "ddContribution": "決済手段、決済手数料、失敗率、不正決済、fallback説明に使える。",
+      "failureIfMissing": "Stripe/PAY.JPいずれかの審査落ち・障害・手数料悪化で販売停止または再実装になる。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^2",
+      "purpose": "決済停止・審査待ち・高額B2Bの不適切チャネル選択を防ぐ",
+      "abstraction": "revenue continuity guard",
+      "proposalContribution": "provider/channel disabled評価、bank-transfer-instructions fallback、cadence/amount/currency/customer guardrailを追加済み。",
+      "saleableCorporationContribution": "入金機会喪失、請求ミス、顧客摩擦、未収化を減らす。",
+      "ddContribution": "請求タイミング、請求漏れ、請求ミス、未収率、滞留期間の統制説明に寄与する。",
+      "failureIfMissing": "高額B2Bがカードcheckoutへ流れる、recurringがone-shotへ流れる、停止providerが選ばれる。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^3",
+      "purpose": "課金ドメイン判断を機械検証可能なoracle/catalog assetにする",
+      "abstraction": "domain oracle asset",
+      "proposalContribution": "validate_catalog/validate_request/add_channelと32件の破壊的ユースケースtestを入れ、generated viewをauthority化しない。",
+      "saleableCorporationContribution": "買い手が見たときに「請求方針がコードと運用に散らばっていない」状態を作る。",
+      "ddContribution": "商品別PL、顧客別PL、チャネル別売上、決済システム、構成図/API/連携の説明材料になる。",
+      "failureIfMissing": "商品/請求/LP/adapterのどこが正本かわからず、DD時に運用依存・属人判断になる。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^4",
+      "purpose": "人間レビューを未知・例外・契約判断へ限定する",
+      "abstraction": "review cost control",
+      "proposalContribution": "invalid requestをstructured diagnostics化し、secret/url/webhook/runtime leakをcatalog段階で拒否する。",
+      "saleableCorporationContribution": "少人数運用でも請求チャネル追加・変更のレビューコストを抑え、運用引継ぎしやすくする。",
+      "ddContribution": "職務分掌、承認権限、監査ログ、説明責任の一部に寄与する。ただし完全な内部統制ではない。",
+      "failureIfMissing": "channel追加ごとに人間が暗黙知で判断し、変更速度が落ち、見落としが増える。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^5",
+      "purpose": "少人数で安全に商品追加・請求導線追加を回せる",
+      "abstraction": "operating leverage",
+      "proposalContribution": "core/port/adapters/test-root分離により、新チャネル追加はcatalog patch + adapter glue + testsへ限定される。",
+      "saleableCorporationContribution": "人員増なしで商品実験、アップセル、保守課金、国内カード重視などの分岐を増やせる。",
+      "ddContribution": "営業体制、商談数、単価、営業サイクル、パイプライン、商品ライフサイクルの改善基盤になる。",
+      "failureIfMissing": "商品が増えるほどbilling実装が膨らみ、売上増より運用コストが先に増える。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^6",
+      "purpose": "破綻した課金ケースを回帰資産に変える",
+      "abstraction": "learning loop",
+      "proposalContribution": "破壊的ユースケースD01-D32をtest化し、provider/channel/request/adapter境界の失敗を回帰化した。",
+      "saleableCorporationContribution": "同じ請求・回収ミスを繰り返さない組織記憶になり、買い手に運用成熟度を示せる。",
+      "ddContribution": "障害履歴、監視、復旧手順、リリース手順、技術負債の減少に寄与する。",
+      "failureIfMissing": "一度潰した請求事故・fallback事故・adapter事故が将来のチャネル追加で再発する。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^7",
+      "purpose": "billing設定・選択ロジックを自社固有の運用資産にする",
+      "abstraction": "proprietary process moat",
+      "proposalContribution": "商品別価格帯、B2B/recurring/domestic-card-heavyの選択規則、fallback順を明示資産化する。",
+      "saleableCorporationContribution": "単なるStripe導入ではなく、事業固有の請求判断資産として買い手が評価可能になる。",
+      "ddContribution": "再現性、横展開性、買い手価値、AI価値向上の説明材料になる。",
+      "failureIfMissing": "誰でも作れる決済リンク集で終わり、会社固有の価値や引継ぎ可能性が薄くなる。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^8",
+      "purpose": "高信頼な売上回収ソフトウェアを小チームで維持する",
+      "abstraction": "small-team high-trust operations",
+      "proposalContribution": "coreはpure、adapterはexample/port、runtime secret/webhook/stateは除外という境界で保守性を上げる。",
+      "saleableCorporationContribution": "キーマン依存・属人コード・単一障害点・手動デプロイ依存を下げる方向へ寄与する。",
+      "ddContribution": "IT/システムDD、運用DD、コード/プロダクト技術DD、AI/自動化DDの一部に効く。",
+      "failureIfMissing": "担当者退職やprovider変更で請求導線が壊れ、買い手がPMIリスクを高く見る。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^9",
+      "purpose": "変更コストを下げ、売上機会への意思決定速度を上げる",
+      "abstraction": "business operation speed",
+      "proposalContribution": "channel追加・停止・fallback変更をcatalog/test差分として扱えるため、販売施策の実験速度が上がる。",
+      "saleableCorporationContribution": "新チャネル、アップセル、クロスセル、値上げ余地、休眠掘起しに対して課金導線の実装待ちを減らす。",
+      "ddContribution": "Value Creation DDの売上成長・利益改善・AI価値向上に寄与する。",
+      "failureIfMissing": "営業機会に対して決済実装がボトルネック化し、機会損失と手戻りが増える。",
+      "permission": "allow_as_billing_subsystem_only"
+    },
+    {
+      "generation": "Meta^10",
+      "purpose": "売却価値のある法人を構築し、買い手に売却できる状態へ近づける",
+      "abstraction": "saleable corporation value",
+      "proposalContribution": "売上回収口、請求方針の正本、チャネル拡張性、fallback統制、検証証跡を提供する。",
+      "saleableCorporationContribution": "EBITDA改善、再現性、横展開性、買い手価値へ間接寄与する。ただし法人格・株主構成・税務・契約・会計・売上認識・実入金消込までは満たさない。",
+      "ddContribution": "請求/回収/決済DDとValue Creation DDには強く寄与。法人/所有/取引構造DDは別proposal必須。",
+      "failureIfMissing": "このproposalを「売却可能法人の完成」と誤称すると破綻。billing subsystemとしてのみ許可可能。",
+      "permission": "allow_as_billing_subsystem_only_not_complete_company"
+    }
+  ],
+  "notCoveredAreas": [
+    {
+      "area": "corporate_identity",
+      "notCovered": "法人種別、登記情報、定款、事業目的、本店/支店、関連法人",
+      "requiredNextProposal": "corporate-governance-dd-pack or company-formation-ledger"
+    },
+    {
+      "area": "ownership_structure",
+      "notCovered": "株主/社員/持分、議決権、種類株式、新株予約権、実質所有者",
+      "requiredNextProposal": "cap-table-governance-package"
+    },
+    {
+      "area": "transaction_structure",
+      "notCovered": "LOI/SPA/APA、表明保証、補償、価格調整、運転資本調整、アーンアウト",
+      "requiredNextProposal": "exit-transaction-dd-pack"
+    },
+    {
+      "area": "tax_accounting_revenue_recognition",
+      "notCovered": "税務申告、消費税、インボイス、売上認識、会計仕訳、入金消込、収益レポート",
+      "requiredNextProposal": "billing-ledger-reconciliation-and-revenue-recognition"
+    },
+    {
+      "area": "legal_compliance",
+      "notCovered": "特商法、消費者保護、反社、下請法、返金規約、業法、個人情報、AI利用同意",
+      "requiredNextProposal": "billing-legal-compliance-policy-pack"
+    },
+    {
+      "area": "runtime_provider_adapter",
+      "notCovered": "Stripe/PAY.JP live API、webhook、idempotency、retry、secret manager、invoice/payment state",
+      "requiredNextProposal": "billing-provider-stripe then billing-provider-payjp if justified"
+    },
+    {
+      "area": "management_reporting",
+      "notCovered": "月次売上、商品別売上、顧客別売上、チャネル別売上、LTV、解約率、未収率の実測",
+      "requiredNextProposal": "billing-evidence-export-and-kpi-pack"
+    }
+  ],
+  "approvalConditions": [
+    "Proposal must explicitly claim only billing-channel config/core/port scope.",
+    "Proposal must not claim to satisfy corporate identity, ownership, tax/accounting, legal transaction, or live reconciliation DD.",
+    "Future provider adapters must remain glue/runtime packages and must not make adapter output authority.",
+    "Future saleability proposals must include separate DD packages for corporate governance, contracts, accounting, compliance, and KPI evidence.",
+    "Every future billing-channel extension must state its contribution to Meta^0..Meta^10 or be rejected as out-of-purpose work."
+  ],
+  "rejectIf": [
+    "claims complete saleable company coverage",
+    "moves secrets/webhooks/live invoice state into lib catalog",
+    "lets provider adapter override selected channel/provider authority",
+    "adds provider/channel without purpose mapping and destructive regression",
+    "treats generated LP/admin UI as billing authority"
+  ]
+}
