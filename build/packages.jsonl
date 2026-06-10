@@ -8,3 +8,4 @@
 {"kind":"package","name":"ops-refs-vault","runtime":"node","entry":"packages/ops-refs-vault/bin/ops-refs-vault.mjs","bin":"ops-refs-vault","deps":["git","node"],"env":[]}
 {"kind":"package","name":"adrs-obligation-compiler","runtime":"python","entry":"packages/adrs-obligation-compiler/bin/adrs-obligation-compiler.py","bin":"adrs-obligation-compiler","deps":["python"],"env":[]}
 {"kind":"package","name":"ops-portable-runtime-pack","runtime":"python","entry":"packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py","bin":"ops-portable-runtime-pack","deps":["python"],"env":[]}
+{"kind":"package","name":"ops-specsless-readiness","runtime":"python","entry":"packages/ops-specsless-readiness/bin/ops-specsless-readiness.py","bin":"ops-specsless-readiness","deps":["python"],"env":[]}
