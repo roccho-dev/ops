@@ -13,20 +13,63 @@ export function listProjectSourcesExpr() {
       .split('\\n')
       .map((line) => line.trim())
       .filter(Boolean);
+    const isSourceKindLine = (line) => {
+      return line === 'File'
+        || line === 'Document'
+        || line === 'Zip Archive'
+        || line.startsWith('File ·')
+        || line.startsWith('Document ·')
+        || line.startsWith('Zip Archive ·');
+    };
+    const ignoredTitles = new Set([
+      'Sources',
+      'Newest',
+      'All',
+      'Add sources',
+      'Give ChatGPT more context',
+      'Upload sources, link drives, or connect apps like Slack to give ChatGPT deeper context about your project.',
+    ]);
+    const looksLikeSourceTitle = (line) => {
+      if (!line || ignoredTitles.has(line) || isSourceKindLine(line)) return false;
+      if (line.length > 180) return false;
+      return /\\.(md|markdown|txt|json|jsonl|yaml|yml|toml|csv|tsv|sha256|zip|tar|tgz|gz|patch|diff|bundle)$/i.test(line);
+    };
     const sourceTitleFromButton = (button) => {
       let cur = button;
       for (let depth = 0; depth < 12 && cur; depth++) {
         const lines = normalizeLines(cur.innerText || cur.textContent || '');
-        const fileIndex = lines.findIndex((line) => line === 'File' || line.startsWith('File ·'));
+        const fileIndex = lines.findIndex(isSourceKindLine);
         if (fileIndex > 0 && fileIndex <= 3) {
           const title = lines[fileIndex - 1];
-          if (title && title !== 'Sources' && title !== 'Newest' && title !== 'All') {
+          if (looksLikeSourceTitle(title)) {
             return { title, lines, depth };
           }
         }
         cur = cur.parentElement;
       }
       return null;
+    };
+    const collectUnparsedVisibleSourceHints = (lines, parsedTitles) => {
+      const hints = [];
+      const seenHints = new Set();
+      for (let i = 0; i < lines.length; i++) {
+        const title = lines[i];
+        if (!looksLikeSourceTitle(title) || parsedTitles.has(title)) continue;
+        const next = lines.slice(i + 1, i + 4);
+        const kindLine = next.find(isSourceKindLine) || '';
+        if (!kindLine) continue;
+        const key = title + '|' + kindLine;
+        if (seenHints.has(key)) continue;
+        seenHints.add(key);
+        hints.push({
+          index: hints.length,
+          title,
+          kindLine,
+          lineIndex: i,
+          lines: [title, ...next].slice(0, 4),
+        });
+      }
+      return hints;
     };
     const buttons = Array.from(document.querySelectorAll('button[aria-label="Source actions"]')).filter(isVisible);
     const seen = new Set();
@@ -38,7 +81,7 @@ export function listProjectSourcesExpr() {
       const key = row.title + '@' + Math.round(rect.top) + ':' + Math.round(rect.left);
       if (seen.has(key)) continue;
       seen.add(key);
-      const fileLine = row.lines.find((line) => line === 'File' || line.startsWith('File ·')) || 'File';
+      const fileLine = row.lines.find(isSourceKindLine) || 'File';
       sources.push({
         index: sources.length,
         title: row.title,
@@ -52,13 +95,23 @@ export function listProjectSourcesExpr() {
         },
       });
     }
+    const bodyText = String(document.body && document.body.innerText || '');
+    const textLines = normalizeLines(bodyText);
+    const parsedTitles = new Set(sources.map((source) => source.title));
+    const unparsedVisibleSourceHints = collectUnparsedVisibleSourceHints(textLines, parsedTitles);
+    const parserStatus = sources.length > 0
+      ? 'parsed-source-actions'
+      : (unparsedVisibleSourceHints.length > 0 ? 'unparsed-visible-source-hints' : 'empty-or-no-visible-source-hints');
     return {
       ok: true,
       href: String(location.href || ''),
       title: String(document.title || ''),
       count: sources.length,
       sources,
-      textTail: String(document.body && document.body.innerText || '').slice(-4000),
+      parserStatus,
+      unparsedVisibleSourceCount: unparsedVisibleSourceHints.length,
+      unparsedVisibleSourceHints,
+      textTail: bodyText.slice(-4000),
     };
   })()`;
 }
