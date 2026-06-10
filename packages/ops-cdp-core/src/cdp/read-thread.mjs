@@ -115,8 +115,7 @@ function buildFullExpr(markers, tail) {
 
     const hits = [];
     for (const marker of markers) {
-      const m = msgs.find((x) => x.text.includes(marker));
-      if (m) {
+      for (const m of msgs.filter((x) => x.text.includes(marker))) {
         hits.push({
           marker,
           idx: m.idx,
@@ -207,14 +206,17 @@ function main(args) {
 
   const timeoutMs = Math.max(30000, Number(args.waitMs) + 30000);
   const pollMs = Math.max(1000, Number(args.pollMs) || 2000);
-  const deadline = Date.now() + Math.max(0, Number(args.waitMs) || 30000);
+  const waitMs = Math.max(0, Number(args.waitMs) || 30000);
+  const deadline = Date.now() + waitMs;
   const stabilityRounds = Math.max(1, Number(args.stabilityRounds) || 3);
+  const maxStreamingRounds = Math.max(1, Math.ceil(waitMs / pollMs));
 
   // Phase 1: Wait for streaming to complete AND for messages to appear
   let isStreaming = true;
   let msgCount = 0;
   let round = 0;
-  while ((isStreaming || msgCount === 0) && round < 10 && Date.now() < deadline) {
+  let streamWaitRounds = 0;
+  while ((isStreaming || msgCount === 0) && streamWaitRounds < maxStreamingRounds && Date.now() < deadline) {
     const simple = ops.evaluate(wsUrl, buildSimpleExpr(), {
       id: 1,
       returnByValue: true,
@@ -227,7 +229,7 @@ function main(args) {
     if (isStreaming || msgCount === 0) {
       sleepMs(pollMs);
     }
-    round++;
+    streamWaitRounds++;
   }
 
   // Phase 2: Stability polling - get messages multiple times until stable
@@ -297,6 +299,7 @@ function main(args) {
     hasPrompt: simpleVal.hasPrompt || false,
     isStreaming: simpleVal.isStreaming || false,
     stableRounds: round,
+    streamWaitRounds,
     hits: lastResult?.hits || [],
     last: lastResult?.last || [],
   };
