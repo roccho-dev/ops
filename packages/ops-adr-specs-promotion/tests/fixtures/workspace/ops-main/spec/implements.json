@@ -1,0 +1,23 @@
+{
+  "kind": "spec.implements.v1",
+  "specsRev": "fixture",
+  "systems": [
+    "x86_64-linux"
+  ],
+  "source": {
+    "repo": "devenv-pkg://repo/ops/target.bundle",
+    "localPath": "/fixture/ops"
+  },
+  "implements": [
+    {
+      "package": "ops-adr-specs-promotion",
+      "contractId": "spec.packages.adr-specs-promotion-kernel.v1",
+      "outputs": [
+        "packages.<system>.ops-adr-specs-promotion"
+      ],
+      "checks": [
+        "checks.<system>.ops-adr-specs-promotion"
+      ]
+    }
+  ]
+}

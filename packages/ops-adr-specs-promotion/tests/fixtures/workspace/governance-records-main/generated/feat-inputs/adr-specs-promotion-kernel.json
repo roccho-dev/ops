@@ -1,0 +1,71 @@
+{
+  "dependencyLock": [
+    {
+      "fromPackageId": "adr-specs-promotion-kernel",
+      "kind": "governance.dependencyEdge.v1",
+      "requires": "adr-jsonl-intent-input",
+      "resolution": "packageId",
+      "toPackageIds": [
+        "adr-jsonl-intent-input"
+      ]
+    },
+    {
+      "fromPackageId": "adr-specs-promotion-kernel",
+      "kind": "governance.dependencyEdge.v1",
+      "requires": "package-contracts",
+      "resolution": "packageId",
+      "toPackageIds": [
+        "package-contracts"
+      ]
+    }
+  ],
+  "environmentBuildDefinition": {
+    "kind": "governance.environmentBuildDefinition.v1",
+    "officialOutput": "packages.<system>.adr-specs-promotion-kernel",
+    "package": "adr-specs-promotion-kernel",
+    "preflightRequiredTools": [
+      "bash",
+      "python3",
+      "git"
+    ],
+    "repoId": "ops",
+    "requiredChecks": [
+      "checks.<system>.ops-adr-specs-promotion"
+    ],
+    "requiredCommands": [
+      "ops-adr-specs-promotion audit --workspace <full-worktree> --json"
+    ],
+    "requiredOutputs": [
+      "packages.<system>.ops-adr-specs-promotion"
+    ],
+    "sourceOfTruth": "package-contract.v1.jsonl",
+    "targetPackage": "adr-specs-promotion-kernel"
+  },
+  "kind": "feat.input.v1",
+  "packageId": "adr-specs-promotion-kernel",
+  "rawAdrDirectAuthority": false,
+  "repoOperation": {
+    "allowedPaths": [
+      "packages/adr-specs-promotion-kernel/",
+      "../ops-main/packages/ops-adr-specs-promotion/",
+      "../ops-main/flake.nix",
+      "../adrs-main/records/raw/adr.v1.jsonl",
+      "../adrs-main/records/promoted/purpose-lineage.v1.jsonl",
+      "../adrs-main/records/promoted/destructive-case.v1.jsonl",
+      "../adrs-main/records/relations/adr-promotion.v1.jsonl"
+    ],
+    "forbiddenPaths": [
+      "executable bridge implementation outside ops",
+      "policy second validator semantics",
+      "raw ADR as issue authority",
+      "issue closed as contract accepted",
+      "generated view as contract authority",
+      "Nix deletion before projection parity"
+    ],
+    "repoSourceUri": "devenv-pkg://repo/ops/target.bundle",
+    "targetRepoId": "ops"
+  },
+  "sourceAuthority": "governance-records-main/records/specs/package-contract.v1.jsonl",
+  "specId": "pkg.adr-specs-promotion-kernel",
+  "status": "ready"
+}
