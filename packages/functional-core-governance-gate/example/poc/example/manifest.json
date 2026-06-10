@@ -1,0 +1,10 @@
+{
+  "kind": "functional-core-governance.manifest.v1",
+  "package": "functional-core-governance-example",
+  "core": [
+    { "path": "core/decider.py", "language": "python" }
+  ],
+  "adapter": [
+    { "path": "adapter/runner.py", "language": "python" }
+  ]
+}

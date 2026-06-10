@@ -1,0 +1,10 @@
+{
+  "kind": "functional-core-governance.manifest.v1",
+  "package": "good-functional-core-fixture",
+  "core": [
+    { "path": "core/reducer.py", "language": "python" }
+  ],
+  "adapter": [
+    { "path": "adapter/runtime.py", "language": "python" }
+  ]
+}

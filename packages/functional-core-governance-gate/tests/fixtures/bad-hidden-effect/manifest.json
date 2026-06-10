@@ -1,0 +1,7 @@
+{
+  "kind": "functional-core-governance.manifest.v1",
+  "package": "bad-hidden-effect-fixture",
+  "core": [
+    { "path": "core/reducer.py", "language": "python" }
+  ]
+}
