@@ -111,7 +111,13 @@
               entryRel = entryRelOf decl.entry;
               # decl.runtime が exec 前置と runtime derivation を選択(node / python)。
               rt = runtimeDrvById.${decl.runtime};
-              execLine = runtimeExecById.${decl.runtime} rt "${pkgDir}/${entryRel}";
+              execLine =
+                if decl ? pythonModule then
+                  ''
+                    export PYTHONPATH="${pkgDir}/${decl.pythonPath or "src"}''${PYTHONPATH:+:$PYTHONPATH}"
+                    exec ${rt}/bin/python3 -m ${decl.pythonModule} "$@"''
+                else
+                  runtimeExecById.${decl.runtime} rt "${pkgDir}/${entryRel}";
             in
             pkgs.writeShellApplication {
               name = decl.bin;
