@@ -576,8 +576,9 @@ std.out.puts("\n=== CDP Wait Clock Contract Test ===\n");
 const readThreadSrc = String(std.loadFile(scriptPath("read-thread.mjs")) || "");
 const waitArtifactsSrc = String(std.loadFile(scriptPath("chromium-cdp-wait-artifacts.mjs")) || "");
 assert(
-  readThreadSrc.includes("Date.now() + Math.max(0, Number(args.waitMs)") &&
-  !readThreadSrc.includes("os.now() + Math.max(0, Number(args.waitMs)") &&
+  readThreadSrc.includes("const waitMs = Math.max(0, Number(args.waitMs)") &&
+  readThreadSrc.includes("const deadline = Date.now() + waitMs") &&
+  !readThreadSrc.includes("os.now() + ") &&
   !readThreadSrc.includes("os.now() < deadline"),
   "read-thread waitMs deadline uses Date.now milliseconds, not qjs os.now microseconds",
 );
