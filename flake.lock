@@ -3,17 +3,17 @@
     "governance": {
       "flake": false,
       "locked": {
-        "lastModified": 1781151610,
-        "narHash": "sha256-n/Kuk4RDjTH3HVLH1vgfAUx6VDMQFy0HRBkTFMvQ730=",
+        "lastModified": 1781160798,
+        "narHash": "sha256-uElXVgMdCQGhRLhWQigjmk2ia5+vTPExebNplZRMW1k=",
         "ref": "refs/heads/claude/governance-unification-260611",
-        "rev": "14d2560c4a1fa676844bb827d5eb10d0230282c2",
-        "revCount": 8,
+        "rev": "573b32b4320df3ea065e84d0b664da718d2d378c",
+        "revCount": 11,
         "type": "git",
         "url": "file:///home/nixos/repos/governance"
       },
       "original": {
         "ref": "refs/heads/claude/governance-unification-260611",
-        "rev": "14d2560c4a1fa676844bb827d5eb10d0230282c2",
+        "rev": "573b32b4320df3ea065e84d0b664da718d2d378c",
         "type": "git",
         "url": "file:///home/nixos/repos/governance"
       }

@@ -1,6 +1,6 @@
 {
   "kind": "spec.implements.v1",
-  "governanceRev": "14d2560c4a1fa676844bb827d5eb10d0230282c2",
+  "governanceRev": "573b32b4320df3ea065e84d0b664da718d2d378c",
   "systems": [
     "x86_64-linux",
     "aarch64-linux"

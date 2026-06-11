@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     governance = {
-      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/claude/governance-unification-260611&rev=14d2560c4a1fa676844bb827d5eb10d0230282c2";
+      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/claude/governance-unification-260611&rev=573b32b4320df3ea065e84d0b664da718d2d378c";
       flake = false;
     };
     # 分離可能な build 定義 package(append-only jsonl -> nix snapshot/module)。
@@ -181,8 +181,14 @@
           generated = mkGeneratedPackages pkgs;
           # specsless: catalog/placement は unified governance repo(SSOT jsonl + bridge tool)
           # から導出する(records/ が権威台帳、tools/ が projection 関数)。
-          # G3 records-gate: catalog 生成の前に pin 済 governance に対して
-          # records-gate(CUE schema vet + DuckDB assertion)を実行する。
+          # C3 CUE 一本化: catalog 生成の前段 blocking gate は cue vet のみ
+          # (governance 自身の flake check と同一形の宣言駆動プラミング)。
+          # ${governance}/policy/interface.json が {file, def, group, required} を宣言し、
+          #   (a) def を持つ各 file を cue vet ${governance}/policy/cue/*.cue <file> -d '<def>'
+          #   (b) group 付き file 群を 1 つの labeled JSON に束ねて -d '#All' で関係制約を vet
+          # 検査ロジックは全て governance の policy/cue/ 側。required:false の file は
+          # 存在しなければ skip(adrs 梯子 binding は ${governance} に file が無い)。
+          # records-gate.py は REPORT 専用に退役し、ここでは実行しない。
           # gate 赤 = この derivation が fail = catalog/placement は生成されない。
           specCatalog =
             pkgs.runCommand "spec-catalog"
@@ -190,13 +196,20 @@
                 nativeBuildInputs = [
                   pkgs.python3
                   pkgs.cue
-                  pkgs.duckdb
                 ];
               }
               ''
+                set -euo pipefail
                 export HOME="$TMPDIR"
-                ${pkgs.python3}/bin/python3 ${governance}/tools/records-gate.py --root ${governance}
-                ${pkgs.python3}/bin/python3 ${governance}/tools/make-spec-catalog.py ${governance} --out-dir $out/share/spec
+                cd ${governance}
+                python3 -c 'import json,os; e=json.load(open("policy/interface.json")); m=[x["file"] for x in e if x.get("required") and not os.path.exists(x["file"])]; assert not m, "missing required record files: %s" % m; print("\n".join(x["file"]+" "+x["def"] for x in e if x.get("def") and os.path.exists(x["file"])))' > "$TMPDIR/per-file-defs"
+                while read -r file def; do
+                  cue vet policy/cue/*.cue "$file" -d "$def"
+                done < "$TMPDIR/per-file-defs"
+                python3 -c 'import json,os; e=json.load(open("policy/interface.json")); g=sorted({x["group"] for x in e if x.get("group")}); print(json.dumps({k: [json.loads(l) for x in e if x.get("group")==k and os.path.exists(x["file"]) for l in open(x["file"], encoding="utf-8") if l.strip()] for k in g}))' > "$TMPDIR/relational-all.json"
+                cue vet policy/cue/*.cue "$TMPDIR/relational-all.json" -d '#All'
+                echo "spec-catalog gate: cue vet PASS (per-file + relational)"
+                python3 ${governance}/tools/make-spec-catalog.py ${governance} --out-dir $out/share/spec
               '';
         in
         generated
