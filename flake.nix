@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     governance = {
-      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/claude/governance-unification-260611&rev=0193004fd66081ce4bd81993d2ff5ca0c903ac09";
+      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/claude/governance-unification-260611&rev=d1ad87f953af50845eec3b2d4ecb5209fe1b7c2b";
       flake = false;
     };
     # 分離可能な build 定義 package(append-only jsonl -> nix snapshot/module)。
@@ -181,9 +181,23 @@
           generated = mkGeneratedPackages pkgs;
           # specsless: catalog/placement は unified governance repo(SSOT jsonl + bridge tool)
           # から導出する(records/ が権威台帳、tools/ が projection 関数)。
-          specCatalog = pkgs.runCommand "spec-catalog" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-            ${pkgs.python3}/bin/python3 ${governance}/tools/make-spec-catalog.py ${governance} --out-dir $out/share/spec
-          '';
+          # G3 records-gate: catalog 生成の前に pin 済 governance に対して
+          # records-gate(CUE schema vet + DuckDB assertion)を実行する。
+          # gate 赤 = この derivation が fail = catalog/placement は生成されない。
+          specCatalog =
+            pkgs.runCommand "spec-catalog"
+              {
+                nativeBuildInputs = [
+                  pkgs.python3
+                  pkgs.cue
+                  pkgs.duckdb
+                ];
+              }
+              ''
+                export HOME="$TMPDIR"
+                ${pkgs.python3}/bin/python3 ${governance}/tools/records-gate.py --root ${governance}
+                ${pkgs.python3}/bin/python3 ${governance}/tools/make-spec-catalog.py ${governance} --out-dir $out/share/spec
+              '';
         in
         generated
         // rec {
