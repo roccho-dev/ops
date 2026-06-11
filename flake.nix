@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     governance = {
-      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/claude/governance-unification-260611&rev=573b32b4320df3ea065e84d0b664da718d2d378c";
+      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/main&rev=573b32b4320df3ea065e84d0b664da718d2d378c";
       flake = false;
     };
     # 分離可能な build 定義 package(append-only jsonl -> nix snapshot/module)。

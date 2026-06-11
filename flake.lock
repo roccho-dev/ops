@@ -5,14 +5,14 @@
       "locked": {
         "lastModified": 1781160798,
         "narHash": "sha256-uElXVgMdCQGhRLhWQigjmk2ia5+vTPExebNplZRMW1k=",
-        "ref": "refs/heads/claude/governance-unification-260611",
+        "ref": "refs/heads/main",
         "rev": "573b32b4320df3ea065e84d0b664da718d2d378c",
         "revCount": 11,
         "type": "git",
         "url": "file:///home/nixos/repos/governance"
       },
       "original": {
-        "ref": "refs/heads/claude/governance-unification-260611",
+        "ref": "refs/heads/main",
         "rev": "573b32b4320df3ea065e84d0b664da718d2d378c",
         "type": "git",
         "url": "file:///home/nixos/repos/governance"
