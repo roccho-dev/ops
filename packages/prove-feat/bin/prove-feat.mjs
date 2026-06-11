@@ -236,20 +236,19 @@ function runStructure(root, system, args) {
   checkItem(items, "implements-manifest-exists", isFile(implPath), `${rel(implPath, root)} exists`);
 
   const flakeText = isFile(flake) ? readText(flake) : "";
-  const governanceRecordsDeclared =
-    flakeText.includes("governance-records.url") || /(^|\s)governance-records\s*=\s*\{/.test(flakeText);
-  const governanceNixDeclared = flakeText.includes("governance-nix.url") || /(^|\s)governance-nix\s*=\s*\{/.test(flakeText);
+  const governanceDeclared =
+    flakeText.includes("governance.url") || /(^|\s)governance\s*=\s*\{/.test(flakeText);
   checkItem(
     items,
-    "inputs-governance-records-declared",
-    governanceRecordsDeclared && governanceNixDeclared,
-    "flake.nix declares inputs.governance-records and inputs.governance-nix",
+    "inputs-governance-declared",
+    governanceDeclared,
+    "flake.nix declares inputs.governance",
   );
   checkItem(
     items,
-    "outputs-receive-governance-records",
-    /outputs\s*=\s*\{[^}]*governance-records/.test(flakeText),
-    "outputs argument includes governance-records",
+    "outputs-receive-governance",
+    /outputs\s*=\s*\{[^}]*governance/.test(flakeText),
+    "outputs argument includes governance",
   );
   checkItem(items, "prove-feat-package-wired", attrDefined(flakeText, "prove-feat"), "flake.nix defines prove-feat outputs");
 
@@ -277,17 +276,14 @@ function runStructure(root, system, args) {
   }
 
   const lock = isFile(lockPath) ? readJson(lockPath) : {};
-  const governanceRecordsLocked = lockedNode(lock, "governance-records");
-  const governanceNixLocked = lockedNode(lock, "governance-nix");
-  checkItem(items, "governance-records-lock-rev", Boolean(governanceRecordsLocked.rev), "flake.lock pins nodes.governance-records.locked.rev");
+  const governanceLocked = lockedNode(lock, "governance");
+  checkItem(items, "governance-lock-rev", Boolean(governanceLocked.rev), "flake.lock pins nodes.governance.locked.rev");
   checkItem(
     items,
-    "governance-records-lock-nar-hash",
-    Boolean(governanceRecordsLocked.narHash),
-    "flake.lock pins nodes.governance-records.locked.narHash",
+    "governance-lock-nar-hash",
+    Boolean(governanceLocked.narHash),
+    "flake.lock pins nodes.governance.locked.narHash",
   );
-  checkItem(items, "governance-nix-lock-rev", Boolean(governanceNixLocked.rev), "flake.lock pins nodes.governance-nix.locked.rev");
-  checkItem(items, "governance-nix-lock-nar-hash", Boolean(governanceNixLocked.narHash), "flake.lock pins nodes.governance-nix.locked.narHash");
 
   try {
     const manifest = manifestJson(root);
@@ -364,11 +360,11 @@ function runContractLint(root, system, args) {
   checkItem(items, "spec-catalog-loaded", specPackages.size > 0, "specs package catalog is readable");
   checkItem(items, "spec-placement-loaded", Object.keys(placementByPackage).length > 0, "specs placement table is readable");
 
-  // specsless: catalog/placement input is governance-records (manifest.specsRev
+  // specsless: catalog/placement input is the unified governance repo (manifest.specsRev
   // keeps recording the source-authority specs rev; lock no longer has a specs node).
-  const locked = lockedNode(lock, "governance-records");
-  checkItem(items, "governance-records-rev-recorded", Boolean(locked.rev), "flake.lock records governance-records rev");
-  checkItem(items, "governance-records-narhash-recorded", Boolean(locked.narHash), "flake.lock records governance-records narHash");
+  const locked = lockedNode(lock, "governance");
+  checkItem(items, "governance-rev-recorded", Boolean(locked.rev), "flake.lock records governance rev");
+  checkItem(items, "governance-narhash-recorded", Boolean(locked.narHash), "flake.lock records governance narHash");
 
   const implementList = manifest.implements || [];
   const packages = implementList.map((item) => item.package);

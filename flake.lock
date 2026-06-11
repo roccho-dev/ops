@@ -1,39 +1,21 @@
 {
   "nodes": {
-    "governance-nix": {
+    "governance": {
       "flake": false,
       "locked": {
-        "lastModified": 1781140189,
-        "narHash": "sha256-muldGkf5uDw1eKTWZcQsLhCMNynwU5AwwuMdPiOFlc0=",
-        "ref": "refs/heads/claude/governance-nix-catalog-bridge-260611",
-        "rev": "683f0b34748ab1be88a64a2305632d39581cf4b5",
-        "revCount": 2,
+        "lastModified": 1781145379,
+        "narHash": "sha256-cQtvp0KYRn5U2ozxrbJzlIq4w7kAYyiIsR20S7GA3Oo=",
+        "ref": "refs/heads/claude/governance-unification-260611",
+        "rev": "0193004fd66081ce4bd81993d2ff5ca0c903ac09",
+        "revCount": 6,
         "type": "git",
-        "url": "file:///home/nixos/repos/governance-nix"
+        "url": "file:///home/nixos/repos/governance"
       },
       "original": {
-        "ref": "refs/heads/claude/governance-nix-catalog-bridge-260611",
-        "rev": "683f0b34748ab1be88a64a2305632d39581cf4b5",
+        "ref": "refs/heads/claude/governance-unification-260611",
+        "rev": "0193004fd66081ce4bd81993d2ff5ca0c903ac09",
         "type": "git",
-        "url": "file:///home/nixos/repos/governance-nix"
-      }
-    },
-    "governance-records": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1781140109,
-        "narHash": "sha256-QnzVds3N0vg5XxiPkPGBbseazbZYFM4xg1KncP7MW54=",
-        "ref": "refs/heads/claude/gr-catalog-membership-260611",
-        "rev": "488951bf59f3dc74b18c1b477cdd697bff9d2ea4",
-        "revCount": 2,
-        "type": "git",
-        "url": "file:///home/nixos/repos/governance-records"
-      },
-      "original": {
-        "ref": "refs/heads/claude/gr-catalog-membership-260611",
-        "rev": "488951bf59f3dc74b18c1b477cdd697bff9d2ea4",
-        "type": "git",
-        "url": "file:///home/nixos/repos/governance-records"
+        "url": "file:///home/nixos/repos/governance"
       }
     },
     "nixpkgs": {
@@ -88,8 +70,7 @@
     },
     "root": {
       "inputs": {
-        "governance-nix": "governance-nix",
-        "governance-records": "governance-records",
+        "governance": "governance",
         "nixpkgs": "nixpkgs",
         "nodejs-src": "nodejs-src",
         "ops-build-defs": "ops-build-defs"
