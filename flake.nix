@@ -1,11 +1,15 @@
 {
-  description = "ops: operational packages implementing specs contracts";
+  description = "ops: operational packages implementing governance-records contracts";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    specs = {
-      url = "git+file:///home/nixos/repos/specs?ref=refs/heads/main&rev=35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6";
-      inputs.nixpkgs.follows = "nixpkgs";
+    governance-records = {
+      url = "git+file:///home/nixos/repos/governance-records?ref=refs/heads/claude/gr-catalog-membership-260611&rev=488951bf59f3dc74b18c1b477cdd697bff9d2ea4";
+      flake = false;
+    };
+    governance-nix = {
+      url = "git+file:///home/nixos/repos/governance-nix?ref=refs/heads/claude/governance-nix-catalog-bridge-260611&rev=683f0b34748ab1be88a64a2305632d39581cf4b5";
+      flake = false;
     };
     # 分離可能な build 定義 package(append-only jsonl -> nix snapshot/module)。
     # flake.lock が snapshot。defs.jsonl 追記後 `nix flake update ops-build-defs` で再 snapshot。
@@ -27,7 +31,8 @@
     {
       self,
       nixpkgs,
-      specs,
+      governance-records,
+      governance-nix,
       ops-build-defs,
       nodejs-src,
     }:
@@ -179,6 +184,11 @@
           # ★goal ②: 通常 package(11 本中の node CLI 群)は build/packages.jsonl の fold で生成。
           # per-package 手書き derivation なし。下の explicit 群は schema に収まらない特例のみ。
           generated = mkGeneratedPackages pkgs;
+          # specsless: catalog/placement は governance-records(SSOT jsonl)から
+          # governance-nix の bridge tool で導出する。
+          specCatalog = pkgs.runCommand "spec-catalog" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+            ${pkgs.python3}/bin/python3 ${governance-nix}/tools/make-spec-catalog.py ${governance-records} --out-dir $out/share/spec
+          '';
         in
         generated
         // rec {
@@ -197,8 +207,9 @@
           };
           # G2: nodejs-only 移行の runtime 基盤。git+https 取得の node v26.3.0。
           nodejs26 = nodejs26For pkgs;
-          # 特例: prove-feat は env が flake input(specs)由来の store path 参照であり
-          # build/packages.jsonl の静的 path/value schema に収まらないため explicit に残す。
+          # 特例: prove-feat は env が flake input(governance-records bridge)由来の
+          # store path 参照であり build/packages.jsonl の静的 path/value schema に
+          # 収まらないため explicit に残す。
           prove-feat = pkgs.writeShellApplication {
             name = "prove-feat";
             runtimeInputs = [
@@ -208,12 +219,8 @@
               pkgs.nodejs
             ];
             text = ''
-              export PROVE_FEAT_SPEC_CATALOG="${
-                specs.packages.${pkgs.stdenv.hostPlatform.system}.spec
-              }/share/spec/package-catalog.json"
-              export PROVE_FEAT_SPEC_PLACEMENT_TABLE="${
-                specs.packages.${pkgs.stdenv.hostPlatform.system}.spec
-              }/share/spec/placement-table.json"
+              export PROVE_FEAT_SPEC_CATALOG="${specCatalog}/share/spec/package-catalog.json"
+              export PROVE_FEAT_SPEC_PLACEMENT_TABLE="${specCatalog}/share/spec/placement-table.json"
               exec ${pkgs.nodejs}/bin/node ${./packages/prove-feat/bin/prove-feat.mjs} "$@"
             '';
           };

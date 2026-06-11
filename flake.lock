@@ -1,5 +1,41 @@
 {
   "nodes": {
+    "governance-nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1781140189,
+        "narHash": "sha256-muldGkf5uDw1eKTWZcQsLhCMNynwU5AwwuMdPiOFlc0=",
+        "ref": "refs/heads/claude/governance-nix-catalog-bridge-260611",
+        "rev": "683f0b34748ab1be88a64a2305632d39581cf4b5",
+        "revCount": 2,
+        "type": "git",
+        "url": "file:///home/nixos/repos/governance-nix"
+      },
+      "original": {
+        "ref": "refs/heads/claude/governance-nix-catalog-bridge-260611",
+        "rev": "683f0b34748ab1be88a64a2305632d39581cf4b5",
+        "type": "git",
+        "url": "file:///home/nixos/repos/governance-nix"
+      }
+    },
+    "governance-records": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1781140109,
+        "narHash": "sha256-QnzVds3N0vg5XxiPkPGBbseazbZYFM4xg1KncP7MW54=",
+        "ref": "refs/heads/claude/gr-catalog-membership-260611",
+        "rev": "488951bf59f3dc74b18c1b477cdd697bff9d2ea4",
+        "revCount": 2,
+        "type": "git",
+        "url": "file:///home/nixos/repos/governance-records"
+      },
+      "original": {
+        "ref": "refs/heads/claude/gr-catalog-membership-260611",
+        "rev": "488951bf59f3dc74b18c1b477cdd697bff9d2ea4",
+        "type": "git",
+        "url": "file:///home/nixos/repos/governance-records"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1777268161,
@@ -52,32 +88,11 @@
     },
     "root": {
       "inputs": {
+        "governance-nix": "governance-nix",
+        "governance-records": "governance-records",
         "nixpkgs": "nixpkgs",
         "nodejs-src": "nodejs-src",
-        "ops-build-defs": "ops-build-defs",
-        "specs": "specs"
-      }
-    },
-    "specs": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1779535200,
-        "narHash": "sha256-0G505pRUaTqNXmMqG9ECkYNZ5ku54STVxseHydVQE0s=",
-        "ref": "refs/heads/main",
-        "rev": "35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6",
-        "revCount": 156,
-        "type": "git",
-        "url": "file:///home/nixos/repos/specs"
-      },
-      "original": {
-        "ref": "refs/heads/main",
-        "rev": "35e1e6840a7c8a9d49eeb8f94c8c91e196d88eb6",
-        "type": "git",
-        "url": "file:///home/nixos/repos/specs"
+        "ops-build-defs": "ops-build-defs"
       }
     }
   },
