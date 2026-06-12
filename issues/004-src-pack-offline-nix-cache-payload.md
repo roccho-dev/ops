@@ -84,3 +84,15 @@ The pack builder should support:
 - No OCI image unless a separate package contract is approved.
 - No binary-only handoff as the default.
 - No source secrecy guarantee; this format is for readable source handoff.
+
+## Update 2026-06-12
+
+Partial integration via `ops-handoff-pack`: handoffs now standardly carry a
+`src-pack` payload (per-repo `SRC/<repoId>.tar.gz`, sha256/bytes pinned in the
+payload manifest and recomputed at validate; stub payloads are rejected for
+delegation). The NIX side of this issue (flake archive / binary cache, as
+built by `ops-src-runtime-pack`) is still not folded into the standard handoff
+payload. Note: this issue names `repos/specs` as the contract home; specs is
+being deleted — the v2 manifest shapes are currently enforced in-code by
+`ops-handoff-pack validate`, and external contract placement (governance) is a
+follow-up decision recorded in the adrs proposal 260612-handoff-pack-glue.
