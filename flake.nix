@@ -72,6 +72,7 @@
           runtimeExecById = {
             node = rt: entry: ''exec ${rt}/bin/node ${entry} "$@"'';
             python = rt: entry: ''exec ${rt}/bin/python3 ${entry} "$@"'';
+            bash = rt: entry: ''exec ${rt}/bin/bash ${entry} "$@"'';
           };
           # dep トークンを derivation に解決:
           #   "node" / "python" -> その runtime derivation
