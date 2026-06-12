@@ -112,3 +112,15 @@ Each thread bootstrap must say only what that thread needs:
 - No semantic approval.
 - No merge.
 - No push.
+
+## Update 2026-06-12
+
+`ops-handoff-pack` (packages/ops-handoff-pack) implements the generator glue:
+repos+branches+request in, validated self-contained handoff out. It derives
+`source.manifest.v2` / `merge.target.v2` from git (no hand-written manifests),
+builds per-repo tracked-files-only packs, drives `ops-handoff-core`, and adds
+digest recomputation + manifest cross-check + stub rejection + live base-head
+re-verification. Single entrypoint runbook: `runbooks/handoff.md`. Gate:
+`checks.<system>.ops-handoff-pack` replays the full flow including tamper and
+drift cases. Remaining open here: NIX offline-cache payload (tracked in 004)
+and transport runner integration.
