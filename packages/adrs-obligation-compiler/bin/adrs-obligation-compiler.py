@@ -17,6 +17,7 @@ ROOT_REL = {
     "readiness_usecases": pathlib.Path("adrs-main/records/control/feat-readiness-usecase.v1.jsonl"),
     "package_contracts": pathlib.Path("governance-records-main/records/specs/package-contract.v1.jsonl"),
     "projection_digests": pathlib.Path("governance-records-main/records/specs/projection-digest.v1.jsonl"),
+    "dependency_edges": pathlib.Path("governance-records-main/records/specs/dependency-edge.v1.jsonl"),
     "feat_inputs": pathlib.Path("governance-records-main/generated/feat-inputs.v1.jsonl"),
     "destructives": pathlib.Path("adrs-main/records/promoted/destructive-case.v1.jsonl"),
     "coverage": pathlib.Path("governance-records-main/records/feat/destructive-coverage.v1.jsonl"),
@@ -119,8 +120,73 @@ def digest_rows(rows: Iterable[dict[str, Any]]) -> str:
     return sha_obj(ordered)
 
 
+
+
+def projection_payload(package: dict[str, Any], edges: list[dict[str, Any]]) -> dict[str, Any]:
+    definition = package.get("definition") or {}
+    return {
+        "packageId": package.get("packageId"),
+        "specId": package.get("specId"),
+        "status": package.get("status"),
+        "successorRepoId": definition.get("successorRepoId"),
+        "repoSourceUri": definition.get("repoSourceUri"),
+        "officialOutput": definition.get("officialOutput"),
+        "requiredOutputs": definition.get("requiredOutputs") or [],
+        "requiredChecks": definition.get("requiredChecks") or [],
+        "requiredCheckPackages": definition.get("requiredCheckPackages") or [],
+        "requiredCommands": definition.get("requiredCommands") or [],
+        "allowedPaths": definition.get("allowedPaths") or [],
+        "forbiddenPaths": definition.get("forbiddenPaths") or [],
+        "runtimeRequirements": definition.get("runtimeRequirements"),
+        "preflightRequiredTools": definition.get("preflightRequiredTools") or [],
+        "dependencyLock": edges,
+        "recordDigest": package.get("recordDigest"),
+    }
+
+def derive_feat_inputs(root: pathlib.Path, packages: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_edge: dict[str, list[dict[str, Any]]] = {}
+    for edge in edges:
+        by_edge.setdefault(str(edge.get("fromPackageId")), []).append(edge)
+    rows: list[dict[str, Any]] = []
+    for package in packages:
+        definition = package.get("definition") or {}
+        projection_digest = sha_obj(projection_payload(package, by_edge.get(str(package.get("packageId")), [])))
+        rows.append({
+            "kind": "feat.input.v1",
+            "packageId": package.get("packageId"),
+            "status": "ready" if package.get("status") == "accepted" else "planned-blocked",
+            "projectionDigest": projection_digest.removeprefix("sha256:"),
+            "rawAdrDirectAuthority": False,
+            "sourceAuthority": "governance-records-main/records/specs/package-contract.v1.jsonl",
+            "environmentBuildDefinition": {
+                "officialOutput": definition.get("officialOutput"),
+                "requiredOutputs": definition.get("requiredOutputs") or [],
+                "requiredChecks": definition.get("requiredChecks") or [],
+                "requiredCommands": definition.get("requiredCommands") or [],
+                "runtimeRequirements": definition.get("runtimeRequirements"),
+                "preflightRequiredTools": definition.get("preflightRequiredTools") or [],
+            },
+            "repoOperation": {
+                "allowedPaths": definition.get("allowedPaths") or [],
+                "forbiddenPaths": definition.get("forbiddenPaths") or [],
+            },
+        })
+    return rows
+
 def load_index(root: pathlib.Path) -> dict[str, list[dict[str, Any]]]:
-    return {name: read_jsonl(root / rel) for name, rel in ROOT_REL.items()}
+    data: dict[str, list[dict[str, Any]]] = {}
+    for name, rel in ROOT_REL.items():
+        path = root / rel
+        if name == "feat_inputs" and not path.exists():
+            generated_dir = root / "governance-records-main/generated"
+            if generated_dir.exists():
+                fail(f"generated-dir-present-without-feat-inputs:{generated_dir}")
+            packages = data.get("package_contracts") or read_jsonl(root / ROOT_REL["package_contracts"])
+            edges = data.get("dependency_edges") or read_jsonl(root / ROOT_REL["dependency_edges"])
+            data[name] = derive_feat_inputs(root, packages, edges)
+        else:
+            data[name] = read_jsonl(path)
+    return data
 
 
 def by_package(rows: list[dict[str, Any]], package_id: str) -> list[dict[str, Any]]:
