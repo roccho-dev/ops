@@ -2,13 +2,7 @@ export const CHATGPT_BASE = "https://chatgpt.com";
 export const CONV_ID_RE = /\/c\/([0-9a-fA-F-]{16,})/;
 export const PROJECT_ID_RE = /\/g\/g-p-([^/]+)/;
 
-export const SELECTORS = {
-  stop: 'button[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label="Stop"], button[aria-label="停止"]',
-  send: 'button[data-testid="send-button"], button[aria-label="Send prompt"], button[aria-label="Send message"], button[aria-label="Send"], button[aria-label="送信"]',
-  assistantMsg: '[data-message-author-role="assistant"]',
-  userMsg: '[data-message-author-role="user"]',
-  modelSwitcher: 'button[data-testid="model-switcher-dropdown-button"], button[aria-label*="Model selector" i], button[aria-label*="current model" i]',
-};
+export { SELECTORS, selector, selectorsSnapshot } from "./selectors.mjs";
 
 export function extractConversationId(url) {
   const m = String(url || "").match(CONV_ID_RE);
