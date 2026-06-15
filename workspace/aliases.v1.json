@@ -1,0 +1,30 @@
+{
+  "kind": "canonicalCore.workspaceAliases.v1",
+  "workspaceRoot": ".",
+  "materialization": {
+    "mode": "relative-symlink",
+    "script": "ops/workspace/materialize-aliases.py",
+    "requiredForReplay": true
+  },
+  "aliases": [
+    {"alias": "adrs-main", "target": "adrs", "role": "current ADR semantic authority"},
+    {"alias": "artifacts", "target": "evidence-archive/artifacts", "role": "non-authority replay and validation evidence"},
+    {"alias": "ci", "target": "ops/ci", "role": "workspace-level requiredCommands entrypoints"},
+    {"alias": "evidence-archive-main", "target": "evidence-archive", "role": "evidence repository"},
+    {"alias": "governance-nix-main", "target": "governance", "role": "governance projection tooling compatibility name"},
+    {"alias": "governance-records-main", "target": "governance", "role": "accepted governance JSONL record authority"},
+    {"alias": "issue-ledger-main", "target": "issue-ledger", "role": "successor issue lifecycle ledger"},
+    {"alias": "ops-main", "target": "ops", "role": "operational package implementation repository"},
+    {"alias": "repo-boundary-guard-main", "target": "repo-boundary-guard", "role": "repository boundary guard checks"}
+  ],
+  "forbiddenAliases": [
+    {"alias": "specs-main", "reason": "retired specs authority must not be active in final mode"},
+    {"alias": "adr-main", "reason": "renamed to adrs-main; retired spelling must not be authority"}
+  ],
+  "authorityBoundary": {
+    "manifestRole": "workspace path binding only; never package/spec authority",
+    "recordsAuthority": "governance-records-main/records/",
+    "adrsAuthority": "adrs-main/records/",
+    "generatedRole": "derived evidence only"
+  }
+}
