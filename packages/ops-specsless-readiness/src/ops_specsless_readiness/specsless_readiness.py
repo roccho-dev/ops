@@ -72,6 +72,53 @@ def projection_payload(package, edges):
         'recordDigest': package['recordDigest'],
     }
 
+
+
+def derive_feat_inputs(packages, by_edge):
+    rows = []
+    for package in packages:
+        pd = sha(projection_payload(package, by_edge.get(package['packageId'], [])))
+
+        if package.get('status') == 'accepted':
+            status = 'ready'
+        elif package.get('status') == 'planned':
+            status = 'planned-blocked'
+        elif package.get('status') == 'deprecated':
+            status = 'deprecated-decision-needed'
+        else:
+            status = 'unsupported-status'
+
+        definition = package.get('definition') or {}
+        rows.append({
+            'kind': 'feat.input.v1',
+            'packageId': package['packageId'],
+            'status': status,
+            'projectionDigest': pd,
+            'rawAdrDirectAuthority': False,
+            'sourceAuthority': 'governance-records-main/records/specs/package-contract.v1.jsonl',
+            'environmentBuildDefinition': {
+                'officialOutput': definition.get('officialOutput'),
+                'requiredOutputs': definition.get('requiredOutputs') or [],
+                'requiredChecks': definition.get('requiredChecks') or [],
+                'requiredCommands': definition.get('requiredCommands') or [],
+                'runtimeRequirements': definition.get('runtimeRequirements'),
+                'preflightRequiredTools': definition.get('preflightRequiredTools') or [],
+            },
+            'repoOperation': {
+                'allowedPaths': definition.get('allowedPaths') or [],
+                'forbiddenPaths': definition.get('forbiddenPaths') or [],
+            },
+        })
+    return rows
+
+def load_feat_rows(root: pathlib.Path, packages, by_edge):
+    generated = root/'governance-records-main/generated/feat-inputs.v1.jsonl'
+    if generated.exists():
+        return {f['packageId']: f for f in read_jsonl(generated)}, 'generated-artifact'
+    if (root/'governance-records-main/generated').exists():
+        fail('generated directory exists without canonical feat-inputs projection')
+    return {f['packageId']: f for f in derive_feat_inputs(packages, by_edge)}, 'derived-from-records-no-generated-artifact'
+
 def run(root: pathlib.Path, mode: str):
     parse_everything(root)
     provenance=read_json(root/'governance-records-main/records/provenance/source-canonical.v1.json')
@@ -97,7 +144,7 @@ def run(root: pathlib.Path, mode: str):
 
     packages=read_jsonl(root/'governance-records-main/records/specs/package-contract.v1.jsonl')
     check(len(packages)==expected_packages, f'package contract count mismatch: {len(packages)} != {expected_packages}')
-    allowed_statuses={'accepted','planned'}
+    allowed_statuses={'accepted','planned','deprecated'}
     bad_statuses=[(p['packageId'], p.get('status')) for p in packages if p.get('status') not in allowed_statuses]
     check(not bad_statuses, f'unsupported package statuses: {bad_statuses[:10]}')
     bad_definition_statuses=[
@@ -112,8 +159,6 @@ def run(root: pathlib.Path, mode: str):
     check(any(p['packageId']=='specsless-canonical-cutover' for p in packages), 'specsless package contract not materialized')
     check(all(p['definition'].get('successorRepoId') not in ('specs','spec') for p in packages), 'successorRepoId must not be specs/spec')
 
-    feat_rows={f['packageId']:f for f in read_jsonl(root/'governance-records-main/generated/feat-inputs.v1.jsonl')}
-    check(set(feat_rows)=={p['packageId'] for p in packages}, 'feat input package set mismatch')
     by_pkg={p['packageId']:p for p in packages}
     edges=read_jsonl(root/'governance-records-main/records/specs/dependency-edge.v1.jsonl')
     by_edge=collections.defaultdict(list)
@@ -123,6 +168,8 @@ def run(root: pathlib.Path, mode: str):
             check(e['toPackageIds']==[], f'external dependency must not bind packages: {e}')
         else:
             check(len(e['toPackageIds'])==1, f'ambiguous dependency edge: {e}')
+    feat_rows, feat_source = load_feat_rows(root, packages, by_edge)
+    check(set(feat_rows)=={p['packageId'] for p in packages}, 'feat input package set mismatch')
     digest_rows={d['packageId']:d for d in read_jsonl(root/'governance-records-main/records/specs/projection-digest.v1.jsonl')}
     check(set(digest_rows)==set(feat_rows), 'projection digest set mismatch')
     for pid,p in by_pkg.items():
@@ -136,6 +183,8 @@ def run(root: pathlib.Path, mode: str):
             check(f['status']=='ready', f'accepted package not ready: {pid}')
         if p['status']=='planned':
             check(f['status']=='planned-blocked', f'planned package not blocked: {pid}')
+        if p['status']=='deprecated':
+            check(f['status']=='deprecated-decision-needed', f'deprecated package not decision-needed: {pid}')
 
     allowances={a['capability'] for a in read_jsonl(root/'governance-records-main/records/specs/factorization-allowance.v1.jsonl')}
     provides=collections.defaultdict(list)
@@ -165,7 +214,8 @@ def run(root: pathlib.Path, mode: str):
     check((root/'repo-boundary-guard-main/tools/specsless_ci.py').is_file(), 'repo-boundary-guard CI missing')
     accepted=sum(1 for p in packages if p['status']=='accepted')
     planned=sum(1 for p in packages if p['status']=='planned')
-    return {'status':'pass','mode':mode,'baseHash':provenance['baseHash'],'packages':len(packages),'acceptedPackages':accepted,'plannedPackages':planned,'featInputs':len(feat_rows),'destructiveCases':len(cases),'migrationCases':mig,'permanentCases':perm,'purposeGenerations':len(purposes)}
+    deprecated=sum(1 for p in packages if p['status']=='deprecated')
+    return {'status':'pass','mode':mode,'baseHash':provenance['baseHash'],'packages':len(packages),'acceptedPackages':accepted,'plannedPackages':planned,'deprecatedPackages':deprecated,'featInputs':len(feat_rows),'featInputSource':feat_source,'destructiveCases':len(cases),'migrationCases':mig,'permanentCases':perm,'purposeGenerations':len(purposes)}
 
 def self_test():
     payload={'kind':'self-test','ok':True}

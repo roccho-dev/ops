@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import pathlib
+from dataclasses import replace
 from typing import Any
 
 from .core import classify_records, compare_with_baseline, read_jsonl_text, summarize
@@ -50,11 +51,48 @@ def write_csv(path: pathlib.Path, rows: list[dict[str, Any]]) -> None:
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
+
+def apply_resolutions(root: pathlib.Path, classifications):
+    resolution_path = root / "governance-records-main" / "records" / "specs" / "package-lib-level-resolution.v1.jsonl"
+    if not resolution_path.exists():
+        return list(classifications), {"kind":"packageLibLevelGovernance.resolutionSummary.v1","applied":0,"status":"absent"}
+    rows = [row for row in read_jsonl(resolution_path) if row.get("status") == "resolved" and row.get("packageId")]
+    by_pkg = {str(row["packageId"]): row for row in rows}
+    out = []
+    applied = 0
+    mismatches = []
+    for cls in classifications:
+        row = by_pkg.get(cls.packageId)
+        if not row:
+            out.append(cls); continue
+        if row.get("sourceClassification") and row.get("sourceClassification") != cls.classification:
+            mismatches.append({"packageId": cls.packageId, "expectedSource": row.get("sourceClassification"), "current": cls.classification})
+            out.append(cls); continue
+        applied += 1
+        out.append(replace(
+            cls,
+            expectedLevel=str(row.get("resolvedExpectedLevel") or cls.expectedLevel),
+            classification=str(row.get("resolvedClassification") or cls.classification),
+            disposition=str(row.get("resolvedDisposition") or "target"),
+            severity="info",
+            coreEvidence=bool(row.get("coreEvidence", cls.coreEvidence)),
+            portEvidence=bool(row.get("portEvidence", cls.portEvidence)),
+            adapterEvidence=bool(row.get("adapterEvidence", cls.adapterEvidence)),
+            exampleUsecaseE2eEvidence=bool(row.get("exampleUsecaseE2eEvidence", cls.exampleUsecaseE2eEvidence)),
+            governanceGateEvidence=bool(row.get("governanceGateEvidence", cls.governanceGateEvidence)),
+            adapterAuthorityRisk=False,
+            reason=str(row.get("reason") or "explicit package-lib-level resolution row converts accepted baseline debt"),
+            requiredNext=str(row.get("requiredNext") or "Keep resolution evidence in sync with package-contract changes."),
+        ))
+    return out, {"kind":"packageLibLevelGovernance.resolutionSummary.v1","status":"pass" if not mismatches else "mismatch","available":len(rows),"applied":applied,"mismatches":mismatches}
+
+
 def audit(root: pathlib.Path, baseline: pathlib.Path | None, out_dir: pathlib.Path | None, mode: str) -> dict[str, Any]:
     root = root.resolve()
     package_contracts = root / "governance-records-main" / "records" / "specs" / "package-contract.v1.jsonl"
     records = read_jsonl(package_contracts)
-    classifications = classify_records(records)
+    raw_classifications = classify_records(records)
+    classifications, resolution_summary = apply_resolutions(root, raw_classifications)
     rows = [row.to_row() for row in sorted(classifications, key=lambda r: r.packageId)]
     summary = summarize(classifications)
     comparison = {"kind": "packageLibLevelGovernance.baselineComparison.v1", "mode": mode, "ok": True, "errors": []}
@@ -66,6 +104,8 @@ def audit(root: pathlib.Path, baseline: pathlib.Path | None, out_dir: pathlib.Pa
         "ok": bool(comparison.get("ok")),
         "mode": mode,
         "summary": summary,
+        "rawSummaryBeforeResolutions": summarize(raw_classifications),
+        "resolutionSummary": resolution_summary,
         "comparison": comparison,
     }
     if out_dir:

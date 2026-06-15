@@ -208,7 +208,14 @@ def classify_package(record: dict[str, Any]) -> Classification:
     gate = _has_token(package_text, "port-adapter-library-governance") or _has_token(package_text, "functional-core-governance-gate") or _has_token(package_text, "core-boundary-lint") or _has_token(package_text, "package-lib-level-governance")
     adapter_authority_risk = adapter and any(term in package_text for term in AUTHORITY_LEAK_TERMS)
 
-    if governance and not (adapter and "adapter" in name_text and role == "implementation"):
+    if status == "deprecated" or role == "deprecated-implementation":
+        expected = "deprecated-decision-needed"
+        classification = "GOVERNANCE_PACKAGE_OK_OR_NOT_TARGET"
+        disposition = "deprecated-not-active-product-lib"
+        severity = "info"
+        reason = "qjs-dependent or otherwise deprecated implementation; retained only for migration/delete decision tracking."
+        required_next = "Record Node.js migration or deletion decision before reactivation; do not treat deprecated implementation as final green."
+    elif governance and not (adapter and "adapter" in name_text and role == "implementation"):
         expected = "governance-or-check"
         classification = "GOVERNANCE_PACKAGE_OK_OR_NOT_TARGET"
         disposition = "target-or-not-product-lib"
