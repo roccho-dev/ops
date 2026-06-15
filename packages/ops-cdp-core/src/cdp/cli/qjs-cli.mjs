@@ -29,5 +29,7 @@ if (!script) {
   process.exit(2);
 }
 globalThis.scriptArgs = [script, ...rest]; // qjs: scriptArgs[0]=script
+// Keep Node-imported qjs-compatible scripts from seeing qjs flags in process.argv.
+process.argv = [process.argv[0], script, ...rest];
 
 await import(pathToFileURL(resolve(process.cwd(), script)).href);
