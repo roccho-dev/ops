@@ -28,6 +28,7 @@ Every result is `ops.projectTransportResult.v1` and must keep:
 | `project-thread-readback` | read a thread and require markers |
 | `project-artifact-fetch` | download one artifact and write `ARTIFACTS_MANIFEST.json` |
 | `project-transport-claim` | append a transport result into a claim JSONL |
+| `project-transport-health` | run independent read-only route/source/readback probes in parallel and summarize them without letting one failed probe block higher-authority evidence |
 | `project-handoff-preflight` | validate Project URL shape, Project Source policy, threadFunction roster, bootstrap artifacts, and expected artifact contract before worker launch |
 | `project-transport-run` | run the common Project Source -> thread create transport sequence |
 
@@ -48,6 +49,9 @@ Every result is `ops.projectTransportResult.v1` and must keep:
   `--id`, it may open the URL when needed.
 - `project-transport-doctor` validates the requested CDP port, not just any
   ChatGPT session found on another port.
+- `project-transport-health` is a false-negative guard. It runs read-only checks
+  in parallel and reports every status; a failed `doctor`, `env`, or
+  `source-list` check is advisory when delayed assistant readback succeeds.
 
 ## Project URL shapes
 

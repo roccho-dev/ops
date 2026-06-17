@@ -334,6 +334,16 @@ async function main() {
   test_browser_parser_regression_terms_are_present();
   test_same_run_worker_readback_beats_env_and_list_probe_false_negatives();
 
+  // health command tests
+  await test_health_all_checks_pass_readback_dominates();
+  await test_health_readback_ok_doctor_env_fail_still_ok();
+  await test_health_no_readback_source_list_dominates();
+  await test_health_all_fail_no_positive_evidence();
+  await test_health_dry_run_shows_planned_commands();
+  await test_health_skips_source_list_without_project_url();
+  await test_health_skips_readback_without_url_or_markers();
+  await test_health_check_timeout_is_advisory();
+
   std.out.puts("\n=== Summary ===\n");
   std.out.puts(`Passed: ${passed}\n`);
   std.out.puts(`Failed: ${failed}\n`);
@@ -341,3 +351,195 @@ async function main() {
 }
 
 await main();
+
+// === health command tests ===
+
+async function test_health_all_checks_pass_readback_dominates() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    const sub = cmd.find((a, i) => i > 0 && ["doctor", "env", "source-list", "thread-readback"].includes(a));
+    if (sub === "doctor") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "doctor-ok", recommendedRoute: { port: 9222 } } });
+    if (sub === "env") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "cdp-port-reachable" } });
+    if (sub === "source-list") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "source-list-read", count: 1, sources: [{ title: "REQUEST.md" }] } });
+    if (sub === "thread-readback") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "readback-verified", readbackVerified: true, matchedMarkers: ["MARK"] } });
+    return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: null });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: "https://chatgpt.com/g/g-p-test/c/thread",
+    markers: ["MARK"], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.ok === true, "health-all-pass: ok true");
+  assert(r.status === "health-readback-verified", "health-all-pass: status health-readback-verified");
+  assert(r.dominantEvidence === "delayed-assistant-readback", "health-all-pass: dominantEvidence delayed-assistant-readback");
+  assert(r.verificationLevel === "worker-readback", "health-all-pass: verificationLevel worker-readback");
+  assert(r.workerReadableProof === true, "health-all-pass: workerReadableProof true");
+  assert(r.falseNegativeGuard.allChecksAttemptedBeforeSummary === true, "health-all-pass: allChecksAttemptedBeforeSummary");
+  assert(r.falseNegativeGuard.singleProbeTerminalBlocker === false, "health-all-pass: singleProbeTerminalBlocker false");
+  assert(r.checks.length === 4, "health-all-pass: 4 checks ran");
+  assert(r.advisoryNegativeChecks.length === 0, "health-all-pass: no advisory negatives");
+}
+
+async function test_health_readback_ok_doctor_env_fail_still_ok() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    const sub = cmd.find((a, i) => i > 0 && ["doctor", "env", "source-list", "thread-readback"].includes(a));
+    if (sub === "doctor") return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: { ok: false, status: "no-cdp-port-reachable" } });
+    if (sub === "env") return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: { ok: false, status: "no-cdp-port-reachable" } });
+    if (sub === "source-list") return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: { ok: false, status: "source-page-not-loaded" } });
+    if (sub === "thread-readback") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "readback-verified", readbackVerified: true, matchedMarkers: ["MARK"] } });
+    return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: null });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: "https://chatgpt.com/g/g-p-test/c/thread",
+    markers: ["MARK"], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.ok === true, "health-false-neg-guard: ok true despite doctor/env/list fail");
+  assert(r.status === "health-readback-verified", "health-false-neg-guard: status health-readback-verified");
+  assert(r.workerReadableProof === true, "health-false-neg-guard: workerReadableProof true");
+  assert(r.routeProbeCanOverrideWorkerReadback === false, "health-false-neg-guard: routeProbeCanOverrideWorkerReadback false");
+  assert(r.sourceListCanOverrideWorkerReadback === false, "health-false-neg-guard: sourceListCanOverrideWorkerReadback false");
+  assert(r.advisoryNegativeChecks.length === 3, "health-false-neg-guard: 3 advisory negatives");
+  assert(r.falseNegativeGuard.failedChecksAreAdvisoryWhenHigherAuthorityPositive === true, "health-false-neg-guard: failedChecksAreAdvisoryWhenHigherAuthorityPositive");
+}
+
+async function test_health_no_readback_source_list_dominates() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    const sub = cmd.find((a, i) => i > 0 && ["doctor", "env", "source-list", "thread-readback"].includes(a));
+    if (sub === "doctor") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "doctor-ok" } });
+    if (sub === "env") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "cdp-port-reachable" } });
+    if (sub === "source-list") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "source-list-read", count: 1 } });
+    return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: null });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: null, markers: [], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.ok === true, "health-source-list-dom: ok true");
+  assert(r.status === "health-source-list-read", "health-source-list-dom: status health-source-list-read");
+  assert(r.dominantEvidence === "advisory-project-source-inventory-probe", "health-source-list-dom: dominantEvidence source-list");
+  assert(r.verificationLevel === "source-inventory", "health-source-list-dom: verificationLevel source-inventory");
+  assert(r.workerReadableProof === false, "health-source-list-dom: workerReadableProof false");
+  assert(r.skippedChecks.length === 1, "health-source-list-dom: 1 skipped check (readback)");
+  assert(r.skippedChecks[0].name === "thread-readback", "health-source-list-dom: skipped check is thread-readback");
+}
+
+async function test_health_all_fail_no_positive_evidence() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "fail", json: { ok: false, status: "check-failed" } });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: "https://chatgpt.com/g/g-p-test/c/thread",
+    markers: ["MARK"], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.ok === false, "health-all-fail: ok false");
+  assert(r.status === "health-no-positive-evidence", "health-all-fail: status health-no-positive-evidence");
+  assert(r.workerReadableProof === false, "health-all-fail: workerReadableProof false");
+  assert(r.advisoryNegativeChecks.length === 4, "health-all-fail: 4 advisory negatives");
+  assert(r.checks.length === 4, "health-all-fail: 4 checks attempted");
+}
+
+async function test_health_dry_run_shows_planned_commands() {
+  const results = [];
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: "https://chatgpt.com/g/g-p-test/c/thread",
+    markers: ["MARK"], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    dry_run: true, connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.ok === true, "health-dry-run: ok true");
+  assert(r.status === "health-dry-run-ready", "health-dry-run: status health-dry-run-ready");
+  assert(r.plannedCommands.length === 4, "health-dry-run: 4 planned commands");
+  const names = r.plannedCommands.map((c) => c.name);
+  assert(names.includes("doctor"), "health-dry-run: plans doctor");
+  assert(names.includes("env"), "health-dry-run: plans env");
+  assert(names.includes("source-list"), "health-dry-run: plans source-list");
+  assert(names.includes("thread-readback"), "health-dry-run: plans thread-readback");
+  assert(r.executionModel === "parallel-independent-probes", "health-dry-run: executionModel parallel-independent-probes");
+  assert(r.singleProbeTerminalBlocker === false, "health-dry-run: singleProbeTerminalBlocker false");
+}
+
+async function test_health_skips_source_list_without_project_url() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "check-ok" } });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: null,
+    url: "https://chatgpt.com/g/g-p-test/c/thread",
+    markers: ["MARK"], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.skippedChecks.some((s) => s.name === "source-list"), "health-skip-no-project-url: source-list skipped");
+  assert(r.skippedChecks.find((s) => s.name === "source-list").status === "skipped-missing-project-url", "health-skip-no-project-url: correct skip reason");
+  assert(r.checks.length === 3, "health-skip-no-project-url: only 3 checks ran");
+}
+
+async function test_health_skips_readback_without_url_or_markers() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "check-ok" } });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: null, markers: [], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.skippedChecks.some((s) => s.name === "thread-readback"), "health-skip-no-thread: readback skipped");
+  assert(r.skippedChecks.find((s) => s.name === "thread-readback").status === "skipped-missing-thread-url-or-markers", "health-skip-no-thread: correct skip reason");
+}
+
+async function test_health_check_timeout_is_advisory() {
+  const results = [];
+  const fakeRunAsync = (cmd) => {
+    const sub = cmd.find((a, i) => i > 0 && ["doctor", "env", "source-list", "thread-readback"].includes(a));
+    if (sub === "doctor") return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: null, timedOut: true });
+    if (sub === "env") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "cdp-port-reachable" } });
+    if (sub === "source-list") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "source-list-read", count: 1 } });
+    if (sub === "thread-readback") return Promise.resolve({ argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, status: "readback-verified", readbackVerified: true } });
+    return Promise.resolve({ argv: cmd, returncode: 1, stdout: "", stderr: "", json: null });
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({
+    project_url: "https://chatgpt.com/g/g-p-test/project",
+    url: "https://chatgpt.com/g/g-p-test/c/thread",
+    markers: ["MARK"], marker_role: "assistant", wait_ms: 30000, tail: 5,
+    connect_timeout_sec: 0.25,
+  });
+  await patchedMany({ runCommandAsync: fakeRunAsync, maybeWriteOut: fakeWrite }, () => pt.handleHealth(args));
+  const r = results[results.length - 1];
+  assert(r.ok === true, "health-timeout-advisory: ok true despite doctor timeout");
+  assert(r.status === "health-readback-verified", "health-timeout-advisory: readback still dominates");
+  const doctorCheck = r.checks.find((c) => c.name === "doctor");
+  assert(doctorCheck.status === "health-check-timeout", "health-timeout-advisory: doctor status is health-check-timeout");
+  assert(r.advisoryNegativeChecks.some((c) => c.name === "doctor"), "health-timeout-advisory: doctor in advisory negatives");
+}

@@ -3,7 +3,7 @@
 // CDP の重い処理は検証済の chromium-cdp-* / cdp-bridge コマンドへ subprocess 委譲する orchestrator。
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createConnection } from "node:net";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -34,7 +34,7 @@ const LOW_LEVEL_COMMANDS = [
 const TRANSPORT_COMMANDS = [
   "project-transport-doctor", "project-transport-env", "project-source-put", "project-source-list",
   "project-source-delete", "project-thread-create", "project-thread-send", "project-thread-readback",
-  "project-artifact-fetch", "project-transport-claim", "project-transport-run",
+  "project-artifact-fetch", "project-transport-claim", "project-transport-health", "project-transport-run",
 ];
 
 const nowIso = () => new Date().toISOString();
@@ -143,6 +143,46 @@ function runCommand(cmd, timeoutMs) {
   return { argv: cmd, returncode: r.status == null ? 1 : r.status, stdout: r.stdout || "", stderr: r.stderr || "", json: parseJsonMaybe(r.stdout || "") };
 }
 
+function runCommandAsync(cmd, timeoutMs) {
+  return new Promise((resolve) => {
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let finished = false;
+    let child = null;
+    const done = (returncode, extra = {}) => {
+      if (finished) return;
+      finished = true;
+      if (timer) clearTimeout(timer);
+      resolve({
+        argv: cmd,
+        returncode,
+        stdout,
+        stderr,
+        json: parseJsonMaybe(stdout || ""),
+        timedOut,
+        ...extra,
+      });
+    };
+    const timer = timeoutMs ? setTimeout(() => {
+      timedOut = true;
+      try { if (child) child.kill("SIGTERM"); } catch { /* ignore */ }
+      const killer = setTimeout(() => { try { if (child) child.kill("SIGKILL"); } catch { /* ignore */ } }, 1000);
+      if (killer.unref) killer.unref();
+    }, timeoutMs) : null;
+    try {
+      child = spawn(cmd[0], cmd.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) {
+      done(1, { error: String(e && e.message ? e.message : e) });
+      return;
+    }
+    child.stdout.on("data", (d) => { stdout += d.toString(); });
+    child.stderr.on("data", (d) => { stderr += d.toString(); });
+    child.on("error", (e) => done(1, { error: String(e && e.message ? e.message : e) }));
+    child.on("close", (code, signal) => done(timedOut ? 1 : (code == null ? 1 : code), { signal: signal || null }));
+  });
+}
+
 function maybeWriteOut(args, result) {
   if (!("finishedAt" in result)) result.finishedAt = nowIso();
   if (args.out_path) writeJson(args.out_path, result);
@@ -173,7 +213,7 @@ function tcpProbe(addr, port, timeoutSec) {
 
 // ESM monkeypatch seam (py test patches run_command / maybe_write_out / socket.create_connection).
 // All internal call-sites route through this object so the test runner can save/override/restore.
-export const __testHooks = { runCommand, maybeWriteOut, tcpProbe };
+export const __testHooks = { runCommand, runCommandAsync, maybeWriteOut, tcpProbe };
 
 // ---------- handlers ----------
 async function handleEnv(args) {
@@ -620,6 +660,174 @@ function handleHandoffPreflight(args) {
   return __testHooks.maybeWriteOut(args, result);
 }
 
+function healthTimeoutMs(args, command) {
+  if (command === "project-thread-readback") return Math.max(60, Math.floor(args.wait_ms / 1000) + 60) * 1000;
+  return Math.max(60, Math.floor(args.timeout_ms / 1000) + 30) * 1000;
+}
+
+function healthChildBaseArgs(args, outDir) {
+  const base = ["--addr", args.addr, "--port", String(args.port), "--timeout-ms", String(args.timeout_ms)];
+  if (outDir) base.push("--out-dir", String(outDir));
+  return base;
+}
+
+function healthCheckSpecs(args, outDir) {
+  const base = healthChildBaseArgs(args, outDir);
+  const specs = [];
+  const skippedChecks = [];
+  const doctorArgs = [...base];
+  if (args.project_url) doctorArgs.push("--project-url", args.project_url);
+  specs.push({
+    name: "doctor",
+    command: "project-transport-doctor",
+    authority: ROUTE_PROBE_AUTHORITY,
+    argv: [process.execPath, SELF, "doctor", ...doctorArgs],
+  });
+  const envArgs = [...base, "--connect-timeout-sec", String(args.connect_timeout_sec)];
+  if (args.ports && args.ports.length) envArgs.push("--ports", args.ports.join(","));
+  if (args.project_url) envArgs.push("--project-url", args.project_url);
+  specs.push({
+    name: "env",
+    command: "project-transport-env",
+    authority: ROUTE_PROBE_AUTHORITY,
+    argv: [process.execPath, SELF, "env", ...envArgs],
+  });
+  if (args.project_url) {
+    specs.push({
+      name: "source-list",
+      command: "project-source-list",
+      authority: SOURCE_LIST_AUTHORITY,
+      argv: [process.execPath, SELF, "source-list", ...base, "--project-url", args.project_url],
+    });
+  } else {
+    skippedChecks.push({ name: "source-list", command: "project-source-list", status: "skipped-missing-project-url" });
+  }
+  if (args.url && args.markers.length) {
+    const readbackArgs = [
+      "--url", args.url,
+      "--markers", args.markers.join(","),
+      "--wait-ms", String(args.wait_ms),
+      "--tail", String(args.tail),
+      "--marker-role", args.marker_role,
+      "--addr", args.addr,
+      "--port", String(args.port),
+    ];
+    specs.push({
+      name: "thread-readback",
+      command: "project-thread-readback",
+      authority: WORKER_READBACK_AUTHORITY,
+      argv: [process.execPath, SELF, "thread-readback", ...readbackArgs],
+    });
+  } else {
+    skippedChecks.push({ name: "thread-readback", command: "project-thread-readback", status: "skipped-missing-thread-url-or-markers" });
+  }
+  return { specs, skippedChecks };
+}
+
+function normalizeHealthCheck(spec, low) {
+  const parsed = low && low.json && typeof low.json === "object" ? low.json : null;
+  const status = parsed && parsed.status ? parsed.status : (low && low.timedOut ? "health-check-timeout" : "health-check-not-verified");
+  return {
+    name: spec.name,
+    command: spec.command,
+    ok: !!(low && low.returncode === 0 && parsed && parsed.ok),
+    status,
+    authority: spec.authority,
+    canBlockAlone: false,
+    returncode: low ? low.returncode : 1,
+    result: parsed,
+    commandOutput: low || null,
+  };
+}
+
+function summarizeHealthChecks(checks) {
+  const byCommand = (command) => checks.find((check) => check.command === command) || null;
+  const readback = byCommand("project-thread-readback");
+  const sourceList = byCommand("project-source-list");
+  const doctor = byCommand("project-transport-doctor");
+  const env = byCommand("project-transport-env");
+  const readbackOk = !!(readback && readback.ok && readback.result && readback.result.readbackVerified);
+  const sourceListRead = !!(sourceList && sourceList.ok && sourceList.status === "source-list-read");
+  const projectRouteOk = !!(doctor && doctor.ok);
+  const cdpReachable = !!(env && env.ok);
+  let status = "health-no-positive-evidence";
+  let dominantEvidence = null;
+  let verificationLevel = "none";
+  if (readbackOk) {
+    status = "health-readback-verified";
+    dominantEvidence = WORKER_READBACK_AUTHORITY;
+    verificationLevel = "worker-readback";
+  } else if (sourceListRead) {
+    status = "health-source-list-read";
+    dominantEvidence = SOURCE_LIST_AUTHORITY;
+    verificationLevel = "source-inventory";
+  } else if (projectRouteOk) {
+    status = "health-project-route-ok";
+    dominantEvidence = ROUTE_PROBE_AUTHORITY;
+    verificationLevel = "project-route";
+  } else if (cdpReachable) {
+    status = "health-cdp-port-reachable";
+    dominantEvidence = ROUTE_PROBE_AUTHORITY;
+    verificationLevel = "cdp-port";
+  }
+  return {
+    ok: readbackOk || sourceListRead || projectRouteOk || cdpReachable,
+    status,
+    dominantEvidence,
+    verificationLevel,
+    workerReadableProof: readbackOk,
+    workerReadableProofAuthority: WORKER_READBACK_AUTHORITY,
+    routeProbeAuthority: ROUTE_PROBE_AUTHORITY,
+    sourceListAuthority: SOURCE_LIST_AUTHORITY,
+    routeProbeCanOverrideWorkerReadback: false,
+    sourceListCanOverrideWorkerReadback: false,
+    falseNegativeGuard: {
+      executionModel: "parallel-independent-probes",
+      allChecksAttemptedBeforeSummary: true,
+      singleProbeTerminalBlocker: false,
+      failedChecksAreAdvisoryWhenHigherAuthorityPositive: true,
+    },
+    advisoryNegativeChecks: checks
+      .filter((check) => !check.ok)
+      .map((check) => ({ name: check.name, command: check.command, status: check.status, authority: check.authority })),
+  };
+}
+
+async function handleHealth(args) {
+  const result = commonResult("project-transport-health", args);
+  const outDir = args.out_dir ? args.out_dir : (args.out_path ? path.dirname(args.out_path) : null);
+  const realOutDir = args.dry_run ? outDir : (outDir ? ensureDir(outDir) : null);
+  const { specs, skippedChecks } = healthCheckSpecs(args, realOutDir);
+  Object.assign(result, {
+    projectUrl: args.project_url || null,
+    threadUrl: args.url || null,
+    markers: args.markers || [],
+    executionModel: "parallel-independent-probes",
+    singleProbeTerminalBlocker: false,
+    skippedChecks,
+  });
+  if (args.dry_run) {
+    Object.assign(result, {
+      ok: true,
+      status: "health-dry-run-ready",
+      plannedCommands: specs.map((spec) => ({
+        name: spec.name,
+        command: spec.command,
+        authority: spec.authority,
+        argv: spec.argv,
+      })),
+    });
+    return __testHooks.maybeWriteOut(args, result);
+  }
+  const runs = specs.map(async (spec) => {
+    const low = await __testHooks.runCommandAsync(spec.argv, healthTimeoutMs(args, spec.command));
+    return normalizeHealthCheck(spec, low);
+  });
+  const checks = await Promise.all(runs);
+  Object.assign(result, summarizeHealthChecks(checks), { checks });
+  return __testHooks.maybeWriteOut(args, result);
+}
+
 function writeRunReport(outDir, result) {
   const p = path.join(outDir, "TRANSPORT_RUN_REPORT.md");
   const lines = ["# Project Transport Run Report", "", `- ok: \`${String(result.ok).toLowerCase()}\``, `- status: \`${result.status}\``, `- semanticApproval: \`${String(result.semanticApproval).toLowerCase()}\``, `- completionApproval: \`${String(result.completionApproval).toLowerCase()}\``, `- routeDecision: \`${String(result.routeDecision).toLowerCase()}\``, "", "## Steps"];
@@ -745,7 +953,7 @@ const HANDLERS = {
   env: handleEnv, doctor: handleDoctor, "source-put": handleSourcePut, "source-list": handleSourceList,
   "source-delete": handleSourceDelete, "thread-create": handleThreadCreate, "thread-send": handleThreadSend,
   "thread-readback": handleThreadReadback, "artifact-fetch": handleArtifactFetch, claim: handleClaim,
-  "handoff-preflight": handleHandoffPreflight, run: handleRun,
+  "handoff-preflight": handleHandoffPreflight, health: handleHealth, run: handleRun,
 };
 
 async function main(argv) {
@@ -765,7 +973,7 @@ async function main(argv) {
 // CLI main guard: only run main when invoked directly, not when imported (e.g. by the test runner).
 export {
   commonResult, sourcePutResult, sourceListResult, sourceDeleteResult,
-  handleThreadCreate, handleThreadSend, handleThreadReadback, handleArtifactFetch, handleEnv,
+  handleThreadCreate, handleThreadSend, handleThreadReadback, handleArtifactFetch, handleEnv, handleHealth,
   projectSourceUploadCommand, classifyTransportProofSteps,
 };
 
