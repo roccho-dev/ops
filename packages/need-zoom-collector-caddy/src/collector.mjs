@@ -62,6 +62,17 @@ export function createCollectorServer(opts = {}) {
 export function appendPayload(rawLog, payload, endpoint) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("payload object required");
   const payloadKind = typeof payload.kind === "string" && payload.kind ? payload.kind : "unknown.payload.v1";
+  const idempotencyKey = payload.meta?.idempotencyKey || deriveIdempotencyKey(payload, payloadKind);
+  const existingRecords = readRecords(rawLog);
+  const isDuplicate = existingRecords.some((r) => r.meta?.idempotencyKey === idempotencyKey);
+  if (isDuplicate) {
+    return {
+      kind: "jsonl.record.generic.v1",
+      status: "duplicate",
+      idempotencyKey,
+      detail: "record with same idempotency key already exists",
+    };
+  }
   const record = {
     kind: "jsonl.record.generic.v1",
     recordId: `need-zoom:${crypto.randomBytes(8).toString("hex")}`,
@@ -76,6 +87,7 @@ export function appendPayload(rawLog, payload, endpoint) {
       pool: "need_zoom.raw_pool.v1",
       canonicalStatus: "local-runtime-not-ssot",
       approval: false,
+      idempotencyKey,
     },
   };
   fs.mkdirSync(path.dirname(rawLog), { recursive: true });
@@ -188,6 +200,18 @@ function splitAddr(addr) {
 
 function rawLogPath(dataDir) {
   return path.join(dataDir, "raw.jsonl");
+}
+
+function deriveIdempotencyKey(payload, payloadKind) {
+  if (payloadKind === "ui.review.feedback.v1") {
+    const stable = { ...payload };
+    delete stable.at;
+    delete stable.createdAt;
+    delete stable.timestamp;
+    const key = `ui-feedback:${crypto.createHash("sha256").update(JSON.stringify(stable)).digest("hex").slice(0, 16)}`;
+    return key;
+  }
+  return `payload:${crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 16)}`;
 }
 
 function usage() {

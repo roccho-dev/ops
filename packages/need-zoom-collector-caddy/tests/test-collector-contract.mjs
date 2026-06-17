@@ -60,20 +60,40 @@ try {
   assert.equal(one.record.meta.canonicalStatus, "local-runtime-not-ssot");
   assert.equal(one.record.meta.approval, false);
 
+  const feedback1 = await post("/api/raw", {
+    kind: "ui.review.feedback.v1",
+    reviewId: "review-123",
+    feedback: "good work",
+    meta: { idempotencyKey: "stable-key-123" },
+  });
+  assert.equal(feedback1.record.kind, "jsonl.record.generic.v1");
+  assert.equal(feedback1.record.meta.idempotencyKey, "stable-key-123");
+
+  const feedback2 = await post("/api/raw", {
+    kind: "ui.review.feedback.v1",
+    reviewId: "review-123",
+    feedback: "good work",
+    meta: { idempotencyKey: "stable-key-123" },
+    timestamp: new Date().toISOString(),
+  });
+  assert.equal(feedback2.record.status, "duplicate", "second POST with same key should be marked duplicate");
+  assert.equal(feedback2.record.idempotencyKey, "stable-key-123");
+
   const pool = await (await fetch(base + "/api/pool.json")).json();
-  assert.equal(pool.rawCount, 6);
+  assert.equal(pool.rawCount, 7, "duplicate POST should not increase raw count");
   assert.equal(pool.byPayloadKind["need_zoom.node.v1"], 2);
   assert.equal(pool.latest.purpose, "company exit");
 
   const projection = await (await fetch(base + "/api/projection/need-zoom.voronoi_surface.v1")).json();
   assert.equal(projection.kind, "need_zoom.voronoi_surface.v1");
-  assert.equal(projection.surface.rawCount, 6);
+  assert.equal(projection.surface.rawCount, 7, "projection should reflect 7 unique records (no duplicates)");
   assert.equal(projection.surface.purpose, "company exit");
 
   console.log(JSON.stringify({
     status: "need-zoom-collector-caddy-check-pass",
     rawCount: pool.rawCount,
     projection: projection.kind,
+    duplicateHandling: "verified",
   }, null, 2));
 } finally {
   child.kill("SIGTERM");
