@@ -470,9 +470,16 @@ function handleThreadCreate(args) {
   const outDir = commandOutDir(args);
   const createLog = path.join(outDir, "project-thread-create.json");
   removeStaleFile(createLog);
-  if (args.dry_run) { Object.assign(result, { ok: true, status: "dry-run-ready", plannedCommand: ["chromium-cdp-create-project-thread", "--projectUrl", args.project_url, args.text_file ? "--text-file" : "--text", args.text_file || "<inline-text>", "--outPath", createLog, "--json"] }); return __testHooks.maybeWriteOut(args, result); }
+  if (args.dry_run) {
+    const plannedCommand = ["chromium-cdp-create-project-thread", "--projectUrl", args.project_url, args.text_file ? "--text-file" : "--text", args.text_file || "<inline-text>", "--outPath", createLog, "--json"];
+    if (args.no_require_dom_pro) plannedCommand.push("--noRequireDomPro");
+    Object.assign(result, { ok: true, status: "dry-run-ready", plannedCommand });
+    return __testHooks.maybeWriteOut(args, result);
+  }
   const cmd = ["chromium-cdp-create-project-thread", "--projectUrl", args.project_url, "--outPath", createLog, "--json", "--addr", args.addr, "--port", String(args.port), "--timeoutMs", String(args.timeout_ms)];
   if (args.text_file) cmd.push("--text-file", args.text_file); else cmd.push("--text", text);
+  if (args.dom_wait_ms != null) cmd.push("--domWaitMs", String(args.dom_wait_ms));
+  if (args.no_require_dom_pro) cmd.push("--noRequireDomPro");
   const low = __testHooks.runCommand(cmd, Math.max(60, Math.floor(args.timeout_ms / 1000) + 30) * 1000);
   const parsed = isFile(createLog) ? JSON.parse(readText(createLog)) : low.json;
   Object.assign(result, {
@@ -643,6 +650,8 @@ function handleRun(args) {
     else {
       const createArgs = ["project-thread-create", "--project-url", args.project_url, "--out-dir", String(outDir), "--addr", args.addr, "--port", String(args.port), "--timeout-ms", String(args.timeout_ms)];
       if (args.prompt_file) createArgs.push("--text-file", args.prompt_file); else createArgs.push("--text", args.text);
+      if (args.dom_wait_ms != null) createArgs.push("--dom-wait-ms", String(args.dom_wait_ms));
+      if (args.no_require_dom_pro) createArgs.push("--no-require-dom-pro");
       const low = __testHooks.runCommand([process.execPath, SELF, ...createArgs], Math.max(60, Math.floor(args.timeout_ms / 1000) + 60) * 1000);
       Object.assign(createResult, low.json || { ok: false, status: "thread-create-wrapper-failed", commandOutput: low });
     }
@@ -675,6 +684,7 @@ const ALIAS = {
   "--timeout-ms": "timeout_ms", "--timeoutMs": "timeout_ms", "--port": "port",
   "--file": "file", "--title": "title", "--reason": "reason", "--url": "url", "--id": "id", "--name": "name",
   "--text": "text", "--text-file": "text_file", "--textFile": "text_file",
+  "--dom-wait-ms": "dom_wait_ms", "--domWaitMs": "dom_wait_ms",
   "--upload-mode": "upload_mode", "--uploadMode": "upload_mode",
   "--marker-role": "marker_role", "--markerRole": "marker_role",
   "--ir-path": "ir_path", "--irPath": "ir_path", "--input": "input",
@@ -691,9 +701,12 @@ const ALIAS = {
   "--readback-marker": "readback_marker", "--readbackMarker": "readback_marker",
   "--readback-wait-ms": "readback_wait_ms", "--readbackWaitMs": "readback_wait_ms",
 };
-const BOOL = { "--dry-run": "dry_run", "--dryRun": "dry_run", "--offline": "offline", "--allow-remove": "allow_remove", "--allowRemove": "allow_remove" };
+const BOOL = {
+  "--dry-run": "dry_run", "--dryRun": "dry_run", "--offline": "offline", "--allow-remove": "allow_remove", "--allowRemove": "allow_remove",
+  "--no-require-dom-pro": "no_require_dom_pro", "--noRequireDomPro": "no_require_dom_pro",
+};
 const APPEND = new Set(["source_file", "bootstrap_artifact", "expected_artifact", "readback_marker"]);
-const INT = new Set(["port", "timeout_ms", "max_inline_length", "wait_ms", "tail", "readback_interval_seconds", "readback_wait_ms"]);
+const INT = new Set(["port", "timeout_ms", "max_inline_length", "wait_ms", "tail", "dom_wait_ms", "readback_interval_seconds", "readback_wait_ms"]);
 
 function parseArgs(argv) {
   const a = { source_file: [], bootstrap_artifact: [], expected_artifact: [], readback_marker: [], markers: [], dry_run: false, offline: false, allow_remove: false };
@@ -716,6 +729,7 @@ function parseArgs(argv) {
   if (a.timeout_ms == null) a.timeout_ms = 180000;
   if (a.connect_timeout_sec == null) a.connect_timeout_sec = 0.25;
   if (a.max_inline_length == null) a.max_inline_length = 2000;
+  if (a.dom_wait_ms == null) a.dom_wait_ms = 8000;
   if (a.wait_ms == null) a.wait_ms = 30000;
   if (a.tail == null) a.tail = 5;
   if (a.readback_interval_seconds == null) a.readback_interval_seconds = 300;

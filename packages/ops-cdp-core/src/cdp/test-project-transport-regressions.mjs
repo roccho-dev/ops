@@ -189,6 +189,21 @@ async function test_thread_create_inner_log_uses_out_path_parent() {
   }
 }
 
+async function test_thread_create_can_disable_dom_pro_requirement() {
+  const captured = [];
+  const results = [];
+  const fakeRun = (cmd) => {
+    captured.push(cmd);
+    return { argv: cmd, returncode: 0, stdout: "", stderr: "", json: { ok: true, threadUrl: "https://chatgpt.com/g/g-p-test/c/thread", conversationId: "thread" } };
+  };
+  const fakeWrite = (_args, result) => { results.push(result); return result.ok ? 0 : 1; };
+  const args = ns({ text: "read source", text_file: null, no_require_dom_pro: true });
+  const rc = await patchedMany({ runCommand: fakeRun, maybeWriteOut: fakeWrite }, () => pt.handleThreadCreate(args));
+  assert(rc === 0, "create-dom-pro: rc 0");
+  assert(captured[0].includes("--noRequireDomPro"), "create-dom-pro: low-level command disables DOM Pro requirement");
+  assert(results[results.length - 1].status === "thread-created", "create-dom-pro: thread-created");
+}
+
 async function test_thread_send_out_dir_uses_out_path_parent() {
   const tmp = mkdtemp("pt_send_outpath_");
   try {
@@ -310,6 +325,7 @@ async function main() {
   test_source_put_inner_log_uses_out_path_parent();
   await test_env_default_ports_include_requested_port();
   await test_thread_create_inner_log_uses_out_path_parent();
+  await test_thread_create_can_disable_dom_pro_requirement();
   await test_thread_send_out_dir_uses_out_path_parent();
   test_source_delete_inner_log_uses_out_path_parent();
   await test_artifact_fetch_out_dir_uses_out_path_parent();
