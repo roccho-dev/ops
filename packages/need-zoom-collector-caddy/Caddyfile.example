@@ -1,0 +1,8 @@
+{
+	admin off
+}
+
+{$NEED_ZOOM_HTTP_ADDR:127.0.0.1:19080} {
+	encode gzip
+	reverse_proxy {$NEED_ZOOM_COLLECTOR_ADDR:127.0.0.1:19081}
+}

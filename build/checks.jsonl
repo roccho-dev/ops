@@ -1,1 +1,2 @@
 {"kind":"check","name":"ops-handoff-pack","script":"packages/ops-handoff-pack/tests/test_ops_handoff_pack.mjs","deps":["nodejs","git","ops-handoff-pack","ops-handoff-core"]}
+{"kind":"check","name":"need-zoom-collector-caddy","script":"packages/need-zoom-collector-caddy/tests/test-collector-contract.mjs","deps":["nodejs","duckdb","need-zoom-collector-caddy"]}
