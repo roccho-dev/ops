@@ -76,17 +76,37 @@ try {
     meta: { idempotencyKey: "stable-key-123" },
     timestamp: new Date().toISOString(),
   });
-  assert.equal(feedback2.record.status, "duplicate", "second POST with same key should be marked duplicate");
+  assert.equal(feedback2.record.status, "duplicate", "second POST with same explicit key should be marked duplicate");
   assert.equal(feedback2.record.idempotencyKey, "stable-key-123");
 
+  // Test derived stable key: two payloads without explicit idempotencyKey, differing only by volatile fields
+  const feedback3 = await post("/api/raw", {
+    kind: "ui.review.feedback.v1",
+    reviewId: "review-456",
+    feedback: "needs revision",
+    createdAt: "2026-06-17T10:00:00Z",
+  });
+  assert.equal(feedback3.record.kind, "jsonl.record.generic.v1");
+  assert.ok(feedback3.record.meta.idempotencyKey, "derived key should be generated");
+
+  const feedback4 = await post("/api/raw", {
+    kind: "ui.review.feedback.v1",
+    reviewId: "review-456",
+    feedback: "needs revision",
+    createdAt: "2026-06-17T10:00:00Z",
+    at: new Date().toISOString(),
+  });
+  assert.equal(feedback4.record.status, "duplicate", "derived stable key should dedupe identical payload with different volatile fields");
+  assert.equal(feedback4.record.idempotencyKey, feedback3.record.meta.idempotencyKey, "both should share derived key");
+
   const pool = await (await fetch(base + "/api/pool.json")).json();
-  assert.equal(pool.rawCount, 7, "duplicate POST should not increase raw count");
+  assert.equal(pool.rawCount, 8, "derived stable key deduping should add only 1 new record (feedback3), not 2");
   assert.equal(pool.byPayloadKind["need_zoom.node.v1"], 2);
   assert.equal(pool.latest.purpose, "company exit");
 
   const projection = await (await fetch(base + "/api/projection/need-zoom.voronoi_surface.v1")).json();
   assert.equal(projection.kind, "need_zoom.voronoi_surface.v1");
-  assert.equal(projection.surface.rawCount, 7, "projection should reflect 7 unique records (no duplicates)");
+  assert.equal(projection.surface.rawCount, 8, "projection should reflect 8 unique records (5 initial + feedback3, duplicates excluded)");
   assert.equal(projection.surface.purpose, "company exit");
 
   console.log(JSON.stringify({
