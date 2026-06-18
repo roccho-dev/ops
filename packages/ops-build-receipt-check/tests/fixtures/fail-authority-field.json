@@ -1,0 +1,25 @@
+{
+  "kind": "build.receipt.v1",
+  "receiptId": "test-fail-authority-001",
+  "createdAt": "2026-06-19T00:00:00Z",
+  "buildResult": "success",
+  "classification": "success",
+  "approved": true,
+  "inputs": [
+    { "inputId": "flake-self", "rawHash": "sha256-aaa" }
+  ],
+  "outputs": {
+    "outputSpecAsserted": true,
+    "contentHash": "sha256-bbb"
+  },
+  "environment": {
+    "system": "x86_64-linux",
+    "nixVersion": "2.28.1",
+    "toolchain": { "nodejs": "22.14.0" }
+  },
+  "metadata": {
+    "rawHash": "sha256-ccc",
+    "treeHash": "abc123",
+    "dirty": false
+  }
+}
