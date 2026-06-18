@@ -1,1 +1,2 @@
 {"kind":"check","name":"ops-handoff-pack","script":"packages/ops-handoff-pack/tests/test_ops_handoff_pack.mjs","deps":["nodejs","git","ops-handoff-pack","ops-handoff-core"]}
+{"kind":"check","name":"ops-build-receipt-check","script":"packages/ops-build-receipt-check/tests/test_ops_build_receipt_check.mjs","deps":["nodejs","ops-build-receipt-check"]}
