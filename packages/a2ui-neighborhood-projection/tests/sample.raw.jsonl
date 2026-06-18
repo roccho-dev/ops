@@ -1,0 +1,14 @@
+{"recordKind":"context.namespace.v1","symbol":"CEO","roleId":"role.cxo.base","modelingMutable":true}
+{"recordKind":"context.roleBinding.v1","roleId":"role.cxo.base","policies":["policy.selector.cxo-adr-intake","policy.selector.role-resolution"]}
+{"recordKind":"context.current.v1","nodeId":"purpose:company-sale"}
+{"recordKind":"context.node.v1","id":"purpose:company-sale","kind":"purpose","label":"Company sale","namespace":"CEO"}
+{"recordKind":"context.node.v1","id":"policy:role-resolution","kind":"policy","label":"Role resolution"}
+{"recordKind":"context.node.v1","id":"evidence:valuation-story","kind":"evidence","label":"Valuation story"}
+{"recordKind":"context.node.v1","id":"blocker:missing-context-package","kind":"blocker","label":"Missing context package"}
+{"recordKind":"context.node.v1","id":"action:emit-a2ui-neighborhood","kind":"nextAction","label":"Emit A2UI neighborhood"}
+{"recordKind":"context.node.v1","id":"role:cfo","kind":"role","label":"CFO"}
+{"recordKind":"context.edge.v1","source":"policy:role-resolution","target":"purpose:company-sale","kind":"governs"}
+{"recordKind":"context.edge.v1","source":"purpose:company-sale","target":"evidence:valuation-story","kind":"requires"}
+{"recordKind":"context.edge.v1","source":"blocker:missing-context-package","target":"purpose:company-sale","kind":"blocks"}
+{"recordKind":"context.edge.v1","source":"purpose:company-sale","target":"action:emit-a2ui-neighborhood","kind":"nextAction"}
+{"recordKind":"context.edge.v1","source":"purpose:company-sale","target":"role:cfo","kind":"sameContext"}
