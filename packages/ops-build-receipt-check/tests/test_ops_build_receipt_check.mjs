@@ -134,17 +134,69 @@ function run(fixturePath, extraArgs = []) {
   console.log("ok - rejects dirty tree without treeHash");
 }
 
-// ADVISORY: stale intent rev (receipt is valid, advisory surfaced)
+// FAIL: stale intent rev (blocking reject when --intent-rev supplied)
 {
   const p = fixture("stale-rev.json", {
     ...BASE,
     metadata: { ...BASE.metadata, intentRev: "proposal/old-260601" },
   });
   const { ok, result } = run(p, ["--intent-rev", "proposal/current-260619"]);
-  assert.equal(ok, true, "stale intent rev receipt is still valid (advisory only)");
-  const advCodes = result.advisories.map((a) => a.code);
-  assert.ok(advCodes.includes("stale-intent-rev"), "must surface stale-intent-rev advisory");
-  console.log("ok - surfaces stale intent rev as advisory");
+  assert.equal(ok, false, "stale intent rev must be rejected when --intent-rev is supplied");
+  const codes = result.errors.map((e) => e.code);
+  assert.ok(codes.includes("stale-intent-rev"), "must detect stale-intent-rev as error");
+  console.log("ok - rejects stale intent rev");
+}
+
+// PASS: stale intent rev without --intent-rev flag is not checked
+{
+  const p = fixture("stale-rev-no-flag.json", {
+    ...BASE,
+    metadata: { ...BASE.metadata, intentRev: "proposal/old-260601" },
+  });
+  const { ok, result } = run(p);
+  assert.equal(ok, true, "stale intent rev without --intent-rev flag should pass");
+  console.log("ok - stale intent rev passes when --intent-rev not supplied");
+}
+
+// FAIL: missing treeHash (always required)
+{
+  const meta = { ...BASE.metadata };
+  delete meta.treeHash;
+  const p = fixture("missing-treeHash.json", {
+    ...BASE,
+    metadata: meta,
+  });
+  const { ok, result } = run(p);
+  assert.equal(ok, false, "missing treeHash should fail");
+  const codes = result.errors.map((e) => e.code);
+  assert.ok(codes.includes("metadata-missing-treeHash"), "must detect missing treeHash");
+  console.log("ok - rejects missing treeHash");
+}
+
+// FAIL: missing outputs.contentHash
+{
+  const p = fixture("missing-contentHash.json", {
+    ...BASE,
+    outputs: { outputSpecAsserted: true, outputPaths: ["/nix/store/example"] },
+  });
+  const { ok, result } = run(p);
+  assert.equal(ok, false, "missing contentHash should fail");
+  const codes = result.errors.map((e) => e.code);
+  assert.ok(codes.includes("output-missing-contentHash"), "must detect missing contentHash");
+  console.log("ok - rejects missing outputs.contentHash");
+}
+
+// FAIL: missing outputs.outputSpecAsserted
+{
+  const p = fixture("missing-outputSpecAsserted.json", {
+    ...BASE,
+    outputs: { contentHash: "sha256-ccc", outputPaths: ["/nix/store/example"] },
+  });
+  const { ok, result } = run(p);
+  assert.equal(ok, false, "missing outputSpecAsserted should fail");
+  const codes = result.errors.map((e) => e.code);
+  assert.ok(codes.includes("output-missing-outputSpecAsserted"), "must detect missing outputSpecAsserted");
+  console.log("ok - rejects missing outputs.outputSpecAsserted");
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

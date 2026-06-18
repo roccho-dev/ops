@@ -5,12 +5,13 @@
 //   - authority field prohibition
 //   - duplicate input IDs
 //   - rawHash/proposalHash mismatch
-//   - dirty tree without treeHash
+//   - metadata.rawHash, metadata.treeHash, metadata.dirty always required
+//   - dirty=true with empty treeHash
 //   - missing required fields
-//   - missing output spec assertion
+//   - missing outputs.outputSpecAsserted or outputs.contentHash
+//   - stale intentRev (when --intent-rev is supplied)
 //
 // Advisory checks:
-//   - stale intentRev
 //   - ADR linkage presence
 //   - breaking-change marker when failure=true
 //   - environment/toolchain metadata gaps
@@ -121,9 +122,19 @@ if (Array.isArray(receipt.inputs)) {
 
 // 6. Metadata checks
 if (receipt.metadata) {
-  // rawHash required
+  // rawHash always required
   if (!receipt.metadata.rawHash) {
     errors.push({ code: "metadata-missing-rawHash", message: "metadata.rawHash is required" });
+  }
+
+  // treeHash always required
+  if (receipt.metadata.treeHash == null || receipt.metadata.treeHash === "") {
+    errors.push({ code: "metadata-missing-treeHash", message: "metadata.treeHash is required" });
+  }
+
+  // dirty always required
+  if (typeof receipt.metadata.dirty !== "boolean") {
+    errors.push({ code: "metadata-missing-dirty", message: "metadata.dirty (boolean) is required" });
   }
 
   // rawHash/proposalHash mismatch
@@ -138,7 +149,7 @@ if (receipt.metadata) {
     }
   }
 
-  // dirty tree without treeHash
+  // dirty=true with empty treeHash
   if (receipt.metadata.dirty === true) {
     if (!receipt.metadata.treeHash) {
       errors.push({
@@ -148,15 +159,14 @@ if (receipt.metadata) {
     }
   }
 
-  // stale intentRev advisory
+  // stale intentRev — blocking reject when --intent-rev is supplied
   if (values["intent-rev"] && receipt.metadata.intentRev) {
     if (receipt.metadata.intentRev !== values["intent-rev"]) {
-      advisories.push({
+      errors.push({
         code: "stale-intent-rev",
         expected: values["intent-rev"],
         actual: receipt.metadata.intentRev,
-        severity: "warning",
-        message: `intentRev '${receipt.metadata.intentRev}' does not match current '${values["intent-rev"]}'`,
+        message: `intentRev '${receipt.metadata.intentRev}' does not match expected '${values["intent-rev"]}'`,
       });
     }
   }
@@ -180,12 +190,25 @@ if (receipt.metadata) {
   }
 }
 
-// 7. Output spec assertion check
-if (receipt.outputs && receipt.outputs.outputSpecAsserted === false) {
-  errors.push({
-    code: "output-spec-not-asserted",
-    message: "outputs.outputSpecAsserted is false — output content was not verified against spec",
-  });
+// 7. Output checks: outputSpecAsserted and contentHash required
+if (receipt.outputs) {
+  if (receipt.outputs.outputSpecAsserted == null) {
+    errors.push({
+      code: "output-missing-outputSpecAsserted",
+      message: "outputs.outputSpecAsserted is required",
+    });
+  } else if (receipt.outputs.outputSpecAsserted === false) {
+    errors.push({
+      code: "output-spec-not-asserted",
+      message: "outputs.outputSpecAsserted is false — output content was not verified against spec",
+    });
+  }
+  if (!receipt.outputs.contentHash) {
+    errors.push({
+      code: "output-missing-contentHash",
+      message: "outputs.contentHash is required",
+    });
+  }
 }
 
 // 8. Environment metadata gaps advisory
