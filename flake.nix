@@ -253,6 +253,19 @@
             EOF
           '';
           ops-cdp-core = cdp.packages.cdp;
+          find-packages-skill = pkgs.runCommand "find-packages-skill" { } ''
+            mkdir -p "$out/share/skills/find-packages"
+            cp ${./packages/find-packages/skill/SKILL.md} "$out/share/skills/find-packages/SKILL.md"
+          '';
+          find-packages-lib = pkgs.runCommand "find-packages-lib" { } ''
+            mkdir -p "$out/share/find-packages/lib"
+            cp ${./packages/find-packages/lib/find-packages-core.mjs} "$out/share/find-packages/lib/find-packages-core.mjs"
+          '';
+          find-packages-sql = pkgs.runCommand "find-packages-sql" { } ''
+            mkdir -p "$out/share/find-packages/sql"
+            cp ${./packages/find-packages/sql/projection.duckdb.sql} "$out/share/find-packages/sql/projection.duckdb.sql"
+            cp ${./packages/find-packages/sql/search.duckdb.sql} "$out/share/find-packages/sql/search.duckdb.sql"
+          '';
           default = ops-bootstrap;
         }
         // cdp.packages
