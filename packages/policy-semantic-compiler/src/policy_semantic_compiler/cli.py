@@ -26,6 +26,26 @@ NORMATIVE_RE = re.compile(
 
 TEXT_SUFFIXES = {".md"}
 SKIP_DIRS = {".git", ".worktrees", "result", "node_modules", "__pycache__"}
+CUTOVER_BLOCKED_GATE = "semantic-cutover-blocked"
+IMPLEMENTED_GATES = {
+    "duckdb-executed",
+    "mandatory-signals-have-activation-edge",
+    "native-rows-have-projection-edge",
+    "no-stale-policy-git-migration-claim",
+    "no-wildcard-role-scope",
+    "review-signals-have-review-edge",
+    "reproducible-two-run-output",
+    "signals-present",
+    "source-spans-present",
+    "sources-present",
+    CUTOVER_BLOCKED_GATE,
+}
+FORBIDDEN_CLAIMS = {
+    "cutover-ready",
+    "policy.git may be deleted",
+    "policy logic deleted",
+    "semantic approval granted",
+}
 
 
 @dataclass(frozen=True)
@@ -298,9 +318,25 @@ def command_compile(args: argparse.Namespace) -> int:
         return 1
 
     gates = [json.loads(line) for line in (out_dir / "duckdb-gates.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
-    blocked = [gate for gate in gates if gate.get("status") != "pass"]
-    print(json.dumps({"ok": not blocked, "blocked": blocked, "outDir": str(out_dir), "gateCount": len(gates)}, sort_keys=True))
-    return 1 if blocked else 0
+    artifact_blocked = [
+        gate
+        for gate in gates
+        if gate.get("status") != "pass" and gate.get("gate_id") != CUTOVER_BLOCKED_GATE
+    ]
+    cutover_blocked = [gate for gate in gates if gate.get("gate_id") == CUTOVER_BLOCKED_GATE]
+    report = {
+        "ok": not artifact_blocked,
+        "candidateArtifactValid": not artifact_blocked,
+        "cutoverReady": False,
+        "policyDeletionApproved": False,
+        "status": "candidate-artifact-valid" if not artifact_blocked else "candidate-artifact-blocked",
+        "blocked": artifact_blocked,
+        "cutoverBlocked": cutover_blocked,
+        "outDir": str(out_dir),
+        "gateCount": len(gates),
+    }
+    print(json.dumps(report, sort_keys=True))
+    return 1 if artifact_blocked else 0
 
 
 def command_check_fixtures(args: argparse.Namespace) -> int:
@@ -312,8 +348,60 @@ def command_check_fixtures(args: argparse.Namespace) -> int:
             continue
         total += 1
         row = json.loads(line)
-        if not row.get("expectedGate"):
+        expected_gate = row.get("expectedGate")
+        if not expected_gate:
             bad.append({"line": line_no, "error": "missing expectedGate"})
+        elif expected_gate not in IMPLEMENTED_GATES:
+            planned = row.get("plannedOnly") is True or row.get("notImplemented") is True
+            if not planned:
+                bad.append(
+                    {
+                        "line": line_no,
+                        "id": row.get("id"),
+                        "expectedGate": expected_gate,
+                        "error": "expectedGate is not implemented and is not marked plannedOnly/notImplemented",
+                    }
+                )
+            elif not row.get("blocker"):
+                bad.append(
+                    {
+                        "line": line_no,
+                        "id": row.get("id"),
+                        "expectedGate": expected_gate,
+                        "error": "plannedOnly/notImplemented fixture must include blocker",
+                    }
+                )
+    print(json.dumps({"ok": not bad, "fixtureCount": total, "errors": bad}))
+    return 1 if bad else 0
+
+
+def command_check_fresh_agent_cases(args: argparse.Namespace) -> int:
+    path = Path(args.fixtures)
+    bad = []
+    total = 0
+    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        total += 1
+        row = json.loads(line)
+        text = row.get("input", "")
+        expected = row.get("expectedDecision")
+        if text in FORBIDDEN_CLAIMS and expected != "reject-forbidden-claim":
+            bad.append({"line": line_no, "id": row.get("id"), "error": "forbidden claim is not rejected"})
+        if text == "semantic-authority-closure-ready-for-review" and expected != "review-candidate-not-cutover":
+            bad.append({"line": line_no, "id": row.get("id"), "error": "candidate claim must stay non-cutover"})
+    seen_forbidden = {
+        row
+        for row in (
+            json.loads(line).get("input")
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+        if row in {"cutover-ready", "policy.git may be deleted"}
+    }
+    for required in ["cutover-ready", "policy.git may be deleted"]:
+        if required not in seen_forbidden:
+            bad.append({"claim": required, "error": "required forbidden-claim regression case missing"})
     print(json.dumps({"ok": not bad, "fixtureCount": total, "errors": bad}))
     return 1 if bad else 0
 
@@ -349,6 +437,9 @@ def main(argv: list[str] | None = None) -> int:
     fixture_parser = sub.add_parser("check-fixtures")
     fixture_parser.add_argument("--fixtures", required=True)
     fixture_parser.set_defaults(func=command_check_fixtures)
+    fresh_parser = sub.add_parser("check-fresh-agent-cases")
+    fresh_parser.add_argument("--fixtures", required=True)
+    fresh_parser.set_defaults(func=command_check_fresh_agent_cases)
     blocked_parser = sub.add_parser("cutover-blocked")
     blocked_parser.add_argument("--out")
     blocked_parser.set_defaults(func=command_cutover_blocked)

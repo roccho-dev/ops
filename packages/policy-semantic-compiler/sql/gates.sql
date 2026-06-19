@@ -30,8 +30,14 @@ SELECT 'duckdb-executed' AS gate_id,
        'pass' AS status,
        NULL AS blocker;
 
+CREATE OR REPLACE TABLE cutover_gate AS
+SELECT 'semantic-cutover-blocked' AS gate_id,
+       'blocked' AS status,
+       'candidate artifact validity is not semantic equivalence, cutover approval, deletion approval, or proof of active policy.git dependency 0' AS blocker;
+
 CREATE OR REPLACE TABLE gate_results AS
 SELECT * FROM duckdb_gate
 UNION ALL SELECT * FROM integrity_gate
 UNION ALL SELECT * FROM compile_gate
-UNION ALL SELECT * FROM semantic_gate;
+UNION ALL SELECT * FROM semantic_gate
+UNION ALL SELECT * FROM cutover_gate;

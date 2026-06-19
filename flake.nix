@@ -393,6 +393,10 @@
                   --fixtures ${./packages/policy-semantic-compiler/tests/edge-counterexamples.jsonl} \
                   > "$out/fixtures.json"
                 grep -q '"ok": true' "$out/fixtures.json"
+                policy-semantic-compiler check-fresh-agent-cases \
+                  --fixtures ${./packages/policy-semantic-compiler/tests/fresh-agent-cases.jsonl} \
+                  > "$out/fresh-agent-cases.json"
+                grep -q '"ok": true' "$out/fresh-agent-cases.json"
                 policy-semantic-compiler cutover-blocked --out "$out/cutover-blocked.json" \
                   > "$out/cutover-blocked.stdout.json"
                 grep -q '"status": "cutover-blocked"' "$out/cutover-blocked.json"

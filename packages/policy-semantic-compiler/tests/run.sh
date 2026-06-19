@@ -11,6 +11,10 @@ policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
 grep -q '"ok": true' "$work/fixtures.json"
 
+policy-semantic-compiler check-fresh-agent-cases \
+  --fixtures "$pkg_root/tests/fresh-agent-cases.jsonl" > "$work/fresh-agent-cases.json"
+grep -q '"ok": true' "$work/fresh-agent-cases.json"
+
 policy-semantic-compiler compile \
   --policy-root "$policy_root" \
   --out-dir "$work/run-a" > "$work/run-a.stdout.json"
@@ -33,6 +37,10 @@ fi
 grep -q 'DuckDB gate not executed' "$work/python-only.stdout.json"
 
 grep -q '"gate_id":"duckdb-executed","status":"pass"' "$work/run-a/duckdb-gates.jsonl"
+grep -q '"gate_id":"semantic-cutover-blocked","status":"blocked"' "$work/run-a/duckdb-gates.jsonl"
+grep -q '"candidateArtifactValid": true' "$work/run-a.stdout.json"
+grep -q '"cutoverReady": false' "$work/run-a.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/run-a.stdout.json"
 grep -q '"cutoverReady": false' "$work/run-a/manifest.json"
 grep -q '"policyDeletionApproved": false' "$work/run-a/manifest.json"
 
