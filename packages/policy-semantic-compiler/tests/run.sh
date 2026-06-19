@@ -148,4 +148,45 @@ policy-semantic-compiler check-projected-policy-entry \
   --expect-accepted > "$work/projected-fixture.check.json"
 grep -q '"ok": true' "$work/projected-fixture.check.json"
 
+mkdir -p "$work/projected-accepted-source" "$work/projected-accepted-source-invalid"
+policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-accepted-source-base" > "$work/projected-accepted-source-base.stdout.json"
+LOCK="$(grep '^POLICY_ENTRY_LOCK=' "$work/projected-accepted-source-base/policy-entry.accepted.env" | cut -d= -f2-)"
+cat > "$work/accepted-source.json" <<EOF
+{"kind":"policy.projectedPolicyEntryAcceptedSource.v1","accepted":true,"policyEntryLock":"$LOCK","sourceAuthority":{"repo":"adrs","path":"records/policy/policy.projectedPolicyEntryAcceptedSource.v1.jsonl","commit":"fixture","id":"source-authority-fixture","status":"accepted"},"ownerApprovalRef":{"repo":"adrs","path":"records/policy/policy.ownerApproval.v1.jsonl","commit":"fixture","id":"owner-approval-fixture","status":"accepted"},"semanticEquivalenceProofRef":{"repo":"adrs","path":"records/policy/policy.semanticEquivalenceProof.v1.jsonl","commit":"fixture","id":"semantic-equivalence-fixture","status":"accepted"},"consumerZeroProofRef":{"repo":"adrs","path":"records/policy/policy.consumerZeroProof.v1.jsonl","commit":"fixture","id":"consumer-zero-fixture","status":"accepted"},"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+policy-semantic-compiler check-accepted-policy-entry-source \
+  --source "$work/accepted-source.json" \
+  --expected-lock "$LOCK" > "$work/accepted-source.check.json"
+grep -q '"ok": true' "$work/accepted-source.check.json"
+if policy-semantic-compiler check-accepted-policy-entry-source \
+  --source "$work/accepted-source.json" \
+  --expected-lock "sha256:wrong" > "$work/accepted-source-wrong-lock.check.json"; then
+  echo "accepted source wrong lock unexpectedly passed" >&2
+  exit 1
+fi
+grep -q 'policy-entry-lock-mismatch' "$work/accepted-source-wrong-lock.check.json"
+policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-accepted-source" \
+  --accepted-source "$work/accepted-source.json" > "$work/projected-accepted-source.stdout.json"
+grep -q '"accepted": true' "$work/projected-accepted-source.stdout.json"
+grep -q '"fixtureOnly": false' "$work/projected-accepted-source/manifest.json"
+grep -q 'POLICY_ENTRY_STATUS=accepted-source' "$work/projected-accepted-source/policy-entry.accepted.env"
+! grep -q 'POLICY_ENTRY_STATUS=fixture-accepted' "$work/projected-accepted-source/policy-entry.accepted.env"
+! grep -q 'POLICY_ENTRY_FIXTURE_ONLY=' "$work/projected-accepted-source/policy-entry.accepted.env"
+policy-semantic-compiler check-projected-policy-entry \
+  --dir "$work/projected-accepted-source" \
+  --expect-accepted > "$work/projected-accepted-source.check.json"
+grep -q '"ok": true' "$work/projected-accepted-source.check.json"
+cat > "$work/accepted-source-invalid.json" <<EOF
+{"kind":"policy.projectedPolicyEntryAcceptedSource.v1","accepted":true,"policyEntryLock":"$LOCK","sourceAuthority":{"repo":"adrs","path":"records/policy/policy.projectedPolicyEntryAcceptedSource.v1.jsonl","commit":"fixture","id":"source-authority-fixture","status":"accepted"},"semanticEquivalenceProofRef":{"repo":"adrs","path":"records/policy/policy.semanticEquivalenceProof.v1.jsonl","commit":"fixture","id":"semantic-equivalence-fixture","status":"accepted"},"consumerZeroProofRef":{"repo":"adrs","path":"records/policy/policy.consumerZeroProof.v1.jsonl","commit":"fixture","id":"consumer-zero-fixture","status":"accepted"},"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+if policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-accepted-source-invalid" \
+  --accepted-source "$work/accepted-source-invalid.json" > "$work/projected-accepted-source-invalid.stdout.json" 2> "$work/projected-accepted-source-invalid.stderr.json"; then
+  echo "accepted source without owner approval unexpectedly passed" >&2
+  exit 1
+fi
+grep -q 'missing-required-field' "$work/projected-accepted-source-invalid.stderr.json"
+
 printf '{"ok":true,"workDir":"%s"}\n' "$work"

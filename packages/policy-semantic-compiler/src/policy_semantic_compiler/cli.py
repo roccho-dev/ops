@@ -786,6 +786,74 @@ def command_cutover_blocked(args: argparse.Namespace) -> int:
     return 0
 
 
+
+ACCEPTED_POLICY_ENTRY_SOURCE_REQUIRED = {
+    "kind",
+    "accepted",
+    "policyEntryLock",
+    "sourceAuthority",
+    "ownerApprovalRef",
+    "semanticEquivalenceProofRef",
+    "consumerZeroProofRef",
+}
+ACCEPTED_POLICY_ENTRY_SOURCE_KIND = "policy.projectedPolicyEntryAcceptedSource.v1"
+
+
+def read_one_json_or_jsonl(path: Path) -> dict:
+    text = path.read_text(encoding="utf-8")
+    stripped = text.strip()
+    if not stripped:
+        raise ValueError("accepted source is empty")
+    if stripped.startswith("{"):
+        return json.loads(stripped)
+    for line in stripped.splitlines():
+        if line.strip():
+            return json.loads(line)
+    raise ValueError("accepted source has no JSON object")
+
+
+def validate_accepted_ref(record: dict, field: str, errors: list[dict]) -> None:
+    value = record.get(field)
+    if not isinstance(value, dict):
+        errors.append({"error": "accepted-source-ref-not-object", "field": field})
+        return
+    for subfield in ("repo", "path", "commit", "id"):
+        if value.get(subfield) in (None, "", []):
+            errors.append({"error": "accepted-source-ref-missing-field", "field": field, "subfield": subfield})
+    if value.get("status") not in (None, "accepted"):
+        errors.append({"error": "accepted-source-ref-not-accepted", "field": field, "status": value.get("status")})
+
+
+def validate_accepted_policy_entry_source_record(record: dict, expected_lock: str | None = None) -> list[dict]:
+    errors: list[dict] = []
+    for field in sorted(ACCEPTED_POLICY_ENTRY_SOURCE_REQUIRED):
+        if field not in record or record.get(field) in (None, "", []):
+            errors.append({"error": "missing-required-field", "field": field})
+    if record.get("kind") != ACCEPTED_POLICY_ENTRY_SOURCE_KIND:
+        errors.append({"error": "wrong-kind", "expected": ACCEPTED_POLICY_ENTRY_SOURCE_KIND, "actual": record.get("kind")})
+    if record.get("accepted") is not True:
+        errors.append({"error": "accepted-source-not-accepted", "accepted": record.get("accepted")})
+    if record.get("generatedIsAuthority") is True:
+        errors.append({"error": "generated-output-cannot-be-authority"})
+    if record.get("policyDeletionApproved") is True:
+        errors.append({"error": "accepted-policy-entry-source-cannot-approve-policy-deletion"})
+    if record.get("fixtureOnly") is True or record.get("POLICY_ENTRY_FIXTURE_ONLY") is True:
+        errors.append({"error": "fixture-only-source-cannot-accept-real-policy-entry"})
+    for ref_field in ("sourceAuthority", "ownerApprovalRef", "semanticEquivalenceProofRef", "consumerZeroProofRef"):
+        validate_accepted_ref(record, ref_field, errors)
+    if expected_lock is not None and record.get("policyEntryLock") != expected_lock:
+        errors.append({"error": "policy-entry-lock-mismatch", "expected": expected_lock, "actual": record.get("policyEntryLock")})
+    return errors
+
+
+def load_and_validate_accepted_policy_entry_source(path: Path, expected_lock: str | None = None) -> tuple[dict | None, list[dict]]:
+    try:
+        record = read_one_json_or_jsonl(path)
+    except Exception as exc:
+        return None, [{"error": "accepted-source-read-failed", "detail": str(exc)}]
+    return record, validate_accepted_policy_entry_source_record(record, expected_lock)
+
+
 def write_projected_policy_entry(
     out_dir: Path,
     *,
@@ -793,6 +861,7 @@ def write_projected_policy_entry(
     policy_text: str,
     rule_rows: list[dict],
     fixture_reason: str | None,
+    accepted_source_record: dict | None = None,
 ) -> dict:
     rules_dir = out_dir / "rules"
     rules_dir.mkdir(parents=True, exist_ok=True)
@@ -816,13 +885,25 @@ def write_projected_policy_entry(
         rule_paths.append(rule_path)
 
     lock = "sha256:" + sha256_tree([out_dir / "policy.md", *rule_paths], out_dir)
+    if accepted and accepted_source_record is not None:
+        entry_status = "accepted-source"
+    elif accepted:
+        entry_status = "fixture-accepted"
+    else:
+        entry_status = "candidate-blocked"
     meta_lines = [
         f"POLICY_ENTRY_ACCEPTED={'true' if accepted else 'false'}",
         f"POLICY_ENTRY_LOCK={lock}",
         "POLICY_ENTRY_GENERATED_IS_AUTHORITY=false",
-        f"POLICY_ENTRY_STATUS={'fixture-accepted' if accepted else 'candidate-blocked'}",
+        f"POLICY_ENTRY_STATUS={entry_status}",
     ]
-    if accepted:
+    if accepted and accepted_source_record is not None:
+        meta_lines.append(f"POLICY_ENTRY_ACCEPTED_SOURCE_KIND={shell_quote(str(accepted_source_record.get('kind')))}")
+        meta_lines.append(f"POLICY_ENTRY_SOURCE_AUTHORITY={shell_quote(json.dumps(accepted_source_record.get('sourceAuthority'), sort_keys=True))}")
+        meta_lines.append(f"POLICY_ENTRY_OWNER_APPROVAL_REF={shell_quote(json.dumps(accepted_source_record.get('ownerApprovalRef'), sort_keys=True))}")
+        meta_lines.append(f"POLICY_ENTRY_SEMANTIC_EQUIVALENCE_PROOF_REF={shell_quote(json.dumps(accepted_source_record.get('semanticEquivalenceProofRef'), sort_keys=True))}")
+        meta_lines.append(f"POLICY_ENTRY_CONSUMER_ZERO_PROOF_REF={shell_quote(json.dumps(accepted_source_record.get('consumerZeroProofRef'), sort_keys=True))}")
+    elif accepted:
         meta_lines.append("POLICY_ENTRY_FIXTURE_ONLY=true")
         reason = fixture_reason or "bootstrap projected-mode contract test"
         meta_lines.append(f"POLICY_ENTRY_FIXTURE_REASON={shell_quote(reason)}")
@@ -831,7 +912,8 @@ def write_projected_policy_entry(
     manifest = {
         "kind": "policySemantic.projectedPolicyEntry.v1",
         "accepted": accepted,
-        "fixtureOnly": accepted,
+        "fixtureOnly": accepted and accepted_source_record is None,
+        "acceptedSource": accepted_source_record,
         "generatedIsAuthority": False,
         "cutoverReady": False,
         "policyDeletionApproved": False,
@@ -857,6 +939,9 @@ def command_project_policy_entry(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     accepted = bool(args.fixture_accepted)
+    if args.fixture_accepted and args.accepted_source:
+        print(json.dumps({"ok": False, "error": "--fixture-accepted and --accepted-source are mutually exclusive"}, sort_keys=True), file=sys.stderr)
+        return 2
     if accepted and not args.fixture_reason:
         print(json.dumps({"ok": False, "error": "--fixture-accepted requires --fixture-reason"}, sort_keys=True), file=sys.stderr)
         return 2
@@ -885,6 +970,7 @@ def command_project_policy_entry(args: argparse.Namespace) -> int:
             "POLICY_ENTRY_ACCEPTED=true from a fixture-only test or a future accepted governance gate.\n"
         )
 
+    accepted_source_record = None
     manifest = write_projected_policy_entry(
         out_dir,
         accepted=accepted,
@@ -892,6 +978,22 @@ def command_project_policy_entry(args: argparse.Namespace) -> int:
         rule_rows=rule_rows,
         fixture_reason=args.fixture_reason,
     )
+    if args.accepted_source:
+        accepted_source_record, source_errors = load_and_validate_accepted_policy_entry_source(Path(args.accepted_source), manifest["lock"])
+        if source_errors:
+            report = {"ok": False, "accepted": False, "errors": source_errors, "expectedLock": manifest["lock"]}
+            (out_dir / "accepted-source.check.json").write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            print(json.dumps(report, sort_keys=True), file=sys.stderr)
+            return 2
+        accepted = True
+        manifest = write_projected_policy_entry(
+            out_dir,
+            accepted=True,
+            policy_text=policy_text,
+            rule_rows=rule_rows,
+            fixture_reason=None,
+            accepted_source_record=accepted_source_record,
+        )
     print(json.dumps({"ok": True, "outDir": str(out_dir), **manifest}, sort_keys=True))
     return 0
 
@@ -917,9 +1019,9 @@ def command_check_projected_policy_entry(args: argparse.Namespace) -> int:
         lock = values.get("POLICY_ENTRY_LOCK")
         if args.expect_accepted:
             if accepted != "true":
-                errors.append({"error": "expected accepted fixture", "accepted": accepted})
+                errors.append({"error": "expected accepted projection", "accepted": accepted})
             if not lock:
-                errors.append({"error": "accepted fixture missing POLICY_ENTRY_LOCK"})
+                errors.append({"error": "accepted projection missing POLICY_ENTRY_LOCK"})
         else:
             if accepted == "true":
                 errors.append({"error": "real candidate unexpectedly accepted"})
@@ -932,6 +1034,16 @@ def command_check_projected_policy_entry(args: argparse.Namespace) -> int:
     }
     print(json.dumps(report, sort_keys=True))
     return 1 if errors else 0
+
+
+
+def command_check_accepted_policy_entry_source(args: argparse.Namespace) -> int:
+    record, errors = load_and_validate_accepted_policy_entry_source(Path(args.source), args.expected_lock)
+    report = {"ok": not errors, "accepted": not errors, "errors": errors, "record": record}
+    if args.out:
+        Path(args.out).write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(report, sort_keys=True))
+    return 0 if not errors else 1
 
 
 TYPED_JSON_FORBIDDEN_KEYS = {
@@ -1620,7 +1732,13 @@ def main(argv: list[str] | None = None) -> int:
     projected_parser.add_argument("--policy-text")
     projected_parser.add_argument("--fixture-accepted", action="store_true")
     projected_parser.add_argument("--fixture-reason")
+    projected_parser.add_argument("--accepted-source")
     projected_parser.set_defaults(func=command_project_policy_entry)
+    accepted_source_parser = sub.add_parser("check-accepted-policy-entry-source")
+    accepted_source_parser.add_argument("--source", required=True)
+    accepted_source_parser.add_argument("--expected-lock", required=True)
+    accepted_source_parser.add_argument("--out")
+    accepted_source_parser.set_defaults(func=command_check_accepted_policy_entry_source)
     projected_check_parser = sub.add_parser("check-projected-policy-entry")
     projected_check_parser.add_argument("--dir", required=True)
     projected_check_parser.add_argument("--expect-accepted", action="store_true")

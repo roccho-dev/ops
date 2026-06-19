@@ -44,6 +44,9 @@ mode contract tests. It writes `POLICY_ENTRY_ACCEPTED=true`,
 can prove the consumer path works without claiming a real accepted projection
 exists.
 
+
+`--accepted-source <json|jsonl>` is separate from `--fixture-accepted`. It only writes `POLICY_ENTRY_ACCEPTED=true` when the accepted-source record is `policy.projectedPolicyEntryAcceptedSource.v1`, has `accepted:true`, includes accepted structured refs for owner approval, semantic equivalence proof, consumer-zero proof, source authority, and its `policyEntryLock` exactly matches the generated policy/rules tree lock. The accepted source cannot approve policy deletion and generated output still is not authority.
+
 ## Semantic Coverage Review
 
 `review-semantic-coverage` reads ADR policy graph JSONL:
