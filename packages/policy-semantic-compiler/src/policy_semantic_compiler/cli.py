@@ -482,6 +482,14 @@ def disposition_by_source_file_id(rows: Iterable[dict]) -> dict[str, dict]:
     return dispositions
 
 
+def candidate_disposition_rows(rows: Iterable[dict]) -> list[dict]:
+    candidate_rows = []
+    for row in rows:
+        if row.get("status") != "accepted":
+            candidate_rows.append(row)
+    return candidate_rows
+
+
 def command_review_semantic_coverage(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -504,6 +512,7 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
     accepted_span_ids = accepted_span_ids_from_rows(source_spans) | accepted_span_ids_from_rows(approval_rows)
     accepted_span_ids &= span_ids
     accepted_equivalence = accepted_equivalence_proofs(equivalence_rows)
+    candidate_dispositions = candidate_disposition_rows(disposition_rows)
     non_normative_file_class_span_ids = {
         str(row_id(span))
         for span in source_spans
@@ -581,6 +590,8 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
                 "sourceSpanIds": [],
                 "spanCount": 0,
                 "acceptedSemanticApprovalCount": 0,
+                "fileClassNonNormativeSpanCount": 0,
+                "reviewRequiredSpanCount": 0,
                 "status": "blocked",
                 "reviewRequired": True,
             },
@@ -588,17 +599,15 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         group["sourceSpanIds"].append(span_id)
         group["spanCount"] += 1
         if span_id in non_normative_file_class_span_ids:
-            group["fileClassNonNormativeSpanCount"] = group.get("fileClassNonNormativeSpanCount", 0) + 1
+            group["fileClassNonNormativeSpanCount"] += 1
         else:
-            group["reviewRequiredSpanCount"] = group.get("reviewRequiredSpanCount", 0) + 1
+            group["reviewRequiredSpanCount"] += 1
         if span_id in accepted_span_ids and span_id in review_required_span_ids:
             group["acceptedSemanticApprovalCount"] += 1
 
     packets = sorted(groups.values(), key=lambda row: (row["sourcePath"], row["nodeKinds"], row["edgeKinds"]))
     for packet in packets:
         packet["sourceSpanIds"] = sorted(packet["sourceSpanIds"])
-        packet.setdefault("fileClassNonNormativeSpanCount", 0)
-        packet.setdefault("reviewRequiredSpanCount", packet["spanCount"])
         packet["unapprovedSpanCount"] = packet["reviewRequiredSpanCount"] - packet["acceptedSemanticApprovalCount"]
         packet["status"] = "accepted" if packet["unapprovedSpanCount"] == 0 else "blocked"
 
@@ -618,6 +627,7 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         total_spans > 0
         and accepted_count == review_required_count
         and equivalence_proof_present
+        and not candidate_dispositions
         and all(count == 0 for count in integrity_counts.values())
     )
     blockers = []
@@ -625,6 +635,8 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         blockers.append("accepted semantic approval count does not equal review-required source spans")
     if not equivalence_proof_present:
         blockers.append("accepted semantic equivalence proof is missing")
+    if candidate_dispositions:
+        blockers.append("source file dispositions are not accepted authority")
     for name, count in integrity_counts.items():
         if count:
             blockers.append(f"{name}={count}")
@@ -643,6 +655,7 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         "reviewRequiredSourceSpanCount": review_required_count,
         "fileClassNonNormativeSourceSpanCount": non_normative_file_class_count,
         "sourceFileDispositionRows": len(disposition_rows),
+        "candidateSourceFileDispositionRows": len(candidate_dispositions),
         "equivalenceProofPresent": equivalence_proof_present,
         "acceptedEquivalenceProofCount": len(accepted_equivalence),
         "reviewPacketCount": len(packets),

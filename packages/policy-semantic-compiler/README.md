@@ -62,7 +62,8 @@ The summary reports `acceptedSemanticApprovalCount`, `totalSourceSpanCount`,
 mechanical orphan/integrity counts, and whether an accepted equivalence proof
 exists. File dispositions with `requiresIndividualSemanticApproval:false` are
 not semantic approval; they only remove source spans from the individual review
-denominator. The review remains fail-closed: `cutoverReady` remains false and
-the command exits nonzero until every review-required source span has accepted
-semantic approval, an accepted semantic equivalence proof exists, and graph
-integrity/orphan counts are zero.
+denominator. Candidate dispositions are not accepted authority. The review
+remains fail-closed: `cutoverReady` remains false and the command exits nonzero
+until every review-required source span has accepted semantic approval,
+dispositions are accepted authority, an accepted semantic equivalence proof
+exists, and graph integrity/orphan counts are zero.

@@ -51,8 +51,12 @@ grep -q '"acceptedSemanticApprovalCount": 0' "$work/semantic-review-disposition.
 grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-disposition.stdout.json"
 grep -q '"reviewRequiredSourceSpanCount": 0' "$work/semantic-review-disposition.stdout.json"
 grep -q '"fileClassNonNormativeSourceSpanCount": 2' "$work/semantic-review-disposition.stdout.json"
+grep -q '"candidateSourceFileDispositionRows": 1' "$work/semantic-review-disposition.stdout.json"
+grep -q '"source file dispositions are not accepted authority"' "$work/semantic-review-disposition.stdout.json"
 grep -q '"equivalenceProofPresent": false' "$work/semantic-review-disposition.stdout.json"
 grep -q '"cutoverReady": false' "$work/semantic-review-disposition.stdout.json"
+grep -q '"reviewRequiredSpanCount": 0' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl"
+grep -q '"fileClassNonNormativeSpanCount": 2' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl"
 
 policy-semantic-compiler review-semantic-coverage \
   --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
