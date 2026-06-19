@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -29,12 +30,16 @@ SKIP_DIRS = {".git", ".worktrees", "result", "node_modules", "__pycache__"}
 CUTOVER_BLOCKED_GATE = "semantic-cutover-blocked"
 IMPLEMENTED_GATES = {
     "duckdb-executed",
+    "consumer-migrated-has-diff",
+    "graph-records-present",
     "mandatory-signals-have-activation-edge",
     "native-rows-have-projection-edge",
     "no-stale-policy-git-migration-claim",
     "no-wildcard-role-scope",
     "review-signals-have-review-edge",
     "reproducible-two-run-output",
+    "semantic-diff-deny-to-allow",
+    "semantic-diff-must-weakened",
     "signals-present",
     "source-spans-present",
     "sources-present",
@@ -176,6 +181,8 @@ def signal_rows(signals: Iterable[Signal]) -> list[dict]:
             "token": sig.token,
             "modal": sig.modal,
             "polarity": sig.polarity,
+            "baselineModal": None,
+            "baselinePolarity": None,
             "text": sig.text,
         }
         for sig in signals
@@ -194,6 +201,8 @@ def edge_rows(signals: Iterable[Signal]) -> list[dict]:
                 "to": sig.signal_id,
                 "edgeType": "source-span",
                 "evidence": f"{sig.path}:{sig.line}",
+                "migrationStatus": None,
+                "consumerDiff": False,
             }
         )
         rows.append(
@@ -204,6 +213,8 @@ def edge_rows(signals: Iterable[Signal]) -> list[dict]:
                 "to": native_id,
                 "edgeType": "projection",
                 "evidence": f"{sig.path}:{sig.line}",
+                "migrationStatus": None,
+                "consumerDiff": False,
             }
         )
         if sig.modal in {"mandatory", "review"}:
@@ -215,6 +226,8 @@ def edge_rows(signals: Iterable[Signal]) -> list[dict]:
                     "to": "gate:semantic-authority-closure",
                     "edgeType": "activation",
                     "evidence": f"{sig.path}:{sig.line}",
+                    "migrationStatus": None,
+                    "consumerDiff": False,
                 }
             )
         if sig.modal == "review":
@@ -226,6 +239,8 @@ def edge_rows(signals: Iterable[Signal]) -> list[dict]:
                     "to": "review:required",
                     "edgeType": "required-review",
                     "evidence": f"{sig.path}:{sig.line}",
+                    "migrationStatus": None,
+                    "consumerDiff": False,
                 }
             )
     return rows
@@ -375,6 +390,69 @@ def command_check_fixtures(args: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
+def read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
+    table_defaults = {
+        "sources": [],
+        "signals": [],
+        "edges": [],
+        "native_rows": [],
+    }
+    for table_name, default_rows in table_defaults.items():
+        jsonl_write(out_dir / f"{table_name}.jsonl", dataset.get(table_name, default_rows))
+
+
+def command_check_counterexamples(args: argparse.Namespace) -> int:
+    fixtures = read_jsonl(Path(args.fixtures))
+    datasets = {row["id"]: row for row in read_jsonl(Path(args.datasets))}
+    fixture_by_id = {row["id"]: row for row in fixtures}
+    bad = []
+    total = 0
+    for fixture in fixtures:
+        total += 1
+        fixture_id = fixture.get("id")
+        expected_gate = fixture.get("expectedGate")
+        dataset = datasets.get(fixture_id)
+        if dataset is None:
+            bad.append({"id": fixture_id, "error": "missing executable counterexample dataset"})
+            continue
+        if expected_gate not in IMPLEMENTED_GATES:
+            bad.append({"id": fixture_id, "expectedGate": expected_gate, "error": "expected gate is not implemented"})
+            continue
+        if dataset.get("expectedGate") != expected_gate:
+            bad.append({"id": fixture_id, "error": "dataset expectedGate does not match fixture expectedGate"})
+            continue
+        if expected_gate == "duckdb-executed":
+            if dataset.get("mode") != "python-only":
+                bad.append({"id": fixture_id, "expectedGate": expected_gate, "error": "duckdb-executed counterexample must use python-only mode"})
+            continue
+        if expected_gate == "reproducible-two-run-output":
+            if dataset.get("mode") != "input-reorder-changes-bytes":
+                bad.append({"id": fixture_id, "expectedGate": expected_gate, "error": "reproducibility counterexample must use input-reorder-changes-bytes mode"})
+            continue
+        with tempfile.TemporaryDirectory(prefix=f"policy-semantic-counterexample-{fixture_id}-") as tmp:
+            out_dir = Path(tmp)
+            write_counterexample_dataset(out_dir, dataset)
+            duckdb_ok, blocker = run_duckdb(out_dir, args.duckdb_bin)
+            if not duckdb_ok:
+                bad.append({"id": fixture_id, "expectedGate": expected_gate, "error": blocker})
+                continue
+            gates = read_jsonl(out_dir / "duckdb-gates.jsonl")
+            matching = [gate for gate in gates if gate.get("gate_id") == expected_gate]
+            if not matching:
+                bad.append({"id": fixture_id, "expectedGate": expected_gate, "error": "expected gate missing from DuckDB output"})
+            elif not any(gate.get("status") == "blocked" for gate in matching):
+                bad.append({"id": fixture_id, "expectedGate": expected_gate, "error": "expected gate did not block"})
+    missing_fixture = sorted(set(datasets) - set(fixture_by_id))
+    for fixture_id in missing_fixture:
+        bad.append({"id": fixture_id, "error": "dataset has no matching fixture"})
+    print(json.dumps({"ok": not bad, "counterexampleCount": total, "errors": bad}, sort_keys=True))
+    return 1 if bad else 0
+
+
 def command_check_fresh_agent_cases(args: argparse.Namespace) -> int:
     path = Path(args.fixtures)
     bad = []
@@ -437,6 +515,11 @@ def main(argv: list[str] | None = None) -> int:
     fixture_parser = sub.add_parser("check-fixtures")
     fixture_parser.add_argument("--fixtures", required=True)
     fixture_parser.set_defaults(func=command_check_fixtures)
+    counterexample_parser = sub.add_parser("check-counterexamples")
+    counterexample_parser.add_argument("--fixtures", required=True)
+    counterexample_parser.add_argument("--datasets", required=True)
+    counterexample_parser.add_argument("--duckdb-bin", default="duckdb")
+    counterexample_parser.set_defaults(func=command_check_counterexamples)
     fresh_parser = sub.add_parser("check-fresh-agent-cases")
     fresh_parser.add_argument("--fixtures", required=True)
     fresh_parser.set_defaults(func=command_check_fresh_agent_cases)

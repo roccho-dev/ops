@@ -393,6 +393,11 @@
                   --fixtures ${./packages/policy-semantic-compiler/tests/edge-counterexamples.jsonl} \
                   > "$out/fixtures.json"
                 grep -q '"ok": true' "$out/fixtures.json"
+                policy-semantic-compiler check-counterexamples \
+                  --fixtures ${./packages/policy-semantic-compiler/tests/edge-counterexamples.jsonl} \
+                  --datasets ${./packages/policy-semantic-compiler/tests/counterexample-datasets.jsonl} \
+                  > "$out/counterexamples.json"
+                grep -q '"ok": true' "$out/counterexamples.json"
                 policy-semantic-compiler check-fresh-agent-cases \
                   --fixtures ${./packages/policy-semantic-compiler/tests/fresh-agent-cases.jsonl} \
                   > "$out/fresh-agent-cases.json"

@@ -11,6 +11,11 @@ policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
 grep -q '"ok": true' "$work/fixtures.json"
 
+policy-semantic-compiler check-counterexamples \
+  --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" \
+  --datasets "$pkg_root/tests/counterexample-datasets.jsonl" > "$work/counterexamples.json"
+grep -q '"ok": true' "$work/counterexamples.json"
+
 policy-semantic-compiler check-fresh-agent-cases \
   --fixtures "$pkg_root/tests/fresh-agent-cases.jsonl" > "$work/fresh-agent-cases.json"
 grep -q '"ok": true' "$work/fresh-agent-cases.json"

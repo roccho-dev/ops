@@ -23,7 +23,49 @@ SELECT 'no-stale-policy-git-migration-claim',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
        CASE WHEN count(*) = 0 THEN NULL ELSE 'stale direct policy.git reference claimed migrated' END
 FROM signals
-WHERE lower(text) LIKE '%policy.git%' AND lower(text) LIKE '%migrated%';
+WHERE lower(text) LIKE '%policy.git%' AND lower(text) LIKE '%migrated%'
+UNION ALL
+SELECT 'semantic-diff-must-weakened',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'mandatory source signal weakened in projected candidate' END
+FROM signals
+WHERE TRIM(BOTH '"' FROM CAST(baselineModal AS VARCHAR)) = 'mandatory'
+  AND TRIM(BOTH '"' FROM CAST(modal AS VARCHAR)) <> 'mandatory'
+UNION ALL
+SELECT 'semantic-diff-deny-to-allow',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'deny source signal changed to allow in projected candidate' END
+FROM signals
+WHERE TRIM(BOTH '"' FROM CAST(baselinePolarity AS VARCHAR)) = 'deny'
+  AND TRIM(BOTH '"' FROM CAST(polarity AS VARCHAR)) = 'allow'
+UNION ALL
+SELECT 'consumer-migrated-has-diff',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'consumer edge marked migrated without consumer diff evidence' END
+FROM edges
+WHERE edgeType = 'consumer-migration'
+  AND TRIM(BOTH '"' FROM CAST(migrationStatus AS VARCHAR)) = 'migrated'
+  AND TRIM(BOTH '"' FROM CAST(consumerDiff AS VARCHAR)) <> 'true'
+UNION ALL
+SELECT 'graph-records-present',
+       CASE
+         WHEN (SELECT count(*) FROM sources) > 0
+          AND (SELECT count(*) FROM signals) > 0
+          AND (SELECT count(*) FROM edges WHERE edgeType = 'source-span') > 0
+          AND (SELECT count(*) FROM edges WHERE edgeType = 'projection') > 0
+          AND (SELECT count(*) FROM native_rows) > 0
+         THEN 'pass'
+         ELSE 'blocked'
+       END,
+       CASE
+         WHEN (SELECT count(*) FROM sources) > 0
+          AND (SELECT count(*) FROM signals) > 0
+          AND (SELECT count(*) FROM edges WHERE edgeType = 'source-span') > 0
+          AND (SELECT count(*) FROM edges WHERE edgeType = 'projection') > 0
+          AND (SELECT count(*) FROM native_rows) > 0
+         THEN NULL
+         ELSE 'source-tree byte parity is not enough; graph records must remain present'
+       END;
 
 CREATE OR REPLACE TABLE duckdb_gate AS
 SELECT 'duckdb-executed' AS gate_id,
