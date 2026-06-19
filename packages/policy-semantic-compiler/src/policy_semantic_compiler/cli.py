@@ -51,6 +51,10 @@ FORBIDDEN_CLAIMS = {
     "policy logic deleted",
     "semantic approval granted",
 }
+POLICY_ENTRY_FILES = {
+    "policy-entry.accepted.env",
+    "policy.md",
+}
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,21 @@ def jsonl_write(path: Path, rows: Iterable[dict]) -> None:
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def sha256_tree(paths: Iterable[Path], root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(paths, key=lambda p: p.relative_to(root).as_posix()):
+        rel = path.relative_to(root).as_posix()
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def shell_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
 def repo_metadata(policy_root: Path) -> dict:
@@ -503,6 +522,154 @@ def command_cutover_blocked(args: argparse.Namespace) -> int:
     return 0
 
 
+def write_projected_policy_entry(
+    out_dir: Path,
+    *,
+    accepted: bool,
+    policy_text: str,
+    rule_rows: list[dict],
+    fixture_reason: str | None,
+) -> dict:
+    rules_dir = out_dir / "rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "policy.md").write_text(policy_text, encoding="utf-8")
+    rule_paths = []
+    for index, row in enumerate(rule_rows, start=1):
+        stem = row.get("id") or row.get("ruleId") or f"rule-{index}"
+        safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", str(stem)).strip("-").lower() or f"rule-{index}"
+        rule_path = rules_dir / f"{safe_stem}.md"
+        text = str(row.get("text") or row.get("body") or row.get("title") or "fixture projected policy rule")
+        rule_path.write_text(f"# {safe_stem}\n\n{text.rstrip()}\n", encoding="utf-8")
+        rule_paths.append(rule_path)
+
+    if not rule_paths:
+        rule_path = rules_dir / "candidate-policy-entry-blocked.md"
+        rule_path.write_text(
+            "# candidate policy entry blocked\n\n"
+            "No accepted semantic rule projection exists yet. Keep POLICY_ENTRY_SOURCE_MODE=policy-git.\n",
+            encoding="utf-8",
+        )
+        rule_paths.append(rule_path)
+
+    lock = "sha256:" + sha256_tree([out_dir / "policy.md", *rule_paths], out_dir)
+    meta_lines = [
+        f"POLICY_ENTRY_ACCEPTED={'true' if accepted else 'false'}",
+        f"POLICY_ENTRY_LOCK={lock}",
+        "POLICY_ENTRY_GENERATED_IS_AUTHORITY=false",
+        f"POLICY_ENTRY_STATUS={'fixture-accepted' if accepted else 'candidate-blocked'}",
+    ]
+    if accepted:
+        meta_lines.append("POLICY_ENTRY_FIXTURE_ONLY=true")
+        reason = fixture_reason or "bootstrap projected-mode contract test"
+        meta_lines.append(f"POLICY_ENTRY_FIXTURE_REASON={shell_quote(reason)}")
+    (out_dir / "policy-entry.accepted.env").write_text("\n".join(meta_lines) + "\n", encoding="utf-8")
+
+    manifest = {
+        "kind": "policySemantic.projectedPolicyEntry.v1",
+        "accepted": accepted,
+        "fixtureOnly": accepted,
+        "generatedIsAuthority": False,
+        "cutoverReady": False,
+        "policyDeletionApproved": False,
+        "lock": lock,
+        "outputs": {
+            "acceptedEnv": "policy-entry.accepted.env",
+            "policy": "policy.md",
+            "rules": [p.relative_to(out_dir).as_posix() for p in rule_paths],
+        },
+        "blockers": []
+        if accepted
+        else [
+            "projection is generated from candidate semantic rows only",
+            "governance cutover gates are not accepted",
+            "bootstrap projected mode must reject this real candidate until acceptance",
+        ],
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    return manifest
+
+
+def command_project_policy_entry(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    accepted = bool(args.fixture_accepted)
+    if accepted and not args.fixture_reason:
+        print(json.dumps({"ok": False, "error": "--fixture-accepted requires --fixture-reason"}, sort_keys=True), file=sys.stderr)
+        return 2
+
+    rule_rows: list[dict] = []
+    if args.native_rows:
+        native_path = Path(args.native_rows)
+        if not native_path.exists():
+            print(json.dumps({"ok": False, "error": f"native rows missing: {native_path}"}, sort_keys=True), file=sys.stderr)
+            return 2
+        for row in read_jsonl(native_path):
+            rule_rows.append(
+                {
+                    "id": row.get("nativeId") or row.get("signalId"),
+                    "text": row.get("text"),
+                }
+            )
+
+    if args.policy_text:
+        policy_text = Path(args.policy_text).read_text(encoding="utf-8")
+    else:
+        policy_text = (
+            "# projected policy entry candidate\n\n"
+            "This is a generated candidate projection for bootstrap projected mode.\n\n"
+            "It is not accepted authority unless policy-entry.accepted.env explicitly sets "
+            "POLICY_ENTRY_ACCEPTED=true from a fixture-only test or a future accepted governance gate.\n"
+        )
+
+    manifest = write_projected_policy_entry(
+        out_dir,
+        accepted=accepted,
+        policy_text=policy_text,
+        rule_rows=rule_rows,
+        fixture_reason=args.fixture_reason,
+    )
+    print(json.dumps({"ok": True, "outDir": str(out_dir), **manifest}, sort_keys=True))
+    return 0
+
+
+def command_check_projected_policy_entry(args: argparse.Namespace) -> int:
+    root = Path(args.dir)
+    missing = sorted(name for name in POLICY_ENTRY_FILES if not (root / name).is_file())
+    rules_dir = root / "rules"
+    if not rules_dir.is_dir() or not list(rules_dir.glob("*.md")):
+        missing.append("rules/*.md")
+    errors = [{"error": "missing", "path": path} for path in missing]
+
+    accepted = None
+    lock = None
+    meta = root / "policy-entry.accepted.env"
+    if meta.exists():
+        values = {}
+        for line in meta.read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                values[key] = value
+        accepted = values.get("POLICY_ENTRY_ACCEPTED")
+        lock = values.get("POLICY_ENTRY_LOCK")
+        if args.expect_accepted:
+            if accepted != "true":
+                errors.append({"error": "expected accepted fixture", "accepted": accepted})
+            if not lock:
+                errors.append({"error": "accepted fixture missing POLICY_ENTRY_LOCK"})
+        else:
+            if accepted == "true":
+                errors.append({"error": "real candidate unexpectedly accepted"})
+
+    report = {
+        "ok": not errors,
+        "accepted": accepted == "true",
+        "lockPresent": bool(lock),
+        "errors": errors,
+    }
+    print(json.dumps(report, sort_keys=True))
+    return 1 if errors else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="policy-semantic-compiler")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -526,6 +693,17 @@ def main(argv: list[str] | None = None) -> int:
     blocked_parser = sub.add_parser("cutover-blocked")
     blocked_parser.add_argument("--out")
     blocked_parser.set_defaults(func=command_cutover_blocked)
+    projected_parser = sub.add_parser("project-policy-entry")
+    projected_parser.add_argument("--out-dir", required=True)
+    projected_parser.add_argument("--native-rows")
+    projected_parser.add_argument("--policy-text")
+    projected_parser.add_argument("--fixture-accepted", action="store_true")
+    projected_parser.add_argument("--fixture-reason")
+    projected_parser.set_defaults(func=command_project_policy_entry)
+    projected_check_parser = sub.add_parser("check-projected-policy-entry")
+    projected_check_parser.add_argument("--dir", required=True)
+    projected_check_parser.add_argument("--expect-accepted", action="store_true")
+    projected_check_parser.set_defaults(func=command_check_projected_policy_entry)
     args = parser.parse_args(argv)
     return args.func(args)
 

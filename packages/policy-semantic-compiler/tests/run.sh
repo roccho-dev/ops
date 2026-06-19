@@ -6,6 +6,7 @@ policy_root="${POLICY_SEMANTIC_POLICY_ROOT:-/home/nixos/repos/policy}"
 work="${1:-$(mktemp -d)}"
 
 mkdir -p "$work/run-a" "$work/run-b" "$work/python-only"
+mkdir -p "$work/projected-real" "$work/projected-fixture"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -48,5 +49,25 @@ grep -q '"cutoverReady": false' "$work/run-a.stdout.json"
 grep -q '"policyDeletionApproved": false' "$work/run-a.stdout.json"
 grep -q '"cutoverReady": false' "$work/run-a/manifest.json"
 grep -q '"policyDeletionApproved": false' "$work/run-a/manifest.json"
+
+policy-semantic-compiler project-policy-entry \
+  --native-rows "$work/run-a/native_rows.jsonl" \
+  --out-dir "$work/projected-real" > "$work/projected-real.stdout.json"
+grep -q '"accepted": false' "$work/projected-real.stdout.json"
+grep -q 'POLICY_ENTRY_ACCEPTED=false' "$work/projected-real/policy-entry.accepted.env"
+policy-semantic-compiler check-projected-policy-entry \
+  --dir "$work/projected-real" > "$work/projected-real.check.json"
+grep -q '"ok": true' "$work/projected-real.check.json"
+
+policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-fixture" \
+  --fixture-accepted \
+  --fixture-reason "bootstrap projected-mode contract test" > "$work/projected-fixture.stdout.json"
+grep -q '"accepted": true' "$work/projected-fixture.stdout.json"
+grep -q 'POLICY_ENTRY_ACCEPTED=true' "$work/projected-fixture/policy-entry.accepted.env"
+policy-semantic-compiler check-projected-policy-entry \
+  --dir "$work/projected-fixture" \
+  --expect-accepted > "$work/projected-fixture.check.json"
+grep -q '"ok": true' "$work/projected-fixture.check.json"
 
 printf '{"ok":true,"workDir":"%s"}\n' "$work"

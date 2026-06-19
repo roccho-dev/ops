@@ -23,3 +23,23 @@ Forbidden claims:
 - `policy.git may be deleted`
 - `policy logic deleted`
 - `semantic approval granted`
+
+## Projected Policy Entry
+
+`project-policy-entry` materializes the bootstrap projected-mode directory:
+
+- `policy-entry.accepted.env`
+- `policy.md`
+- `rules/*.md`
+- `manifest.json`
+
+Real compiler output is fail-closed and writes `POLICY_ENTRY_ACCEPTED=false`.
+That output is a blocked candidate artifact only. It exists so bootstrap can
+reject it explicitly instead of silently falling back or treating generation as
+authority.
+
+`--fixture-accepted --fixture-reason ...` is reserved for bootstrap projected
+mode contract tests. It writes `POLICY_ENTRY_ACCEPTED=true`,
+`POLICY_ENTRY_FIXTURE_ONLY=true`, and a content lock so the bootstrap proposal
+can prove the consumer path works without claiming a real accepted projection
+exists.

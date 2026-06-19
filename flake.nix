@@ -407,6 +407,28 @@
                 grep -q '"status": "cutover-blocked"' "$out/cutover-blocked.json"
                 grep -q '"cutoverReady": false' "$out/cutover-blocked.json"
                 grep -q '"policyDeletionApproved": false' "$out/cutover-blocked.json"
+                mkdir -p "$out/projected-real" "$out/projected-fixture"
+                policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-real" \
+                  > "$out/projected-real.stdout.json"
+                grep -q '"accepted": false' "$out/projected-real.stdout.json"
+                grep -q 'POLICY_ENTRY_ACCEPTED=false' "$out/projected-real/policy-entry.accepted.env"
+                policy-semantic-compiler check-projected-policy-entry \
+                  --dir "$out/projected-real" \
+                  > "$out/projected-real.check.json"
+                grep -q '"ok": true' "$out/projected-real.check.json"
+                policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-fixture" \
+                  --fixture-accepted \
+                  --fixture-reason "bootstrap projected-mode contract test" \
+                  > "$out/projected-fixture.stdout.json"
+                grep -q '"accepted": true' "$out/projected-fixture.stdout.json"
+                grep -q 'POLICY_ENTRY_ACCEPTED=true' "$out/projected-fixture/policy-entry.accepted.env"
+                policy-semantic-compiler check-projected-policy-entry \
+                  --dir "$out/projected-fixture" \
+                  --expect-accepted \
+                  > "$out/projected-fixture.check.json"
+                grep -q '"ok": true' "$out/projected-fixture.check.json"
                 touch "$out/ok"
               '';
           ops-runbook-checks =
