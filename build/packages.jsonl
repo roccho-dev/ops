@@ -1,4 +1,3 @@
-{"kind":"package","name":"ops-artifact-materialize","runtime":"node","entry":"packages/ops-artifact-materialize/bin/ops-artifact-materialize.mjs","bin":"ops-artifact-materialize","deps":["node"],"env":[]}
 {"kind":"package","name":"ops-knowledge-intake","runtime":"node","entry":"packages/ops-knowledge-intake/bin/ops-knowledge-intake.mjs","bin":"ops-knowledge-intake","deps":["node"],"env":[]}
 {"kind":"package","name":"package-architecture-map","runtime":"node","entry":"packages/package-architecture-map/bin/package-architecture-map.mjs","bin":"package-architecture-map","deps":["node"],"env":[{"name":"PACKAGE_ARCHITECTURE_MAP_VIEWER","path":"packages/package-architecture-map/viewer/index.html"}]}
 {"kind":"package","name":"ops-runbook-checks","runtime":"node","entry":"packages/ops-runbook-checks/bin/ops-runbook-checks.mjs","bin":"ops-runbook-checks","deps":["node"],"env":[]}

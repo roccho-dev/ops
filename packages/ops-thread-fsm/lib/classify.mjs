@@ -5,9 +5,7 @@ import { nextActionFor, permissionsFor } from "./state_model.mjs";
 import { pyOr, splitlines } from "./pyhelpers.mjs";
 
 export const OUTPUT_MARKERS = [
-  "BEGIN_B64_FILE",
   "RUN_REPORT",
-  "MATERIALIZE_MANIFEST",
   "diff --git",
   "file tree",
   "patch",

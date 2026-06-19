@@ -314,21 +314,6 @@
                 prove-feat --root ${self} --system ${system} --json > "$out/report.json"
                 grep -q '"ok": true' "$out/report.json"
               '';
-          ops-artifact-materialize =
-            pkgs.runCommand "ops-artifact-materialize-check"
-              {
-                nativeBuildInputs = [ self.packages.${pkgs.stdenv.hostPlatform.system}.ops-artifact-materialize ];
-              }
-              ''
-                mkdir -p "$out/restored"
-                ops-artifact-materialize \
-                  --input ${./packages/ops-artifact-materialize/tests/sample-thread.txt} \
-                  --out-dir "$out/restored" \
-                  --strict-count \
-                  --json > "$out/result.json"
-                test "$(cat "$out/restored/hello.txt")" = "ok"
-                grep -q '"ok": true' "$out/restored/MATERIALIZE_MANIFEST.json"
-              '';
           ops-knowledge-intake =
             pkgs.runCommand "ops-knowledge-intake-check"
               {

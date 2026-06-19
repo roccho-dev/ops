@@ -70,7 +70,6 @@ Agent は「node へ書き換えた」だけでは**報告に値しない**。�
 py↔node 差分検証(`a467596a…` + gen0 独立再現)の結果と確定方針:
 - **STAY-PY(runtime:python・proposal から node 除外)**: `ops-src-runtime-pack` — 根=`tarfile`(node に無い)。実証: 非ASCII名 latin1 mojibake / 100byte 切詰め / symlink 非対応 / archive sha 乖離(#23,25,26,27,28)。
 - **FIXABLE → node 化(直して再実証)**:
-  - `ops-artifact-materialize`: MATERIALIZE_MANIFEST を ensure_ascii serializer(**sort_keys 無し**)へ(#17,45,66)。
   - `ops-knowledge-intake`: 忠実 csv reader(quote/埋め込みタブ・改行=python csv 互換)+ summary を ensure_ascii ser へ(#1,2,3)。
 - **削除(proposal から除去)**: `ops-tailnet-github-egress` + `git-push-tailnet` — package dir / build/packages.jsonl 2行 / refs-vault の vestigial deps / spec/implements.json エントリ / flake.nix の 2 check。refs-vault は tailnet 未使用のため機能影響なし。
 - **NODE-OK 維持**: `ops-handoff-core` `ops-thread-fsm` `package-architecture-map` `ops-runbook-checks` `prove-feat` `ops-refs-vault`(具体 sha 一致で実証済)。

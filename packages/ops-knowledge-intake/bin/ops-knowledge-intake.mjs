@@ -40,7 +40,6 @@ const PROMOTABLE_ROLES = new Set([
   "project_source_input",
   "ledger",
   "event_log",
-  "b64_payload",
 ]);
 
 // Faithful reader compatible with Python csv.DictReader(f, delimiter="\t").
@@ -228,12 +227,6 @@ function classify(row) {
     cause = "A run needed durable state to avoid forgetting what was assigned or accepted.";
     detection = "Status is unclear, actor ownership is lost, or a completed/blocked thread must be reconstructed.";
     recovery = "Promote event schema/checks, not ad-hoc status prose.";
-  } else if (role === "b64_payload") {
-    kind = "artifact-contract-evidence";
-    symptom = `B64 payload exists: ${basename}`;
-    cause = "Plain BEGIN_FILE or file chip output was not reliable enough for machine artifacts.";
-    detection = "Output must be materialized with bytes and sha256 evidence.";
-    recovery = "Use BEGIN_B64_FILE plus materialize gate before local merge.";
   } else {
     return null;
   }

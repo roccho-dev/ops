@@ -32,14 +32,6 @@ F=再現性/冪等 G=構文解析(csv/regex) H=FS/パス I=プロセス J=時刻
 15. claim 追記時の sort_keys 差 → 既存行と異なる正規化で後続の重複検出が誤動作 [C,A]
 16. scope に絵文字(サロゲートペア)→ escaper のサロゲート分解が py と不一致で表示・ハッシュ破綻 [B,A]
 
-## ops-artifact-materialize(base64 / hashlib / json 既定 / re / 冪等)
-17. artifact 本文が非ASCII → 復元後の内容ハッシュ照合が encode 差で不一致、改竄誤検知 [A,B]
-18. base64 に改行/パディング変種 → py base64 と node Buffer の寛容度差で復元成否が分かれる [G,M]
-19. 同一スレッドを2回 materialize → manifest の ok/ハッシュが冪等でなく再実行で別結果 [F,A]
-20. `--strict-count` 対象が非ASCII → 抽出 re の `\w` ユニコード差でカウントずれ strict-count 誤判定 [G,B]
-21. 本文の CRLF → py 保持 / node 正規化で内容ハッシュ不一致 [B,A]
-22. 抽出 regex が `re.DOTALL/MULTILINE` 依存 → node フラグ差で artifact 境界の切出しが変わり内容欠落 [G]
-
 ## ops-src-runtime-pack(tarfile / gzip / hashlib / sort_keys / subprocess)
 23. 同一 source を2回 pack → gzip header の mtime/OS バイトで bytes が変わり「同入力同成果」契約破綻 [F]
 24. 自前 USTAR の checksum/mode(octal)実装差 → py tarfile 生成物と展開互換が崩れ消費側 tar が破損判定 [E,L]

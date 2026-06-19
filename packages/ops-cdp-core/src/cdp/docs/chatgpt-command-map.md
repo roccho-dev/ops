@@ -279,7 +279,6 @@ nix run .#chromium-cdp-read-thread -- \
 - 回答本文内の `sandbox:/mnt/data/...` は `<a>` ではなく `button.behavior-btn` として出ることがある。
 - その場合、`innerText` では見えず `textContent` や React props 内の `href` からだけ見えることがある。
 - `chromium-cdp-list-artifacts` は `kind=sandbox_button`, `match=react_sandbox_href` として列挙する。
-- `chromium-cdp-fetch-artifact` は browser download が発生しない時、UI が発火した authenticated interpreter download response をCDP内で捕まえ、zip bytesならbase64復元する。
 - backend が `{"status":"retry"}` を返し続ける場合は、CDP認識の問題ではなく、その sandbox file がその時点で materialize されていない扱いにする。
 
 ### project から新規会話を作って送る

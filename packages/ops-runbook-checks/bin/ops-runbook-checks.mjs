@@ -51,7 +51,6 @@ const REQUIRED_STATIC_PATHS = [
 
 const OPTIONAL_LEGACY_PATHS = [
   "cdp-ops-poc",
-  "ops/packages/ops-artifact-materialize",
   "ops/packages/ops-knowledge-intake",
 ];
 
