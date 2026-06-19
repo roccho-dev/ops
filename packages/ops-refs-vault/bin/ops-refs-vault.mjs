@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 process.on("unhandledRejection", (e) => {
@@ -90,6 +91,17 @@ function printJson(value) {
   out(dumps2(value) + "\n");
 }
 
+function writeJsonFile(p, value) {
+  fs.mkdirSync(path.dirname(path.resolve(p)), { recursive: true });
+  fs.writeFileSync(p, dumps2(value) + "\n", { encoding: "utf8" });
+}
+
+function sha256File(p) {
+  const h = crypto.createHash("sha256");
+  h.update(fs.readFileSync(p));
+  return h.digest("hex");
+}
+
 function run(cmd, { cwd = null, check = true, capture = false } = {}) {
   const opts = { encoding: "utf8" };
   if (cwd !== null && cwd !== undefined) opts.cwd = cwd;
@@ -157,6 +169,74 @@ function sourceBare(repo) {
     throw new VaultError(`manifest repoId=${repo.repoId} is missing sourceBarePath`);
   }
   return p;
+}
+
+function readExcludeFile(p) {
+  if (!p) return new Set();
+  const ids = new Set();
+  for (const raw of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    validateRepoId(line);
+    ids.add(line);
+  }
+  return ids;
+}
+
+function repoIdFromBareName(name) {
+  if (!name.endsWith(".git")) return null;
+  const repoId = name.slice(0, -4);
+  validateRepoId(repoId);
+  return repoId;
+}
+
+function discoverBareRepos(bareRoot, excludeFile = null) {
+  const root = path.resolve(bareRoot);
+  const excludes = readExcludeFile(excludeFile);
+  const repos = [];
+  const seen = new Set();
+  for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
+    const repoId = repoIdFromBareName(ent.name);
+    if (!repoId) continue;
+    const sourceBarePath = path.join(root, ent.name);
+    if (!isLocalBare(sourceBarePath)) continue;
+    seen.add(repoId);
+    if (excludes.has(repoId)) continue;
+    repos.push({ repoId, sourceBarePath });
+  }
+  const unknownExcludes = [...excludes].filter((repoId) => !seen.has(repoId)).sort();
+  if (unknownExcludes.length) {
+    throw new VaultError(`exclude file contains repoIds not present under bare root: ${unknownExcludes.join(", ")}`);
+  }
+  repos.sort((a, b) => a.repoId.localeCompare(b.repoId));
+  return { bareRoot: root, repos, excludedRepoIds: [...excludes].sort() };
+}
+
+function cmdGenerateManifest(args) {
+  const discovered = discoverBareRepos(args.bare_root, args.exclude_file);
+  const remote = args.remote || DEFAULT_REMOTE;
+  const manifest = {
+    kind: "ops.refsVault.generatedManifest.v1",
+    authority: "filesystem-snapshot-not-ssot-authority",
+    source: {
+      bareRoot: discovered.bareRoot,
+      excludeFile: args.exclude_file || null,
+      excludedRepoIds: discovered.excludedRepoIds,
+    },
+    targetForgeRepo: {
+      sshUrl: remote,
+    },
+    repos: discovered.repos,
+  };
+  writeJsonFile(args.out, manifest);
+  printJson({
+    ok: true,
+    mode: "generate-manifest",
+    out: path.resolve(args.out),
+    repoCount: manifest.repos.length,
+    excludedRepoIds: discovered.excludedRepoIds,
+    manifestDigest: sha256File(args.out),
+  });
 }
 
 function namespacedHead(repoId, branch) {
@@ -326,13 +406,17 @@ function cmdBackupAll(args) {
     }
   }
   const allOk = results.every((item) => item.ok);
-  printJson({
+  const report = {
     ok: allOk,
     mode: "backup-all",
+    manifestPath: path.resolve(args.manifest),
+    manifestDigest: sha256File(args.manifest),
     vaultRemote: vault,
     dryRun: args.dry_run,
     results,
-  });
+  };
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  printJson(report);
   if (!allOk) {
     throw new VaultError("one or more refs failed backup");
   }
@@ -432,6 +516,101 @@ function cmdVerifyOne(args) {
   });
   if (!ok) {
     throw new VaultError("source and vault hashes differ");
+  }
+}
+
+function cmdVerifyAll(args) {
+  const manifest = loadManifest(args.manifest);
+  const vault = vaultRemote(manifest, args.remote);
+  const results = [];
+  for (const [repoId, repo] of manifestRepos(manifest)) {
+    const source = sourceBare(repo);
+    try {
+      for (const [, branch] of listSourceHeads(source)) {
+        const sourceRef = `refs/heads/${branch}`;
+        const vaultRef = namespacedHead(repoId, branch);
+        const sourceHash = oneRemoteHash(source, sourceRef);
+        const vaultHash = oneRemoteHash(vault, vaultRef);
+        const ok = Boolean(sourceHash) && sourceHash === vaultHash;
+        results.push({
+          ok,
+          repoId,
+          branch,
+          sourceBarePath: source,
+          sourceRef,
+          vaultRef,
+          sourceHash,
+          vaultHash,
+          status: ok ? "verified" : "mismatch",
+        });
+      }
+    } catch (exc) {
+      results.push({ ok: false, repoId, sourceBarePath: source, status: "failed", error: errStr(exc) });
+    }
+  }
+  const allOk = results.every((item) => item.ok);
+  printJson({
+    ok: allOk,
+    mode: "verify-all",
+    manifestPath: path.resolve(args.manifest),
+    manifestDigest: sha256File(args.manifest),
+    vaultRemote: vault,
+    results,
+  });
+  if (!allOk) {
+    throw new VaultError("one or more refs failed verify");
+  }
+}
+
+function cmdOrphanAudit(args) {
+  const manifest = loadManifest(args.manifest);
+  const vault = vaultRemote(manifest, args.remote);
+  const expectedRefs = new Set();
+  const expectedRepoIds = new Set();
+  const sourceFailures = [];
+  for (const [repoId, repo] of manifestRepos(manifest)) {
+    expectedRepoIds.add(repoId);
+    const source = sourceBare(repo);
+    try {
+      for (const [, branch] of listSourceHeads(source)) {
+        expectedRefs.add(namespacedHead(repoId, branch));
+      }
+    } catch (exc) {
+      sourceFailures.push({ repoId, sourceBarePath: source, error: errStr(exc) });
+    }
+  }
+  const vaultRefs = lsRemote(vault, "refs/heads/repos/*").map(([sha, ref]) => ({ hash: sha, ref }));
+  const vaultRefSet = new Set(vaultRefs.map((row) => row.ref));
+  const missingRefs = [...expectedRefs].filter((ref) => !vaultRefSet.has(ref)).sort();
+  const orphanRefs = vaultRefs
+    .filter((row) => !expectedRefs.has(row.ref))
+    .map((row) => row.ref)
+    .sort();
+  const extraRepoIds = [
+    ...new Set(
+      orphanRefs
+        .map((ref) => ref.match(/^refs\/heads\/repos\/([^/]+)\//))
+        .filter(Boolean)
+        .map((m) => m[1])
+        .filter((repoId) => !expectedRepoIds.has(repoId)),
+    ),
+  ].sort();
+  const ok = sourceFailures.length === 0 && missingRefs.length === 0 && orphanRefs.length === 0;
+  printJson({
+    ok,
+    mode: "orphan-audit",
+    manifestPath: path.resolve(args.manifest),
+    manifestDigest: sha256File(args.manifest),
+    vaultRemote: vault,
+    expectedRefs: expectedRefs.size,
+    vaultRefs: vaultRefs.length,
+    missingRefs,
+    orphanRefs,
+    extraRepoIds,
+    sourceFailures,
+  });
+  if (!ok) {
+    throw new VaultError("vault refs differ from generated manifest snapshot");
   }
 }
 
@@ -559,21 +738,19 @@ function cmdSmokeLocal() {
     proof("P01", "local working clones can update repo-specific bare SSOT repos by normal git push", [alphaBare, betaBare]);
 
     const manifest = path.join(root, "manifest.json");
-    fs.writeFileSync(
-      manifest,
-      dumps2({
-        targetForgeRepo: { sshUrl: vault },
-        repos: [
-          { repoId: "alpha", sourceBarePath: alphaBare },
-          { repoId: "beta", sourceBarePath: betaBare },
-        ],
-      }),
-      { encoding: "utf8" },
+    withRedirectStdout(() =>
+      cmdGenerateManifest({ bare_root: path.join(root, "ssot"), out: manifest, remote: vault, exclude_file: null }),
     );
+    proof("P12", "generate-manifest derives a non-authority backup snapshot from the bare root", [manifest]);
 
-    const backup = { manifest, remote: null, branch: null, force: false, dry_run: false };
+    const receipt = path.join(root, "backup-receipt.json");
+    const backup = { manifest, remote: null, branch: null, force: false, dry_run: false, receipt_out: receipt };
     withRedirectStdout(() => cmdBackupAll(backup));
     proof("P02", "backup-all reads manifest sourceBarePath and backs up repo-specific bare SSOT repos", [manifest]);
+    if (!fs.existsSync(receipt)) {
+      throw new VaultError("backup receipt missing");
+    }
+    proof("P13", "backup-all can emit a receipt containing the manifest digest and per-ref results", [receipt]);
 
     const vaultAlphaRef = namespacedHead("alpha", branch);
     const vaultBetaRef = namespacedHead("beta", branch);
@@ -589,6 +766,10 @@ function cmdSmokeLocal() {
     const verify = { manifest, remote: null, repo_id: "alpha", branch };
     withRedirectStdout(() => cmdVerifyOne(verify));
     proof("P05", "verify-one compares source bare hash with forge backup hash", ["verify-one alpha/main"]);
+    withRedirectStdout(() => cmdVerifyAll({ manifest, remote: null }));
+    proof("P14", "verify-all compares every generated manifest source head with the forge backup hash", ["verify-all"]);
+    withRedirectStdout(() => cmdOrphanAudit({ manifest, remote: null }));
+    proof("P15", "orphan-audit rejects missing or extra forge refs relative to the generated snapshot", ["orphan-audit"]);
 
     const inventory = { manifest, out_dir: path.join(root, "inventory") };
     withRedirectStdout(() => cmdInventory(inventory));
@@ -688,17 +869,22 @@ const PROG = "ops-refs-vault";
 // Byte-reproduced from argparse with prog="ops-refs-vault".
 const TOP_USAGE =
   `usage: ${PROG} [-h]\n` +
-  `                      {backup-one,backup-all,restore-bare-one,promote-staging-bare,audit,verify-one,inventory,smoke-local} ...\n`;
+  `                      {generate-manifest,backup-one,backup-all,restore-bare-one,promote-staging-bare,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
 
 // Per-subcommand usage blocks, byte-reproduced from argparse (prog="ops-refs-vault <cmd>").
 const SUB_USAGE = {
+  "generate-manifest":
+    `usage: ${PROG} generate-manifest [-h] --bare-root BARE_ROOT --out OUT\n` +
+    `                                      [--remote REMOTE]\n` +
+    `                                      [--exclude-file EXCLUDE_FILE]\n`,
   "backup-one":
     `usage: ${PROG} backup-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
     `                                 --branch BRANCH [--remote REMOTE] [--force]\n` +
     `                                 [--dry-run]\n`,
   "backup-all":
     `usage: ${PROG} backup-all [-h] --manifest MANIFEST [--remote REMOTE]\n` +
-    `                                 [--branch BRANCH] [--force] [--dry-run]\n`,
+    `                                 [--branch BRANCH] [--receipt-out RECEIPT_OUT]\n` +
+    `                                 [--force] [--dry-run]\n`,
   "restore-bare-one":
     `usage: ${PROG} restore-bare-one [-h] --manifest MANIFEST\n` +
     `                                       --repo-id REPO_ID --branch BRANCH\n` +
@@ -713,6 +899,8 @@ const SUB_USAGE = {
   "verify-one":
     `usage: ${PROG} verify-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
     `                                 --branch BRANCH [--remote REMOTE]\n`,
+  "verify-all": `usage: ${PROG} verify-all [-h] --manifest MANIFEST [--remote REMOTE]\n`,
+  "orphan-audit": `usage: ${PROG} orphan-audit [-h] --manifest MANIFEST [--remote REMOTE]\n`,
   inventory: `usage: ${PROG} inventory [-h] --manifest MANIFEST --out-dir OUT_DIR\n`,
   "smoke-local": `usage: ${PROG} smoke-local [-h]\n`,
 };
@@ -730,19 +918,38 @@ function subUsageError(command, msg) {
 }
 
 const SUB_SPEC = {
+  "generate-manifest": {
+    flags: ["--remote", "--exclude-file"],
+    bools: [],
+    required: ["--bare-root", "--out"],
+  },
   "backup-one": { flags: ["--remote"], bools: ["--force", "--dry-run"], required: ["--manifest", "--repo-id", "--branch"] },
-  "backup-all": { flags: ["--remote", "--branch"], bools: ["--force", "--dry-run"], required: ["--manifest"] },
+  "backup-all": { flags: ["--remote", "--branch", "--receipt-out"], bools: ["--force", "--dry-run"], required: ["--manifest"] },
   "restore-bare-one": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch", "--staging-bare"] },
   "promote-staging-bare": { flags: [], bools: ["--confirm"], required: ["--repo-id", "--staging-bare", "--target-bare"] },
   audit: { flags: ["--remote"], bools: [], required: ["--manifest"] },
   "verify-one": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch"] },
+  "verify-all": { flags: ["--remote"], bools: [], required: ["--manifest"] },
+  "orphan-audit": { flags: ["--remote"], bools: [], required: ["--manifest"] },
   inventory: { flags: [], bools: [], required: ["--manifest", "--out-dir"] },
   "smoke-local": { flags: [], bools: [], required: [] },
 };
 
 function parseSub(command, rest) {
   const spec = SUB_SPEC[command];
-  const allFlags = ["--manifest", "--repo-id", "--branch", "--remote", "--staging-bare", "--target-bare", "--out-dir"];
+  const allFlags = [
+    "--manifest",
+    "--repo-id",
+    "--branch",
+    "--remote",
+    "--staging-bare",
+    "--target-bare",
+    "--out-dir",
+    "--bare-root",
+    "--out",
+    "--exclude-file",
+    "--receipt-out",
+  ];
   const key = (flag) => flag.replace(/^--/, "").replace(/-/g, "_");
   const out = {
     manifest: undefined,
@@ -752,6 +959,10 @@ function parseSub(command, rest) {
     staging_bare: undefined,
     target_bare: undefined,
     out_dir: undefined,
+    bare_root: undefined,
+    out: undefined,
+    exclude_file: null,
+    receipt_out: null,
     force: false,
     dry_run: false,
     confirm: false,
@@ -780,12 +991,15 @@ function parseSub(command, rest) {
 }
 
 const DISPATCH = {
+  "generate-manifest": cmdGenerateManifest,
   "backup-one": cmdBackupOne,
   "backup-all": cmdBackupAll,
   "restore-bare-one": cmdRestoreBareOne,
   "promote-staging-bare": cmdPromoteStagingBare,
   audit: cmdAudit,
   "verify-one": cmdVerifyOne,
+  "verify-all": cmdVerifyAll,
+  "orphan-audit": cmdOrphanAudit,
   inventory: cmdInventory,
   "smoke-local": cmdSmokeLocal,
 };
@@ -798,7 +1012,7 @@ function main(argv) {
   const command = args[0];
   if (!(command in DISPATCH)) {
     topUsageError(
-      `argument command: invalid choice: '${command}' (choose from backup-one, backup-all, restore-bare-one, promote-staging-bare, audit, verify-one, inventory, smoke-local)`,
+      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, restore-bare-one, promote-staging-bare, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
     );
   }
   const parsed = command === "smoke-local" ? {} : parseSub(command, args.slice(1));

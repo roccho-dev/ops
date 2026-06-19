@@ -567,7 +567,7 @@
                 mkdir -p "$out"
                 ops-refs-vault smoke-local > "$out/report.json"
                 grep -q '"ok": true' "$out/report.json"
-                for proof in P01 P02 P03 P04 P05 P06 P07 P08 P09 P10 P11; do
+                for proof in P01 P02 P03 P04 P05 P06 P07 P08 P09 P10 P11 P12 P13 P14 P15; do
                   grep -q "\"id\": \"$proof\"" "$out/report.json"
                 done
               '';
