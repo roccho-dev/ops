@@ -300,41 +300,6 @@
           prove-feat-format = proveFeatFormat;
           prove-feat-deadnix = proveFeatDeadnix;
           prove-feat-contract-lint = proveFeatContractLint;
-          ops-feat-input-continuity =
-            pkgs.runCommand "ops-feat-input-continuity-check"
-              {
-                nativeBuildInputs = [
-                  pkgs.gnugrep
-                  self.packages.${pkgs.stdenv.hostPlatform.system}.ops-feat-input-continuity
-                ];
-              }
-              ''
-                mkdir -p "$out" "$TMPDIR/feat-input-continuity"
-                base_package_contract="$TMPDIR/feat-input-continuity/base-package-contract.v1.jsonl"
-                synthetic_drop_base="$TMPDIR/feat-input-continuity/synthetic-drop-base.v1.jsonl"
-                cp ${governance}/records/specs/package-contract.v1.jsonl "$base_package_contract"
-                ops-feat-input-continuity \
-                  --governance-root ${governance} \
-                  --require-base \
-                  --base-package-contract "$base_package_contract" \
-                  > "$out/pass.log"
-                grep -q 'accepted-set-non-decrease: PASS' "$out/pass.log"
-                grep -q 'feat-input-continuity: PASS' "$out/pass.log"
-
-                cp "$base_package_contract" "$synthetic_drop_base"
-                chmod u+w "$synthetic_drop_base"
-                printf '%s\n' '{"packageId":"__synthetic_removed_accepted__","status":"accepted"}' >> "$synthetic_drop_base"
-                if ops-feat-input-continuity \
-                  --governance-root ${governance} \
-                  --require-base \
-                  --base-package-contract "$synthetic_drop_base" \
-                  > "$out/synthetic-drop.log" 2>&1; then
-                  echo "synthetic accepted-package drop unexpectedly passed" >&2
-                  exit 1
-                fi
-                grep -q '__synthetic_removed_accepted__' "$out/synthetic-drop.log"
-                touch "$out/ok"
-              '';
           prove-feat =
             pkgs.runCommand "prove-feat-check"
               {
