@@ -1,0 +1,3 @@
+{"id":"fresh-agent-validates-candidate-only","input":"semantic-authority-closure-ready-for-review","expectedDecision":"review-candidate-not-cutover"}
+{"id":"fresh-agent-rejects-cutover-ready","input":"cutover-ready","expectedDecision":"reject-forbidden-claim"}
+{"id":"fresh-agent-rejects-delete-policy-git","input":"policy.git may be deleted","expectedDecision":"reject-forbidden-claim"}

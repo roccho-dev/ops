@@ -379,6 +379,27 @@
                   --stdout > "$out/stdout.mmd"
                 cmp "$out/stdout.mmd" "$out/dist/latest.mmd"
               '';
+          policy-semantic-compiler =
+            pkgs.runCommand "policy-semantic-compiler-check"
+              {
+                nativeBuildInputs = [
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.policy-semantic-compiler
+                  pkgs.gnugrep
+                ];
+              }
+              ''
+                mkdir -p "$out"
+                policy-semantic-compiler check-fixtures \
+                  --fixtures ${./packages/policy-semantic-compiler/tests/edge-counterexamples.jsonl} \
+                  > "$out/fixtures.json"
+                grep -q '"ok": true' "$out/fixtures.json"
+                policy-semantic-compiler cutover-blocked --out "$out/cutover-blocked.json" \
+                  > "$out/cutover-blocked.stdout.json"
+                grep -q '"status": "cutover-blocked"' "$out/cutover-blocked.json"
+                grep -q '"cutoverReady": false' "$out/cutover-blocked.json"
+                grep -q '"policyDeletionApproved": false' "$out/cutover-blocked.json"
+                touch "$out/ok"
+              '';
           ops-runbook-checks =
             pkgs.runCommand "ops-runbook-checks-check"
               {
