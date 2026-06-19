@@ -402,6 +402,32 @@
                   --fixtures ${./packages/policy-semantic-compiler/tests/fresh-agent-cases.jsonl} \
                   > "$out/fresh-agent-cases.json"
                 grep -q '"ok": true' "$out/fresh-agent-cases.json"
+                mkdir -p "$out/semantic-review-blocked" "$out/semantic-review-accepted"
+                ! policy-semantic-compiler review-semantic-coverage \
+                  --source-files ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-files.jsonl} \
+                  --source-spans ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-spans.jsonl} \
+                  --semantic-nodes ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-nodes.jsonl} \
+                  --semantic-edges ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-edges.jsonl} \
+                  --out-dir "$out/semantic-review-blocked" \
+                  > "$out/semantic-review-blocked.stdout.json"
+                grep -q '"acceptedSemanticApprovalCount": 0' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"totalSourceSpanCount": 2' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"equivalenceProofPresent": false' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"cutoverReady": false' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"reviewPacketCount": 2' "$out/semantic-review-blocked.stdout.json"
+                policy-semantic-compiler review-semantic-coverage \
+                  --source-files ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-files.jsonl} \
+                  --source-spans ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-spans.jsonl} \
+                  --semantic-nodes ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-nodes.jsonl} \
+                  --semantic-edges ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-edges.jsonl} \
+                  --approvals ${./packages/policy-semantic-compiler/tests/semantic-coverage/approvals.jsonl} \
+                  --equivalence-proofs ${./packages/policy-semantic-compiler/tests/semantic-coverage/equivalence-proofs.jsonl} \
+                  --out-dir "$out/semantic-review-accepted" \
+                  > "$out/semantic-review-accepted.stdout.json"
+                grep -q '"acceptedSemanticApprovalCount": 2' "$out/semantic-review-accepted.stdout.json"
+                grep -q '"totalSourceSpanCount": 2' "$out/semantic-review-accepted.stdout.json"
+                grep -q '"equivalenceProofPresent": true' "$out/semantic-review-accepted.stdout.json"
+                grep -q '"cutoverReady": true' "$out/semantic-review-accepted.stdout.json"
                 policy-semantic-compiler cutover-blocked --out "$out/cutover-blocked.json" \
                   > "$out/cutover-blocked.stdout.json"
                 grep -q '"status": "cutover-blocked"' "$out/cutover-blocked.json"

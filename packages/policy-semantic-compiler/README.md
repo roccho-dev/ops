@@ -43,3 +43,21 @@ mode contract tests. It writes `POLICY_ENTRY_ACCEPTED=true`,
 `POLICY_ENTRY_FIXTURE_ONLY=true`, and a content lock so the bootstrap proposal
 can prove the consumer path works without claiming a real accepted projection
 exists.
+
+## Semantic Coverage Review
+
+`review-semantic-coverage` reads ADR policy graph JSONL:
+
+- `policy.sourceFile.v1`
+- `policy.sourceSpan.v1`
+- `policy.semanticNode.v1`
+- `policy.semanticEdge.v1`
+
+It emits `semantic-coverage-review-packets.jsonl`, grouped by source path,
+node kind, and edge kind, plus `semantic-coverage-summary.json`.
+
+The summary reports `acceptedSemanticApprovalCount`, `totalSourceSpanCount`,
+mechanical orphan/integrity counts, and whether an accepted equivalence proof
+exists. It is fail-closed: `cutoverReady` remains false and the command exits
+nonzero until every source span has accepted semantic approval, an accepted
+semantic equivalence proof exists, and graph integrity/orphan counts are zero.

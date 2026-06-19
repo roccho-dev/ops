@@ -7,6 +7,7 @@ work="${1:-$(mktemp -d)}"
 
 mkdir -p "$work/run-a" "$work/run-b" "$work/python-only"
 mkdir -p "$work/projected-real" "$work/projected-fixture"
+mkdir -p "$work/semantic-review-blocked" "$work/semantic-review-accepted"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -20,6 +21,34 @@ grep -q '"ok": true' "$work/counterexamples.json"
 policy-semantic-compiler check-fresh-agent-cases \
   --fixtures "$pkg_root/tests/fresh-agent-cases.jsonl" > "$work/fresh-agent-cases.json"
 grep -q '"ok": true' "$work/fresh-agent-cases.json"
+
+if policy-semantic-compiler review-semantic-coverage \
+  --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
+  --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \
+  --semantic-nodes "$pkg_root/tests/semantic-coverage/semantic-nodes.jsonl" \
+  --semantic-edges "$pkg_root/tests/semantic-coverage/semantic-edges.jsonl" \
+  --out-dir "$work/semantic-review-blocked" > "$work/semantic-review-blocked.stdout.json"; then
+  echo "semantic coverage review unexpectedly passed without approvals" >&2
+  exit 1
+fi
+grep -q '"acceptedSemanticApprovalCount": 0' "$work/semantic-review-blocked.stdout.json"
+grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-blocked.stdout.json"
+grep -q '"equivalenceProofPresent": false' "$work/semantic-review-blocked.stdout.json"
+grep -q '"cutoverReady": false' "$work/semantic-review-blocked.stdout.json"
+grep -q '"reviewPacketCount": 2' "$work/semantic-review-blocked.stdout.json"
+
+policy-semantic-compiler review-semantic-coverage \
+  --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
+  --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \
+  --semantic-nodes "$pkg_root/tests/semantic-coverage/semantic-nodes.jsonl" \
+  --semantic-edges "$pkg_root/tests/semantic-coverage/semantic-edges.jsonl" \
+  --approvals "$pkg_root/tests/semantic-coverage/approvals.jsonl" \
+  --equivalence-proofs "$pkg_root/tests/semantic-coverage/equivalence-proofs.jsonl" \
+  --out-dir "$work/semantic-review-accepted" > "$work/semantic-review-accepted.stdout.json"
+grep -q '"acceptedSemanticApprovalCount": 2' "$work/semantic-review-accepted.stdout.json"
+grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-accepted.stdout.json"
+grep -q '"equivalenceProofPresent": true' "$work/semantic-review-accepted.stdout.json"
+grep -q '"cutoverReady": true' "$work/semantic-review-accepted.stdout.json"
 
 policy-semantic-compiler compile \
   --policy-root "$policy_root" \

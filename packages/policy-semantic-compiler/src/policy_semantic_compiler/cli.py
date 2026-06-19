@@ -413,6 +413,225 @@ def read_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def row_id(row: dict) -> str | None:
+    value = row.get("id") or row.get("sourceSpanId") or row.get("spanId")
+    return str(value) if value is not None else None
+
+
+def row_ids(rows: Iterable[dict]) -> set[str]:
+    return {rid for row in rows if (rid := row_id(row))}
+
+
+def as_list(value: object) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def source_path_for_span(span: dict, source_files_by_id: dict[str, dict]) -> str:
+    trace = span.get("sourceTrace") if isinstance(span.get("sourceTrace"), dict) else {}
+    if trace.get("path"):
+        return str(trace["path"])
+    source_file = source_files_by_id.get(str(span.get("sourceFileId")))
+    return str(source_file.get("path") or "<unknown>")
+
+
+def accepted_span_ids_from_rows(rows: Iterable[dict]) -> set[str]:
+    accepted: set[str] = set()
+    for row in rows:
+        is_accepted = (
+            row.get("acceptedSemanticApproval") is True
+            or row.get("semanticApprovalAccepted") is True
+            or row.get("approvalStatus") == "accepted"
+            or row.get("status") in {"accepted", "pass", "approved"}
+        )
+        if not is_accepted:
+            continue
+        for key in ("sourceSpanId", "spanId", "id"):
+            value = row.get(key)
+            if value:
+                accepted.add(str(value))
+        for key in ("sourceSpanIds", "spanIds", "coveredSourceSpanIds"):
+            for value in as_list(row.get(key)):
+                if value:
+                    accepted.add(str(value))
+    return accepted
+
+
+def accepted_equivalence_proofs(rows: Iterable[dict]) -> list[dict]:
+    accepted = []
+    for row in rows:
+        status = row.get("status")
+        if (
+            row.get("acceptedSemanticEquivalence") is True
+            or row.get("equivalenceProofAccepted") is True
+            or status in {"accepted", "pass", "approved"}
+        ):
+            accepted.append(row)
+    return accepted
+
+
+def command_review_semantic_coverage(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    source_files = read_jsonl(Path(args.source_files))
+    source_spans = read_jsonl(Path(args.source_spans))
+    semantic_nodes = read_jsonl(Path(args.semantic_nodes))
+    semantic_edges = read_jsonl(Path(args.semantic_edges))
+    approval_rows = read_jsonl(Path(args.approvals)) if args.approvals else []
+    equivalence_rows = read_jsonl(Path(args.equivalence_proofs)) if args.equivalence_proofs else []
+
+    source_file_ids = row_ids(source_files)
+    span_ids = row_ids(source_spans)
+    node_ids = row_ids(semantic_nodes)
+    all_endpoint_ids = source_file_ids | span_ids | node_ids
+    source_files_by_id = {str(row["id"]): row for row in source_files if row.get("id")}
+
+    accepted_span_ids = accepted_span_ids_from_rows(source_spans) | accepted_span_ids_from_rows(approval_rows)
+    accepted_span_ids &= span_ids
+    accepted_equivalence = accepted_equivalence_proofs(equivalence_rows)
+
+    spans_missing_source_file = [
+        row_id(span)
+        for span in source_spans
+        if span.get("sourceFileId") and str(span.get("sourceFileId")) not in source_file_ids
+    ]
+    node_missing_source_span = [
+        {"nodeId": row_id(node), "sourceSpanId": str(span_id)}
+        for node in semantic_nodes
+        for span_id in as_list(node.get("sourceSpanIds"))
+        if str(span_id) not in span_ids
+    ]
+    edge_missing_endpoint = [
+        {"edgeId": row_id(edge), "field": field, "endpoint": str(edge.get(field))}
+        for edge in semantic_edges
+        for field in ("from", "to")
+        if edge.get(field) and str(edge.get(field)) not in all_endpoint_ids
+    ]
+    edge_missing_source_span = [
+        {"edgeId": row_id(edge), "sourceSpanId": str(span_id)}
+        for edge in semantic_edges
+        for span_id in as_list(edge.get("sourceSpanIds"))
+        if str(span_id) not in span_ids
+    ]
+
+    supported_span_ids = {
+        str(edge.get("from"))
+        for edge in semantic_edges
+        if edge.get("edgeKind") == "span-supports-semantic-node" and str(edge.get("from")) in span_ids
+    }
+    orphan_span_ids = sorted(span_ids - supported_span_ids)
+
+    node_kinds_by_span: dict[str, set[str]] = {span_id: set() for span_id in span_ids}
+    for node in semantic_nodes:
+        node_kind = str(node.get("nodeKind") or "<missing-node-kind>")
+        for span_id in as_list(node.get("sourceSpanIds")):
+            if str(span_id) in node_kinds_by_span:
+                node_kinds_by_span[str(span_id)].add(node_kind)
+
+    edge_kinds_by_span: dict[str, set[str]] = {span_id: set() for span_id in span_ids}
+    for edge in semantic_edges:
+        edge_kind = str(edge.get("edgeKind") or "<missing-edge-kind>")
+        candidate_ids = set(str(value) for value in as_list(edge.get("sourceSpanIds")))
+        for field in ("from", "to"):
+            if edge.get(field):
+                candidate_ids.add(str(edge.get(field)))
+        for span_id in candidate_ids & span_ids:
+            edge_kinds_by_span[span_id].add(edge_kind)
+
+    groups: dict[tuple[str, str, str], dict] = {}
+    for span in source_spans:
+        span_id = row_id(span)
+        if not span_id:
+            continue
+        path = source_path_for_span(span, source_files_by_id)
+        node_key = ",".join(sorted(node_kinds_by_span.get(span_id) or {"<missing-node-kind>"}))
+        edge_key = ",".join(sorted(edge_kinds_by_span.get(span_id) or {"<missing-edge-kind>"}))
+        key = (path, node_key, edge_key)
+        group = groups.setdefault(
+            key,
+            {
+                "kind": "policySemantic.semanticCoverageReviewPacket.v1",
+                "packetId": "packet:" + sha256_bytes("\0".join(key).encode("utf-8"))[:20],
+                "sourcePath": path,
+                "nodeKinds": sorted(node_key.split(",")),
+                "edgeKinds": sorted(edge_key.split(",")),
+                "sourceSpanIds": [],
+                "spanCount": 0,
+                "acceptedSemanticApprovalCount": 0,
+                "status": "blocked",
+                "reviewRequired": True,
+            },
+        )
+        group["sourceSpanIds"].append(span_id)
+        group["spanCount"] += 1
+        if span_id in accepted_span_ids:
+            group["acceptedSemanticApprovalCount"] += 1
+
+    packets = sorted(groups.values(), key=lambda row: (row["sourcePath"], row["nodeKinds"], row["edgeKinds"]))
+    for packet in packets:
+        packet["sourceSpanIds"] = sorted(packet["sourceSpanIds"])
+        packet["unapprovedSpanCount"] = packet["spanCount"] - packet["acceptedSemanticApprovalCount"]
+        packet["status"] = "accepted" if packet["unapprovedSpanCount"] == 0 else "blocked"
+
+    integrity_counts = {
+        "spansMissingSourceFile": len(spans_missing_source_file),
+        "nodesMissingSourceSpan": len(node_missing_source_span),
+        "edgesMissingEndpoint": len(edge_missing_endpoint),
+        "edgesMissingSourceSpan": len(edge_missing_source_span),
+        "orphanSpansWithoutSemanticNode": len(orphan_span_ids),
+    }
+    total_spans = len(span_ids)
+    accepted_count = len(accepted_span_ids)
+    equivalence_proof_present = bool(accepted_equivalence)
+    cutover_ready = (
+        total_spans > 0
+        and accepted_count == total_spans
+        and equivalence_proof_present
+        and all(count == 0 for count in integrity_counts.values())
+    )
+    blockers = []
+    if accepted_count != total_spans:
+        blockers.append("accepted semantic approval count does not equal total source spans")
+    if not equivalence_proof_present:
+        blockers.append("accepted semantic equivalence proof is missing")
+    for name, count in integrity_counts.items():
+        if count:
+            blockers.append(f"{name}={count}")
+
+    summary = {
+        "kind": "policySemantic.semanticCoverageReviewSummary.v1",
+        "ok": cutover_ready,
+        "status": "accepted" if cutover_ready else "blocked",
+        "cutoverReady": cutover_ready,
+        "policyDeletionApproved": False,
+        "generatedIsAuthority": False,
+        "migrationAuthority": False,
+        "cutoverAuthority": False,
+        "acceptedSemanticApprovalCount": accepted_count,
+        "totalSourceSpanCount": total_spans,
+        "equivalenceProofPresent": equivalence_proof_present,
+        "acceptedEquivalenceProofCount": len(accepted_equivalence),
+        "reviewPacketCount": len(packets),
+        "orphanOrIntegrityCounts": integrity_counts,
+        "blockers": blockers,
+        "outputs": {
+            "reviewPackets": "semantic-coverage-review-packets.jsonl",
+            "summary": "semantic-coverage-summary.json",
+        },
+    }
+    jsonl_write(out_dir / "semantic-coverage-review-packets.jsonl", packets)
+    (out_dir / "semantic-coverage-summary.json").write_text(
+        json.dumps(summary, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(summary, sort_keys=True))
+    return 0 if cutover_ready else 1
+
+
 def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
     table_defaults = {
         "sources": [],
@@ -704,6 +923,15 @@ def main(argv: list[str] | None = None) -> int:
     projected_check_parser.add_argument("--dir", required=True)
     projected_check_parser.add_argument("--expect-accepted", action="store_true")
     projected_check_parser.set_defaults(func=command_check_projected_policy_entry)
+    review_parser = sub.add_parser("review-semantic-coverage")
+    review_parser.add_argument("--source-files", required=True)
+    review_parser.add_argument("--source-spans", required=True)
+    review_parser.add_argument("--semantic-nodes", required=True)
+    review_parser.add_argument("--semantic-edges", required=True)
+    review_parser.add_argument("--approvals")
+    review_parser.add_argument("--equivalence-proofs")
+    review_parser.add_argument("--out-dir", required=True)
+    review_parser.set_defaults(func=command_review_semantic_coverage)
     args = parser.parse_args(argv)
     return args.func(args)
 
