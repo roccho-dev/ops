@@ -473,6 +473,15 @@ def accepted_equivalence_proofs(rows: Iterable[dict]) -> list[dict]:
     return accepted
 
 
+def disposition_by_source_file_id(rows: Iterable[dict]) -> dict[str, dict]:
+    dispositions: dict[str, dict] = {}
+    for row in rows:
+        source_file_id = row.get("sourceFileId")
+        if source_file_id:
+            dispositions[str(source_file_id)] = row
+    return dispositions
+
+
 def command_review_semantic_coverage(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -483,16 +492,26 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
     semantic_edges = read_jsonl(Path(args.semantic_edges))
     approval_rows = read_jsonl(Path(args.approvals)) if args.approvals else []
     equivalence_rows = read_jsonl(Path(args.equivalence_proofs)) if args.equivalence_proofs else []
+    disposition_rows = read_jsonl(Path(args.source_file_dispositions)) if args.source_file_dispositions else []
 
     source_file_ids = row_ids(source_files)
     span_ids = row_ids(source_spans)
     node_ids = row_ids(semantic_nodes)
     all_endpoint_ids = source_file_ids | span_ids | node_ids
     source_files_by_id = {str(row["id"]): row for row in source_files if row.get("id")}
+    dispositions_by_source_file_id = disposition_by_source_file_id(disposition_rows)
 
     accepted_span_ids = accepted_span_ids_from_rows(source_spans) | accepted_span_ids_from_rows(approval_rows)
     accepted_span_ids &= span_ids
     accepted_equivalence = accepted_equivalence_proofs(equivalence_rows)
+    non_normative_file_class_span_ids = {
+        str(row_id(span))
+        for span in source_spans
+        if row_id(span)
+        and dispositions_by_source_file_id.get(str(span.get("sourceFileId")), {}).get("requiresIndividualSemanticApproval")
+        is False
+    }
+    review_required_span_ids = span_ids - non_normative_file_class_span_ids
 
     spans_missing_source_file = [
         row_id(span)
@@ -568,13 +587,19 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         )
         group["sourceSpanIds"].append(span_id)
         group["spanCount"] += 1
-        if span_id in accepted_span_ids:
+        if span_id in non_normative_file_class_span_ids:
+            group["fileClassNonNormativeSpanCount"] = group.get("fileClassNonNormativeSpanCount", 0) + 1
+        else:
+            group["reviewRequiredSpanCount"] = group.get("reviewRequiredSpanCount", 0) + 1
+        if span_id in accepted_span_ids and span_id in review_required_span_ids:
             group["acceptedSemanticApprovalCount"] += 1
 
     packets = sorted(groups.values(), key=lambda row: (row["sourcePath"], row["nodeKinds"], row["edgeKinds"]))
     for packet in packets:
         packet["sourceSpanIds"] = sorted(packet["sourceSpanIds"])
-        packet["unapprovedSpanCount"] = packet["spanCount"] - packet["acceptedSemanticApprovalCount"]
+        packet.setdefault("fileClassNonNormativeSpanCount", 0)
+        packet.setdefault("reviewRequiredSpanCount", packet["spanCount"])
+        packet["unapprovedSpanCount"] = packet["reviewRequiredSpanCount"] - packet["acceptedSemanticApprovalCount"]
         packet["status"] = "accepted" if packet["unapprovedSpanCount"] == 0 else "blocked"
 
     integrity_counts = {
@@ -585,17 +610,19 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         "orphanSpansWithoutSemanticNode": len(orphan_span_ids),
     }
     total_spans = len(span_ids)
-    accepted_count = len(accepted_span_ids)
+    review_required_count = len(review_required_span_ids)
+    accepted_count = len(accepted_span_ids & review_required_span_ids)
+    non_normative_file_class_count = len(non_normative_file_class_span_ids)
     equivalence_proof_present = bool(accepted_equivalence)
     cutover_ready = (
         total_spans > 0
-        and accepted_count == total_spans
+        and accepted_count == review_required_count
         and equivalence_proof_present
         and all(count == 0 for count in integrity_counts.values())
     )
     blockers = []
-    if accepted_count != total_spans:
-        blockers.append("accepted semantic approval count does not equal total source spans")
+    if accepted_count != review_required_count:
+        blockers.append("accepted semantic approval count does not equal review-required source spans")
     if not equivalence_proof_present:
         blockers.append("accepted semantic equivalence proof is missing")
     for name, count in integrity_counts.items():
@@ -613,6 +640,9 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
         "cutoverAuthority": False,
         "acceptedSemanticApprovalCount": accepted_count,
         "totalSourceSpanCount": total_spans,
+        "reviewRequiredSourceSpanCount": review_required_count,
+        "fileClassNonNormativeSourceSpanCount": non_normative_file_class_count,
+        "sourceFileDispositionRows": len(disposition_rows),
         "equivalenceProofPresent": equivalence_proof_present,
         "acceptedEquivalenceProofCount": len(accepted_equivalence),
         "reviewPacketCount": len(packets),
@@ -926,6 +956,7 @@ def main(argv: list[str] | None = None) -> int:
     review_parser = sub.add_parser("review-semantic-coverage")
     review_parser.add_argument("--source-files", required=True)
     review_parser.add_argument("--source-spans", required=True)
+    review_parser.add_argument("--source-file-dispositions")
     review_parser.add_argument("--semantic-nodes", required=True)
     review_parser.add_argument("--semantic-edges", required=True)
     review_parser.add_argument("--approvals")

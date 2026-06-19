@@ -50,6 +50,7 @@ exists.
 
 - `policy.sourceFile.v1`
 - `policy.sourceSpan.v1`
+- optional `policy.sourceFileDisposition.v1`
 - `policy.semanticNode.v1`
 - `policy.semanticEdge.v1`
 
@@ -57,7 +58,11 @@ It emits `semantic-coverage-review-packets.jsonl`, grouped by source path,
 node kind, and edge kind, plus `semantic-coverage-summary.json`.
 
 The summary reports `acceptedSemanticApprovalCount`, `totalSourceSpanCount`,
+`reviewRequiredSourceSpanCount`, file-class non-normative span count,
 mechanical orphan/integrity counts, and whether an accepted equivalence proof
-exists. It is fail-closed: `cutoverReady` remains false and the command exits
-nonzero until every source span has accepted semantic approval, an accepted
-semantic equivalence proof exists, and graph integrity/orphan counts are zero.
+exists. File dispositions with `requiresIndividualSemanticApproval:false` are
+not semantic approval; they only remove source spans from the individual review
+denominator. The review remains fail-closed: `cutoverReady` remains false and
+the command exits nonzero until every review-required source span has accepted
+semantic approval, an accepted semantic equivalence proof exists, and graph
+integrity/orphan counts are zero.
