@@ -6,6 +6,8 @@ import json
 import os
 import re
 import shutil
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -1309,6 +1311,144 @@ def typed_gate(gates: list[dict], gate_id: str, ok: bool, details: dict | None =
     gates.append({"gate_id": gate_id, "status": "pass" if ok else "blocked", "details": details or {}})
 
 
+
+POLICY_DELETION_REF_TOKENS = (
+    "policy.git",
+    "/home/nixos/repos/policy",
+    "git+ssh://100.124.250.91/home/nixos/repos/policy.git",
+    "DEFAULT_POLICY_ROOT",
+    "POLICY_SEMANTIC_POLICY_ROOT",
+    "POLICY_URL",
+    "POLICY_PACKAGE_FLAKE_REF",
+)
+POLICY_DELETION_SKIP_DIRS = {".git", "result", "node_modules", "__pycache__"}
+POLICY_DELETION_SKIP_SUFFIXES = {".pyc", ".duckdb"}
+
+
+def deletion_rel_path(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def deletion_classify_reference(path: str, line: str) -> str:
+    low_path = path.lower()
+    low_line = line.lower()
+    if "tests/" in low_path or low_path.endswith("run.sh") or "fixture" in low_path or "counterexample" in low_path:
+        return "test-or-negative-control"
+    if "readme" in low_path or low_path.endswith(".md"):
+        return "documentation"
+    if "policy.git may be deleted" in low_line or "forbidden" in low_line or "negative" in low_line:
+        return "negative-control"
+    if any(token.lower() in low_line for token in ("nix run", "git+ssh://", "default_policy_root", "default source", "source must exist", "policy_fetch_default", "policy_package_flake_ref", "policy_url")):
+        return "active-runtime-candidate"
+    return "candidate-reference"
+
+
+def deletion_iter_files(root: Path):
+    if not root.exists():
+        return
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in POLICY_DELETION_SKIP_DIRS and not d.startswith(".worktrees")]
+        for filename in filenames:
+            path = Path(dirpath) / filename
+            if path.suffix in POLICY_DELETION_SKIP_SUFFIXES:
+                continue
+            yield path
+
+
+def deletion_scan_roots(roots: list[Path]) -> list[dict]:
+    rows: list[dict] = []
+    for root in roots:
+        root = root.resolve()
+        if not root.exists():
+            rows.append({"kind": "policyDeletion.consumerReference.v1", "repoRoot": str(root), "path": str(root), "lineNumber": 0, "token": "<missing-root>", "line": "", "referenceClass": "missing-scan-root", "activeRuntimeCandidate": True, "scanRootPresent": False, "claimAllowed": False, "status": "blocked"})
+            continue
+        for path in deletion_iter_files(root) or []:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            except OSError:
+                continue
+            rel = deletion_rel_path(path, root)
+            for lineno, line in enumerate(text.splitlines(), 1):
+                matched = [token for token in POLICY_DELETION_REF_TOKENS if token in line]
+                if not matched:
+                    continue
+                ref_class = deletion_classify_reference(rel, line)
+                rows.append({
+                    "kind": "policyDeletion.consumerReference.v1",
+                    "repoRoot": str(root),
+                    "path": rel,
+                    "lineNumber": lineno,
+                    "tokens": matched,
+                    "line": line.strip(),
+                    "referenceClass": ref_class,
+                    "activeRuntimeCandidate": ref_class == "active-runtime-candidate",
+                    "scanRootPresent": True,
+                    "claimAllowed": False,
+                    "status": "candidate",
+                })
+    return rows
+
+
+def deletion_run_absent_simulation(policy_root: Path, out_dir: Path) -> dict:
+    missing_root = out_dir / "missing-policy-root"
+    absent_out = out_dir / "absent-compile"
+    absent_out.mkdir(parents=True, exist_ok=True)
+    capture = io.StringIO()
+    with contextlib.redirect_stdout(capture), contextlib.redirect_stderr(capture):
+        rc = command_compile(argparse.Namespace(policy_root=str(missing_root), out_dir=str(absent_out), duckdb_bin="duckdb", python_only=False))
+    output = capture.getvalue().strip()
+    return {
+        "kind": "policyDeletion.absentSimulation.v1",
+        "policyRoot": str(missing_root),
+        "command": "policy-semantic-compiler compile",
+        "exitCode": rc,
+        "consumerPassedWithoutPolicyGit": rc == 0,
+        "observedDecision": "blocked-fail-closed" if rc != 0 else "passed",
+        "capturedOutput": output,
+        "claimAllowed": False,
+        "status": "blocked" if rc != 0 else "candidate-pass",
+    }
+
+
+def command_review_deletion_readiness(args: argparse.Namespace) -> int:
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    roots = [Path(item) for item in (args.repo_root or [])]
+    reference_rows = deletion_scan_roots(roots)
+    absent = deletion_run_absent_simulation(Path(args.policy_root), out_dir)
+    active_refs = [row for row in reference_rows if row.get("activeRuntimeCandidate")]
+    missing_scan_roots = [row for row in reference_rows if row.get("referenceClass") == "missing-scan-root"]
+    deletion_approved = False
+    gates: list[dict] = []
+    typed_gate(gates, "scan-roots-present", len(missing_scan_roots) == 0 and bool(roots), {"missingScanRootCount": len(missing_scan_roots), "missingScanRoots": missing_scan_roots[:25], "scannedRootCount": len(roots)})
+    typed_gate(gates, "active-policy-consumers-zero", len(active_refs) == 0 and len(missing_scan_roots) == 0, {"activeRuntimeReferenceCount": len(active_refs), "activeRuntimeReferences": active_refs[:25]})
+    typed_gate(gates, "policy-absent-consumers-pass", absent.get("consumerPassedWithoutPolicyGit") is True, {"absentSimulation": absent})
+    typed_gate(gates, "deletion-approved", deletion_approved, {"policyDeletionApproved": deletion_approved, "reason": "owner deletion approval is not accepted in this review"})
+    typed_gate(gates, "deletion-readiness-does-not-claim-cutover", True, {"cutoverReady": False, "policyDeletionApproved": False})
+    jsonl_write(out_dir / "consumer-references.jsonl", reference_rows)
+    jsonl_write(out_dir / "deletion-readiness-gates.jsonl", gates)
+    (out_dir / "absent-simulation.json").write_text(json.dumps(absent, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    ok = all(row.get("status") == "pass" for row in gates)
+    manifest = {
+        "kind": "policyDeletion.readinessReview.v1",
+        "ok": ok,
+        "claim": "policy-deletion-readiness-reviewed",
+        "cutoverReady": False,
+        "policyDeletionApproved": False,
+        "activeRuntimeReferenceCount": len(active_refs),
+        "policyAbsentConsumersPass": absent.get("consumerPassedWithoutPolicyGit") is True,
+        "outputs": {"consumerReferences": "consumer-references.jsonl", "gates": "deletion-readiness-gates.jsonl", "absentSimulation": "absent-simulation.json"},
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
+
 def command_extract_typed_json(args: argparse.Namespace) -> int:
     policy_root = Path(args.policy_root)
     out_dir = Path(args.out_dir)
@@ -1455,6 +1595,11 @@ def main(argv: list[str] | None = None) -> int:
     typed_parser.add_argument("--out-dir", required=True)
     typed_parser.add_argument("--inject-violation", action="append")
     typed_parser.set_defaults(func=command_extract_typed_json)
+    deletion_parser = sub.add_parser("review-deletion-readiness")
+    deletion_parser.add_argument("--policy-root", default=str(DEFAULT_POLICY_ROOT))
+    deletion_parser.add_argument("--repo-root", action="append")
+    deletion_parser.add_argument("--out-dir", required=True)
+    deletion_parser.set_defaults(func=command_review_deletion_readiness)
     fixture_parser = sub.add_parser("check-fixtures")
     fixture_parser.add_argument("--fixtures", required=True)
     fixture_parser.set_defaults(func=command_check_fixtures)

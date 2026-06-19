@@ -75,3 +75,10 @@ exists, and graph integrity/orphan counts are zero.
 Allowed candidate claim: `typed-json-semantic-graph-candidate-ready-for-review`.
 
 It must not claim semantic approval, cutover readiness, active `policy.git` dependency zero, fresh semantic equivalence, owner deletion approval, or that `policy.git` may be deleted. The extractor keeps `cutoverReady=false` and `policyDeletionApproved=false`; approval and equivalence remain separate gates.
+
+
+## Policy Deletion Readiness Review
+
+`review-deletion-readiness` scans selected repo roots for direct `policy.git` and `/home/nixos/repos/policy` runtime dependency candidates, then runs a missing-policy-root simulation. This is a deletion blocker review, not deletion approval.
+
+It emits `consumer-references.jsonl`, `deletion-readiness-gates.jsonl`, `absent-simulation.json`, and `manifest.json`. The review keeps `cutoverReady=false` and `policyDeletionApproved=false`; direct active references or failed absent simulation keep deletion readiness blocked.

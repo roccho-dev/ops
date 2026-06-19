@@ -402,6 +402,25 @@
                   --fixtures ${./packages/policy-semantic-compiler/tests/fresh-agent-cases.jsonl} \
                   > "$out/fresh-agent-cases.json"
                 grep -q '"ok": true' "$out/fresh-agent-cases.json"
+                mkdir -p "$out/deletion-readiness" "$out/deletion-missing-root"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root ${./packages/policy-semantic-compiler} \
+                  --out-dir "$out/deletion-readiness" \
+                  > "$out/deletion-readiness.stdout.json"
+                grep -q '"ok": false' "$out/deletion-readiness.stdout.json"
+                grep -q '"cutoverReady": false' "$out/deletion-readiness.stdout.json"
+                grep -q '"policyDeletionApproved": false' "$out/deletion-readiness.stdout.json"
+                grep -q '"gate_id":"active-policy-consumers-zero","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                grep -q '"gate_id":"policy-absent-consumers-pass","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root "$out/does-not-exist" \
+                  --out-dir "$out/deletion-missing-root" \
+                  > "$out/deletion-missing-root.stdout.json"
+                grep -q '"gate_id":"scan-roots-present","status":"blocked"' "$out/deletion-missing-root/deletion-readiness-gates.jsonl"
+                grep -q '"referenceClass":"missing-scan-root"' "$out/deletion-missing-root/consumer-references.jsonl"
+                grep -q '"activeRuntimeCandidate":true' "$out/deletion-missing-root/consumer-references.jsonl"
                 mkdir -p "$out/semantic-review-blocked" "$out/semantic-review-accepted"
                 ! policy-semantic-compiler review-semantic-coverage \
                   --source-files ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-files.jsonl} \

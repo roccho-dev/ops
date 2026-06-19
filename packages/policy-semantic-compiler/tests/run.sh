@@ -32,6 +32,24 @@ grep -q '"policyDeletionApproved": false' "$work/typed-json-current.stdout.json"
 grep -q '"gate_id":"role-index-sha256-lock-verified","status":"pass"' "$work/typed-json-current/typed-gates.jsonl"
 grep -q '"gate_id":"protocol-command-completeness","status":"pass"' "$work/typed-json-current/typed-gates.jsonl"
 
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --repo-root /home/nixos/repos/bootstrap \
+  --repo-root /home/nixos/repos/ops/.worktrees/policy-git-boundary-deletion-gates-260619 \
+  --repo-root /home/nixos/repos/adrs \
+  --out-dir "$work/deletion-readiness" > "$work/deletion-readiness.stdout.json"; then
+  echo "deletion readiness unexpectedly passed while policy.git consumers remain" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/deletion-readiness.stdout.json"
+grep -q '"cutoverReady": false' "$work/deletion-readiness.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/deletion-readiness.stdout.json"
+grep -q '"gate_id":"scan-roots-present","status":"pass"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"active-policy-consumers-zero","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"policy-absent-consumers-pass","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"deletion-approved","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"consumerPassedWithoutPolicyGit": false' "$work/deletion-readiness/absent-simulation.json"
+
 if policy-semantic-compiler review-semantic-coverage \
   --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
   --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \
