@@ -22,6 +22,16 @@ policy-semantic-compiler check-fresh-agent-cases \
   --fixtures "$pkg_root/tests/fresh-agent-cases.jsonl" > "$work/fresh-agent-cases.json"
 grep -q '"ok": true' "$work/fresh-agent-cases.json"
 
+python "$pkg_root/tests/typed-json-fixture.py" "$work" > "$work/typed-json-fixture.json"
+grep -q '"ok": true' "$work/typed-json-fixture.json"
+
+policy-semantic-compiler extract-typed-json   --policy-root "$policy_root"   --out-dir "$work/typed-json-current" > "$work/typed-json-current.stdout.json"
+grep -q '"ok": true' "$work/typed-json-current.stdout.json"
+grep -q '"cutoverReady": false' "$work/typed-json-current.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/typed-json-current.stdout.json"
+grep -q '"gate_id":"role-index-sha256-lock-verified","status":"pass"' "$work/typed-json-current/typed-gates.jsonl"
+grep -q '"gate_id":"protocol-command-completeness","status":"pass"' "$work/typed-json-current/typed-gates.jsonl"
+
 if policy-semantic-compiler review-semantic-coverage \
   --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
   --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \

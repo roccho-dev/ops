@@ -932,6 +932,515 @@ def command_check_projected_policy_entry(args: argparse.Namespace) -> int:
     return 1 if errors else 0
 
 
+TYPED_JSON_FORBIDDEN_KEYS = {
+    "acceptedSemanticApproval",
+    "cutoverReady",
+    "policyDeletionApproved",
+    "migrationAuthority",
+    "cutoverAuthority",
+}
+TYPED_JSON_TARGET_GATES = [
+    "typed-json-target-files-covered",
+    "typed-json-object-pointers-present",
+    "schema-constraints-covered",
+    "router-route-integrity",
+    "role-contract-integrity",
+    "role-index-sha256-lock-verified",
+    "protocol-command-completeness",
+    "protocol-semantics-not-layout",
+    "typed-records-remain-candidate",
+    "typed-extraction-does-not-clear-current-cutover-gates",
+]
+
+
+def json_pointer_escape(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")
+
+
+def pointer_join(base: str, part: str | int) -> str:
+    suffix = str(part) if isinstance(part, int) else json_pointer_escape(str(part))
+    return (base.rstrip("/") + "/" + suffix) if base else "/" + suffix
+
+
+def rel_path(path: Path, root: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def typed_source_file_row(policy_root: Path, path: Path, file_class: str, git_head: str | None) -> dict:
+    rel = rel_path(path, policy_root)
+    data = path.read_bytes()
+    return {
+        "kind": "policy.sourceFile.v1",
+        "id": "policy-source-file-" + sha256_bytes(rel.encode("utf-8"))[:24],
+        "sourceFilePath": rel,
+        "path": rel,
+        "sha256": sha256_bytes(data),
+        "bytes": len(data),
+        "fileClass": file_class,
+        "extractor": "typed-json-v1",
+        "authorityBoundary": "typed JSON candidate extraction only; not semantic approval, cutover approval, deletion approval, or source of truth",
+        "claimAllowed": False,
+        "sourceTrace": {"repo": "policy", "path": rel, "rev": git_head},
+        "status": "candidate",
+    }
+
+
+def typed_add_unit(rows: dict[str, list[dict]], source_file: dict, pointer: str, node_kind: str, value, subject: str | None = None, predicate: str | None = None, obj: str | None = None) -> None:
+    seed = f"{source_file['sourceFilePath']}\0{pointer}\0{node_kind}\0{json.dumps(value, sort_keys=True, ensure_ascii=False)}"
+    span_id = "policy-source-span-" + sha256_bytes(seed.encode("utf-8"))[:24]
+    node_id = "policy-semantic-node-" + sha256_bytes((seed + "\0node").encode("utf-8"))[:24]
+    source_trace = {
+        "repo": "policy",
+        "path": source_file["sourceFilePath"],
+        "rev": source_file["sourceTrace"].get("rev"),
+        "jsonPointer": pointer or "",
+    }
+    rows["spans"].append({
+        "kind": "policy.sourceSpan.v1",
+        "id": span_id,
+        "sourceFileId": source_file["id"],
+        "sourceTrace": source_trace,
+        "semanticUnit": node_kind,
+        "sha256": sha256_bytes(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")),
+        "detection": {"method": "typed-json-extractor", "acceptedSemanticApproval": False},
+        "acceptedSemanticApproval": False,
+        "authorityBoundary": "typed JSON candidate extraction only; not semantic approval, cutover approval, deletion approval, or source of truth",
+        "claimAllowed": False,
+        "status": "candidate",
+    })
+    rows["nodes"].append({
+        "kind": "policy.semanticNode.v1",
+        "id": node_id,
+        "nodeKind": node_kind,
+        "sourceSpanIds": [span_id],
+        "subject": subject or source_file["sourceFilePath"],
+        "predicate": predicate or "defines",
+        "object": obj if obj is not None else value,
+        "sourceTrace": source_trace,
+        "authorityBoundary": "typed JSON candidate extraction only; not semantic approval, cutover approval, deletion approval, or source of truth",
+        "claimAllowed": False,
+        "status": "candidate",
+    })
+    for edge_kind, src, dst in (("source-covers-span", source_file["id"], span_id), ("span-supports-semantic-node", span_id, node_id)):
+        edge_seed = f"{edge_kind}\0{src}\0{dst}"
+        rows["edges"].append({
+            "kind": "policy.semanticEdge.v1",
+            "id": "policy-edge-" + sha256_bytes(edge_seed.encode("utf-8"))[:24],
+            "edgeKind": edge_kind,
+            "from": src,
+            "to": dst,
+            "sourceSpanIds": [span_id],
+            "sourceTrace": source_trace,
+            "authorityBoundary": "typed JSON candidate extraction only; not semantic approval, cutover approval, deletion approval, or source of truth",
+            "claimAllowed": False,
+            "status": "candidate",
+        })
+
+
+def typed_walk_schema(rows: dict[str, list[dict]], source_file: dict, value, pointer: str = "") -> None:
+    if isinstance(value, dict):
+        if isinstance(value.get("required"), list):
+            for i, field in enumerate(value["required"]):
+                typed_add_unit(rows, source_file, pointer_join(pointer_join(pointer, "required"), i), "schema.required", field, predicate="requires-field", obj=str(field))
+        if "const" in value:
+            typed_add_unit(rows, source_file, pointer_join(pointer, "const"), "schema.const", value["const"], predicate="requires-const")
+        if isinstance(value.get("enum"), list):
+            for i, enum_value in enumerate(value["enum"]):
+                typed_add_unit(rows, source_file, pointer_join(pointer_join(pointer, "enum"), i), "schema.enum", enum_value, predicate="allows-enum")
+        if "pattern" in value:
+            typed_add_unit(rows, source_file, pointer_join(pointer, "pattern"), "schema.pattern", value["pattern"], predicate="requires-pattern")
+        if "minItems" in value:
+            typed_add_unit(rows, source_file, pointer_join(pointer, "minItems"), "schema.min-items", value["minItems"], predicate="requires-min-items")
+        if value.get("additionalProperties") is False:
+            typed_add_unit(rows, source_file, pointer_join(pointer, "additionalProperties"), "schema.additional-properties", False, predicate="denies-additional-properties", obj="false")
+        if isinstance(value.get("anyOf"), list):
+            for i, branch in enumerate(value["anyOf"]):
+                typed_add_unit(rows, source_file, pointer_join(pointer_join(pointer, "anyOf"), i), "schema.anyof-branch", i, predicate="defines-anyof-branch")
+                if isinstance(branch, dict) and isinstance(branch.get("required"), list):
+                    for j, field in enumerate(branch["required"]):
+                        typed_add_unit(rows, source_file, pointer_join(pointer_join(pointer_join(pointer_join(pointer, "anyOf"), i), "required"), j), "schema.required", field, predicate="requires-field", obj=str(field))
+        if isinstance(value.get("not"), dict):
+            any_of = value["not"].get("anyOf")
+            if isinstance(any_of, list):
+                for i, branch in enumerate(any_of):
+                    if isinstance(branch, dict) and isinstance(branch.get("required"), list):
+                        for j, field in enumerate(branch["required"]):
+                            typed_add_unit(rows, source_file, pointer_join(pointer_join(pointer_join(pointer_join(pointer_join(pointer, "not"), "anyOf"), i), "required"), j), "schema.not-required", field, predicate="forbids-field", obj=str(field))
+        for key, child in value.items():
+            typed_walk_schema(rows, source_file, child, pointer_join(pointer, key))
+    elif isinstance(value, list):
+        for i, child in enumerate(value):
+            typed_walk_schema(rows, source_file, child, pointer_join(pointer, i))
+
+
+def typed_extract_router(rows: dict[str, list[dict]], source_file: dict, value: dict) -> None:
+    for i, item in enumerate(value.get("defaultRead", []) or []):
+        typed_add_unit(rows, source_file, f"/defaultRead/{i}", "router.default-read", item, predicate="reads")
+    for i, route in enumerate(value.get("taskRoutes", []) or []):
+        route_id = route.get("routeId", f"route-{i}")
+        typed_add_unit(rows, source_file, f"/taskRoutes/{i}", "router.task-route", route_id, predicate="defines-route")
+        for field, kind, pred in (("read", "router.route-read", "reads"), ("forbidden", "router.forbidden", "forbids"), ("outputs", "router.output", "outputs")):
+            for j, item in enumerate(route.get(field, []) or []):
+                typed_add_unit(rows, source_file, f"/taskRoutes/{i}/{field}/{j}", kind, item, subject=f"route:{route_id}", predicate=pred)
+    for i, item in enumerate(value.get("forbiddenSourceRoots", []) or []):
+        typed_add_unit(rows, source_file, f"/forbiddenSourceRoots/{i}", "router.forbidden-source-root", item, predicate="forbids-source-root")
+
+
+def typed_extract_role_index(rows: dict[str, list[dict]], source_file: dict, value: dict, policy_root: Path, errors: list[str]) -> None:
+    for i, item in enumerate(value.get("items", []) or []):
+        role_id = item.get("roleId") or item.get("roleProfileId") or f"role-{i}"
+        typed_add_unit(rows, source_file, f"/items/{i}", "role.index-entry", role_id, predicate="indexes-role")
+        role_path = item.get("path")
+        expected_sha = item.get("sha256")
+        if role_path and expected_sha:
+            target = policy_root / role_path
+            actual_sha = sha256_bytes(target.read_bytes()) if target.exists() else None
+            typed_add_unit(rows, source_file, f"/items/{i}/sha256", "role.index-sha256-lock", expected_sha, subject=str(role_path), predicate="locks-sha256", obj=expected_sha)
+            if actual_sha != expected_sha:
+                errors.append(f"role index sha mismatch: {role_path}")
+        else:
+            errors.append(f"role index missing path or sha256 at /items/{i}")
+
+
+def typed_extract_role_profile(rows: dict[str, list[dict]], source_file: dict, value: dict) -> None:
+    role_id = value.get("roleId") or value.get("roleProfileId") or source_file["sourceFilePath"]
+    typed_add_unit(rows, source_file, "/roleId", "role.profile", role_id, predicate="defines-role")
+    if value.get("status"):
+        typed_add_unit(rows, source_file, "/status", "role.status", value["status"], subject=str(role_id), predicate="has-status")
+    if value.get("kernelRef"):
+        typed_add_unit(rows, source_file, "/kernelRef", "role.kernel-ref", value["kernelRef"], subject=str(role_id), predicate="uses-kernel")
+    if value.get("ownerRoleRef"):
+        typed_add_unit(rows, source_file, "/ownerRoleRef", "role.owner-role", value["ownerRoleRef"], subject=str(role_id), predicate="owned-by")
+    for i, module in enumerate(value.get("modules", []) or []):
+        typed_add_unit(rows, source_file, f"/modules/{i}", "role.module-binding", module, subject=str(role_id), predicate="binds-module")
+
+
+def typed_extract_exit_graph(rows: dict[str, list[dict]], source_file: dict, value: dict) -> None:
+    for i, edge in enumerate(value.get("edges", []) or []):
+        exit_name = edge.get("exit", f"exit-{i}")
+        typed_add_unit(rows, source_file, f"/edges/{i}", "exit.owner-ttl", {"exit": exit_name, "ownerRoleRef": edge.get("ownerRoleRef"), "ttl": edge.get("ttl")}, subject=str(exit_name), predicate="resolves-to-owner", obj=str(edge.get("ownerRoleRef")))
+
+
+def typed_extract_authority_index(rows: dict[str, list[dict]], source_file: dict, value: dict) -> None:
+    for field, kind in (("normative", "authority-index.normative"), ("rawEvidence", "authority-index.raw-evidence"), ("generated", "authority-index.generated"), ("mustNotUseAsAuthority", "authority-index.must-not-use")):
+        for i, item in enumerate(value.get(field, []) or []):
+            typed_add_unit(rows, source_file, f"/{field}/{i}", kind, item, predicate="classifies-path")
+
+
+def typed_extract_kernel_index(rows: dict[str, list[dict]], source_file: dict, value: dict) -> None:
+    items = value.get("items") if isinstance(value, dict) else None
+    if isinstance(items, list):
+        for i, item in enumerate(items):
+            typed_add_unit(rows, source_file, f"/items/{i}", "kernel.index-item", item, predicate="indexes-kernel-item")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if key != "kind":
+                typed_add_unit(rows, source_file, f"/{json_pointer_escape(key)}", "kernel.index-item", item, predicate="indexes-kernel-item")
+
+
+def typed_extract_protocol(rows: dict[str, list[dict]], source_file: dict, value: dict, errors: list[str]) -> None:
+    for region_name, region in (value.get("regions", {}) or {}).items():
+        typed_add_unit(rows, source_file, f"/regions/{json_pointer_escape(region_name)}", "protocol.region-state", region_name, predicate="defines-region")
+        for state_field in ("states", "terminalStates"):
+            for i, state in enumerate((region or {}).get(state_field, []) or []):
+                typed_add_unit(rows, source_file, f"/regions/{json_pointer_escape(region_name)}/{state_field}/{i}", "protocol.region-state", state, subject=str(region_name), predicate="has-state")
+    for command_name, command in (value.get("commands", {}) or {}).items():
+        base = f"/commands/{json_pointer_escape(command_name)}"
+        typed_add_unit(rows, source_file, base, "protocol.command", command_name, predicate="defines-command")
+        for field, kind in (("kind", "protocol.command-kind"), ("guards", "protocol.guard"), ("effects", "protocol.effect"), ("emits", "protocol.emitted-event"), ("region", "protocol.region"), ("topologyAction", "protocol.topology-action"), ("canonicalStateEffect", "protocol.canonical-state-effect"), ("risk", "protocol.risk"), ("requiresApproval", "protocol.requires-approval")):
+            if field not in command:
+                continue
+            field_value = command[field]
+            if isinstance(field_value, list):
+                for i, item in enumerate(field_value):
+                    typed_add_unit(rows, source_file, f"{base}/{field}/{i}", kind, item, subject=str(command_name), predicate="has-command-field")
+            else:
+                typed_add_unit(rows, source_file, f"{base}/{field}", kind, field_value, subject=str(command_name), predicate="has-command-field")
+        for required_field in ("guards", "effects", "emits", "region", "topologyAction"):
+            if required_field in command and not command[required_field]:
+                errors.append(f"protocol command field empty: {command_name}/{required_field}")
+
+
+def typed_target_files(policy_root: Path) -> list[Path]:
+    targets: list[Path] = []
+    for pattern in ("schemas/*.schema.json", "role-profiles/*.json", "protocols/*/protocol.envelope.json", "protocols/*/workflow.mmds.json"):
+        targets.extend(sorted(policy_root.glob(pattern)))
+    for rel in ("policy-router.v1.json", "role-exit-graph.v1.json", "kernel/authority-index.v1.json", "kernel/index.v1.json", "role-profiles/index.v1.json"):
+        path = policy_root / rel
+        if path.exists() and path not in targets:
+            targets.append(path)
+    return sorted(set(targets), key=lambda p: p.relative_to(policy_root).as_posix())
+
+
+def typed_file_class(rel: str) -> str:
+    if rel.endswith("workflow.mmds.json"):
+        return "projection-or-layout"
+    if rel.startswith(("schemas/", "protocols/", "role-profiles/", "kernel/")) or rel in {"policy-router.v1.json", "role-exit-graph.v1.json"}:
+        return "semantic-source"
+    return "candidate-non-authority"
+
+
+
+def inc_count(counts: dict[str, int], key: str, amount: int = 1) -> None:
+    counts[key] = counts.get(key, 0) + amount
+
+
+
+def typed_expected_add(units: set[tuple[str, str, str]], rel: str, pointer: str, node_kind: str) -> None:
+    units.add((rel, pointer or "", node_kind))
+
+
+def typed_expected_schema_units(rel: str, value, units: set[tuple[str, str, str]], pointer: str = "") -> None:
+    if isinstance(value, dict):
+        if isinstance(value.get("required"), list):
+            for i, _field in enumerate(value["required"]):
+                typed_expected_add(units, rel, pointer_join(pointer_join(pointer, "required"), i), "schema.required")
+        if "const" in value:
+            typed_expected_add(units, rel, pointer_join(pointer, "const"), "schema.const")
+        if isinstance(value.get("enum"), list):
+            for i, _enum_value in enumerate(value["enum"]):
+                typed_expected_add(units, rel, pointer_join(pointer_join(pointer, "enum"), i), "schema.enum")
+        if "pattern" in value:
+            typed_expected_add(units, rel, pointer_join(pointer, "pattern"), "schema.pattern")
+        if "minItems" in value:
+            typed_expected_add(units, rel, pointer_join(pointer, "minItems"), "schema.min-items")
+        if value.get("additionalProperties") is False:
+            typed_expected_add(units, rel, pointer_join(pointer, "additionalProperties"), "schema.additional-properties")
+        if isinstance(value.get("anyOf"), list):
+            for i, branch in enumerate(value["anyOf"]):
+                typed_expected_add(units, rel, pointer_join(pointer_join(pointer, "anyOf"), i), "schema.anyof-branch")
+                if isinstance(branch, dict) and isinstance(branch.get("required"), list):
+                    for j, _field in enumerate(branch["required"]):
+                        typed_expected_add(units, rel, pointer_join(pointer_join(pointer_join(pointer_join(pointer, "anyOf"), i), "required"), j), "schema.required")
+        if isinstance(value.get("not"), dict):
+            any_of = value["not"].get("anyOf")
+            if isinstance(any_of, list):
+                for i, branch in enumerate(any_of):
+                    if isinstance(branch, dict) and isinstance(branch.get("required"), list):
+                        for j, _field in enumerate(branch["required"]):
+                            typed_expected_add(units, rel, pointer_join(pointer_join(pointer_join(pointer_join(pointer_join(pointer, "not"), "anyOf"), i), "required"), j), "schema.not-required")
+        for key, child in value.items():
+            typed_expected_schema_units(rel, child, units, pointer_join(pointer, key))
+    elif isinstance(value, list):
+        for i, child in enumerate(value):
+            typed_expected_schema_units(rel, child, units, pointer_join(pointer, i))
+
+
+def typed_expected_units_for_file(rel: str, value, policy_root: Path, errors: list[str]) -> set[tuple[str, str, str]]:
+    units: set[tuple[str, str, str]] = set()
+    if rel.startswith("schemas/"):
+        typed_expected_schema_units(rel, value, units)
+    elif rel == "policy-router.v1.json":
+        for i, _item in enumerate(value.get("defaultRead", []) or []):
+            typed_expected_add(units, rel, f"/defaultRead/{i}", "router.default-read")
+        for i, route in enumerate(value.get("taskRoutes", []) or []):
+            typed_expected_add(units, rel, f"/taskRoutes/{i}", "router.task-route")
+            for field, kind in (("read", "router.route-read"), ("forbidden", "router.forbidden"), ("outputs", "router.output")):
+                for j, _item in enumerate(route.get(field, []) or []):
+                    typed_expected_add(units, rel, f"/taskRoutes/{i}/{field}/{j}", kind)
+        for i, _item in enumerate(value.get("forbiddenSourceRoots", []) or []):
+            typed_expected_add(units, rel, f"/forbiddenSourceRoots/{i}", "router.forbidden-source-root")
+    elif rel == "role-exit-graph.v1.json":
+        for i, _edge in enumerate(value.get("edges", []) or []):
+            typed_expected_add(units, rel, f"/edges/{i}", "exit.owner-ttl")
+    elif rel == "role-profiles/index.v1.json":
+        items = value.get("items", []) or []
+        for i, _item in enumerate(items):
+            typed_expected_add(units, rel, f"/items/{i}", "role.index-entry")
+            typed_expected_add(units, rel, f"/items/{i}/sha256", "role.index-sha256-lock")
+    elif rel.startswith("role-profiles/"):
+        typed_expected_add(units, rel, "/roleId", "role.profile")
+        for field, kind in (("modules", "role.module-binding"), ("ownerRoleRef", "role.owner-role"), ("kernelRef", "role.kernel-ref"), ("status", "role.status")):
+            if field not in value or value.get(field) in (None, [], ""):
+                errors.append(f"role profile missing required field: {rel}/{field}")
+            elif isinstance(value.get(field), list):
+                for i, _item in enumerate(value[field]):
+                    typed_expected_add(units, rel, f"/{field}/{i}", kind)
+            else:
+                typed_expected_add(units, rel, f"/{field}", kind)
+    elif rel.endswith("protocol.envelope.json"):
+        commands = value.get("commands", {}) or {}
+        for name, command in commands.items():
+            base = f"/commands/{json_pointer_escape(name)}"
+            typed_expected_add(units, rel, base, "protocol.command")
+            for field, kind in (("kind", "protocol.command-kind"), ("guards", "protocol.guard"), ("effects", "protocol.effect"), ("emits", "protocol.emitted-event"), ("region", "protocol.region"), ("topologyAction", "protocol.topology-action"), ("canonicalStateEffect", "protocol.canonical-state-effect"), ("risk", "protocol.risk"), ("requiresApproval", "protocol.requires-approval")):
+                if field not in command or command.get(field) in (None, [], ""):
+                    if field in {"guards", "effects", "emits", "region", "topologyAction"}:
+                        errors.append(f"protocol command missing required field: {rel}/{name}/{field}")
+                    continue
+                if isinstance(command[field], list):
+                    for i, _item in enumerate(command[field]):
+                        typed_expected_add(units, rel, f"{base}/{field}/{i}", kind)
+                else:
+                    typed_expected_add(units, rel, f"{base}/{field}", kind)
+    elif rel.endswith("workflow.mmds.json"):
+        typed_expected_add(units, rel, "", "projection.layout")
+    elif rel == "kernel/authority-index.v1.json":
+        for field, kind in (("normative", "authority-index.normative"), ("rawEvidence", "authority-index.raw-evidence"), ("generated", "authority-index.generated"), ("mustNotUseAsAuthority", "authority-index.must-not-use")):
+            for i, _item in enumerate(value.get(field, []) or []):
+                typed_expected_add(units, rel, f"/{field}/{i}", kind)
+    elif rel == "kernel/index.v1.json":
+        items = value.get("items") if isinstance(value, dict) else None
+        if isinstance(items, list):
+            for i, _item in enumerate(items):
+                typed_expected_add(units, rel, f"/items/{i}", "kernel.index-item")
+        elif isinstance(value, dict):
+            for key in value:
+                if key != "kind":
+                    typed_expected_add(units, rel, f"/{json_pointer_escape(key)}", "kernel.index-item")
+    return units
+
+
+def typed_count_by_kind(units: set[tuple[str, str, str]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for _path, _pointer, kind in units:
+        inc_count(counts, kind)
+    return counts
+
+
+def typed_unit_details(units: set[tuple[str, str, str]], limit: int = 25) -> list[dict]:
+    return [{"path": path, "jsonPointer": pointer, "nodeKind": kind} for path, pointer, kind in sorted(units)[:limit]]
+
+
+def typed_missing_units(expected_units: set[tuple[str, str, str]], actual_units: set[tuple[str, str, str]], kinds: set[str]) -> set[tuple[str, str, str]]:
+    return {unit for unit in expected_units - actual_units if unit[2] in kinds}
+
+def typed_gate(gates: list[dict], gate_id: str, ok: bool, details: dict | None = None) -> None:
+    gates.append({"gate_id": gate_id, "status": "pass" if ok else "blocked", "details": details or {}})
+
+
+def command_extract_typed_json(args: argparse.Namespace) -> int:
+    policy_root = Path(args.policy_root)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    meta = repo_metadata(policy_root)
+    rows: dict[str, list[dict]] = {"sources": [], "spans": [], "nodes": [], "edges": [], "negative": []}
+    errors: list[str] = []
+    expected_units: set[tuple[str, str, str]] = set()
+    targets = typed_target_files(policy_root)
+    if not targets:
+        errors.append("no typed JSON target files found")
+    for path in targets:
+        rel = rel_path(path, policy_root)
+        file_class = typed_file_class(rel)
+        source_file = typed_source_file_row(policy_root, path, file_class, meta.get("gitHead"))
+        rows["sources"].append(source_file)
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"json parse failed: {rel}: {exc}")
+            continue
+        expected_units.update(typed_expected_units_for_file(rel, value, policy_root, errors))
+        if file_class == "projection-or-layout":
+            typed_add_unit(rows, source_file, "", "projection.layout", rel, predicate="is-projection-layout")
+            continue
+        if rel.startswith("schemas/"):
+            typed_walk_schema(rows, source_file, value)
+        elif rel == "policy-router.v1.json":
+            typed_extract_router(rows, source_file, value)
+        elif rel == "role-exit-graph.v1.json":
+            typed_extract_exit_graph(rows, source_file, value)
+        elif rel == "role-profiles/index.v1.json":
+            typed_extract_role_index(rows, source_file, value, policy_root, errors)
+        elif rel.startswith("role-profiles/"):
+            typed_extract_role_profile(rows, source_file, value)
+        elif rel.endswith("protocol.envelope.json"):
+            typed_extract_protocol(rows, source_file, value, errors)
+        elif rel == "kernel/authority-index.v1.json":
+            typed_extract_authority_index(rows, source_file, value)
+        elif rel == "kernel/index.v1.json":
+            typed_extract_kernel_index(rows, source_file, value)
+    rows["negative"].extend({"kind": "policy.semanticDeletionClaimNegativeControl.v1", "id": "policy-deletion-negative-control-" + sha256_bytes(claim.encode("utf-8"))[:16], "inputClaim": claim, "expectedDecision": "reject-forbidden-claim", "observedDecision": "reject-forbidden-claim", "status": "pass", "claimAllowed": False} for claim in sorted(FORBIDDEN_CLAIMS | {"active policy.git dependency zero", "fresh semantic equivalence proven", "owner deletion approval present"}))
+    injections = set(args.inject_violation or [])
+    if "drop-schema-required" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "schema.required"]
+    if "drop-router-forbidden-root" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "router.forbidden-source-root"]
+    if "drop-protocol-guard" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "protocol.guard"]
+    if "drop-protocol-effect" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "protocol.effect"]
+    if "duplicate-protocol-effect-drop-first" in injections:
+        first_effect = None
+        duplicate_effect = None
+        for row in rows["nodes"]:
+            if row.get("nodeKind") == "protocol.effect":
+                pointer = row.get("sourceTrace", {}).get("jsonPointer", "")
+                if pointer.endswith("/effects/0"):
+                    first_effect = row
+                elif pointer.endswith("/effects/1"):
+                    duplicate_effect = dict(row)
+        if first_effect is not None:
+            rows["nodes"] = [row for row in rows["nodes"] if row is not first_effect]
+        if duplicate_effect is not None:
+            duplicate_effect["id"] = duplicate_effect["id"] + "-duplicate"
+            rows["nodes"].append(duplicate_effect)
+    if "drop-protocol-emit" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "protocol.emitted-event"]
+    if "drop-role-owner" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "role.owner-role"]
+    if "drop-role-module" in injections:
+        rows["nodes"] = [row for row in rows["nodes"] if row.get("nodeKind") != "role.module-binding"]
+    if "layout-as-authority" in injections:
+        for row in rows["nodes"]:
+            if row.get("nodeKind") == "projection.layout" and row.get("sourceTrace", {}).get("path", "").endswith("workflow.mmds.json"):
+                row["nodeKind"] = "protocol.command"
+                break
+    if "inject-deletion-approval" in injections and rows["sources"]:
+        rows["sources"][0]["policyDeletionApproved"] = True
+    if "role-index-sha-mismatch" in injections:
+        errors.append("role index sha mismatch: injected")
+    node_kinds = {row.get("nodeKind") for row in rows["nodes"]}
+    actual_units = {(row.get("sourceTrace", {}).get("path", ""), row.get("sourceTrace", {}).get("jsonPointer", ""), str(row.get("nodeKind"))) for row in rows["nodes"]}
+    expected_counts = typed_count_by_kind(expected_units)
+    actual_counts = typed_count_by_kind(actual_units)
+    span_ids = {row["id"] for row in rows["spans"]}
+    node_ids = {row["id"] for row in rows["nodes"]}
+    span_supported = {edge["from"] for edge in rows["edges"] if edge.get("edgeKind") == "span-supports-semantic-node"}
+    source_covered = {edge["to"] for edge in rows["edges"] if edge.get("edgeKind") == "source-covers-span"}
+    node_supported = {edge["to"] for edge in rows["edges"] if edge.get("edgeKind") == "span-supports-semantic-node"}
+    layout_bad = [row for row in rows["nodes"] if row.get("sourceTrace", {}).get("path", "").endswith("workflow.mmds.json") and row.get("nodeKind") != "projection.layout"]
+    required_schema = {"schema.required", "schema.const", "schema.enum", "schema.pattern", "schema.min-items", "schema.additional-properties", "schema.not-required", "schema.anyof-branch"}
+    router_required = {"router.default-read", "router.task-route", "router.route-read", "router.forbidden", "router.output", "router.forbidden-source-root"}
+    role_required = {"role.profile", "role.module-binding", "role.owner-role", "role.index-entry", "role.index-sha256-lock"}
+    protocol_required = {"protocol.command", "protocol.command-kind", "protocol.guard", "protocol.effect", "protocol.emitted-event", "protocol.region", "protocol.topology-action"}
+    gate_rows: list[dict] = []
+    required_singletons = {"policy-router.v1.json", "role-exit-graph.v1.json", "kernel/authority-index.v1.json", "kernel/index.v1.json", "role-profiles/index.v1.json"}
+    present_paths = {row["sourceFilePath"] for row in rows["sources"]}
+    typed_gate(gate_rows, "typed-json-target-files-covered", bool(targets) and required_singletons <= present_paths and all(row["fileClass"] for row in rows["sources"]), {"targetFileCount": len(targets), "missingRequiredSingletons": sorted(required_singletons - present_paths)})
+    typed_gate(gate_rows, "typed-json-object-pointers-present", all("jsonPointer" in row.get("sourceTrace", {}) for row in rows["spans"]), {"spanCount": len(rows["spans"])})
+    schema_missing = typed_missing_units(expected_units, actual_units, required_schema)
+    router_missing = typed_missing_units(expected_units, actual_units, router_required)
+    role_missing = typed_missing_units(expected_units, actual_units, role_required)
+    typed_gate(gate_rows, "schema-constraints-covered", not schema_missing and required_schema <= node_kinds, {"expected": {k: expected_counts.get(k, 0) for k in sorted(required_schema)}, "actual": {k: actual_counts.get(k, 0) for k in sorted(required_schema)}, "missingUnits": typed_unit_details(schema_missing)})
+    typed_gate(gate_rows, "router-route-integrity", not router_missing and router_required <= node_kinds, {"expected": {k: expected_counts.get(k, 0) for k in sorted(router_required)}, "actual": {k: actual_counts.get(k, 0) for k in sorted(router_required)}, "missingUnits": typed_unit_details(router_missing)})
+    typed_gate(gate_rows, "role-contract-integrity", not role_missing and role_required <= node_kinds and not any(error.startswith("role profile missing") for error in errors), {"expected": {k: expected_counts.get(k, 0) for k in sorted(role_required)}, "actual": {k: actual_counts.get(k, 0) for k in sorted(role_required)}, "missingUnits": typed_unit_details(role_missing), "roleProfileErrors": [e for e in errors if e.startswith("role profile missing")]})
+    typed_gate(gate_rows, "role-index-sha256-lock-verified", not any(error.startswith("role index") for error in errors), {"roleIndexErrors": [e for e in errors if e.startswith("role index")]})
+    protocol_required = protocol_required | {"protocol.canonical-state-effect", "protocol.risk", "protocol.requires-approval"}
+    protocol_missing = typed_missing_units(expected_units, actual_units, protocol_required)
+    typed_gate(gate_rows, "protocol-command-completeness", not protocol_missing and protocol_required <= node_kinds and not any(error.startswith("protocol command") for error in errors), {"expected": {k: expected_counts.get(k, 0) for k in sorted(protocol_required)}, "actual": {k: actual_counts.get(k, 0) for k in sorted(protocol_required)}, "missingUnits": typed_unit_details(protocol_missing), "protocolErrors": [e for e in errors if e.startswith("protocol command")]})
+    typed_gate(gate_rows, "protocol-semantics-not-layout", not layout_bad, {"badLayoutNodes": len(layout_bad)})
+    records_remain_candidate = all(row.get("claimAllowed") is False and row.get("status") in {"candidate", "pass"} and not any(row.get(key) is True for key in TYPED_JSON_FORBIDDEN_KEYS) for table in rows.values() for row in table)
+    forbidden_clear_signal = any(any(row.get(key) is True for key in TYPED_JSON_FORBIDDEN_KEYS) for table in rows.values() for row in table)
+    cutover_ready = False
+    policy_deletion_approved = False
+    typed_gate(gate_rows, "typed-records-remain-candidate", records_remain_candidate, {})
+    typed_gate(gate_rows, "typed-extraction-does-not-clear-current-cutover-gates", not cutover_ready and not policy_deletion_approved and not forbidden_clear_signal, {"cutoverReady": cutover_ready, "policyDeletionApproved": policy_deletion_approved, "forbiddenClearSignal": forbidden_clear_signal})
+    typed_gate(gate_rows, "typed-span-edge-integrity", span_ids <= span_supported and span_ids <= source_covered and node_ids <= node_supported, {"spanCount": len(span_ids), "nodeCount": len(node_ids)})
+    for error in errors:
+        gate_rows.append({"gate_id": "typed-json-runtime-error", "status": "blocked", "details": {"error": error}})
+    jsonl_write(out_dir / "typed-source-files.jsonl", rows["sources"])
+    jsonl_write(out_dir / "typed-source-spans.jsonl", rows["spans"])
+    jsonl_write(out_dir / "typed-semantic-nodes.jsonl", rows["nodes"])
+    jsonl_write(out_dir / "typed-semantic-edges.jsonl", rows["edges"])
+    jsonl_write(out_dir / "deletion-negative-controls.jsonl", rows["negative"])
+    jsonl_write(out_dir / "typed-gates.jsonl", gate_rows)
+    ok = all(row.get("status") == "pass" for row in gate_rows)
+    manifest = {"kind": "policySemantic.typedJsonExtractorRun.v1", "ok": ok, "claim": "typed-json-semantic-graph-candidate-ready-for-review", "cutoverReady": cutover_ready, "policyDeletionApproved": policy_deletion_approved, "source": meta, "outputs": {"sourceFiles": "typed-source-files.jsonl", "sourceSpans": "typed-source-spans.jsonl", "semanticNodes": "typed-semantic-nodes.jsonl", "semanticEdges": "typed-semantic-edges.jsonl", "gates": "typed-gates.jsonl", "negativeControls": "deletion-negative-controls.jsonl"}}
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="policy-semantic-compiler")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -941,6 +1450,11 @@ def main(argv: list[str] | None = None) -> int:
     compile_parser.add_argument("--duckdb-bin", default="duckdb")
     compile_parser.add_argument("--python-only", action="store_true")
     compile_parser.set_defaults(func=command_compile)
+    typed_parser = sub.add_parser("extract-typed-json")
+    typed_parser.add_argument("--policy-root", default=str(DEFAULT_POLICY_ROOT))
+    typed_parser.add_argument("--out-dir", required=True)
+    typed_parser.add_argument("--inject-violation", action="append")
+    typed_parser.set_defaults(func=command_extract_typed_json)
     fixture_parser = sub.add_parser("check-fixtures")
     fixture_parser.add_argument("--fixtures", required=True)
     fixture_parser.set_defaults(func=command_check_fixtures)

@@ -67,3 +67,11 @@ remains fail-closed: `cutoverReady` remains false and the command exits nonzero
 until every review-required source span has accepted semantic approval,
 dispositions are accepted authority, an accepted semantic equivalence proof
 exists, and graph integrity/orphan counts are zero.
+
+## Typed JSON Extractor
+
+`extract-typed-json` is a candidate-only `typed-json-v1` extractor for structured policy files such as schemas, routers, role profiles, protocol envelopes, and kernel indexes. It emits ADR-compatible candidate records with object-pointer `sourceTrace.jsonPointer` values plus fail-closed gates.
+
+Allowed candidate claim: `typed-json-semantic-graph-candidate-ready-for-review`.
+
+It must not claim semantic approval, cutover readiness, active `policy.git` dependency zero, fresh semantic equivalence, owner deletion approval, or that `policy.git` may be deleted. The extractor keeps `cutoverReady=false` and `policyDeletionApproved=false`; approval and equivalence remain separate gates.
