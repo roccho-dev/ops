@@ -1,0 +1,9 @@
+{
+  "kind": "purpose.lineage.v1",
+  "purposeDepths": [
+    { "depth": -3, "purpose": "法人売却に耐える開発基盤の継続性", "sourceRef": "parent command", "nonGoal": "conversation-specific task content" },
+    { "depth": -2, "purpose": "agent handoff and policy compliance are reproducible without hidden context", "sourceRef": "policy.git", "nonGoal": "transport visibility as approval" },
+    { "depth": -1, "purpose": "gen1 can manage gen2 with fixed policy entry and typed handoff", "sourceRef": "context-packet + handoff package", "nonGoal": "Gen0 direct Gen2 command" },
+    { "depth": 0, "purpose": "REPLACE local task", "sourceRef": "REQUEST.md", "nonGoal": "REPLACE" }
+  ]
+}

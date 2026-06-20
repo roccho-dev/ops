@@ -1,0 +1,34 @@
+{
+  "kind": "handoff.package.v1",
+  "packageId": "gen2-handoff-REPLACE",
+  "packageType": "project-request",
+  "createdAt": "REPLACE_ISO8601",
+  "producer": { "actorId": "actor.gen1.codex.REPLACE", "actorRole": "parentActor", "roleId": "role.rootCoordinator" },
+  "target": { "actorId": "actor.gen2.REPLACE", "actorRole": "childActor", "roleId": "role.implWorker", "threadFunction": "impl-work" },
+  "container": { "kind": "zip", "path": "gen2-handoff-REPLACE.zip", "externalDigestRef": "sidecar:gen2-handoff-REPLACE.zip.sha256" },
+  "entrypoints": { "manifest": "HANDOFF_MANIFEST.json", "request": "REQUEST.md", "background": "BACKGROUND.md", "index": "INDEX.md" },
+  "sourceIdentities": [
+    { "repoId": "policy", "role": "source", "repoPath": "/home/nixos/work/policy-understand-gen-handoff-260620", "baseRef": "main", "baseHead": "334997669f1889a8e2658730c616d2d4510d4536" },
+    { "repoId": "REPLACE", "role": "candidate", "repoPath": "/home/nixos/work/REPLACE", "candidateRef": "refs/heads/REPLACE", "candidateHead": "REPLACE" }
+  ],
+  "payloads": [
+    { "kind": "manifest", "path": "HANDOFF_MANIFEST.json", "sha256": "REPLACE", "required": true },
+    { "kind": "request", "path": "REQUEST.md", "sha256": "REPLACE", "required": true },
+    { "kind": "background", "path": "BACKGROUND.md", "sha256": "REPLACE", "required": true },
+    { "kind": "policy-snapshot", "path": "SNAPSHOT_MANIFEST.md", "sha256": "REPLACE", "required": true },
+    { "kind": "purpose-lineage", "path": "purpose_lineage.json", "sha256": "REPLACE", "required": true },
+    { "kind": "definition-of-done", "path": "DOD.md", "sha256": "REPLACE", "required": true },
+    { "kind": "policy-entry-refs", "path": "POLICY_ENTRY_REFS.json", "sha256": "REPLACE", "required": true },
+    { "kind": "context-packet", "path": "context-packet.json", "sha256": "REPLACE", "required": true },
+    { "kind": "expected-output-contract", "path": "output-contract/EXPECTED_OUTPUT_CONTRACT.md", "sha256": "REPLACE", "required": true }
+  ],
+  "expectedReadback": [
+    { "file": "REQUEST.md", "marker": "gen2-handoff-REPLACE", "minimumIntervalSeconds": 0 },
+    { "file": "POLICY_ENTRY_REFS.json", "marker": "334997669f1889a8e2658730c616d2d4510d4536", "minimumIntervalSeconds": 0 }
+  ],
+  "expectedOutputs": [
+    { "path": "GEN2_READBACK.json", "description": "first reply readback", "required": true },
+    { "path": "VERDICT_OR_WORK_REPORT.md", "description": "PASS/BLOCK or work report with evidence", "required": true }
+  ],
+  "authorityFlags": { "semanticApproval": false, "completionApproval": false, "routeDecision": false, "canonicalWriteApproval": false }
+}

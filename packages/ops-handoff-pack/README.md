@@ -73,3 +73,11 @@ authorization. Runbook: `runbooks/handoff.md`.
 
 - `ops/issues/003-end-to-end-handoff-generator.md`
 - `ops/issues/004-src-pack-offline-nix-cache-payload.md`
+
+## Gen2 policy handoff template
+
+`templates/gen2-policy-handoff/` provides a policy-compliant starting point for
+Gen1 -> Gen2 handoff packets. It is intentionally a template layer on top of
+`ops-handoff-pack`, not policy truth and not approval. It encodes the required
+fixed policyEntryRef/digest, context packet, purpose lineage, DOD, Project Source
+readback, and expected output contract surfaces described by `policy.git`.
