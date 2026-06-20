@@ -28,23 +28,47 @@ secrets, and build caches are not protected by this Git backup route.
 
 ## Manifest
 
+The manifest used for a production backup run is a generated receipt
+snapshot, not the authority for which repositories should exist. Authority
+remains the repo-specific bare SSOT registry/root. Until a root-owned registry
+exists, generate the manifest from the current bare root immediately before the
+backup run and preserve it with the backup receipt.
+
 ```json
 {
+  "kind": "ops.refsVault.generatedManifest.v1",
+  "authority": "filesystem-snapshot-not-ssot-authority",
   "targetForgeRepo": {
     "sshUrl": "git@github.com:roccho-dev/refs.git"
+  },
+  "source": {
+    "bareRoot": "/home/nixos/repos/.bare",
+    "excludeFile": null,
+    "excludedRepoIds": []
   },
   "repos": [
     {
       "repoId": "specs",
-      "sourceBarePath": "/home/nixos/repos/specs.git"
+      "sourceBarePath": "/home/nixos/repos/.bare/specs.git"
     }
   ]
 }
 ```
 
 When running on `nixos-vm`, `sourceBarePath` is normally
-`$HOME/repos/<repoId>.git`. A remote source URL is allowed, but the normal
-operator route is to run on the host where the bare SSOT paths are local.
+`$HOME/repos/.bare/<repoId>.git`. A remote source URL is allowed, but the
+normal operator route is to run on the host where the bare SSOT paths are local.
+
+Generate a snapshot manifest from the bare root:
+
+```bash
+ops-refs-vault generate-manifest \
+  --bare-root /home/nixos/repos/.bare \
+  --out /var/lib/ssot/refs-vault/runs/20260619/manifest.json
+```
+
+Use `--exclude-file` only for intentional opt-out repository IDs. The exclude
+file is one repo ID per line and is validated against the discovered bare root.
 
 ## Back up
 
@@ -55,7 +79,8 @@ ops-refs-vault backup-one \
   --branch main
 
 ops-refs-vault backup-all \
-  --manifest refs-vault.manifest.json
+  --manifest /var/lib/ssot/refs-vault/runs/20260619/manifest.json \
+  --receipt-out /var/lib/ssot/refs-vault/runs/20260619/backup-receipt.json
 ```
 
 The destination branch is:
@@ -65,10 +90,17 @@ refs/heads/repos/<repoId>/<branch>
 ```
 
 Default backup is no-force. Use `--force` only after an operator decision.
+Do not combine backup with restore promotion in the same run.
 
 ## Verify and audit
 
 ```bash
+ops-refs-vault verify-all \
+  --manifest /var/lib/ssot/refs-vault/runs/20260619/manifest.json
+
+ops-refs-vault orphan-audit \
+  --manifest /var/lib/ssot/refs-vault/runs/20260619/manifest.json
+
 ops-refs-vault verify-one \
   --manifest refs-vault.manifest.json \
   --repo-id specs \
@@ -83,6 +115,9 @@ ops-refs-vault inventory \
 ```
 
 `verify-one` compares the bare SSOT branch hash with the forge backup hash.
+`verify-all` applies that comparison to every branch in the generated
+manifest. `orphan-audit` fails if the forge has missing or extra
+`refs/heads/repos/<repoId>/<branch>` refs relative to the generated snapshot.
 
 ## Restore
 
