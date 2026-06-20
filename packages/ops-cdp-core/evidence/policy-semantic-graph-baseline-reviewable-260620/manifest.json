@@ -2,9 +2,9 @@
   "decision": "BLOCK",
   "files": [
     {
-      "bytes": 2403,
+      "bytes": 2601,
       "path": "REVIEW_SUMMARY.json",
-      "sha256": "53134a4b86cbd40ba979883bdbd79d52c148d9b11c3065df9597fdbc8ae55763"
+      "sha256": "bf7eccf437111d800ffd4a5929cf9846907f2df2e3fb977c4b7c583ebc5d7b58"
     },
     {
       "bytes": 14224,
@@ -30,6 +30,26 @@
       "bytes": 2885,
       "path": "gen2-impl-review/gen2-reviewable-baseline-review-summary.json",
       "sha256": "63d05bf188416f2f49fc953bb8ceb9571f10930191e6b81e7da78b41c9c9fd79"
+    },
+    {
+      "bytes": 890,
+      "path": "gen2-negative-controls-review/README.md",
+      "sha256": "0411b1b01cb72600fbc3f1800af1e16627698b029be4f37041ac08e3cd66f552"
+    },
+    {
+      "bytes": 9139,
+      "path": "gen2-negative-controls-review/gen2-negative-controls-impl-review.raw.txt",
+      "sha256": "7aaec8ba993b4c3ee2d4b1178ca8f803b4f3f746405cefc068d2bba564216f19"
+    },
+    {
+      "bytes": 192,
+      "path": "gen2-negative-controls-review/gen2-negative-controls-readback.raw.txt",
+      "sha256": "f8e1d9732c13e1806d5a643583140e76cba0754f50f2263bcbcc14d38595976d"
+    },
+    {
+      "bytes": 2403,
+      "path": "gen2-negative-controls-review/gen2-negative-controls-review-summary.json",
+      "sha256": "104e0030452b34f6b1d881e0009999a776f830924ab7dbe1ed0b4e17c1d1ebde"
     },
     {
       "bytes": 326,
@@ -70,6 +90,11 @@
       "bytes": 8881,
       "path": "policy_negative_control_results.json",
       "sha256": "c0920e6372c4068ee6eb18f7d2d5eea0fd6c3e82694a0209753554c95f6a2053"
+    },
+    {
+      "bytes": 3030,
+      "path": "policy_negative_control_traceability.json",
+      "sha256": "5e6631ccd0ea582d0e6588f1d7887acfdbd9e3b46ea2ebf9f073ae355e1bbc34"
     },
     {
       "bytes": 1291,
@@ -120,6 +145,11 @@
       "bytes": 15245,
       "path": "policy_untyped_sources.jsonl",
       "sha256": "245cf08ca672dbd73c745801d92d054c5b97170f2a7098b9d2e10deb5f2697f4"
+    },
+    {
+      "bytes": 851,
+      "path": "policy_verifier_manifest.json",
+      "sha256": "38965c31e0ca51189e3c70f84611e47b5c74e54b3e43492f929ae27898059ba3"
     },
     {
       "bytes": 832591,

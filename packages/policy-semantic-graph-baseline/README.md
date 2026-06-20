@@ -37,7 +37,16 @@ This emits:
 
 - `policy_negative_control_results.json`
 - `policy_independent_rerun_receipt.json`
+- `policy_negative_control_traceability.json`
+- `policy_verifier_manifest.json`
 
 The controls use synthetic fixtures. They prove the current measurement harness
 can detect selected loss/tamper classes; they do not prove policy deletion
 readiness.
+
+`policy_negative_control_traceability.json` maps planned control classes to the
+executed controls. Partial controls are explicit and remain future work.
+
+`policy_verifier_manifest.json` pins the verifier and baseline generator hashes
+for external review mirrors. It improves reviewability only; it is not Project
+Source proof or canonical SSOT proof.

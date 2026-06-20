@@ -1,0 +1,84 @@
+{
+  "executedControlCount": 9,
+  "plannedClassCount": 8,
+  "plannedToExecuted": [
+    {
+      "executed": [
+        "missing-deny-edge"
+      ],
+      "notes": "Required edge-kind gate blocks when deny evidence is omitted.",
+      "planned": "dropped-deny-edge",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "missing-obligation-edge"
+      ],
+      "notes": "Current fixture covers missing obligation evidence, not nuanced weakening. Weakening false-positive cases remain future work.",
+      "planned": "weakened-obligation-edge",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "missing-activation-edge"
+      ],
+      "notes": "Required edge-kind gate blocks when activation evidence is omitted.",
+      "planned": "missing-activation-edge",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "edge-source-spans-validate",
+        "removed-source-span-detected"
+      ],
+      "notes": "Harness validates source spans exist and detects removed span mutation.",
+      "planned": "removed-source-span",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "source-node-hashes-validate",
+        "stale-source-node-detected"
+      ],
+      "notes": "Harness validates source hashes and detects stale hash mutation.",
+      "planned": "stale-source-node",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "active-consumer-ref-blocks"
+      ],
+      "notes": "Current fixture proves active consumer references block. False-positive documentation/path triage remains future work.",
+      "planned": "consumer-ref-false-positive",
+      "status": "partial-executed-pass"
+    },
+    {
+      "executed": [
+        "active-consumer-ref-blocks"
+      ],
+      "notes": "Current fixture proves at least one active policy.git reference is detected. Broader false-negative controls remain future work.",
+      "planned": "consumer-ref-false-negative",
+      "status": "partial-executed-pass"
+    },
+    {
+      "executed": [
+        "source-file-with-no-edges"
+      ],
+      "notes": "Additional executed control not present in the original seven-item plan; covers coverage gate failure.",
+      "planned": "source-without-semantic-edge",
+      "status": "executed-pass"
+    }
+  ],
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "purpose": "Reconcile planned negative-control classes with the executed synthetic harness controls.",
+  "remainingControlGaps": [
+    "weak obligation or permission text falsely extracted as obligation",
+    "documentation/path mention falsely classified as active runtime consumer",
+    "active runtime policy reference missed when wording changes",
+    "quoted anti-pattern treated as active allowed behavior",
+    "superseded/generated/evidence material treated as current authority",
+    "source span points to wrong file or wrong line while present"
+  ],
+  "scope": "synthetic fixture controls; not deletion readiness",
+  "type": "policy.negativeControlTraceability.v1"
+}

@@ -71,12 +71,14 @@
     "SSOT write"
   ],
   "negativeControlResults": "policy_negative_control_results.json",
+  "negativeControlTraceability": "policy_negative_control_traceability.json",
   "negativeControls": "policy_negative_controls.json",
   "negativeControlsStatus": {
     "decision": "PASS",
     "passed": 9,
     "scope": "synthetic fixture controls; not deletion readiness",
-    "total": 9
+    "total": 9,
+    "traceability": "policy_negative_control_traceability.json"
   },
   "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
   "reviewLimit": "This remains a heuristic baseline and fail-closed BLOCK evidence.",
@@ -84,5 +86,6 @@
     "semanticEdges": "policy_semantic_edges.shards.json",
     "sourceNodes": "policy_source_nodes.shards.json"
   },
-  "type": "policy.reviewSummary.v1"
+  "type": "policy.reviewSummary.v1",
+  "verifierManifest": "policy_verifier_manifest.json"
 }

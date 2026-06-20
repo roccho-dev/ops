@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "bytes": 8552,
+      "path": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-negative-controls.py",
+      "role": "negative-control verifier",
+      "sha256": "e151ca7e78b4506b900f28ea50511873edeed4f5fc0f89fe1ee144ddb71c25c6"
+    },
+    {
+      "bytes": 20536,
+      "path": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+      "role": "baseline generator",
+      "sha256": "eea525565df66ff09dffe7121fe7361866f0b0c4eb62e854230ed562e9787230"
+    }
+  ],
+  "note": "Publishing these hashes supports reviewability only; it is not Project Source proof or canonical SSOT proof.",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "scope": "negative-control verifier and baseline generator hashes for external review mirror",
+  "type": "policy.verifierManifest.v1"
+}
