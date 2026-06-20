@@ -217,6 +217,26 @@ grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' 
 grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssignment.v1.jsonl"
 grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl"
 
+mkdir -p "$work/adrs-projection-review-provider-records" "$work/adrs-projection-review-provider-gated"
+cp "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/"*.jsonl "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-batches/policy.sourceSpanDispositionReviewBatch.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssignment.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$work/adrs-projection-review-provider-records" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-review-provider-gated" > "$work/adrs-projection-review-provider-gated.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed without accepted review results" >&2
+  exit 1
+fi
+grep '"gate_id":"review-batches-cover-missing-accepted-spans"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-batches-have-two-reviewer-assignments"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-batches-have-direct-cross-discussion-required"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-assignments-have-accepted-results"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"review-assignments-have-accepted-results"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"count":2'
+grep '"gate_id":"review-batches-have-accepted-direct-cross-discussions"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"review-batches-have-accepted-direct-cross-discussions"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"count":1'
+
 if policy-semantic-compiler check-source-span-review-completion \
   --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
   --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
