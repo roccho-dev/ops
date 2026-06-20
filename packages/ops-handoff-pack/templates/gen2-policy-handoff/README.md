@@ -21,9 +21,13 @@ building a handoff packet from that policy.
 |---|---|
 | `GEN2_HANDOFF_BUNDLE_SPEC.md` | bundle structure and authority boundary |
 | `templates/HANDOFF_MANIFEST.template.json` | handoff package manifest template |
-| `templates/context-packet.template.json` | gen1 -> gen2 context packet template |
+| `templates/context-packet.template.json` | generic gen1 -> gen2 context packet template |
+| `templates/context-packet.impl-work.template.json` | ChatGPT impl-work thread context packet template |
+| `templates/context-packet.impl-review.template.json` | ChatGPT impl-review thread context packet template |
 | `PROJECT_SOURCE_UPLOAD_PLAN.md` | Project Source revision/readback rules |
-| `EXPECTED_OUTPUT_CONTRACT.md` | worker/reviewer return contract |
+| `EXPECTED_OUTPUT_CONTRACT.md` | generic worker/reviewer return contract |
+| `output-contract/EXPECTED_OUTPUT_CONTRACT.impl-work.md` | ChatGPT impl-work return contract |
+| `output-contract/EXPECTED_OUTPUT_CONTRACT.impl-review.md` | ChatGPT impl-review return contract |
 | `SNAPSHOT_MANIFEST.template.md` | source snapshot manifest template |
 | `purpose_lineage.template.json` | purpose lineage template |
 | `DOD.template.md` | definition of done template |
@@ -71,3 +75,34 @@ Generated packet payload hashes inside `HANDOFF_MANIFEST.json` must be limited t
 non-self payloads and must match final `sha256sum` output. Local proof packets
 use `container.kind: "loose-files"`; archive transports use `"zip"` or
 `"tar.gz"`.
+
+## ChatGPT Gen2 work/review topology
+
+ChatGPT Gen2 handoff uses separate Project thread actors. Do not bind a single
+ChatGPT actor to both work and review for the same scope.
+
+| actor shape | roleId | threadFunction | boundary |
+|---|---|---|---|
+| `actor.gen2.chatgpt.impl-work.<packetId>` | `role.chatgpt.thread` | `impl-work` | produces work artifact/RUN_REPORT; cannot review or approve its own work |
+| `actor.gen2.chatgpt.impl-review.<packetId>` | `role.chatgpt.thread` | `impl-review` | reviews impl-work artifact and returns PASS/BLOCK; cannot edit implementation |
+
+ChatGPT thread actors must use `role.chatgpt.thread`. The canonical
+`threadFunction` values are `impl-work`, `impl-review`, `merge-work`, and
+`merge-review`. Do not use `role.implWorker` or `role.implReviewer` as the
+ChatGPT thread actor role. Same `actorId` must not appear in both work and
+review for the same scope.
+
+The `impl-review` packet must include the `impl-work` artifact/readback as input.
+A review packet that only includes the original request is not sufficient for an
+`impl-review-pass` claim.
+
+## Multi-thread manifest boundary
+
+`HANDOFF_MANIFEST.json.target` remains the schema-floor single targetRef. Do not
+replace `target` with a roster object. ChatGPT multi-thread topology is expressed
+in `threadBindings[]`, where each bound child has a distinct `actorId`,
+`roleId: "role.chatgpt.thread"`, and canonical `threadFunction`.
+
+A roster target may identify the ChatGPT Project thread set, but it must not use
+a non-canonical `threadFunction`. Canonical `threadFunction` values live on
+`threadBindings[]` entries only.

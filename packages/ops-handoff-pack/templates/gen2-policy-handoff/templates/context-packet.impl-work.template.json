@@ -1,0 +1,43 @@
+{
+  "contextPacketId": "ctx-gen1-to-gen2-impl-work-REPLACE",
+  "createdAt": "REPLACE_ISO8601",
+  "parentActor": { "actorId": "actor.gen1.codex.REPLACE", "actorRole": "parentActor", "roleId": "role.rootCoordinator" },
+  "childActor": { "actorId": "actor.gen2.chatgpt.impl-work.REPLACE", "actorRole": "childActor", "roleId": "role.chatgpt.thread" },
+  "relationship": "parent-to-child",
+  "roleBinding": {
+    "roleBindingId": "role-binding-gen2-chatgpt-impl-work-REPLACE",
+    "actorId": "actor.gen2.chatgpt.impl-work.REPLACE",
+    "roleId": "role.chatgpt.thread",
+    "threadFunction": "impl-work",
+    "parentActorId": "actor.gen1.codex.REPLACE",
+    "claimPath": "claims/impl-work-REPLACE.jsonl",
+    "eventLogPath": "events/impl-work-REPLACE.jsonl",
+    "roleProfileRef": "role-profiles/impl-worker.json",
+    "compiledRoleContractRef": "projections/compiled-role-contracts/role-implWorker.json"
+  },
+  "commandRef": { "commandId": "cmd-gen2-impl-work-REPLACE", "commandBoardPath": "boards/impl-work-REPLACE.jsonl", "claimPath": "claims/impl-work-REPLACE.jsonl" },
+  "goalState": "Produce the requested implementation/work artifact from fixed source and policy refs without claiming review or approval.",
+  "currentState": "REPLACE",
+  "scope": { "localWorktree": "/home/nixos/work/REPLACE", "remoteSsot": "ssh://100.124.250.91/home/nixos/repos/REPLACE.git" },
+  "sourceRefs": [
+    { "kind": "policy-entry", "path": "POLICY_ENTRY_REFS.json", "ref": "fixed policyEntryRef + digest list", "purpose": "verify immutable policy source before normal work" },
+    { "kind": "handoff-manifest", "path": "HANDOFF_MANIFEST.json", "ref": "handoff.package.v1", "purpose": "verify package type, payloads, source identity, expected outputs, and authority flags" },
+    { "kind": "request", "path": "REQUEST.impl-work.md", "ref": "impl-work request", "purpose": "know work-only task and no-review boundary" },
+    { "kind": "snapshot-manifest", "path": "SNAPSHOT_MANIFEST.md", "ref": "policy/source snapshot", "purpose": "verify sourceHead, archiveMethod, requestEntrypoint, and uncommitted-change boundary" },
+    { "kind": "purpose-lineage", "path": "purpose_lineage.json", "ref": "purpose.lineage.v1", "purpose": "preserve all known purpose generations and non-goals" },
+    { "kind": "dod", "path": "DOD.md", "ref": "completion contract", "purpose": "know done criteria, evidence requirements, and approval boundary" },
+    { "kind": "expected-output-contract", "path": "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-work.md", "ref": "impl-work return contract", "purpose": "know required work artifacts and PASS/BLOCK ceiling" }
+  ],
+  "mustReadArtifacts": ["HANDOFF_MANIFEST.json", "context-packet.impl-work.json", "POLICY_ENTRY_REFS.json", "REQUEST.impl-work.md", "BACKGROUND.md", "purpose_lineage.json", "DOD.md", "SNAPSHOT_MANIFEST.md", "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-work.md"],
+  "knownFacts": ["This actor is impl-work only", "A separate impl-review actor must review this work", "Project Source/readback is transport evidence only"],
+  "openQuestions": [],
+  "allowedActions": ["read listed sources", "produce implementation/work artifact", "produce RUN_REPORT", "report BLOCK with evidence"],
+  "forbiddenActions": ["impl-review-pass", "merge-review-pass", "completion approval", "canonical write", "ssot direct edit", "self-review", "Gen0 direct command bypass"],
+  "completionContract": { "criteriaRequired": true, "approvalRequired": true, "claimKind": "claim.implWork.v1", "approvalActor": "actor.gen2.chatgpt.impl-review.REPLACE" },
+  "escalationPolicy": { "missingSource": "return blockerClass=context-missing" },
+  "runtimeCapabilities": [],
+  "transportPolicy": { "projectSourceReadbackRequired": true, "inlineSourceForbidden": true, "base64FallbackForbidden": true },
+  "exitCriteria": ["GEN2_IMPL_WORK_READBACK.json produced", "IMPL_WORK_REPORT.md produced or blocker returned with evidence"],
+  "redactions": [],
+  "eventLogPath": "events/impl-work-REPLACE.jsonl"
+}

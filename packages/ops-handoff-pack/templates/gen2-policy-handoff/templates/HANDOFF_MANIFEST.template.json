@@ -1,32 +1,192 @@
 {
-  "kind": "handoff.package.v1",
-  "packageId": "gen2-handoff-REPLACE",
-  "packageType": "project-request",
-  "createdAt": "REPLACE_ISO8601",
-  "producer": { "actorId": "actor.gen1.codex.REPLACE", "actorRole": "parentActor", "roleId": "role.rootCoordinator" },
-  "target": { "actorId": "actor.gen2.REPLACE", "actorRole": "childActor", "roleId": "role.implWorker", "threadFunction": "impl-work" },
-  "container": { "kind": "zip", "path": "gen2-handoff-REPLACE.zip", "externalDigestRef": "SNAPSHOT_MANIFEST.md" },
-  "entrypoints": { "manifest": "HANDOFF_MANIFEST.json", "request": "REQUEST.md", "background": "BACKGROUND.md", "index": "INDEX.md", "snapshot": "SNAPSHOT_MANIFEST.md" },
-  "sourceIdentities": [
-    { "repoId": "policy", "role": "source", "repoPath": "/home/nixos/work/policy-understand-gen-handoff-260620", "baseRef": "main", "baseHead": "334997669f1889a8e2658730c616d2d4510d4536" },
-    { "repoId": "REPLACE", "role": "candidate", "repoPath": "/home/nixos/work/REPLACE", "candidateRef": "refs/heads/REPLACE", "candidateHead": "REPLACE" }
-  ],
-  "payloads": [
-    { "kind": "request", "path": "REQUEST.md", "sha256": "REPLACE", "required": true },
-    { "kind": "background", "path": "BACKGROUND.md", "sha256": "REPLACE", "required": true },
-    { "kind": "purpose-lineage", "path": "purpose_lineage.json", "sha256": "REPLACE", "required": true },
-    { "kind": "definition-of-done", "path": "DOD.md", "sha256": "REPLACE", "required": true },
-    { "kind": "policy-entry-refs", "path": "POLICY_ENTRY_REFS.json", "sha256": "REPLACE", "required": true },
-    { "kind": "context-packet", "path": "context-packet.json", "sha256": "REPLACE", "required": true },
-    { "kind": "expected-output-contract", "path": "output-contract/EXPECTED_OUTPUT_CONTRACT.md", "sha256": "REPLACE", "required": true }
-  ],
-  "expectedReadback": [
-    { "file": "REQUEST.md", "marker": "gen2-handoff-REPLACE", "minimumIntervalSeconds": 0 },
-    { "file": "POLICY_ENTRY_REFS.json", "marker": "334997669f1889a8e2658730c616d2d4510d4536", "minimumIntervalSeconds": 0 }
-  ],
-  "expectedOutputs": [
-    { "path": "GEN2_READBACK.json", "description": "first reply readback", "required": true },
-    { "path": "VERDICT_OR_WORK_REPORT.md", "description": "PASS/BLOCK or work report with evidence", "required": true }
-  ],
-  "authorityFlags": { "semanticApproval": false, "completionApproval": false, "routeDecision": false, "canonicalWriteApproval": false }
+   "authorityFlags" : {
+      "canonicalWriteApproval" : false,
+      "completionApproval" : false,
+      "routeDecision" : false,
+      "semanticApproval" : false
+   },
+   "container" : {
+      "externalDigestRef" : "SNAPSHOT_MANIFEST.md",
+      "kind" : "zip",
+      "path" : "gen2-chatgpt-handoff-REPLACE.zip"
+   },
+   "createdAt" : "REPLACE_ISO8601",
+   "entrypoints" : {
+      "background" : "BACKGROUND.md",
+      "index" : "INDEX.md",
+      "manifest" : "HANDOFF_MANIFEST.json",
+      "requestImplReview" : "REQUEST.impl-review.md",
+      "requestImplWork" : "REQUEST.impl-work.md",
+      "snapshot" : "SNAPSHOT_MANIFEST.md"
+   },
+   "expectedOutputs" : [
+      {
+         "description" : "impl-work first reply readback",
+         "path" : "GEN2_IMPL_WORK_READBACK.json",
+         "required" : true,
+         "threadFunction" : "impl-work"
+      },
+      {
+         "description" : "impl-work artifact/report or BLOCK",
+         "path" : "IMPL_WORK_REPORT.md",
+         "required" : true,
+         "threadFunction" : "impl-work"
+      },
+      {
+         "description" : "impl-review first reply readback",
+         "path" : "GEN2_IMPL_REVIEW_READBACK.json",
+         "required" : true,
+         "threadFunction" : "impl-review"
+      },
+      {
+         "description" : "impl-review PASS/BLOCK verdict with evidence",
+         "path" : "IMPL_REVIEW_VERDICT.md",
+         "required" : true,
+         "threadFunction" : "impl-review"
+      }
+   ],
+   "expectedReadback" : [
+      {
+         "file" : "REQUEST.impl-work.md",
+         "marker" : "gen2-impl-work-REPLACE",
+         "minimumIntervalSeconds" : 0,
+         "threadFunction" : "impl-work"
+      },
+      {
+         "file" : "REQUEST.impl-review.md",
+         "marker" : "gen2-impl-review-REPLACE",
+         "minimumIntervalSeconds" : 0,
+         "threadFunction" : "impl-review"
+      },
+      {
+         "file" : "POLICY_ENTRY_REFS.json",
+         "marker" : "334997669f1889a8e2658730c616d2d4510d4536",
+         "minimumIntervalSeconds" : 0
+      }
+   ],
+   "kind" : "handoff.package.v1",
+   "packageId" : "gen2-chatgpt-handoff-REPLACE",
+   "packageType" : "project-request",
+   "payloads" : [
+      {
+         "kind" : "request",
+         "path" : "REQUEST.impl-work.md",
+         "required" : true,
+         "sha256" : "REPLACE",
+         "targetThreadFunction" : "impl-work"
+      },
+      {
+         "kind" : "request",
+         "path" : "REQUEST.impl-review.md",
+         "required" : true,
+         "sha256" : "REPLACE",
+         "targetThreadFunction" : "impl-review"
+      },
+      {
+         "kind" : "background",
+         "path" : "BACKGROUND.md",
+         "required" : true,
+         "sha256" : "REPLACE"
+      },
+      {
+         "kind" : "purpose-lineage",
+         "path" : "purpose_lineage.json",
+         "required" : true,
+         "sha256" : "REPLACE"
+      },
+      {
+         "kind" : "definition-of-done",
+         "path" : "DOD.md",
+         "required" : true,
+         "sha256" : "REPLACE"
+      },
+      {
+         "kind" : "policy-entry-refs",
+         "path" : "POLICY_ENTRY_REFS.json",
+         "required" : true,
+         "sha256" : "REPLACE"
+      },
+      {
+         "kind" : "context-packet",
+         "path" : "context-packet.impl-work.json",
+         "required" : true,
+         "sha256" : "REPLACE",
+         "targetThreadFunction" : "impl-work"
+      },
+      {
+         "kind" : "context-packet",
+         "path" : "context-packet.impl-review.json",
+         "required" : true,
+         "sha256" : "REPLACE",
+         "targetThreadFunction" : "impl-review"
+      },
+      {
+         "kind" : "expected-output-contract",
+         "path" : "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-work.md",
+         "required" : true,
+         "sha256" : "REPLACE",
+         "targetThreadFunction" : "impl-work"
+      },
+      {
+         "kind" : "expected-output-contract",
+         "path" : "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-review.md",
+         "required" : true,
+         "sha256" : "REPLACE",
+         "targetThreadFunction" : "impl-review"
+      }
+   ],
+   "producer" : {
+      "actorId" : "actor.gen1.codex.REPLACE",
+      "actorRole" : "parentActor",
+      "roleId" : "role.rootCoordinator"
+   },
+   "separationOfDuty" : {
+      "gen0DirectGen2CommandAllowed" : false,
+      "implReviewRequiresImplWorkArtifact" : true,
+      "sameActorMayDoImplWorkAndImplReview" : false
+   },
+   "sourceIdentities" : [
+      {
+         "baseHead" : "334997669f1889a8e2658730c616d2d4510d4536",
+         "baseRef" : "main",
+         "repoId" : "policy",
+         "repoPath" : "/home/nixos/work/policy-understand-gen-handoff-260620",
+         "role" : "source"
+      },
+      {
+         "candidateHead" : "REPLACE",
+         "candidateRef" : "refs/heads/REPLACE",
+         "repoId" : "REPLACE",
+         "repoPath" : "/home/nixos/work/REPLACE",
+         "role" : "candidate"
+      }
+   ],
+   "target" : {
+      "actorId" : "actor.chatgpt.project.threads.REPLACE",
+      "actorRole" : "childActor",
+      "roleId" : "role.chatgpt.thread"
+   },
+   "threadBindings" : [
+      {
+         "actorId" : "actor.gen2.chatgpt.impl-work.REPLACE",
+         "actorRole" : "childActor",
+         "contextPacket" : "context-packet.impl-work.json",
+         "expectedOutputContract" : "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-work.md",
+         "parentActorId" : "actor.gen1.codex.REPLACE",
+         "request" : "REQUEST.impl-work.md",
+         "roleId" : "role.chatgpt.thread",
+         "threadFunction" : "impl-work"
+      },
+      {
+         "actorId" : "actor.gen2.chatgpt.impl-review.REPLACE",
+         "actorRole" : "childActor",
+         "contextPacket" : "context-packet.impl-review.json",
+         "expectedOutputContract" : "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-review.md",
+         "parentActorId" : "actor.gen1.codex.REPLACE",
+         "request" : "REQUEST.impl-review.md",
+         "requiresInput" : "GEN2_IMPL_WORK_OUTPUT/",
+         "roleId" : "role.chatgpt.thread",
+         "threadFunction" : "impl-review"
+      }
+   ]
 }
