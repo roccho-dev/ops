@@ -1,0 +1,43 @@
+{
+  "type": "policy.typedBridge.deletionReadinessGates.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "classifierVersion": "typed-bridge-jq-v1",
+  "decision": "BLOCK",
+  "sourceBaselineRows": 64,
+  "sourceRowsExcludedAsNonAuthority": 51,
+  "sourceRowsRemaining": 13,
+  "consumerBaselineRows": 89,
+  "consumerRowsExcludedAsNonActive": 68,
+  "consumerRowsRemaining": 21,
+  "gates": [
+    {
+      "name": "authority-bearing-untyped-sources-eliminated",
+      "status": "BLOCK",
+      "actual": 13,
+      "expected": 0
+    },
+    {
+      "name": "active-runtime-policy-consumers-eliminated",
+      "status": "BLOCK",
+      "actual": 21,
+      "expected": 0
+    },
+    {
+      "name": "typed-semantic-compiler-accepted",
+      "status": "BLOCK",
+      "actual": "typed-bridge-over-heuristic-baseline",
+      "expected": "accepted typed semantic graph compiler"
+    }
+  ],
+  "notDeletionReady": true,
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "semantic approval",
+    "canonical write",
+    "SSOT write"
+  ]
+}

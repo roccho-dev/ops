@@ -1,0 +1,103 @@
+{
+  "type": "policy.typedBridge.reviewSummary.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "classifierVersion": "typed-bridge-jq-v1",
+  "decision": "BLOCK",
+  "purpose": "Reduce false blockers by preserving explicit non-authority and non-active exclusion records while keeping real policy.git retirement gates blocked.",
+  "baselineDecision": "BLOCK",
+  "baselineGates": [
+    {
+      "actual": 64,
+      "expected": 0,
+      "name": "all-source-files-have-semantic-edges",
+      "status": "BLOCK"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "name": "all-required-edge-kinds-observed",
+      "status": "PASS"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "name": "low-density-prose-reviewed",
+      "status": "PASS"
+    },
+    {
+      "actual": 89,
+      "expected": 0,
+      "name": "active-policy-repo-consumer-refs-eliminated",
+      "status": "BLOCK"
+    },
+    {
+      "actual": "heuristic-keyword-baseline",
+      "expected": "accepted typed semantic graph compiler",
+      "name": "heuristic-extraction-not-final-authority",
+      "status": "BLOCK"
+    }
+  ],
+  "sourceReduction": {
+    "baselineRows": 64,
+    "excludedRows": 51,
+    "remainingRows": 13,
+    "remainingBySourceClass": {
+      "normative": 5,
+      "template": 1,
+      "unknown": 7
+    },
+    "excludedBySourceClass": {
+      "code": 24,
+      "evidence": 3,
+      "package-metadata": 24
+    },
+    "exclusions": "policy_typed_source_exclusions.jsonl",
+    "unresolved": "policy_typed_source_unresolved.jsonl"
+  },
+  "consumerReduction": {
+    "baselineRows": 89,
+    "excludedRows": 68,
+    "remainingRows": 21,
+    "remainingByRefClass": {
+      "active-runtime-candidate": 21
+    },
+    "excludedByRefClass": {
+      "documentation": 27,
+      "generated-evidence": 39,
+      "path-mention": 2
+    },
+    "exclusions": "policy_typed_consumer_exclusions.jsonl",
+    "unresolved": "policy_typed_consumer_unresolved.jsonl"
+  },
+  "bridgeGates": [
+    {
+      "name": "authority-bearing-untyped-sources-eliminated",
+      "status": "BLOCK",
+      "actual": 13,
+      "expected": 0
+    },
+    {
+      "name": "active-runtime-policy-consumers-eliminated",
+      "status": "BLOCK",
+      "actual": 21,
+      "expected": 0
+    },
+    {
+      "name": "typed-semantic-compiler-accepted",
+      "status": "BLOCK",
+      "actual": "typed-bridge-over-heuristic-baseline",
+      "expected": "accepted typed semantic graph compiler"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "semantic approval",
+    "canonical write",
+    "SSOT write"
+  ],
+  "reviewLimit": "This bridge is not final semantic equivalence proof. It is a reviewable typed reduction over the existing heuristic baseline."
+}

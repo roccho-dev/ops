@@ -1,0 +1,8 @@
+{
+  "type": "policy.typedBridge.controlSummary.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "PASS",
+  "passed": 9,
+  "total": 9,
+  "scope": "bridge reducer controls; not deletion readiness"
+}

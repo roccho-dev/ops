@@ -1,0 +1,9 @@
+{"type":"policy.typedBridge.controlResult.v1","name":"source-exclusions-do-not-clear-gate","passed":true,"details":{"remaining":13,"gate":"BLOCK"}}
+{"type":"policy.typedBridge.controlResult.v1","name":"consumer-exclusions-do-not-clear-gate","passed":true,"details":{"remaining":21,"gate":"BLOCK"}}
+{"type":"policy.typedBridge.controlResult.v1","name":"typed-compiler-still-blocks","passed":true,"details":{"gate":"BLOCK"}}
+{"type":"policy.typedBridge.controlResult.v1","name":"source-exclusions-have-required-fields","passed":true,"details":{"missing":0}}
+{"type":"policy.typedBridge.controlResult.v1","name":"consumer-exclusions-have-required-fields","passed":true,"details":{"missing":0}}
+{"type":"policy.typedBridge.controlResult.v1","name":"unresolved-records-machine-readable","passed":true,"details":{"sourceUnresolvedRows":13,"consumerUnresolvedRows":21}}
+{"type":"policy.typedBridge.controlResult.v1","name":"non-active-consumer-refs-excluded-only","passed":true,"details":{"bad":0}}
+{"type":"policy.typedBridge.controlResult.v1","name":"active-runtime-candidates-preserved","passed":true,"details":{"bad":0}}
+{"type":"policy.typedBridge.controlResult.v1","name":"authority-source-candidates-preserved","passed":true,"details":{"bad":0}}

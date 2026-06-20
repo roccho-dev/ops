@@ -1,0 +1,48 @@
+{
+  "type": "policy.typedBridge.manifest.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "classifierVersion": "typed-bridge-jq-v1",
+  "decision": "BLOCK",
+  "files": [
+    {
+      "path": "policy_typed_bridge_deletion_readiness_gates.json",
+      "sha256": "dc45c92b8c7bd67feca9e69c72a1121a64e3330823816f0083d10e45a6eb4fd6",
+      "bytes": 1134
+    },
+    {
+      "path": "policy_typed_bridge_review_summary.json",
+      "sha256": "84a2cc2a0266c53cf93fe992965b378ab4ed97dd3aba420abd327222429f547c",
+      "bytes": 2824
+    },
+    {
+      "path": "policy_typed_consumer_exclusions.jsonl",
+      "sha256": "db2699e9624e5d96243af84915bf2db1ac37b537dd9eabfd3a345646f5f38256",
+      "bytes": 108926
+    },
+    {
+      "path": "policy_typed_consumer_reduction.jsonl",
+      "sha256": "63b454423ccbc66d8c02ffecfbd456eb206d97abb1cd7b5b56a985c64ee9b614",
+      "bytes": 133602
+    },
+    {
+      "path": "policy_typed_consumer_unresolved.jsonl",
+      "sha256": "11e482360c57b45f49528ca6aa869a2e6c545e79c2b7726e0b2c3d9c004a8e98",
+      "bytes": 24676
+    },
+    {
+      "path": "policy_typed_source_exclusions.jsonl",
+      "sha256": "18f19a2ef6f7ca73f0ac6deebbcf20ca97be7559b74620d095b38b021c9a3398",
+      "bytes": 42908
+    },
+    {
+      "path": "policy_typed_source_reduction.jsonl",
+      "sha256": "7b47a77e30cfc49ebac2790f16d47e0d34eea88a8153c7ef740b2891bbbd70e6",
+      "bytes": 54615
+    },
+    {
+      "path": "policy_typed_source_unresolved.jsonl",
+      "sha256": "10113257da12c4a1b476a7eac234c62cc97ec6f856765ffb2e17f9e1afccdb5a",
+      "bytes": 11707
+    }
+  ]
+}
