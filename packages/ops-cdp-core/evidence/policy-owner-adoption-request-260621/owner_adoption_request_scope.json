@@ -1,0 +1,38 @@
+{
+  "type": "policy.ownerAdoptionRequest.scope.v1",
+  "requestId": "owner-adoption-request-260621",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "acceptedAuthorityRefs": {
+    "ops": "7fabb736ec0bbf9bc56056c0b6fc5bfa8cc0cdee",
+    "adrs": "f4ccf6a23e7676b8c192d215bf77871bb5877994"
+  },
+  "blockedGateRefs": {
+    "ops": "fd3a257fc06f4237cdbb140f1da0034a201ae00c",
+    "adrs": "204a541b331e92ab107306d658272e1fdfbf18bf"
+  },
+  "requestedDecision": "adopt accepted full-corpus semantic equivalence authority boundary for the fixed policy ref",
+  "approvalScope": {
+    "adopts": [
+      "full-corpus semantic equivalence authority for policy input ref"
+    ],
+    "doesNotAdopt": [
+      "policy.git deletion",
+      "policy.git retirement",
+      "cutover readiness",
+      "end-to-end retirement proof",
+      "canonical write",
+      "SSOT adoption",
+      "merge approval"
+    ]
+  },
+  "requiredOwnerFields": [
+    "approvalActor",
+    "approvalAuthority",
+    "decision",
+    "scopeRef",
+    "policyRef",
+    "acceptedAuthorityRefs",
+    "recordedAt",
+    "signatureOrAuditRef"
+  ]
+}

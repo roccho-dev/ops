@@ -1,0 +1,21 @@
+{
+  "type": "policy.ownerAdoptionRequest.summary.v1",
+  "decision": "REQUEST_READY",
+  "ownerAdoptionGate": "BLOCK_UNTIL_OWNER_RECORD",
+  "deletionReadiness": "BLOCK",
+  "requestId": "owner-adoption-request-260621",
+  "requestPurpose": "obtain explicit owner adoption decision for accepted semantic authority boundary",
+  "ownerApprovalRecordsPresent": false,
+  "templateProvided": true,
+  "noDelegatedImplicitApproval": "PASS",
+  "adoptionBoundaryExplicit": "PASS",
+  "mustNotClaim": [
+    "owner approval",
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "end-to-end retirement proof",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

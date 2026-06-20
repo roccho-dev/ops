@@ -1,0 +1,26 @@
+{
+  "type": "policy.ownerAdoptionRequest.options.v1",
+  "requestId": "owner-adoption-request-260621",
+  "allowedDecisions": [
+    {
+      "decision": "APPROVE_SCOPE_ONLY",
+      "effect": "owner/adoption gate may pass for semantic authority boundary only; deletion/e2e/canonical remain BLOCK"
+    },
+    {
+      "decision": "REJECT",
+      "effect": "owner/adoption gate remains BLOCK; record rejection reason"
+    },
+    {
+      "decision": "DEFER",
+      "effect": "owner/adoption gate remains BLOCK; record missing evidence or timing reason"
+    }
+  ],
+  "forbiddenDecisionEffects": [
+    "policy.git deletion approval",
+    "policy.git retirement approval",
+    "cutover readiness",
+    "canonical write",
+    "SSOT adoption",
+    "end-to-end retirement proof"
+  ]
+}
