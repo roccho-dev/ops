@@ -131,7 +131,9 @@ reviewers not to read the `policy.git` body.
 accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an
 accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`
 with peer replies read and no remaining objections. Missing review results or
-discussion results keep the gate blocked.
+discussion results keep the gate blocked. Accepted review results must match
+the assignment span set, reference the review packet, set `packetRead:true`,
+include disposition/rationale, and report no remaining objections.
 
 `materialize-accepted-source-span-dispositions` emits accepted
 `policy.sourceSpanDisposition.v1` rows only after the completion checker passes.

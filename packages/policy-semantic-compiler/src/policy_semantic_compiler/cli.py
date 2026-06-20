@@ -1215,16 +1215,46 @@ COPY (
         and row.get("status") == "direct-cross-discussion-required"
         and str(row.get("batchId")) in batch_ids
     }
+    assignment_span_ids = {
+        (str(row.get("batchId")), str(row.get("reviewerId"))): {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+        for row in valid_assignments
+    }
+    packet_ids_by_batch = {
+        str(row.get("batchId")): str(row.get("id"))
+        for row in review_packets
+        if row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1" and row.get("id")
+    }
+    valid_review_results = []
+    invalid_review_result_ids: list[str] = []
+    for row in review_results:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1"
+            and row.get("status") == "accepted"
+            and row.get("accepted") is True
+            and row.get("policyRev") == expected_rev
+            and row.get("fixtureOnly") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+        ):
+            continue
+        pair = (str(row.get("batchId")), str(row.get("reviewerId")))
+        result_span_ids = {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+        valid_shape = (
+            pair in assignment_span_ids
+            and result_span_ids == assignment_span_ids[pair]
+            and row.get("packetRead") is True
+            and row.get("packetId") == packet_ids_by_batch.get(str(row.get("batchId")))
+            and row.get("noRemainingObjections") is True
+            and bool(row.get("disposition"))
+            and bool(row.get("rationale"))
+        )
+        if valid_shape:
+            valid_review_results.append(row)
+        else:
+            invalid_review_result_ids.append(str(row.get("id") or f"{pair[0]}:{pair[1]}"))
     accepted_review_pairs = {
         (str(row.get("batchId")), str(row.get("reviewerId")))
-        for row in review_results
-        if row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1"
-        and row.get("status") == "accepted"
-        and row.get("accepted") is True
-        and row.get("policyRev") == expected_rev
-        and row.get("fixtureOnly") is False
-        and row.get("generatedIsAuthority") is False
-        and row.get("policyDeletionApproved") is False
+        for row in valid_review_results
     }
     accepted_discussion_batch_ids = {
         str(row.get("batchId"))
@@ -1296,6 +1326,12 @@ COPY (
             "count": len(missing_review_result_pairs),
         },
         {
+            "gate_id": "review-results-match-assignments-and-packets",
+            "status": "pass" if not invalid_review_result_ids else "blocked",
+            "blocker": None if not invalid_review_result_ids else "review result does not match assignment spans, packet id, packet read, disposition, rationale, or no-objection requirements",
+            "count": len(invalid_review_result_ids),
+        },
+        {
             "gate_id": "review-batches-have-accepted-direct-cross-discussions",
             "status": "pass" if not batches_missing_accepted_discussion else "blocked",
             "blocker": None if not batches_missing_accepted_discussion else "review batches lack accepted no-objection direct cross-discussions",
@@ -1311,6 +1347,7 @@ COPY (
     jsonl_write(out_dir / "review-packets-missing-projection-fields.jsonl", [{"kind": "policySemantic.reviewPacketMissingProjectionFields.v1", "packetId": packet_id} for packet_id in packets_with_missing_projection_fields])
     jsonl_write(out_dir / "review-batches-missing-required-discussion.jsonl", [{"kind": "policySemantic.reviewBatchMissingRequiredDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_required_discussion])
     jsonl_write(out_dir / "review-assignments-missing-accepted-results.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingAcceptedResult.v1", "batchId": batch_id, "reviewerId": reviewer_id} for batch_id, reviewer_id in missing_review_result_pairs])
+    jsonl_write(out_dir / "invalid-review-results.jsonl", [{"kind": "policySemantic.invalidReviewResult.v1", "reviewResultId": result_id} for result_id in invalid_review_result_ids])
     jsonl_write(out_dir / "review-batches-missing-accepted-discussions.jsonl", [{"kind": "policySemantic.reviewBatchMissingAcceptedDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_accepted_discussion])
     gates.extend(review_provider_gates)
 
@@ -1344,6 +1381,7 @@ COPY (
             "reviewPacketsMissingProjectionFields": "review-packets-missing-projection-fields.jsonl",
             "reviewBatchesMissingRequiredDiscussion": "review-batches-missing-required-discussion.jsonl",
             "reviewAssignmentsMissingAcceptedResults": "review-assignments-missing-accepted-results.jsonl",
+            "invalidReviewResults": "invalid-review-results.jsonl",
             "reviewBatchesMissingAcceptedDiscussions": "review-batches-missing-accepted-discussions.jsonl",
             "sql": "adrs-projection-duckdb.sql",
         },
@@ -1590,21 +1628,48 @@ def command_materialize_source_span_review_packets(args: argparse.Namespace) -> 
 def command_check_source_span_review_completion(args: argparse.Namespace) -> int:
     assignments = read_jsonl(Path(args.assignments))
     required_discussions = read_jsonl(Path(args.required_discussions))
+    review_packets = read_jsonl(Path(args.review_packets)) if args.review_packets else []
     review_results = read_jsonl(Path(args.review_results)) if args.review_results else []
     discussion_results = read_jsonl(Path(args.discussion_results)) if args.discussion_results else []
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    accepted_reviews = {
-        (str(row.get("batchId")), str(row.get("reviewerId")))
-        for row in review_results
-        if row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1"
-        and row.get("status") == "accepted"
-        and row.get("accepted") is True
-        and row.get("policyRev") == args.policy_rev
-        and row.get("fixtureOnly") is False
-        and row.get("generatedIsAuthority") is False
-        and row.get("policyDeletionApproved") is False
+    assignment_span_ids = {
+        (str(row.get("batchId")), str(row.get("reviewerId"))): {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+        for row in assignments
     }
+    packet_ids_by_batch = {
+        str(row.get("batchId")): str(row.get("id"))
+        for row in review_packets
+        if row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1" and row.get("id")
+    }
+    accepted_reviews: set[tuple[str, str]] = set()
+    invalid_review_results: list[dict] = []
+    for row in review_results:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1"
+            and row.get("status") == "accepted"
+            and row.get("accepted") is True
+            and row.get("policyRev") == args.policy_rev
+            and row.get("fixtureOnly") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+        ):
+            continue
+        pair = (str(row.get("batchId")), str(row.get("reviewerId")))
+        result_span_ids = {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+        packet_ok = bool(packet_ids_by_batch) and row.get("packetRead") is True and row.get("packetId") == packet_ids_by_batch.get(str(row.get("batchId")))
+        valid_shape = (
+            pair in assignment_span_ids
+            and result_span_ids == assignment_span_ids[pair]
+            and packet_ok
+            and row.get("noRemainingObjections") is True
+            and bool(row.get("disposition"))
+            and bool(row.get("rationale"))
+        )
+        if valid_shape:
+            accepted_reviews.add(pair)
+        else:
+            invalid_review_results.append(row)
     missing_assignments = [
         row
         for row in assignments
@@ -1637,6 +1702,12 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
             "count": len(missing_assignments),
         },
         {
+            "gate_id": "source-span-review-results-match-packets",
+            "status": "pass" if not invalid_review_results else "blocked",
+            "blocker": None if not invalid_review_results else "review results fail assignment, packet, disposition, rationale, or no-objection requirements",
+            "count": len(invalid_review_results),
+        },
+        {
             "gate_id": "source-span-direct-cross-discussions-accepted",
             "status": "pass" if not missing_discussions else "blocked",
             "blocker": None if not missing_discussions else "direct cross-discussions missing accepted no-objection results",
@@ -1645,6 +1716,7 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
     ]
     jsonl_write(out_dir / "source-span-review-completion-gates.jsonl", gates)
     jsonl_write(out_dir / "missing-source-span-review-assignments.jsonl", missing_assignments)
+    jsonl_write(out_dir / "invalid-source-span-review-results.jsonl", invalid_review_results)
     jsonl_write(out_dir / "missing-source-span-direct-cross-discussions.jsonl", missing_discussions)
     ok = all(row["status"] == "pass" for row in gates)
     manifest = {
@@ -1662,6 +1734,7 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
         "outputs": {
             "gates": "source-span-review-completion-gates.jsonl",
             "missingAssignments": "missing-source-span-review-assignments.jsonl",
+            "invalidReviewResults": "invalid-source-span-review-results.jsonl",
             "missingDirectCrossDiscussions": "missing-source-span-direct-cross-discussions.jsonl",
         },
         "status": "pass" if ok else "blocked",
@@ -1681,6 +1754,7 @@ def command_materialize_accepted_source_span_dispositions(args: argparse.Namespa
     completion_args = argparse.Namespace(
         assignments=args.assignments,
         required_discussions=args.required_discussions,
+        review_packets=args.review_packets,
         review_results=args.review_results,
         discussion_results=args.discussion_results,
         policy_rev=policy_rev,
@@ -3087,6 +3161,7 @@ def main(argv: list[str] | None = None) -> int:
     completion_parser = sub.add_parser("check-source-span-review-completion")
     completion_parser.add_argument("--assignments", required=True)
     completion_parser.add_argument("--required-discussions", required=True)
+    completion_parser.add_argument("--review-packets")
     completion_parser.add_argument("--review-results")
     completion_parser.add_argument("--discussion-results")
     completion_parser.add_argument("--policy-rev", required=True)
@@ -3095,6 +3170,7 @@ def main(argv: list[str] | None = None) -> int:
     disposition_parser = sub.add_parser("materialize-accepted-source-span-dispositions")
     disposition_parser.add_argument("--assignments", required=True)
     disposition_parser.add_argument("--required-discussions", required=True)
+    disposition_parser.add_argument("--review-packets", required=True)
     disposition_parser.add_argument("--review-results", required=True)
     disposition_parser.add_argument("--discussion-results", required=True)
     disposition_parser.add_argument("--policy-rev", required=True)
