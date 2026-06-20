@@ -1,0 +1,62 @@
+[
+  {
+    "class": "diagram-or-protocol-source",
+    "count": 9,
+    "authorityCandidate": true,
+    "recommendedAction": "requires-typed-authority-review"
+  },
+  {
+    "class": "evidence-output",
+    "count": 7,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-evidence"
+  },
+  {
+    "class": "generated-dist-output",
+    "count": 2,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-generated"
+  },
+  {
+    "class": "generated-example-output",
+    "count": 1,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-generated"
+  },
+  {
+    "class": "issue-evidence-artifact",
+    "count": 16,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-evidence"
+  },
+  {
+    "class": "lockfile",
+    "count": 4,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-generated-lock"
+  },
+  {
+    "class": "runtime-or-test-code",
+    "count": 51,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-code-unless-promoted"
+  },
+  {
+    "class": "vcs-ignore-config",
+    "count": 2,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-structural"
+  },
+  {
+    "class": "vcs-metadata",
+    "count": 1,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-structural"
+  },
+  {
+    "class": "vendored-runtime",
+    "count": 10,
+    "authorityCandidate": false,
+    "recommendedAction": "exclude-vendor"
+  }
+]

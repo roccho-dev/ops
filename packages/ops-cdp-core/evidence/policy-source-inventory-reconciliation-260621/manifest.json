@@ -1,0 +1,42 @@
+{
+  "type": "policy.sourceInventory.reconciliationManifest.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "deletionReadiness": "BLOCK",
+  "files": [
+    {
+      "path": "not_in_baseline_sources.jsonl",
+      "sha256": "acc3961383851e6b1704ce54239417ffa7239db42440f54885abf4966183c815",
+      "bytes": 59596
+    },
+    {
+      "path": "source_inventory_authority_candidates.jsonl",
+      "sha256": "2a69408d097e4b0e059248b3872bf5fed0fcd0cda57960ebac57ed0f2d02db77",
+      "bytes": 4331
+    },
+    {
+      "path": "source_inventory_reconciliation_by_class.json",
+      "sha256": "0dcd24616e9b33607e88a9c3f180e52b932cc0a8434c504e86b4af80f2af3aeb",
+      "bytes": 1414
+    },
+    {
+      "path": "source_inventory_reconciliation_controls.json",
+      "sha256": "6f4baf703e52a66b739276b8aeee11877871950af65bd8442357ad4e7c9cc085",
+      "bytes": 534
+    },
+    {
+      "path": "source_inventory_reconciliation.jsonl",
+      "sha256": "38ecf782de3afd9cbf3bd44430c68b410601ccdcb21519b54d76a71594c39704",
+      "bytes": 48704
+    },
+    {
+      "path": "source_inventory_reconciliation_summary.json",
+      "sha256": "a1aa354d85ca3c0a3c06f32ff702e4a01613b7ac5bf5db08bcb312bc7c8d7a43",
+      "bytes": 1461
+    },
+    {
+      "path": "source_inventory_structural_exclusions.jsonl",
+      "sha256": "c0a2494e2e94b899fc4906f76670588a7a37fbe85fa67ee7f0eb67e5e1c486ec",
+      "bytes": 44373
+    }
+  ]
+}

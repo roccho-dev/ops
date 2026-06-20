@@ -1,0 +1,21 @@
+{
+  "type": "policy.sourceInventory.reconciliationControls.v1",
+  "decision": "PASS",
+  "passed": 8,
+  "total": 8,
+  "controls": [
+    "all-103-records-classified",
+    "structural-exclusions-are-explicit",
+    "cli-wrappers-excluded-as-runtime-code",
+    "authority-candidates-remain-blocking",
+    "no-deletion-claim",
+    "class-counts-sum-to-total",
+    "machine-readable-candidate-list",
+    "machine-readable-exclusion-list"
+  ],
+  "facts": {
+    "total": 103,
+    "authorityCandidates": 9,
+    "structuralExclusions": 94
+  }
+}
