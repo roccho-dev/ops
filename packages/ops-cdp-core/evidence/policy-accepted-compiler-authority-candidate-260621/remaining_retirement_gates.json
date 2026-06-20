@@ -1,0 +1,26 @@
+{
+  "type": "policy.acceptedCompilerAuthority.remainingRetirementGates.v1",
+  "deletionReadiness": "BLOCK",
+  "gates": [
+    {
+      "name": "full-natural-language-policy-semantic-equivalence",
+      "status": "BLOCK",
+      "reason": "accepted compiler authority candidate is limited to reduced/source13 scope"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK",
+      "reason": "owner approval and adoption/cutover records are not part of this lane"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK",
+      "reason": "policy.git absence/retirement with all consumers passing is not proven here"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK",
+      "reason": "canonical write and SSOT adoption are not granted here"
+    }
+  ]
+}

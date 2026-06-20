@@ -1,0 +1,79 @@
+{
+  "type": "policy.acceptedCompilerAuthority.controlResults.v1",
+  "decision": "BLOCK",
+  "passed": 7,
+  "total": 8,
+  "deletionReadiness": "BLOCK",
+  "results": [
+    {
+      "name": "compiler-authority-inputs-fixed",
+      "passed": true,
+      "details": {
+        "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+        "typedCompilerVersion": "typed-semantic-compiler-candidate-jq-v1",
+        "inputBundleSha256": "7d0edd03c7ad099a11bdb849640f69df4e8c5d6410f245803bbd484d3b73e837"
+      }
+    },
+    {
+      "name": "candidate-to-accepted-diff-reviewed",
+      "passed": true,
+      "details": {
+        "diffRows": 0,
+        "reason": "authority wrapper does not rewrite typed compiler output"
+      }
+    },
+    {
+      "name": "compiler-controls-complete",
+      "passed": true,
+      "details": {
+        "compilerControls": "PASS",
+        "equivalenceControls": "PASS"
+      }
+    },
+    {
+      "name": "full-corpus-authority-boundary-explicit",
+      "passed": true,
+      "details": {
+        "fullNaturalLanguageCorpusAuthority": false,
+        "proposedAuthorityScope": "reduced-source13-typed-semantic-compiler-output"
+      }
+    },
+    {
+      "name": "non-authority-exclusions-reviewed",
+      "passed": true,
+      "details": {
+        "nonAuthorityExcluded": 6,
+        "authorityGranted": false
+      }
+    },
+    {
+      "name": "accepted-compiler-does-not-claim-retirement",
+      "passed": true,
+      "details": {
+        "deletionReadiness": "BLOCK",
+        "cutover": false,
+        "ownerApproval": false,
+        "canonicalWrite": false
+      }
+    },
+    {
+      "name": "reviewer-acceptance-record-present",
+      "passed": false,
+      "details": {
+        "reason": "Gen2 reviewer acceptance for this authority lane has not been recorded yet"
+      }
+    },
+    {
+      "name": "remaining-retirement-gates-blocked",
+      "passed": true,
+      "details": {
+        "remainingBlocked": [
+          "full-natural-language-policy-semantic-equivalence",
+          "owner/adoption-gates",
+          "end-to-end-retirement-proof",
+          "canonical-write-and-ssot-adoption"
+        ]
+      }
+    }
+  ]
+}

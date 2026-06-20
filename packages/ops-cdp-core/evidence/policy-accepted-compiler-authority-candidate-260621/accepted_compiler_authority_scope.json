@@ -1,0 +1,18 @@
+{
+  "type": "policy.acceptedCompilerAuthority.scope.v1",
+  "compilerAuthorityCandidateVersion": "accepted-compiler-authority-candidate-jq-v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "typedCompilerVersion": "typed-semantic-compiler-candidate-jq-v1",
+  "proposedAuthorityScope": "reduced-source13-typed-semantic-compiler-output",
+  "fullNaturalLanguageCorpusAuthority": false,
+  "sourceScope": {
+    "source13Total": 13,
+    "typedCovered": 7,
+    "nonAuthorityExcluded": 6,
+    "compiledEdges": 7
+  },
+  "authorityMeaning": "The compiler may be accepted only as the deterministic projection of reviewed source13 typed edges into typed compiler candidate outputs for this declared scope.",
+  "nonAuthorityMeaning": "This does not accept full policy corpus equivalence, policy.git deletion, cutover, owner approval, or canonical adoption.",
+  "deletionReadiness": "BLOCK",
+  "claimAllowed": false
+}

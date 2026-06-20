@@ -1,0 +1,38 @@
+{
+  "type": "policy.acceptedCompilerAuthority.manifest.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "BLOCK",
+  "deletionReadiness": "BLOCK",
+  "files": [
+    {
+      "path": "accepted_compiler_authority_scope.json",
+      "sha256": "f4c98c466102afe65590cf1c06976ff2f9d98cc001d223a39390a5e9dedbea0d",
+      "bytes": 918
+    },
+    {
+      "path": "accepted_compiler_authority_summary.json",
+      "sha256": "ae811c3b86f4f68e7934b45daa0f25c04f578e62c3535b52f919881ad2977a9e",
+      "bytes": 1517
+    },
+    {
+      "path": "candidate_to_accepted_diff.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "compiler_authority_control_results.json",
+      "sha256": "f479b8a093227097fb05bc0ee34441691adb13d7da19cfd0253ca9235cc1f00c",
+      "bytes": 2149
+    },
+    {
+      "path": "compiler_authority_rerun_receipt.json",
+      "sha256": "46f7e96a90697a92d80d37d87b5d9400ac8af6c05285e1bdb799a2c4b4cfac5b",
+      "bytes": 252
+    },
+    {
+      "path": "remaining_retirement_gates.json",
+      "sha256": "3217fadfe2eef043d94ce215bcdc7c39e2dc823d645037ae1160ffdd9be802f5",
+      "bytes": 827
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "type": "policy.acceptedCompilerAuthority.rerunReceipt.v1",
+  "passed": true,
+  "inputBundleSha256": "7d0edd03c7ad099a11bdb849640f69df4e8c5d6410f245803bbd484d3b73e837",
+  "method": "hash fixed compiler/equivalence summaries and control receipts"
+}
