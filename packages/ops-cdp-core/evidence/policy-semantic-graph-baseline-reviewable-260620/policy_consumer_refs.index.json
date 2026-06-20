@@ -1,0 +1,13 @@
+{
+  "activeRuntimeCandidateCount": 21,
+  "byRefClass": {
+    "active-runtime-candidate": 21,
+    "documentation": 27,
+    "generated-evidence": 39,
+    "path-mention": 2
+  },
+  "nonActiveCandidateCount": 68,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "rowCount": 89,
+  "type": "policy.consumerRefIndex.v1"
+}

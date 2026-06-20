@@ -32,6 +32,33 @@ Key files:
 - `counterexamples.md`
 - `manifest.json`
 
+Gen2 review of this first baseline is recorded at:
+
+`packages/ops-cdp-core/evidence/policy-semantic-graph-baseline-260620/gen2-impl-review/`
+
+The review accepted the result only as a first reproducible `BLOCK` baseline and
+identified the next reviewability gaps: large JSONL row review, missing
+negative-control fixture outputs, untyped-file classification, consumer-ref
+classification, and deterministic rerun evidence.
+
+The reviewability-hardened follow-up output is stored at:
+
+`packages/ops-cdp-core/evidence/policy-semantic-graph-baseline-reviewable-260620/`
+
+Additional files:
+
+- `REVIEW_SUMMARY.json`
+- `policy_source_nodes.index.json`
+- `policy_semantic_edges.index.json`
+- `policy_consumer_refs.index.json`
+- `policy_untyped_sources.index.json`
+- `policy_source_nodes.shards.json`
+- `policy_semantic_edges.shards.json`
+- `policy_negative_controls.json`
+- `policy_rerun_transcript.json`
+- `shards/policy_source_nodes/part-*.jsonl`
+- `shards/policy_semantic_edges/part-*.jsonl`
+
 ## Current result
 
 The baseline result is `BLOCK`.
@@ -64,7 +91,7 @@ The current baseline does not prove:
 
 ## Next gate
 
-The next work unit is to convert this baseline into an accepted typed semantic
-graph compiler with explicit treatment for untyped files and active consumer
-refs, then re-run Gen2 work/review against the generated graph and
-counterexamples.
+The next work unit after the reviewability-hardened output is to replace the
+negative-control plan with executed fixture outputs and to convert the heuristic
+baseline into an accepted typed semantic graph compiler. Until then the result
+remains `BLOCK`.

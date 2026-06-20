@@ -1,0 +1,16 @@
+{
+  "name": "policy_source_nodes",
+  "rowCount": 651,
+  "shardSize": 1000,
+  "shards": [
+    {
+      "bytes": 262869,
+      "firstRow": 1,
+      "lastRow": 651,
+      "path": "shards/policy_source_nodes/part-000.jsonl",
+      "rowCount": 651,
+      "sha256": "02fbbf50c690336247558527d9404fb18dfa719b21c1afc87ce9825bb8078253"
+    }
+  ],
+  "type": "policy.reviewShardIndex.v1"
+}

@@ -1,0 +1,208 @@
+{
+  "name": "policy_semantic_edges",
+  "rowCount": 24109,
+  "shardSize": 1000,
+  "shards": [
+    {
+      "bytes": 832591,
+      "firstRow": 1,
+      "lastRow": 1000,
+      "path": "shards/policy_semantic_edges/part-000.jsonl",
+      "rowCount": 1000,
+      "sha256": "f05623a51b9a184d1ce6823743c0960183c22c9a9c7d25c1678199c68f6edca5"
+    },
+    {
+      "bytes": 783429,
+      "firstRow": 1001,
+      "lastRow": 2000,
+      "path": "shards/policy_semantic_edges/part-001.jsonl",
+      "rowCount": 1000,
+      "sha256": "4e1c49808e7f5d42df94b5fe510c55764b2bc94093547618170bfd79b265ff35"
+    },
+    {
+      "bytes": 580585,
+      "firstRow": 2001,
+      "lastRow": 3000,
+      "path": "shards/policy_semantic_edges/part-002.jsonl",
+      "rowCount": 1000,
+      "sha256": "b76dd72b0aa73dc0081d252579d473a77dff9d0b037483e23985abb2deb5b79b"
+    },
+    {
+      "bytes": 666210,
+      "firstRow": 3001,
+      "lastRow": 4000,
+      "path": "shards/policy_semantic_edges/part-003.jsonl",
+      "rowCount": 1000,
+      "sha256": "528449ef9b17e3aeb3f3b47aa8302d613be4856bea479b09cd49b872c6d6725d"
+    },
+    {
+      "bytes": 544097,
+      "firstRow": 4001,
+      "lastRow": 5000,
+      "path": "shards/policy_semantic_edges/part-004.jsonl",
+      "rowCount": 1000,
+      "sha256": "e4d56047db2f2c1f499f4514c0b98ef7afbc0500ec4e93d3703714abd6b579e2"
+    },
+    {
+      "bytes": 561614,
+      "firstRow": 5001,
+      "lastRow": 6000,
+      "path": "shards/policy_semantic_edges/part-005.jsonl",
+      "rowCount": 1000,
+      "sha256": "96f5c19df8267354d37763b5739467255378531ed9ec6ea51ff522161722bb4e"
+    },
+    {
+      "bytes": 529331,
+      "firstRow": 6001,
+      "lastRow": 7000,
+      "path": "shards/policy_semantic_edges/part-006.jsonl",
+      "rowCount": 1000,
+      "sha256": "ba5f44a6c2c66491541de269d3052e0d8ef5da859bf8f34fb460730f53c76f2b"
+    },
+    {
+      "bytes": 530000,
+      "firstRow": 7001,
+      "lastRow": 8000,
+      "path": "shards/policy_semantic_edges/part-007.jsonl",
+      "rowCount": 1000,
+      "sha256": "beeee160f4df4d3d3746de6975355a2c6891fa302709846a332583b50dacadde"
+    },
+    {
+      "bytes": 524647,
+      "firstRow": 8001,
+      "lastRow": 9000,
+      "path": "shards/policy_semantic_edges/part-008.jsonl",
+      "rowCount": 1000,
+      "sha256": "8310e2c4ec4e9759bbe12e5bd36dfa062529d9347c637b372439a2cec440baf0"
+    },
+    {
+      "bytes": 810153,
+      "firstRow": 9001,
+      "lastRow": 10000,
+      "path": "shards/policy_semantic_edges/part-009.jsonl",
+      "rowCount": 1000,
+      "sha256": "5a853ba83701681886d06fc12884965247e879ee2298ba6da9c694741587828f"
+    },
+    {
+      "bytes": 1054238,
+      "firstRow": 10001,
+      "lastRow": 11000,
+      "path": "shards/policy_semantic_edges/part-010.jsonl",
+      "rowCount": 1000,
+      "sha256": "153e8c3063f093be73171dbd6e4c5eaa9c657405da69f327ad92f02b2ea80cd1"
+    },
+    {
+      "bytes": 1051181,
+      "firstRow": 11001,
+      "lastRow": 12000,
+      "path": "shards/policy_semantic_edges/part-011.jsonl",
+      "rowCount": 1000,
+      "sha256": "253b1f0ccdc7e6e694081a9f3cdb723042f211d3c4aa4dc74ffb32c4d64accbb"
+    },
+    {
+      "bytes": 1020172,
+      "firstRow": 12001,
+      "lastRow": 13000,
+      "path": "shards/policy_semantic_edges/part-012.jsonl",
+      "rowCount": 1000,
+      "sha256": "bec245658109354d0844c72fa4878f7e6b0ec73d5bb295974261d56ab6ad7263"
+    },
+    {
+      "bytes": 1038377,
+      "firstRow": 13001,
+      "lastRow": 14000,
+      "path": "shards/policy_semantic_edges/part-013.jsonl",
+      "rowCount": 1000,
+      "sha256": "7b1429d3e223929ebd81f675f100a246e6717ac1a240faefb6ecb60abb4fa2e0"
+    },
+    {
+      "bytes": 1058226,
+      "firstRow": 14001,
+      "lastRow": 15000,
+      "path": "shards/policy_semantic_edges/part-014.jsonl",
+      "rowCount": 1000,
+      "sha256": "7610099e5ef6851a17d1d94fddba4866cda9db380ad4e90f1725d01add1aa80f"
+    },
+    {
+      "bytes": 1068037,
+      "firstRow": 15001,
+      "lastRow": 16000,
+      "path": "shards/policy_semantic_edges/part-015.jsonl",
+      "rowCount": 1000,
+      "sha256": "f47e7f9c9d5f68d5623b388d5803343e6b98f7aa102145d29e7ee5901f338cde"
+    },
+    {
+      "bytes": 752909,
+      "firstRow": 16001,
+      "lastRow": 17000,
+      "path": "shards/policy_semantic_edges/part-016.jsonl",
+      "rowCount": 1000,
+      "sha256": "5b63fadc6daf82df4cecd10487eaf14aa46c68cf9e536dff497a74482c44c934"
+    },
+    {
+      "bytes": 1080646,
+      "firstRow": 17001,
+      "lastRow": 18000,
+      "path": "shards/policy_semantic_edges/part-017.jsonl",
+      "rowCount": 1000,
+      "sha256": "cbe004ca34936d38e7af7f208876321fdf27ed157ddb538ede48051793a1140d"
+    },
+    {
+      "bytes": 1048838,
+      "firstRow": 18001,
+      "lastRow": 19000,
+      "path": "shards/policy_semantic_edges/part-018.jsonl",
+      "rowCount": 1000,
+      "sha256": "a7cb8cc2bb2521912a97f6da1e676993dc9eac7056883f10f249180342acb892"
+    },
+    {
+      "bytes": 779678,
+      "firstRow": 19001,
+      "lastRow": 20000,
+      "path": "shards/policy_semantic_edges/part-019.jsonl",
+      "rowCount": 1000,
+      "sha256": "9a047e1914803efa4bf256571c163e7ccd82175be93eb1a99e83b2199b1e884f"
+    },
+    {
+      "bytes": 546438,
+      "firstRow": 20001,
+      "lastRow": 21000,
+      "path": "shards/policy_semantic_edges/part-020.jsonl",
+      "rowCount": 1000,
+      "sha256": "f3ee794afb0f53d19c16b011d88997c364a71887157579f061a380d124de8fd1"
+    },
+    {
+      "bytes": 581799,
+      "firstRow": 21001,
+      "lastRow": 22000,
+      "path": "shards/policy_semantic_edges/part-021.jsonl",
+      "rowCount": 1000,
+      "sha256": "36b3a4e49538b5f528a8b5bad19a1d9c620a5d49ce3d4a0834de951571bac61b"
+    },
+    {
+      "bytes": 461643,
+      "firstRow": 22001,
+      "lastRow": 23000,
+      "path": "shards/policy_semantic_edges/part-022.jsonl",
+      "rowCount": 1000,
+      "sha256": "0af32a0d5a2c6c6367a233dbda7226b252bf99ae9b07b63198b937aed3b123c7"
+    },
+    {
+      "bytes": 478733,
+      "firstRow": 23001,
+      "lastRow": 24000,
+      "path": "shards/policy_semantic_edges/part-023.jsonl",
+      "rowCount": 1000,
+      "sha256": "c2cdf2e3c6d49db558336c6c26428137f735a80001886dca1c2f611de4e9c7d8"
+    },
+    {
+      "bytes": 91788,
+      "firstRow": 24001,
+      "lastRow": 24109,
+      "path": "shards/policy_semantic_edges/part-024.jsonl",
+      "rowCount": 109,
+      "sha256": "c9d916cfc6b486b7acc5783c9f32062e42d87ff51274b44ee622223421550652"
+    }
+  ],
+  "type": "policy.reviewShardIndex.v1"
+}

@@ -1,0 +1,80 @@
+{
+  "coverage": {
+    "consumerRefCount": 89,
+    "coverageRatio": 0.9017,
+    "edgeKindsMissing": [],
+    "edgeKindsObserved": [
+      "activation",
+      "authority",
+      "consumer",
+      "deny",
+      "evidence",
+      "obligation",
+      "replacement"
+    ],
+    "filesWithEdges": 587,
+    "filesWithoutEdges": 64,
+    "lowDensityProseFiles": 0,
+    "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+    "semanticEdgeCount": 24109,
+    "sourceNodeCount": 651,
+    "type": "policy.graphCoverage.v1"
+  },
+  "decision": "BLOCK",
+  "gates": [
+    {
+      "actual": 64,
+      "expected": 0,
+      "name": "all-source-files-have-semantic-edges",
+      "status": "BLOCK"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "name": "all-required-edge-kinds-observed",
+      "status": "PASS"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "name": "low-density-prose-reviewed",
+      "status": "PASS"
+    },
+    {
+      "actual": 89,
+      "expected": 0,
+      "name": "active-policy-repo-consumer-refs-eliminated",
+      "status": "BLOCK"
+    },
+    {
+      "actual": "heuristic-keyword-baseline",
+      "expected": "accepted typed semantic graph compiler",
+      "name": "heuristic-extraction-not-final-authority",
+      "status": "BLOCK"
+    }
+  ],
+  "indexes": {
+    "consumerRefs": "policy_consumer_refs.index.json",
+    "semanticEdges": "policy_semantic_edges.index.json",
+    "sourceNodes": "policy_source_nodes.index.json",
+    "untypedSources": "policy_untyped_sources.index.json"
+  },
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "semantic approval",
+    "canonical write",
+    "SSOT write"
+  ],
+  "negativeControls": "policy_negative_controls.json",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "reviewLimit": "This remains a heuristic baseline and fail-closed BLOCK evidence.",
+  "shards": {
+    "semanticEdges": "policy_semantic_edges.shards.json",
+    "sourceNodes": "policy_source_nodes.shards.json"
+  },
+  "type": "policy.reviewSummary.v1"
+}

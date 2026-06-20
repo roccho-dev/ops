@@ -1,0 +1,41 @@
+{
+  "byKind": {
+    "doc": 20,
+    "issue-record": 44,
+    "json": 160,
+    "ledger": 39,
+    "legacy": 9,
+    "package": 177,
+    "projection": 13,
+    "source": 189
+  },
+  "bySourceClass": {
+    "code": 151,
+    "evidence": 31,
+    "generated": 13,
+    "normative": 351,
+    "package-metadata": 32,
+    "template": 30,
+    "unknown": 43
+  },
+  "firstRowIds": [
+    "source:3481f57a9e708fb4",
+    "source:fd51f581d1d76ca7",
+    "source:8fb3ed5efff09646",
+    "source:a54ff182c7e8acf5",
+    "source:d76aee8a6af21f5e"
+  ],
+  "lastRowIds": [
+    "source:c7e44e10b7248ba0",
+    "source:ceb0b7eda9fb80e1",
+    "source:cd7b16727e45e758",
+    "source:2ea6e30042ce46b6",
+    "source:5eb2943eee234442"
+  ],
+  "nonNormativeCount": 227,
+  "normativeCount": 424,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "rowCount": 651,
+  "totalBytes": 14877701,
+  "type": "policy.sourceNodeIndex.v1"
+}

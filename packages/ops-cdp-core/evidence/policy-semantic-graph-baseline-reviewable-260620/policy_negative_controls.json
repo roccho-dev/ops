@@ -1,0 +1,43 @@
+{
+  "controls": [
+    {
+      "expectedGate": "semantic-equivalence-negative-controls",
+      "expectedStatus": "BLOCK",
+      "name": "dropped-deny-edge"
+    },
+    {
+      "expectedGate": "semantic-equivalence-negative-controls",
+      "expectedStatus": "BLOCK",
+      "name": "weakened-obligation-edge"
+    },
+    {
+      "expectedGate": "semantic-equivalence-negative-controls",
+      "expectedStatus": "BLOCK",
+      "name": "missing-activation-edge"
+    },
+    {
+      "expectedGate": "traceability-negative-controls",
+      "expectedStatus": "BLOCK",
+      "name": "removed-source-span"
+    },
+    {
+      "expectedGate": "source-freshness-negative-controls",
+      "expectedStatus": "BLOCK",
+      "name": "stale-source-node"
+    },
+    {
+      "expectedGate": "consumer-ref-classification-controls",
+      "expectedStatus": "TRIAGE",
+      "name": "consumer-ref-false-positive"
+    },
+    {
+      "expectedGate": "consumer-ref-classification-controls",
+      "expectedStatus": "BLOCK",
+      "name": "consumer-ref-false-negative"
+    }
+  ],
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "purpose": "Define mutation classes required before policy.git deletion readiness can be claimed.",
+  "status": "planned-not-executed",
+  "type": "policy.negativeControlPlan.v1"
+}

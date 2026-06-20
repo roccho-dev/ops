@@ -1,0 +1,15 @@
+{
+  "bySourceClass": {
+    "code": 24,
+    "evidence": 3,
+    "normative": 5,
+    "package-metadata": 24,
+    "template": 1,
+    "unknown": 7
+  },
+  "nonNormativeCount": 51,
+  "normativeCount": 13,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "rowCount": 64,
+  "type": "policy.untypedSourceIndex.v1"
+}

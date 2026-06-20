@@ -1,0 +1,16 @@
+{
+  "command": [
+    "policy-semantic-graph-baseline.py",
+    "--policy-root",
+    "/home/nixos/work/policy-semantic-baseline-input-3349976",
+    "--policy-ref",
+    "334997669f1889a8e2658730c616d2d4510d4536",
+    "--out-dir",
+    "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/ops-cdp-core/evidence/policy-semantic-graph-baseline-reviewable-260620"
+  ],
+  "note": "Generated locally for proposal evidence; reviewers must still verify hashes and SSOT refs.",
+  "outputDir": "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/ops-cdp-core/evidence/policy-semantic-graph-baseline-reviewable-260620",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "tool": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+  "type": "policy.semanticGraphBaselineRerunTranscript.v1"
+}

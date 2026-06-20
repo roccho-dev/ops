@@ -1,0 +1,29 @@
+{
+  "byEdgeKind": {
+    "activation": 2335,
+    "authority": 3703,
+    "consumer": 7055,
+    "deny": 1668,
+    "evidence": 5464,
+    "obligation": 2737,
+    "replacement": 1147
+  },
+  "firstRowIds": [
+    "edge:7adb5a1c02e6be568c2f",
+    "edge:60df060201266791d3ff",
+    "edge:344f24474775c862f7f1",
+    "edge:abc6f52a2600a8d76eeb",
+    "edge:031ab3ce5bf2715bfbce"
+  ],
+  "lastRowIds": [
+    "edge:c971945c72396b051f83",
+    "edge:531993c248f77855622d",
+    "edge:9ad0926c0aa1d8185576",
+    "edge:1ab5d2d5889c32f1c9d7",
+    "edge:f1aa15faa97685154c44"
+  ],
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "rowCount": 24109,
+  "sourceSpanCount": 24109,
+  "type": "policy.semanticEdgeIndex.v1"
+}

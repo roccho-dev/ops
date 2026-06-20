@@ -31,6 +31,8 @@ EDGE_RULES = [
     ("evidence", ["proof", "evidence", "verify", "test", "readback", "pass", "block"]),
 ]
 
+SHARD_SIZE = 1000
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -80,6 +82,76 @@ def node_kind(rel: str) -> str:
     return "source"
 
 
+def source_classification(rel: str, kind: str) -> dict:
+    suffix = Path(rel).suffix.lower()
+    if rel.startswith("projections/"):
+        return {"class": "generated", "normative": False, "reason": "projection output"}
+    if "/evidence/" in rel or rel.startswith("evidence/"):
+        return {"class": "evidence", "normative": False, "reason": "evidence artifact"}
+    if rel.endswith("package.json") or rel.endswith("package-lock.json"):
+        return {"class": "package-metadata", "normative": False, "reason": "package metadata"}
+    if suffix in {".mjs", ".js"}:
+        return {"class": "code", "normative": False, "reason": "runtime or tooling code"}
+    if rel.startswith("templates/"):
+        return {"class": "template", "normative": True, "reason": "template may carry instructions"}
+    if kind in {"doc", "source", "ledger", "json", "issue-record", "legacy"}:
+        return {"class": "normative", "normative": True, "reason": "policy source surface"}
+    return {"class": "unknown", "normative": True, "reason": "requires human triage"}
+
+
+def consumer_ref_classification(rel: str, text: str) -> dict:
+    lower = text.lower()
+    if "/evidence/" in rel or rel.startswith("evidence/") or "evidence" in lower:
+        return {"class": "generated-evidence", "active": False, "reason": "evidence or generated record mention"}
+    if rel.startswith("docs/") or rel.endswith(".md"):
+        return {"class": "documentation", "active": False, "reason": "documentation mention requires triage"}
+    if "path" in lower or "file" in lower:
+        return {"class": "path-mention", "active": False, "reason": "path-like mention"}
+    if rel.startswith("packages/") or rel.endswith((".mjs", ".js", ".json", ".nix")):
+        return {"class": "active-runtime-candidate", "active": True, "reason": "tooling/config surface mention"}
+    return {"class": "needs-human-triage", "active": True, "reason": "unclassified consumer reference"}
+
+
+def write_json(path: Path, payload) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_jsonl(path: Path, rows) -> None:
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def write_sharded_jsonl(out_dir: Path, name: str, rows) -> dict:
+    shard_dir = out_dir / "shards" / name
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    shards = []
+    for index, start in enumerate(range(0, len(rows), SHARD_SIZE)):
+        chunk = rows[start:start + SHARD_SIZE]
+        rel = f"shards/{name}/part-{index:03d}.jsonl"
+        path = out_dir / rel
+        write_jsonl(path, chunk)
+        data = path.read_bytes()
+        shards.append({
+            "path": rel,
+            "sha256": sha256_bytes(data),
+            "bytes": len(data),
+            "rowCount": len(chunk),
+            "firstRow": start + 1,
+            "lastRow": start + len(chunk),
+        })
+    return {
+        "type": "policy.reviewShardIndex.v1",
+        "name": name,
+        "shardSize": SHARD_SIZE,
+        "rowCount": len(rows),
+        "shards": shards,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy-root", required=True)
@@ -103,12 +175,17 @@ def main() -> int:
         text = raw.decode("utf-8", errors="replace")
         lines = text.splitlines()
         node_id = "source:" + sha256_bytes(rel.encode("utf-8"))[:16]
+        kind = node_kind(rel)
+        source_class = source_classification(rel, kind)
         node = {
             "type": "policy.sourceNode.v1",
             "id": node_id,
             "policyRef": args.policy_ref,
             "path": rel,
-            "kind": node_kind(rel),
+            "kind": kind,
+            "sourceClass": source_class["class"],
+            "normative": source_class["normative"],
+            "classificationReason": source_class["reason"],
             "sha256": sha256_bytes(raw),
             "bytes": len(raw),
             "lineCount": len(lines),
@@ -142,18 +219,25 @@ def main() -> int:
 
             lower = line.lower()
             if "policy.git" in lower or "policy repo" in lower or "policy/" in lower:
+                classification = consumer_ref_classification(rel, excerpt)
                 consumer_refs.append({
                     "type": "policy.consumerRef.v1",
                     "policyRef": args.policy_ref,
                     "sourcePath": rel,
                     "line": line_no,
                     "text": excerpt[:500],
+                    "refClass": classification["class"],
+                    "activeRuntimeCandidate": classification["active"],
+                    "classificationReason": classification["reason"],
                 })
 
         if file_edge_count == 0:
             untyped.append({
                 "path": rel,
                 "kind": node["kind"],
+                "sourceClass": node["sourceClass"],
+                "normative": node["normative"],
+                "classificationReason": node["classificationReason"],
                 "lineCount": len(lines),
                 "reason": "no heuristic semantic edge extracted",
             })
@@ -161,6 +245,8 @@ def main() -> int:
             prose_only.append({
                 "path": rel,
                 "kind": node["kind"],
+                "sourceClass": node["sourceClass"],
+                "normative": node["normative"],
                 "lineCount": len(lines),
                 "edgeCount": file_edge_count,
                 "reason": "low edge density for prose document",
@@ -182,6 +268,54 @@ def main() -> int:
         "edgeKindsMissing": missing_edge_kinds,
         "lowDensityProseFiles": len(prose_only),
         "consumerRefCount": len(consumer_refs),
+    }
+
+    def count_by(rows, key):
+        counts = {}
+        for row in rows:
+            value = row.get(key, "<missing>")
+            counts[value] = counts.get(value, 0) + 1
+        return dict(sorted(counts.items()))
+
+    source_index = {
+        "type": "policy.sourceNodeIndex.v1",
+        "policyRef": args.policy_ref,
+        "rowCount": len(nodes),
+        "byKind": count_by(nodes, "kind"),
+        "bySourceClass": count_by(nodes, "sourceClass"),
+        "normativeCount": sum(1 for row in nodes if row["normative"]),
+        "nonNormativeCount": sum(1 for row in nodes if not row["normative"]),
+        "firstRowIds": [row["id"] for row in nodes[:5]],
+        "lastRowIds": [row["id"] for row in nodes[-5:]],
+        "totalBytes": sum(row["bytes"] for row in nodes),
+    }
+
+    edge_index = {
+        "type": "policy.semanticEdgeIndex.v1",
+        "policyRef": args.policy_ref,
+        "rowCount": len(edges),
+        "byEdgeKind": count_by(edges, "edgeKind"),
+        "sourceSpanCount": sum(1 for row in edges if row.get("sourceSpan")),
+        "firstRowIds": [row["id"] for row in edges[:5]],
+        "lastRowIds": [row["id"] for row in edges[-5:]],
+    }
+
+    consumer_ref_index = {
+        "type": "policy.consumerRefIndex.v1",
+        "policyRef": args.policy_ref,
+        "rowCount": len(consumer_refs),
+        "byRefClass": count_by(consumer_refs, "refClass"),
+        "activeRuntimeCandidateCount": sum(1 for row in consumer_refs if row["activeRuntimeCandidate"]),
+        "nonActiveCandidateCount": sum(1 for row in consumer_refs if not row["activeRuntimeCandidate"]),
+    }
+
+    untyped_source_index = {
+        "type": "policy.untypedSourceIndex.v1",
+        "policyRef": args.policy_ref,
+        "rowCount": len(untyped),
+        "bySourceClass": count_by(untyped, "sourceClass"),
+        "normativeCount": sum(1 for row in untyped if row["normative"]),
+        "nonNormativeCount": sum(1 for row in untyped if not row["normative"]),
     }
 
     gates = {
@@ -223,24 +357,19 @@ def main() -> int:
         "notDeletionReady": True,
     }
 
-    def write_jsonl(name: str, rows):
-        with (out_dir / name).open("w", encoding="utf-8", newline="\n") as f:
-            for row in rows:
-                f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-
-    write_jsonl("policy_source_nodes.jsonl", nodes)
-    write_jsonl("policy_semantic_edges.jsonl", edges)
-    write_jsonl("policy_consumer_refs.jsonl", consumer_refs)
-    write_jsonl("policy_untyped_sources.jsonl", untyped)
-    write_jsonl("policy_low_density_prose.jsonl", prose_only)
-    (out_dir / "policy_deletion_readiness_gates.json").write_text(
-        json.dumps(gates, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (out_dir / "policy_graph_coverage.json").write_text(
-        json.dumps(coverage, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_jsonl(out_dir / "policy_source_nodes.jsonl", nodes)
+    write_jsonl(out_dir / "policy_semantic_edges.jsonl", edges)
+    write_jsonl(out_dir / "policy_consumer_refs.jsonl", consumer_refs)
+    write_jsonl(out_dir / "policy_untyped_sources.jsonl", untyped)
+    write_jsonl(out_dir / "policy_low_density_prose.jsonl", prose_only)
+    write_json(out_dir / "policy_deletion_readiness_gates.json", gates)
+    write_json(out_dir / "policy_graph_coverage.json", coverage)
+    write_json(out_dir / "policy_source_nodes.index.json", source_index)
+    write_json(out_dir / "policy_semantic_edges.index.json", edge_index)
+    write_json(out_dir / "policy_consumer_refs.index.json", consumer_ref_index)
+    write_json(out_dir / "policy_untyped_sources.index.json", untyped_source_index)
+    write_json(out_dir / "policy_source_nodes.shards.json", write_sharded_jsonl(out_dir, "policy_source_nodes", nodes))
+    write_json(out_dir / "policy_semantic_edges.shards.json", write_sharded_jsonl(out_dir, "policy_semantic_edges", edges))
 
     counter_lines = [
         "# Policy semantic graph counterexamples",
@@ -275,6 +404,7 @@ def main() -> int:
         f"- filesWithoutEdges: {coverage['filesWithoutEdges']}",
         f"- lowDensityProseFiles: {coverage['lowDensityProseFiles']}",
         f"- consumerRefCount: {coverage['consumerRefCount']}",
+        f"- activeRuntimeConsumerCandidateCount: {consumer_ref_index['activeRuntimeCandidateCount']}",
         f"- deletionReadiness: `{gates['decision']}`",
         "",
         "This is a baseline graph extraction. It is evidence for the next",
@@ -282,12 +412,78 @@ def main() -> int:
     ]
     (out_dir / "policy_graph_coverage.md").write_text("\n".join(report) + "\n", encoding="utf-8")
 
+    negative_controls = {
+        "type": "policy.negativeControlPlan.v1",
+        "policyRef": args.policy_ref,
+        "status": "planned-not-executed",
+        "purpose": "Define mutation classes required before policy.git deletion readiness can be claimed.",
+        "controls": [
+            {"name": "dropped-deny-edge", "expectedGate": "semantic-equivalence-negative-controls", "expectedStatus": "BLOCK"},
+            {"name": "weakened-obligation-edge", "expectedGate": "semantic-equivalence-negative-controls", "expectedStatus": "BLOCK"},
+            {"name": "missing-activation-edge", "expectedGate": "semantic-equivalence-negative-controls", "expectedStatus": "BLOCK"},
+            {"name": "removed-source-span", "expectedGate": "traceability-negative-controls", "expectedStatus": "BLOCK"},
+            {"name": "stale-source-node", "expectedGate": "source-freshness-negative-controls", "expectedStatus": "BLOCK"},
+            {"name": "consumer-ref-false-positive", "expectedGate": "consumer-ref-classification-controls", "expectedStatus": "TRIAGE"},
+            {"name": "consumer-ref-false-negative", "expectedGate": "consumer-ref-classification-controls", "expectedStatus": "BLOCK"},
+        ],
+    }
+    write_json(out_dir / "policy_negative_controls.json", negative_controls)
+
+    rerun_transcript = {
+        "type": "policy.semanticGraphBaselineRerunTranscript.v1",
+        "policyRef": args.policy_ref,
+        "command": [
+            "policy-semantic-graph-baseline.py",
+            "--policy-root",
+            str(root),
+            "--policy-ref",
+            args.policy_ref,
+            "--out-dir",
+            str(out_dir),
+        ],
+        "tool": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+        "outputDir": str(out_dir),
+        "note": "Generated locally for proposal evidence; reviewers must still verify hashes and SSOT refs.",
+    }
+    write_json(out_dir / "policy_rerun_transcript.json", rerun_transcript)
+
+    review_summary = {
+        "type": "policy.reviewSummary.v1",
+        "policyRef": args.policy_ref,
+        "decision": gates["decision"],
+        "coverage": coverage,
+        "gates": gates["gates"],
+        "indexes": {
+            "sourceNodes": "policy_source_nodes.index.json",
+            "semanticEdges": "policy_semantic_edges.index.json",
+            "consumerRefs": "policy_consumer_refs.index.json",
+            "untypedSources": "policy_untyped_sources.index.json",
+        },
+        "shards": {
+            "sourceNodes": "policy_source_nodes.shards.json",
+            "semanticEdges": "policy_semantic_edges.shards.json",
+        },
+        "negativeControls": "policy_negative_controls.json",
+        "mustNotClaim": [
+            "policy.git retirement",
+            "policy.git deletion",
+            "cutover approval",
+            "merge approval",
+            "completion approval",
+            "semantic approval",
+            "canonical write",
+            "SSOT write",
+        ],
+        "reviewLimit": "This remains a heuristic baseline and fail-closed BLOCK evidence.",
+    }
+    write_json(out_dir / "REVIEW_SUMMARY.json", review_summary)
+
     manifest_rows = []
-    for file_path in sorted(out_dir.iterdir()):
+    for file_path in sorted(out_dir.rglob("*")):
         if file_path.is_file():
             data = file_path.read_bytes()
             manifest_rows.append({
-                "path": file_path.name,
+                "path": file_path.relative_to(out_dir).as_posix(),
                 "sha256": sha256_bytes(data),
                 "bytes": len(data),
             })
