@@ -1,0 +1,47 @@
+{
+  "type": "policy.mmdAuthority.manifest.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "deletionReadiness": "BLOCK",
+  "files": [
+    {
+      "path": "mmd_authority_classification.jsonl",
+      "sha256": "e0dedc3486cba1c1a5efe627739698d6a2d9d483624dc34bf3418ef892a6e471",
+      "bytes": 4113
+    },
+    {
+      "path": "mmd_authority_review_summary.json",
+      "sha256": "f6b94656b4b568c0d9d6100bbd0c8bf178825bff593b37cfa0d18f2e7e00309e",
+      "bytes": 1344
+    },
+    {
+      "path": "mmd_negative_control_results.json",
+      "sha256": "25e7c96b3099618ecfea8ec8bc77a06cbb802c53b0d480cb62e7876ae39a3515",
+      "bytes": 490
+    },
+    {
+      "path": "mmd_non_authority_exclusions.jsonl",
+      "sha256": "1504f4af1428835bf0e66b4bcc1a26cfca65d59bfb04484b35f0f765fcc84cdd",
+      "bytes": 1489
+    },
+    {
+      "path": "mmd_rerun_receipt.json",
+      "sha256": "bcc6503526498cadf7501358919076d986c0e67465626bc373844ff7a13fae47",
+      "bytes": 232
+    },
+    {
+      "path": "mmd_typed_semantic_edges.jsonl",
+      "sha256": "763860e52c7b05c7ac6395482c8feb31ebe38075fa886b77b44ace376dd8e7ff",
+      "bytes": 99806
+    },
+    {
+      "path": "mmd_typed_semantic_nodes.jsonl",
+      "sha256": "ae7fc8abb0d0a08ab3b82fa52d7052ba5cd6f7a85ad1e1703d918b044eb0fa45",
+      "bytes": 2159
+    },
+    {
+      "path": "remaining_retirement_gates.json",
+      "sha256": "0af5ed48f4c681c443a3a20e3d32925d8b7579e7c01edac5059dd18771459593",
+      "bytes": 688
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "type": "policy.mmdAuthority.reviewSummary.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "PASS_FOR_MMD_AUTHORITY_REVIEW_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "candidateCount": 9,
+  "authoritySources": 6,
+  "nonAuthorityExclusions": 3,
+  "typedNodes": 6,
+  "typedEdges": 202,
+  "unresolvedClassifications": 0,
+  "mmdAuthorityGate": {
+    "status": "PASS_FOR_CANDIDATE",
+    "expectedUnresolved": 0,
+    "actualUnresolved": 0
+  },
+  "remainingRetirementGates": [
+    {
+      "name": "authorityClassificationGate",
+      "status": "BLOCK"
+    },
+    {
+      "name": "typedCoverageGate",
+      "status": "BLOCK"
+    },
+    {
+      "name": "semanticDeltaGate",
+      "status": "BLOCK"
+    },
+    {
+      "name": "full-natural-language-policy-semantic-equivalence",
+      "status": "BLOCK"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "full corpus semantic equivalence",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

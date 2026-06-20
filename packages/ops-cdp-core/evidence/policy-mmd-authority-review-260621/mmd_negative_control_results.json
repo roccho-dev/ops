@@ -1,0 +1,17 @@
+{
+  "type": "policy.mmdAuthority.negativeControlResults.v1",
+  "decision": "PASS",
+  "passed": 8,
+  "total": 8,
+  "deletionReadiness": "BLOCK",
+  "controls": [
+    "mmd-candidate-list-fixed",
+    "mmd-source-kind-classified",
+    "mmd-authority-decision-evidenced",
+    "mmd-typed-extraction-present-for-authority",
+    "mmd-generated-or-example-not-authority",
+    "mmd-dropped-transition-detected-by-edge-count",
+    "mmd-does-not-clear-retirement",
+    "deterministic-rerun-match"
+  ]
+}
