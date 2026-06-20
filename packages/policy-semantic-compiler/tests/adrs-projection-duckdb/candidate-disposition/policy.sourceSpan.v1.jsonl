@@ -1,1 +1,1 @@
-{"id":"span:one","kind":"policy.sourceSpan.v1","sourceFileId":"file:one","sourceTrace":{"repo":"policy","rev":"rev-good","path":"POLICY.md","startLine":1,"endLine":1},"status":"candidate"}
+{"id":"span:one","kind":"policy.sourceSpan.v1","sourceFileId":"file:one","sourceTrace":{"repo":"policy","rev":"rev-good","path":"POLICY.md","startLine":1,"endLine":1},"startLine":1,"endLine":1,"sha256":"1111111111111111111111111111111111111111111111111111111111111111","excerpt":"MUST keep accepted dispositions separate from candidate dispositions.","status":"candidate"}

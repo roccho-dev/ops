@@ -700,6 +700,7 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
         "dispositions": records_dir / "policy.sourceFileDisposition.v1.jsonl",
         "review_batches": records_dir / "policy.sourceSpanDispositionReviewBatch.v1.jsonl",
         "review_assignments": records_dir / "policy.sourceSpanDispositionReviewAssignment.v1.jsonl",
+        "review_packets": records_dir / "policy.sourceSpanDispositionReviewPacket.v1.jsonl",
         "required_discussions": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl",
         "review_results": records_dir / "policy.sourceSpanDispositionReviewResult.v1.jsonl",
         "discussion_results": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussion.v1.jsonl",
@@ -1133,6 +1134,7 @@ COPY (
     missing_span_ids = {str(row.get("sourceSpanId")) for row in missing_span_rows if row.get("sourceSpanId")}
     review_batches = read_jsonl(optional_files["review_batches"]) if optional_files["review_batches"].exists() else []
     review_assignments = read_jsonl(optional_files["review_assignments"]) if optional_files["review_assignments"].exists() else []
+    review_packets = read_jsonl(optional_files["review_packets"]) if optional_files["review_packets"].exists() else []
     required_discussions = read_jsonl(optional_files["required_discussions"]) if optional_files["required_discussions"].exists() else []
     review_results = read_jsonl(optional_files["review_results"]) if optional_files["review_results"].exists() else []
     discussion_results = read_jsonl(optional_files["discussion_results"]) if optional_files["discussion_results"].exists() else []
@@ -1163,6 +1165,42 @@ COPY (
     ]
     for row in valid_assignments:
         batch_assignment_reviewers.setdefault(str(row.get("batchId")), set()).add(str(row.get("reviewerId")))
+    batch_span_ids_by_batch = {
+        str(row.get("id")): {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+        for row in valid_batches
+        if row.get("id")
+    }
+    valid_packet_batch_ids: set[str] = set()
+    packets_with_span_mismatch: list[str] = []
+    packets_with_missing_projection_fields: list[str] = []
+    for row in review_packets:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1"
+            and row.get("policyRev") == expected_rev
+            and row.get("accepted") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+            and row.get("status") == "review-required"
+            and str(row.get("batchId")) in batch_ids
+        ):
+            continue
+        batch_id = str(row.get("batchId"))
+        valid_packet_batch_ids.add(batch_id)
+        packet_span_ids = {str(span.get("sourceSpanId")) for span in as_list(row.get("sourceSpans")) if isinstance(span, dict) and span.get("sourceSpanId")}
+        if packet_span_ids != batch_span_ids_by_batch.get(batch_id, set()):
+            packets_with_span_mismatch.append(str(row.get("id")))
+        missing_projection = [
+            str(span.get("sourceSpanId"))
+            for span in as_list(row.get("sourceSpans"))
+            if isinstance(span, dict)
+            and (
+                not span.get("sourceTrace")
+                or not span.get("sha256")
+                or "excerpt" not in span
+            )
+        ]
+        if missing_projection:
+            packets_with_missing_projection_fields.append(str(row.get("id")))
     valid_required_discussion_batch_ids = {
         str(row.get("batchId"))
         for row in required_discussions
@@ -1205,6 +1243,7 @@ COPY (
     missing_batch_span_ids = sorted(missing_span_ids - batch_span_ids)
     invalid_batch_span_ids = sorted(batch_span_ids - missing_span_ids)
     batches_missing_two_reviewers = sorted(batch_id for batch_id in batch_ids if len(batch_assignment_reviewers.get(batch_id, set())) < 2)
+    batches_missing_review_packets = sorted(batch_ids - valid_packet_batch_ids)
     batches_missing_required_discussion = sorted(batch_ids - valid_required_discussion_batch_ids)
     missing_review_result_pairs = sorted(
         (batch_id, reviewer_id)
@@ -1225,6 +1264,24 @@ COPY (
             "status": "pass" if not batches_missing_two_reviewers else "blocked",
             "blocker": None if not batches_missing_two_reviewers else "review batch lacks at least two reviewer assignments",
             "count": len(batches_missing_two_reviewers),
+        },
+        {
+            "gate_id": "review-batches-have-review-packets",
+            "status": "pass" if not batches_missing_review_packets else "blocked",
+            "blocker": None if not batches_missing_review_packets else "review batch lacks projection-only review packet",
+            "count": len(batches_missing_review_packets),
+        },
+        {
+            "gate_id": "review-packets-match-batch-spans",
+            "status": "pass" if not packets_with_span_mismatch else "blocked",
+            "blocker": None if not packets_with_span_mismatch else "review packet source spans do not match batch source spans",
+            "count": len(packets_with_span_mismatch),
+        },
+        {
+            "gate_id": "review-packets-have-projection-fields",
+            "status": "pass" if not packets_with_missing_projection_fields else "blocked",
+            "blocker": None if not packets_with_missing_projection_fields else "review packet lacks sourceTrace, sha256, or excerpt",
+            "count": len(packets_with_missing_projection_fields),
         },
         {
             "gate_id": "review-batches-have-direct-cross-discussion-required",
@@ -1249,6 +1306,9 @@ COPY (
     jsonl_write(out_dir / "review-batch-missing-source-spans.jsonl", [{"kind": "policySemantic.reviewBatchMissingSourceSpan.v1", "sourceSpanId": span_id} for span_id in missing_batch_span_ids])
     jsonl_write(out_dir / "review-batch-extra-source-spans.jsonl", [{"kind": "policySemantic.reviewBatchExtraSourceSpan.v1", "sourceSpanId": span_id} for span_id in invalid_batch_span_ids])
     jsonl_write(out_dir / "review-batches-missing-two-reviewers.jsonl", [{"kind": "policySemantic.reviewBatchMissingTwoReviewers.v1", "batchId": batch_id} for batch_id in batches_missing_two_reviewers])
+    jsonl_write(out_dir / "review-batches-missing-review-packets.jsonl", [{"kind": "policySemantic.reviewBatchMissingReviewPacket.v1", "batchId": batch_id} for batch_id in batches_missing_review_packets])
+    jsonl_write(out_dir / "review-packets-with-span-mismatch.jsonl", [{"kind": "policySemantic.reviewPacketSpanMismatch.v1", "packetId": packet_id} for packet_id in packets_with_span_mismatch])
+    jsonl_write(out_dir / "review-packets-missing-projection-fields.jsonl", [{"kind": "policySemantic.reviewPacketMissingProjectionFields.v1", "packetId": packet_id} for packet_id in packets_with_missing_projection_fields])
     jsonl_write(out_dir / "review-batches-missing-required-discussion.jsonl", [{"kind": "policySemantic.reviewBatchMissingRequiredDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_required_discussion])
     jsonl_write(out_dir / "review-assignments-missing-accepted-results.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingAcceptedResult.v1", "batchId": batch_id, "reviewerId": reviewer_id} for batch_id, reviewer_id in missing_review_result_pairs])
     jsonl_write(out_dir / "review-batches-missing-accepted-discussions.jsonl", [{"kind": "policySemantic.reviewBatchMissingAcceptedDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_accepted_discussion])
@@ -1279,6 +1339,9 @@ COPY (
             "reviewBatchMissingSourceSpans": "review-batch-missing-source-spans.jsonl",
             "reviewBatchExtraSourceSpans": "review-batch-extra-source-spans.jsonl",
             "reviewBatchesMissingTwoReviewers": "review-batches-missing-two-reviewers.jsonl",
+            "reviewBatchesMissingReviewPackets": "review-batches-missing-review-packets.jsonl",
+            "reviewPacketsWithSpanMismatch": "review-packets-with-span-mismatch.jsonl",
+            "reviewPacketsMissingProjectionFields": "review-packets-missing-projection-fields.jsonl",
             "reviewBatchesMissingRequiredDiscussion": "review-batches-missing-required-discussion.jsonl",
             "reviewAssignmentsMissingAcceptedResults": "review-assignments-missing-accepted-results.jsonl",
             "reviewBatchesMissingAcceptedDiscussions": "review-batches-missing-accepted-discussions.jsonl",
