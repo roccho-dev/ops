@@ -19,10 +19,11 @@ export function normalizeRows(rows) {
   return rows.map(normalizeRow).filter((r) => r.pkg || r.repo || r.examples);
 }
 
-export function searchPackages(rows, { query = "", role = "" } = {}) {
+export function searchPackages(rows, { query = "", role = "", requireEligible = false } = {}) {
   const q = String(query || "").toLowerCase();
   const wantedRole = String(role || "").toLowerCase();
   return rows.filter((row) => {
+    if (requireEligible && row.eligible === "false") return false;
     const haystack = Object.values(row).join(" ").toLowerCase();
     if (q && !haystack.includes(q)) return false;
     if (wantedRole && !String(row.role || "").toLowerCase().includes(wantedRole)) return false;
