@@ -1,0 +1,14 @@
+{
+  "type": "policy.typedCoverageGapSourceclass003.rerunReceipt.v1",
+  "sourceclassLane": "sourceclass-003",
+  "deterministicRerunMatch": "PASS",
+  "hashes": {
+    "summary": "16592e05f1c7c1c33c86cc39654797af876fa903d488ac62f4ceee25105f8e0e",
+    "selection": "bb38020e9e78cac1aab11b1d2c23c8abaf2458b988db79db1e2bd77e95413642",
+    "manifest": "c972a86df60912f4ed3bf6cb23c82dea10cff430e43e21b0593d1e4f68ae30ce",
+    "nodes": "01c684a65d4f4a492f79d1d1599b27dd50fcb4290e0ff603595aeee52f9bff4a",
+    "edges": "b42f1ffb28d84b629dd294dfda1aa25338bed6e3e6165e4fd35c75d1a2877934",
+    "deltas": "50404ff1e3a53736f1f23240679985506caaeb5d0eddd297fc0c9b3fa70f254b",
+    "controls": "117cec9819bdcfed5ec858031076d6540dca6b46336a2021fcb726d2ed57e3ec"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "type": "policy.typedCoverageGapSourceclass003.negativeControls.v1",
+  "sourceclassLane": "sourceclass-003",
+  "decision": "PASS",
+  "selectedClass": "mjs-executable-or-test-policy",
+  "controls": [
+    {
+      "name": "sourceclass-003-inputs-fixed",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-003-selection-deterministic",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-003-inventory-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-003-typed-coverage-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-003-source-trace-valid",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-003-recompute-counts",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-003-does-not-clear-retirement",
+      "status": "PASS"
+    },
+    {
+      "name": "generated-evidence-not-authority",
+      "status": "PASS"
+    },
+    {
+      "name": "deterministic-rerun-match",
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "type": "policy.typedCoverageGapSourceclass003.summary.v1",
+  "sourceclassLane": "sourceclass-003",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsPrevRef": "210ec932d6c0332523dba24a1cc070208d9b3cd2",
+  "adrsPrevRef": "7241200a231ffea4bc23d39251acb6876697675b",
+  "decision": "PASS_AS_SOURCECLASS_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "inputGapCount": 240,
+  "selectedClass": "mjs-executable-or-test-policy",
+  "selectedGapCount": 151,
+  "deferredGapCount": 89,
+  "missingSelectedSources": 0,
+  "typedNodes": 151,
+  "typedEdges": 151,
+  "resolvedForSourceclass": 151,
+  "recomputedRemainingCoverageGaps": 89,
+  "selectionRule": "largest remaining sourceClass by count; tie-break lexicographically",
+  "fullCorpusEquivalenceGate": "BLOCK",
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "full corpus equivalence",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

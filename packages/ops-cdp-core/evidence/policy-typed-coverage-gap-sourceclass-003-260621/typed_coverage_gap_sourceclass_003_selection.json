@@ -1,0 +1,8 @@
+{
+  "type": "policy.typedCoverageGapSourceclass003.selection.v1",
+  "selectedClass": "mjs-executable-or-test-policy",
+  "selectionRule": "largest remaining sourceClass by count; tie-break lexicographically",
+  "inputGapCount": 240,
+  "selectedGapCount": 151,
+  "deferredGapCount": 89
+}
