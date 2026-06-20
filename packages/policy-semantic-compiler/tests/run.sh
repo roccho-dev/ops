@@ -15,7 +15,7 @@ mkdir -p "$work/source-span-review-batches"
 mkdir -p "$work/source-span-review-assignments"
 mkdir -p "$work/source-span-review-completion-blocked" "$work/source-span-review-completion-accepted"
 mkdir -p "$work/source-span-dispositions-blocked" "$work/source-span-dispositions-accepted"
-mkdir -p "$work/accepted-coverage-proof-blocked" "$work/accepted-coverage-proof-fake-authority" "$work/accepted-coverage-proof-invalid-reference" "$work/accepted-coverage-proof-stale-span" "$work/accepted-coverage-proof-fixture-only-covering" "$work/accepted-coverage-proof-accepted"
+mkdir -p "$work/accepted-coverage-proof-blocked" "$work/accepted-coverage-proof-fake-authority" "$work/accepted-coverage-proof-invalid-reference" "$work/accepted-coverage-proof-stale-span" "$work/accepted-coverage-proof-fixture-only-covering" "$work/accepted-coverage-proof-fixture-only-accepted" "$work/accepted-coverage-proof-accepted"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -319,6 +319,17 @@ if policy-semantic-compiler materialize-accepted-coverage-proof \
 fi
 grep -q '"ok": false' "$work/accepted-coverage-proof-fixture-only-covering.stdout.json"
 grep '"gate_id":"no-candidate-span-dispositions-for-covered-spans"' "$work/accepted-coverage-proof-fixture-only-covering/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/fixture-only-accepted-covering-disposition/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-fixture-only-accepted" > "$work/accepted-coverage-proof-fixture-only-accepted.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with fixture-only accepted disposition" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-fixture-only-accepted.stdout.json"
+grep '"gate_id":"no-candidate-span-dispositions-for-covered-spans"' "$work/accepted-coverage-proof-fixture-only-accepted/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
 policy-semantic-compiler materialize-accepted-coverage-proof \
   --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
   --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpanDisposition.v1.jsonl" \

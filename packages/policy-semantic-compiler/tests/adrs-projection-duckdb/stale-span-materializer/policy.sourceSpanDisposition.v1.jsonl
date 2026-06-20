@@ -1,0 +1,1 @@
+{"id":"span-disposition:stale-source","kind":"policy.sourceSpanDisposition.v1","accepted":true,"status":"accepted","policyRev":"rev-good","sourceSpanIds":["span:one"],"disposition":"represented","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}

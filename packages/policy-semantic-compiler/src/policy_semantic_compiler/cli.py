@@ -698,6 +698,11 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
     }
     optional_files = {
         "dispositions": records_dir / "policy.sourceFileDisposition.v1.jsonl",
+        "review_batches": records_dir / "policy.sourceSpanDispositionReviewBatch.v1.jsonl",
+        "review_assignments": records_dir / "policy.sourceSpanDispositionReviewAssignment.v1.jsonl",
+        "required_discussions": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl",
+        "review_results": records_dir / "policy.sourceSpanDispositionReviewResult.v1.jsonl",
+        "discussion_results": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussion.v1.jsonl",
     }
     missing_files = [str(path) for path in required_files.values() if not path.exists()]
     if missing_files:
@@ -1124,6 +1129,131 @@ COPY (
                 rows.append(clean_row)
         jsonl_write(jsonl_detail_path, rows)
 
+    missing_span_rows = read_jsonl(out_dir / "missing-accepted-span-dispositions.jsonl")
+    missing_span_ids = {str(row.get("sourceSpanId")) for row in missing_span_rows if row.get("sourceSpanId")}
+    review_batches = read_jsonl(optional_files["review_batches"]) if optional_files["review_batches"].exists() else []
+    review_assignments = read_jsonl(optional_files["review_assignments"]) if optional_files["review_assignments"].exists() else []
+    required_discussions = read_jsonl(optional_files["required_discussions"]) if optional_files["required_discussions"].exists() else []
+    review_results = read_jsonl(optional_files["review_results"]) if optional_files["review_results"].exists() else []
+    discussion_results = read_jsonl(optional_files["discussion_results"]) if optional_files["discussion_results"].exists() else []
+
+    valid_batches = [
+        row
+        for row in review_batches
+        if row.get("kind") == "policy.sourceSpanDispositionReviewBatch.v1"
+        and row.get("policyRev") == expected_rev
+        and row.get("accepted") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+        and row.get("status") == "review-required"
+    ]
+    batch_span_ids = {str(span_id) for row in valid_batches for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+    batch_ids = {str(row.get("id")) for row in valid_batches if row.get("id")}
+    batch_assignment_reviewers: dict[str, set[str]] = {}
+    valid_assignments = [
+        row
+        for row in review_assignments
+        if row.get("kind") == "policy.sourceSpanDispositionReviewAssignment.v1"
+        and row.get("policyRev") == expected_rev
+        and row.get("accepted") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+        and row.get("status") == "assigned-review-required"
+        and str(row.get("batchId")) in batch_ids
+    ]
+    for row in valid_assignments:
+        batch_assignment_reviewers.setdefault(str(row.get("batchId")), set()).add(str(row.get("reviewerId")))
+    valid_required_discussion_batch_ids = {
+        str(row.get("batchId"))
+        for row in required_discussions
+        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"
+        and row.get("policyRev") == expected_rev
+        and row.get("accepted") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+        and row.get("sameRevisionRequired") is True
+        and row.get("peerRepliesReadRequired") is True
+        and row.get("noRemainingObjectionsRequired") is True
+        and row.get("status") == "direct-cross-discussion-required"
+        and str(row.get("batchId")) in batch_ids
+    }
+    accepted_review_pairs = {
+        (str(row.get("batchId")), str(row.get("reviewerId")))
+        for row in review_results
+        if row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1"
+        and row.get("status") == "accepted"
+        and row.get("accepted") is True
+        and row.get("policyRev") == expected_rev
+        and row.get("fixtureOnly") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+    }
+    accepted_discussion_batch_ids = {
+        str(row.get("batchId"))
+        for row in discussion_results
+        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1"
+        and row.get("status") == "accepted"
+        and row.get("accepted") is True
+        and row.get("policyRev") == expected_rev
+        and row.get("sameRevision") is True
+        and row.get("peerRepliesRead") is True
+        and row.get("noRemainingObjections") is True
+        and row.get("fixtureOnly") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+    }
+    missing_batch_span_ids = sorted(missing_span_ids - batch_span_ids)
+    invalid_batch_span_ids = sorted(batch_span_ids - missing_span_ids)
+    batches_missing_two_reviewers = sorted(batch_id for batch_id in batch_ids if len(batch_assignment_reviewers.get(batch_id, set())) < 2)
+    batches_missing_required_discussion = sorted(batch_ids - valid_required_discussion_batch_ids)
+    missing_review_result_pairs = sorted(
+        (batch_id, reviewer_id)
+        for batch_id, reviewers in batch_assignment_reviewers.items()
+        for reviewer_id in reviewers
+        if (batch_id, reviewer_id) not in accepted_review_pairs
+    )
+    batches_missing_accepted_discussion = sorted(batch_ids - accepted_discussion_batch_ids)
+    review_provider_gates = [
+        {
+            "gate_id": "review-batches-cover-missing-accepted-spans",
+            "status": "pass" if not missing_batch_span_ids and not invalid_batch_span_ids else "blocked",
+            "blocker": None if not missing_batch_span_ids and not invalid_batch_span_ids else "review batches do not exactly cover missing accepted source spans",
+            "count": len(missing_batch_span_ids) + len(invalid_batch_span_ids),
+        },
+        {
+            "gate_id": "review-batches-have-two-reviewer-assignments",
+            "status": "pass" if not batches_missing_two_reviewers else "blocked",
+            "blocker": None if not batches_missing_two_reviewers else "review batch lacks at least two reviewer assignments",
+            "count": len(batches_missing_two_reviewers),
+        },
+        {
+            "gate_id": "review-batches-have-direct-cross-discussion-required",
+            "status": "pass" if not batches_missing_required_discussion else "blocked",
+            "blocker": None if not batches_missing_required_discussion else "review batch lacks direct cross-discussion requirement",
+            "count": len(batches_missing_required_discussion),
+        },
+        {
+            "gate_id": "review-assignments-have-accepted-results",
+            "status": "pass" if not missing_review_result_pairs else "blocked",
+            "blocker": None if not missing_review_result_pairs else "review assignments lack accepted results",
+            "count": len(missing_review_result_pairs),
+        },
+        {
+            "gate_id": "review-batches-have-accepted-direct-cross-discussions",
+            "status": "pass" if not batches_missing_accepted_discussion else "blocked",
+            "blocker": None if not batches_missing_accepted_discussion else "review batches lack accepted no-objection direct cross-discussions",
+            "count": len(batches_missing_accepted_discussion),
+        },
+    ]
+    jsonl_write(out_dir / "review-provider-gates.jsonl", review_provider_gates)
+    jsonl_write(out_dir / "review-batch-missing-source-spans.jsonl", [{"kind": "policySemantic.reviewBatchMissingSourceSpan.v1", "sourceSpanId": span_id} for span_id in missing_batch_span_ids])
+    jsonl_write(out_dir / "review-batch-extra-source-spans.jsonl", [{"kind": "policySemantic.reviewBatchExtraSourceSpan.v1", "sourceSpanId": span_id} for span_id in invalid_batch_span_ids])
+    jsonl_write(out_dir / "review-batches-missing-two-reviewers.jsonl", [{"kind": "policySemantic.reviewBatchMissingTwoReviewers.v1", "batchId": batch_id} for batch_id in batches_missing_two_reviewers])
+    jsonl_write(out_dir / "review-batches-missing-required-discussion.jsonl", [{"kind": "policySemantic.reviewBatchMissingRequiredDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_required_discussion])
+    jsonl_write(out_dir / "review-assignments-missing-accepted-results.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingAcceptedResult.v1", "batchId": batch_id, "reviewerId": reviewer_id} for batch_id, reviewer_id in missing_review_result_pairs])
+    jsonl_write(out_dir / "review-batches-missing-accepted-discussions.jsonl", [{"kind": "policySemantic.reviewBatchMissingAcceptedDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_accepted_discussion])
+    gates.extend(review_provider_gates)
+
     ok = bool(gates) and all(row["status"] == "pass" for row in gates)
     blockers = [row["blocker"] for row in gates if row["status"] != "pass" and row["blocker"]]
     jsonl_write(out_dir / "adrs-projection-duckdb-gates.jsonl", gates)
@@ -1145,6 +1275,13 @@ COPY (
             "missingAcceptedCoverage": "missing-accepted-coverage.jsonl",
             "candidateOnlySpanDispositions": "candidate-only-span-dispositions.jsonl",
             "candidateOnlyFileDispositions": "candidate-only-file-dispositions.jsonl",
+            "reviewProviderGates": "review-provider-gates.jsonl",
+            "reviewBatchMissingSourceSpans": "review-batch-missing-source-spans.jsonl",
+            "reviewBatchExtraSourceSpans": "review-batch-extra-source-spans.jsonl",
+            "reviewBatchesMissingTwoReviewers": "review-batches-missing-two-reviewers.jsonl",
+            "reviewBatchesMissingRequiredDiscussion": "review-batches-missing-required-discussion.jsonl",
+            "reviewAssignmentsMissingAcceptedResults": "review-assignments-missing-accepted-results.jsonl",
+            "reviewBatchesMissingAcceptedDiscussions": "review-batches-missing-accepted-discussions.jsonl",
             "sql": "adrs-projection-duckdb.sql",
         },
     }
@@ -1509,11 +1646,11 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
         for row in span_dispositions
         if row.get("kind") == "policy.sourceSpanDisposition.v1"
         and row.get("policyRev") == policy_rev
-        and row.get("fixtureOnly") is False
         and any(str(span_id) in span_ids for span_id in as_list(row.get("sourceSpanIds")))
         and not (
             row.get("status") == "accepted"
             and row.get("accepted") is True
+            and row.get("fixtureOnly") is False
             and row.get("generatedIsAuthority") is False
             and row.get("policyDeletionApproved") is False
         )

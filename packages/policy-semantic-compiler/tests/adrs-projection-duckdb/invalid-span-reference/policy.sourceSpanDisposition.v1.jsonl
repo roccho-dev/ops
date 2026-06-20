@@ -1,0 +1,1 @@
+{"id":"span-disposition:invalid-reference","kind":"policy.sourceSpanDisposition.v1","accepted":true,"status":"accepted","policyRev":"rev-good","sourceSpanIds":["span:one","span:two","span:missing"],"disposition":"represented","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
