@@ -1175,6 +1175,7 @@ COPY (
         if row.get("id")
     }
     valid_packet_batch_ids: set[str] = set()
+    valid_packet_ids_by_batch: dict[str, str] = {}
     packets_with_span_mismatch: list[str] = []
     packets_with_missing_projection_fields: list[str] = []
     for row in review_packets:
@@ -1205,6 +1206,8 @@ COPY (
         ]
         if missing_projection:
             packets_with_missing_projection_fields.append(str(row.get("id")))
+        if packet_span_ids == batch_span_ids_by_batch.get(batch_id, set()) and not missing_projection and row.get("id"):
+            valid_packet_ids_by_batch[batch_id] = str(row.get("id"))
     valid_required_discussion_batch_ids = {
         str(row.get("batchId"))
         for row in required_discussions
@@ -1223,11 +1226,7 @@ COPY (
         (str(row.get("batchId")), str(row.get("reviewerId"))): {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
         for row in valid_assignments
     }
-    packet_ids_by_batch = {
-        str(row.get("batchId")): str(row.get("id"))
-        for row in review_packets
-        if row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1" and row.get("id")
-    }
+    packet_ids_by_batch = valid_packet_ids_by_batch
     assignment_ids = {str(row.get("id")) for row in valid_assignments if row.get("id")}
     assignment_ids_by_pair = {
         (str(row.get("batchId")), str(row.get("reviewerId"))): str(row.get("id"))

@@ -301,6 +301,27 @@ EOF
 cat > "$work/source-span-discussion-results.jsonl" <<EOF
 {"id":"direct-cross-discussion-accepted","kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$batch_id","policyRev":"rev-good","reviewResultIds":["review-result-a","review-result-b"],"peerRepliesReadByReviewerIds":["reviewer-a","reviewer-b"],"rationale":"fixture reviewers read peer replies and have no remaining objections","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
 EOF
+cp "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" "$work/source-span-review-packets-with-invalid-extra.jsonl"
+sed 's/"id":"[^"]*"/"id":"invalid-stale-packet"/; s/"policyRev":"rev-good"/"policyRev":"stale-rev"/' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" >> "$work/source-span-review-packets-with-invalid-extra.jsonl"
+cat > "$work/source-span-review-results-invalid-packet.jsonl" <<EOF
+{"id":"review-result-a-invalid-packet","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-a","policyRev":"rev-good","packetId":"invalid-stale-packet","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer incorrectly referenced stale packet","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+{"id":"review-result-b-invalid-packet","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-b","policyRev":"rev-good","packetId":"invalid-stale-packet","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer incorrectly referenced stale packet","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+cat > "$work/source-span-discussion-results-invalid-packet.jsonl" <<EOF
+{"id":"direct-cross-discussion-invalid-packet","kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$batch_id","policyRev":"rev-good","reviewResultIds":["review-result-a-invalid-packet","review-result-b-invalid-packet"],"peerRepliesReadByReviewerIds":["reviewer-a","reviewer-b"],"rationale":"fixture reviewers read peer replies but source review results used invalid packet ids","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+if policy-semantic-compiler check-source-span-review-completion \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-packets "$work/source-span-review-packets-with-invalid-extra.jsonl" \
+  --review-results "$work/source-span-review-results-invalid-packet.jsonl" \
+  --discussion-results "$work/source-span-discussion-results-invalid-packet.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-completion-invalid-packet" > "$work/source-span-review-completion-invalid-packet.stdout.json"; then
+  echo "source span review completion unexpectedly accepted invalid packet id" >&2
+  exit 1
+fi
+grep '"gate_id":"source-span-review-results-match-packets"' "$work/source-span-review-completion-invalid-packet/source-span-review-completion-gates.jsonl" | grep -q '"status":"blocked"'
 policy-semantic-compiler check-source-span-review-completion \
   --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
   --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
