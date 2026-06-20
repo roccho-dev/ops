@@ -1,0 +1,25 @@
+{
+  "type": "policy.semanticEquivalenceCandidate.gen2Review.v1",
+  "reviewer": "ChatGPT remove-policy project",
+  "reviewConversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "opsCommit": "5fc1ed2a00f6a27bbf174a8c0ca95c75c1f06385",
+  "adrsCommit": "cd983d2de7b281ce11832c5cc4e741265624790c",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "verdict": "PASS",
+  "semanticEquivalenceCandidateGate": "PASS",
+  "deletionReadiness": "BLOCK",
+  "proposalQuality": "PASS for this bounded semantic-equivalence candidate lane. Based on the pasted evidence only, the lane checks exact preservation between the 7 source13 typed-covered edges and the typed semantic compiler candidate outputs, with semanticDeltaGate unresolved=0. It does not claim full policy corpus equivalence, accepted compiler authority, deletion readiness, retirement, cutover, merge, canonical write, or SSOT adoption.",
+  "scopeBoundaryReview": "PASS. The scope is correctly limited to candidate equivalence between source13 authority dispositions and typed compiler candidate outputs. source13 scope is not overclaimed as full natural-language policy corpus coverage. The remainingRetirementGates keep accepted compiler authority, owner/adoption, end-to-end retirement proof, and canonical-write/SSOT adoption as BLOCK.",
+  "determinismReview": "PASS for this lane. The compilerVersion, typedCompilerVersion, and policyRef are fixed, and the deterministic rerun receipt shows originalManifestSha256 equals rerunManifestSha256. This is sufficient for bounded candidate evidence, but not sufficient for accepted final compiler authority or full semantic completion.",
+  "negativeControlReview": "PASS. The 12 controls cover the main bounded-lane failure modes: fixed inputs, authority-bearing source coverage, semantic deltas blocked or zero, source trace validity, no final-authority claim, manifest hash validation, deterministic rerun match, and mutation detection for dropped edge, weakened text, stale source hash, generated-authority confusion, and final-authority overclaim. They are sufficient for candidate equivalence evidence, not for retirement approval.",
+  "falseClaimReview": "PASS. No improper policy.git retirement, deletion, cutover approval, semantic completion, accepted compiler authority, owner approval, merge approval, canonical write, SSOT write, or end-to-end retirement claim is visible in the pasted evidence. PASS_FOR_EQUIVALENCE_CANDIDATE is not confused with final semantic completion, and semanticDeltaGate PASS is not promoted into deletion or cutover readiness.",
+  "blockers": [],
+  "minimalFixesBeforeThisLaneCanBeAccepted": [],
+  "remainingGatesForActualRetirement": [
+    {"name":"accepted-typed-semantic-compiler-authority","status":"BLOCK","reason":"typed-semantic-compiler-candidate-jq-v1 and semantic-equivalence-candidate-jq-v1 remain candidate evidence, not accepted final compiler authority"},
+    {"name":"full-natural-language-policy-semantic-equivalence","status":"BLOCK","reason":"this lane proves candidate equivalence only for source13 typed-covered edges, not full corpus semantic equivalence"},
+    {"name":"owner/adoption-gates","status":"BLOCK","reason":"owner approval and adoption/cutover records are not granted by this review"},
+    {"name":"end-to-end-retirement-proof","status":"BLOCK","reason":"this lane does not prove policy.git can be absent or retired while all consumers and authority routes pass"},
+    {"name":"canonical-write-and-ssot-adoption","status":"BLOCK","reason":"no merge, canonical write, SSOT write, deletion, retirement, or cutover approval is granted here"}
+  ]
+}
