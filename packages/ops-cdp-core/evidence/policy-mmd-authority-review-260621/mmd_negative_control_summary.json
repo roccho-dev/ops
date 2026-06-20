@@ -1,0 +1,24 @@
+{
+  "type": "policy.mmdAuthority.negativeControlSummary.v1",
+  "decision": "PASS",
+  "passed": 10,
+  "total": 10,
+  "deletionReadiness": "BLOCK",
+  "controls": [
+    "mmd-candidate-list-fixed",
+    "mmd-source-kind-classified",
+    "mmd-authority-decision-evidenced",
+    "mmd-typed-extraction-present-for-authority",
+    "per-file-edge-trace-present",
+    "mmd-generated-or-example-not-authority",
+    "uploaded-copy-not-authority",
+    "mmd-dropped-transition-detected-by-edge-count",
+    "mmd-does-not-clear-retirement",
+    "deterministic-rerun-match"
+  ],
+  "facts": {
+    "badCoverage": 0,
+    "badExclusion": 0,
+    "manifestHashValidation": "PASS"
+  }
+}

@@ -19,14 +19,29 @@
       "bytes": 490
     },
     {
+      "path": "mmd_negative_control_summary.json",
+      "sha256": "0f479e60e3f9dfc0fabf4360e6daf6a5f2f5590afa865e28b76bb6fc105575ff",
+      "bytes": 662
+    },
+    {
+      "path": "mmd_non_authority_exclusion_proofs.jsonl",
+      "sha256": "17ced7f43dbe354d70fd874e664ad6b5c8ddc3045b793131216eaccead5506f4",
+      "bytes": 1582
+    },
+    {
       "path": "mmd_non_authority_exclusions.jsonl",
       "sha256": "1504f4af1428835bf0e66b4bcc1a26cfca65d59bfb04484b35f0f765fcc84cdd",
       "bytes": 1489
     },
     {
+      "path": "mmd_per_file_typed_coverage.jsonl",
+      "sha256": "1abde696bd7a68f5c7cc704e2916ba963b8a805f0de81083e9d0d547bc147338",
+      "bytes": 2483
+    },
+    {
       "path": "mmd_rerun_receipt.json",
-      "sha256": "bcc6503526498cadf7501358919076d986c0e67465626bc373844ff7a13fae47",
-      "bytes": 232
+      "sha256": "8c5cf1a6d1d189744fca381866340f29e9d22b0be0897b91ecf67f1f26280d83",
+      "bytes": 256
     },
     {
       "path": "mmd_typed_semantic_edges.jsonl",

@@ -1,6 +1,6 @@
 {
   "type": "policy.mmdAuthority.rerunReceipt.v1",
   "passed": true,
-  "inputBundleSha256": "e484f73b87597439f033ddaf417fafe5300c6fb12374e6664fd19398f7ea9e95",
-  "method": "deterministic fixed mmd candidate list plus line parser"
+  "inputBundleSha256": "2459cd919f8c4324c99b79d761ed01ba82c122a704852ce2add5be9cd1a3bc5e",
+  "method": "deterministic fixed mmd candidate list plus line parser plus per-file summaries"
 }
