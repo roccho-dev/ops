@@ -1,0 +1,13 @@
+{"caseId":"valid-scope-only-owner-approval","expected":"ACCEPT_SCOPE_ONLY","actual":"ACCEPT_SCOPE_ONLY","pass":true}
+{"caseId":"reject-non-owner-reviewer","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-gen2-delegated-approval","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-overbroad-scope","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-missing-does-not-approve","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-stale-policy-ref","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-stale-ops-ref","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-stale-adrs-ref","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-missing-owner-approval-ref","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"accept-deferred-owner-decision-as-block","expected":"BLOCK_WITH_OWNER_DECISION","actual":"BLOCK_WITH_OWNER_DECISION","pass":true}
+{"caseId":"reject-gen0-delegated-approval","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-gen1-delegated-approval","expected":"REJECT","actual":"REJECT","pass":true}
+{"caseId":"reject-partial-boundary-missing-cutover","expected":"REJECT","actual":"REJECT","pass":true}

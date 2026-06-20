@@ -36,7 +36,15 @@
     "stale refs",
     "missing approvalRef",
     "missing approvedAt",
-    "missing explicit doesNotApprove boundaries"
+    "missing explicit doesNotApprove boundaries",
+    "Gen0 delegated approval",
+    "Gen1 delegated approval",
+    "partial doesNotApprove boundary omissions"
   ],
-  "deferOrRejectVerdict": "BLOCK_WITH_OWNER_DECISION"
+  "deferOrRejectVerdict": "BLOCK_WITH_OWNER_DECISION",
+  "negativeCoverageFixes": [
+    "Gen0 delegated approval rejected",
+    "Gen1 delegated approval rejected",
+    "partial boundary omission rejected"
+  ]
 }

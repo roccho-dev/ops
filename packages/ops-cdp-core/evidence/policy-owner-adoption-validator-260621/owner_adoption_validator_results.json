@@ -60,6 +60,24 @@
       "expected": "BLOCK_WITH_OWNER_DECISION",
       "actual": "BLOCK_WITH_OWNER_DECISION",
       "pass": true
+    },
+    {
+      "caseId": "reject-gen0-delegated-approval",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "pass": true
+    },
+    {
+      "caseId": "reject-gen1-delegated-approval",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "pass": true
+    },
+    {
+      "caseId": "reject-partial-boundary-missing-cutover",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "pass": true
     }
   ],
   "allPass": true

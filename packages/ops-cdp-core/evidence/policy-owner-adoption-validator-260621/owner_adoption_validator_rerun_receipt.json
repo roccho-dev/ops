@@ -1,7 +1,12 @@
 {
   "type": "policy.ownerAdoptionValidator.rerunReceipt.v1",
   "ranAt": "2026-06-21T00:00:00Z",
-  "caseCount": 10,
+  "caseCount": 13,
   "passed": true,
-  "command": "python owner_adoption_validator.py owner_adoption_validator_cases.jsonl"
+  "command": "python owner_adoption_validator.py owner_adoption_validator_cases.jsonl",
+  "reviewFixesApplied": [
+    "explicit Gen0 delegated approval rejection",
+    "explicit Gen1 delegated approval rejection",
+    "partial doesNotApprove boundary omission rejection"
+  ]
 }
