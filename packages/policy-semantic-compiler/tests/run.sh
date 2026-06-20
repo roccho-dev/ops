@@ -272,7 +272,7 @@ cat > "$work/source-span-review-results.jsonl" <<EOF
 {"id":"review-result-b","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-b","policyRev":"rev-good","packetId":"$packet_id","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer accepted projection-only packet coverage","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
 EOF
 cat > "$work/source-span-discussion-results.jsonl" <<EOF
-{"kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$batch_id","policyRev":"rev-good","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+{"id":"direct-cross-discussion-accepted","kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$batch_id","policyRev":"rev-good","reviewResultIds":["review-result-a","review-result-b"],"peerRepliesReadByReviewerIds":["reviewer-a","reviewer-b"],"rationale":"fixture reviewers read peer replies and have no remaining objections","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
 EOF
 policy-semantic-compiler check-source-span-review-completion \
   --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \

@@ -1256,20 +1256,38 @@ COPY (
         (str(row.get("batchId")), str(row.get("reviewerId")))
         for row in valid_review_results
     }
-    accepted_discussion_batch_ids = {
-        str(row.get("batchId"))
-        for row in discussion_results
-        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1"
-        and row.get("status") == "accepted"
-        and row.get("accepted") is True
-        and row.get("policyRev") == expected_rev
-        and row.get("sameRevision") is True
-        and row.get("peerRepliesRead") is True
-        and row.get("noRemainingObjections") is True
-        and row.get("fixtureOnly") is False
-        and row.get("generatedIsAuthority") is False
-        and row.get("policyDeletionApproved") is False
-    }
+    review_result_ids_by_batch: dict[str, set[str]] = {}
+    for row in valid_review_results:
+        if row.get("id"):
+            review_result_ids_by_batch.setdefault(str(row.get("batchId")), set()).add(str(row.get("id")))
+    accepted_discussion_batch_ids: set[str] = set()
+    invalid_discussion_result_ids: list[str] = []
+    for row in discussion_results:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1"
+            and row.get("status") == "accepted"
+            and row.get("accepted") is True
+            and row.get("policyRev") == expected_rev
+            and row.get("sameRevision") is True
+            and row.get("peerRepliesRead") is True
+            and row.get("noRemainingObjections") is True
+            and row.get("fixtureOnly") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+        ):
+            continue
+        batch_id = str(row.get("batchId"))
+        result_ids = {str(item) for item in as_list(row.get("reviewResultIds")) if item}
+        peer_read_reviewers = {str(item) for item in as_list(row.get("peerRepliesReadByReviewerIds")) if item}
+        valid_shape = (
+            result_ids == review_result_ids_by_batch.get(batch_id, set())
+            and peer_read_reviewers == batch_assignment_reviewers.get(batch_id, set())
+            and bool(row.get("rationale"))
+        )
+        if valid_shape:
+            accepted_discussion_batch_ids.add(batch_id)
+        else:
+            invalid_discussion_result_ids.append(str(row.get("id") or batch_id))
     missing_batch_span_ids = sorted(missing_span_ids - batch_span_ids)
     invalid_batch_span_ids = sorted(batch_span_ids - missing_span_ids)
     batches_missing_two_reviewers = sorted(batch_id for batch_id in batch_ids if len(batch_assignment_reviewers.get(batch_id, set())) < 2)
@@ -1337,6 +1355,12 @@ COPY (
             "blocker": None if not batches_missing_accepted_discussion else "review batches lack accepted no-objection direct cross-discussions",
             "count": len(batches_missing_accepted_discussion),
         },
+        {
+            "gate_id": "direct-cross-discussions-match-review-results",
+            "status": "pass" if not invalid_discussion_result_ids else "blocked",
+            "blocker": None if not invalid_discussion_result_ids else "direct cross-discussion does not reference accepted review results, peer-read reviewers, rationale, or no-objection requirements",
+            "count": len(invalid_discussion_result_ids),
+        },
     ]
     jsonl_write(out_dir / "review-provider-gates.jsonl", review_provider_gates)
     jsonl_write(out_dir / "review-batch-missing-source-spans.jsonl", [{"kind": "policySemantic.reviewBatchMissingSourceSpan.v1", "sourceSpanId": span_id} for span_id in missing_batch_span_ids])
@@ -1349,6 +1373,7 @@ COPY (
     jsonl_write(out_dir / "review-assignments-missing-accepted-results.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingAcceptedResult.v1", "batchId": batch_id, "reviewerId": reviewer_id} for batch_id, reviewer_id in missing_review_result_pairs])
     jsonl_write(out_dir / "invalid-review-results.jsonl", [{"kind": "policySemantic.invalidReviewResult.v1", "reviewResultId": result_id} for result_id in invalid_review_result_ids])
     jsonl_write(out_dir / "review-batches-missing-accepted-discussions.jsonl", [{"kind": "policySemantic.reviewBatchMissingAcceptedDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_accepted_discussion])
+    jsonl_write(out_dir / "invalid-direct-cross-discussions.jsonl", [{"kind": "policySemantic.invalidDirectCrossDiscussion.v1", "discussionId": discussion_id} for discussion_id in invalid_discussion_result_ids])
     gates.extend(review_provider_gates)
 
     ok = bool(gates) and all(row["status"] == "pass" for row in gates)
@@ -1383,6 +1408,7 @@ COPY (
             "reviewAssignmentsMissingAcceptedResults": "review-assignments-missing-accepted-results.jsonl",
             "invalidReviewResults": "invalid-review-results.jsonl",
             "reviewBatchesMissingAcceptedDiscussions": "review-batches-missing-accepted-discussions.jsonl",
+            "invalidDirectCrossDiscussions": "invalid-direct-cross-discussions.jsonl",
             "sql": "adrs-projection-duckdb.sql",
         },
     }
@@ -1675,20 +1701,42 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
         for row in assignments
         if (str(row.get("batchId")), str(row.get("reviewerId"))) not in accepted_reviews
     ]
-    accepted_discussions = {
-        str(row.get("batchId"))
-        for row in discussion_results
-        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1"
-        and row.get("status") == "accepted"
-        and row.get("accepted") is True
-        and row.get("policyRev") == args.policy_rev
-        and row.get("sameRevision") is True
-        and row.get("peerRepliesRead") is True
-        and row.get("noRemainingObjections") is True
-        and row.get("fixtureOnly") is False
-        and row.get("generatedIsAuthority") is False
-        and row.get("policyDeletionApproved") is False
-    }
+    review_result_ids_by_batch: dict[str, set[str]] = {}
+    for row in review_results:
+        pair = (str(row.get("batchId")), str(row.get("reviewerId")))
+        if pair in accepted_reviews and row.get("id"):
+            review_result_ids_by_batch.setdefault(str(row.get("batchId")), set()).add(str(row.get("id")))
+    assignment_reviewers_by_batch: dict[str, set[str]] = {}
+    for row in assignments:
+        assignment_reviewers_by_batch.setdefault(str(row.get("batchId")), set()).add(str(row.get("reviewerId")))
+    accepted_discussions: set[str] = set()
+    invalid_discussion_results: list[dict] = []
+    for row in discussion_results:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1"
+            and row.get("status") == "accepted"
+            and row.get("accepted") is True
+            and row.get("policyRev") == args.policy_rev
+            and row.get("sameRevision") is True
+            and row.get("peerRepliesRead") is True
+            and row.get("noRemainingObjections") is True
+            and row.get("fixtureOnly") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+        ):
+            continue
+        batch_id = str(row.get("batchId"))
+        result_ids = {str(item) for item in as_list(row.get("reviewResultIds")) if item}
+        peer_read_reviewers = {str(item) for item in as_list(row.get("peerRepliesReadByReviewerIds")) if item}
+        valid_shape = (
+            result_ids == review_result_ids_by_batch.get(batch_id, set())
+            and peer_read_reviewers == assignment_reviewers_by_batch.get(batch_id, set())
+            and bool(row.get("rationale"))
+        )
+        if valid_shape:
+            accepted_discussions.add(batch_id)
+        else:
+            invalid_discussion_results.append(row)
     missing_discussions = [
         row
         for row in required_discussions
@@ -1713,11 +1761,18 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
             "blocker": None if not missing_discussions else "direct cross-discussions missing accepted no-objection results",
             "count": len(missing_discussions),
         },
+        {
+            "gate_id": "source-span-direct-cross-discussions-match-review-results",
+            "status": "pass" if not invalid_discussion_results else "blocked",
+            "blocker": None if not invalid_discussion_results else "direct cross-discussions fail review-result, peer-read, rationale, or no-objection requirements",
+            "count": len(invalid_discussion_results),
+        },
     ]
     jsonl_write(out_dir / "source-span-review-completion-gates.jsonl", gates)
     jsonl_write(out_dir / "missing-source-span-review-assignments.jsonl", missing_assignments)
     jsonl_write(out_dir / "invalid-source-span-review-results.jsonl", invalid_review_results)
     jsonl_write(out_dir / "missing-source-span-direct-cross-discussions.jsonl", missing_discussions)
+    jsonl_write(out_dir / "invalid-source-span-direct-cross-discussions.jsonl", invalid_discussion_results)
     ok = all(row["status"] == "pass" for row in gates)
     manifest = {
         "kind": "policy.sourceSpanDispositionReviewCompletionCheck.v1",
@@ -1736,6 +1791,7 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
             "missingAssignments": "missing-source-span-review-assignments.jsonl",
             "invalidReviewResults": "invalid-source-span-review-results.jsonl",
             "missingDirectCrossDiscussions": "missing-source-span-direct-cross-discussions.jsonl",
+            "invalidDirectCrossDiscussions": "invalid-source-span-direct-cross-discussions.jsonl",
         },
         "status": "pass" if ok else "blocked",
     }
