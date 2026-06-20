@@ -1,0 +1,7 @@
+{
+  "type": "policy.typedSemanticCompiler.controlSummary.v1",
+  "decision": "PASS",
+  "passed": 9,
+  "total": 9,
+  "scope": "typed compiler candidate controls; not semantic equivalence or retirement approval"
+}

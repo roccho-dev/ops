@@ -1,0 +1,9 @@
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"compiler-candidate-decision-pass","passed":true,"details":{"decision":"PASS_FOR_COMPILER_CANDIDATE"}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"deletion-readiness-stays-blocked","passed":true,"details":{"deletionReadiness":"BLOCK"}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"source-and-consumer-gates-pass","passed":true,"details":{"sourceGate":"PASS","consumerGate":"PASS"}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"compiler-gate-is-candidate-only","passed":true,"details":{"compilerGate":"PASS_FOR_CANDIDATE"}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"semantic-equivalence-stays-blocked","passed":true,"details":{"semanticGate":"BLOCK"}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"compiled-edge-count-matches","passed":true,"details":{"summaryEdges":7,"actualEdges":7}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"compiled-edges-remain-candidate-traced","passed":true,"details":{"bad":0}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"disposition-records-remain-non-authority-traced","passed":true,"details":{"badSources":0,"badConsumers":0}}
+{"type":"policy.typedSemanticCompiler.controlResult.v1","name":"manifest-hashes-validate","passed":true,"details":{"bad":0}}

@@ -1,0 +1,34 @@
+{
+  "type": "policy.typedSemanticCompiler.manifest.v1",
+  "compilerVersion": "typed-semantic-compiler-candidate-jq-v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "PASS_FOR_COMPILER_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "files": [
+    {
+      "path": "policy_typed_compiler_consumer_dispositions.jsonl",
+      "sha256": "5aac4f76380be642c9f7fd2d3745bd4425e6a6252a50cd1118c15aa1c327a880",
+      "bytes": 10878
+    },
+    {
+      "path": "policy_typed_compiler_edges.jsonl",
+      "sha256": "aafc128299d45986d0b526ac676a79d9902bd2ce79425e8ae1968676fb6bb3f0",
+      "bytes": 5019
+    },
+    {
+      "path": "policy_typed_compiler_inputs.json",
+      "sha256": "9fe12fc4836e881ae2dbcc7fba5e4bc21fa8aa695a4f98ba2af2c2bd731500b3",
+      "bytes": 732
+    },
+    {
+      "path": "policy_typed_compiler_review_summary.json",
+      "sha256": "8ecb5c75313aa4395b5768ba75af6fcb4b34d0c00075b80146b94156209bd246",
+      "bytes": 1777
+    },
+    {
+      "path": "policy_typed_compiler_source_dispositions.jsonl",
+      "sha256": "4b011443d5d441dfd460d173f1daed30c22dc8ff64aaa6e55973a6979f269165",
+      "bytes": 6276
+    }
+  ]
+}

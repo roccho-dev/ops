@@ -1,0 +1,28 @@
+{
+  "type": "policy.typedSemanticCompiler.inputs.v1",
+  "compilerVersion": "typed-semantic-compiler-candidate-jq-v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "inputs": {
+    "typedBridge": {
+      "path": "policy_typed_bridge_review_summary.json",
+      "sha256": null,
+      "decision": "BLOCK"
+    },
+    "consumerCutover": {
+      "path": "policy_consumer_cutover_review_summary.json",
+      "sha256": null,
+      "decision": "PASS"
+    },
+    "source13": {
+      "path": "policy_source13_review_summary.json",
+      "sha256": null,
+      "decision": "PASS"
+    }
+  },
+  "inputDecisions": {
+    "bridge": "BLOCK",
+    "consumerCutover": "PASS",
+    "source13": "PASS",
+    "deletionReadiness": "BLOCK"
+  }
+}

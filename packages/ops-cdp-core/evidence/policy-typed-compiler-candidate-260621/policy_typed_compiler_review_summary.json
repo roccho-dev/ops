@@ -1,0 +1,58 @@
+{
+  "type": "policy.typedSemanticCompiler.reviewSummary.v1",
+  "compilerVersion": "typed-semantic-compiler-candidate-jq-v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "PASS_FOR_COMPILER_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "purpose": "Deterministically compile reviewed bridge, consumer cutover, and source13 evidence into typed candidate graph/disposition outputs without claiming semantic equivalence or retirement approval.",
+  "compiledEdges": 7,
+  "sourceGate": {
+    "status": "PASS",
+    "actual": 0,
+    "expected": 0
+  },
+  "consumerGate": {
+    "status": "PASS",
+    "actual": 0,
+    "expected": 0
+  },
+  "upstreamBridgeRemainders": {
+    "sourceRowsBeforeSource13": 13,
+    "consumerRowsBeforeConsumerCutover": 21
+  },
+  "compilerGate": {
+    "status": "PASS_FOR_CANDIDATE",
+    "actual": "typed-semantic-compiler-candidate-jq-v1",
+    "expected": "deterministic reviewed compiler candidate"
+  },
+  "remainingRetirementGates": [
+    {
+      "name": "semantic-equivalence-proof",
+      "status": "BLOCK",
+      "actual": "not proven by compiler candidate",
+      "expected": "accepted equivalence proof against natural-language policy"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK",
+      "actual": "not granted",
+      "expected": "owner approval and adoption/cutover records"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK",
+      "actual": "not proven",
+      "expected": "policy.git absent or retired with all consumers passing"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "semantic approval",
+    "canonical write",
+    "SSOT write"
+  ]
+}
