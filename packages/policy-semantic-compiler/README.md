@@ -106,16 +106,19 @@ next ADRS review queue input:
 
 `materialize-source-span-review-batches` reads
 `missing-accepted-span-dispositions.jsonl` and emits
-`source-span-disposition-review-batches.jsonl`. These batch rows are review
-queue artifacts only; they set `accepted:false`, `claimAllowed:false`,
-`generatedIsAuthority:false`, and point to the next provider record
-`policy.sourceSpanDisposition.v1`.
+`source-span-disposition-review-batches.jsonl` plus canonical provider record
+`policy.sourceSpanDispositionReviewBatch.v1.jsonl`. These batch rows are
+review queue artifacts only; they set `accepted:false`,
+`claimAllowed:false`, `generatedIsAuthority:false`, and point to the next
+provider record `policy.sourceSpanDisposition.v1`.
 
 `assign-source-span-review-batches` reads those batch rows and emits one
 assignment per reviewer plus a direct cross-discussion requirement per batch.
 The output still does not approve any disposition; it only records the
 reviewer work that must happen before ADRS can append accepted
-`policy.sourceSpanDisposition.v1` rows.
+`policy.sourceSpanDisposition.v1` rows. The command also emits canonical
+provider records `policy.sourceSpanDispositionReviewAssignment.v1.jsonl` and
+`policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl`.
 
 `check-source-span-review-completion` verifies that each assignment has an
 accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an

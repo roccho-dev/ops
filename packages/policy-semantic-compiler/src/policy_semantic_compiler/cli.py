@@ -936,15 +936,21 @@ WHERE c.id IS NULL
 UNION ALL
 SELECT 'fresh-genx-evidence-accepted',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
-       CASE WHEN count(*) = 0 THEN NULL ELSE 'accepted coverage proof lacks accepted fresh GenX no-objection evidence' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'accepted Fresh GenX no-objection evidence is missing or not linked from coverage proof' END,
        count(*)
-FROM coverage_proof_candidates c
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM coverage_proof_genx_ids p
-  JOIN accepted_fresh_genx_reviews g ON g.id = p.genx_id
-  WHERE p.proof_id = c.id
-)
+FROM (
+  SELECT 'accepted-fresh-genx-missing' AS id
+  WHERE NOT EXISTS (SELECT 1 FROM accepted_fresh_genx_reviews)
+  UNION ALL
+  SELECT c.id
+  FROM coverage_proof_candidates c
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM coverage_proof_genx_ids p
+    JOIN accepted_fresh_genx_reviews g ON g.id = p.genx_id
+    WHERE p.proof_id = c.id
+  )
+) missing_fresh_genx
 UNION ALL
 SELECT 'fixture-only-proof-rejected',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
@@ -1181,6 +1187,7 @@ def command_materialize_source_span_review_batches(args: argparse.Namespace) -> 
             }
         )
     jsonl_write(out_dir / "source-span-disposition-review-batches.jsonl", batches)
+    jsonl_write(out_dir / "policy.sourceSpanDispositionReviewBatch.v1.jsonl", batches)
     manifest = {
         "kind": "policy.sourceSpanDispositionReviewBatchRun.v1",
         "ok": bool(batches) or len(rows) == 0,
@@ -1193,7 +1200,10 @@ def command_materialize_source_span_review_batches(args: argparse.Namespace) -> 
         "claimAllowed": False,
         "generatedIsAuthority": False,
         "policyDeletionApproved": False,
-        "outputs": {"batches": "source-span-disposition-review-batches.jsonl"},
+        "outputs": {
+            "batches": "source-span-disposition-review-batches.jsonl",
+            "providerRecord": "policy.sourceSpanDispositionReviewBatch.v1.jsonl",
+        },
         "status": "review-batches-materialized",
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
@@ -1255,6 +1265,8 @@ def command_assign_source_span_review_batches(args: argparse.Namespace) -> int:
         )
     jsonl_write(out_dir / "source-span-disposition-review-assignments.jsonl", assignments)
     jsonl_write(out_dir / "source-span-disposition-direct-cross-discussion-required.jsonl", discussion_rows)
+    jsonl_write(out_dir / "policy.sourceSpanDispositionReviewAssignment.v1.jsonl", assignments)
+    jsonl_write(out_dir / "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl", discussion_rows)
     manifest = {
         "kind": "policy.sourceSpanDispositionReviewAssignmentRun.v1",
         "ok": bool(batches),
@@ -1270,6 +1282,8 @@ def command_assign_source_span_review_batches(args: argparse.Namespace) -> int:
         "outputs": {
             "assignments": "source-span-disposition-review-assignments.jsonl",
             "directCrossDiscussionRequired": "source-span-disposition-direct-cross-discussion-required.jsonl",
+            "assignmentProviderRecord": "policy.sourceSpanDispositionReviewAssignment.v1.jsonl",
+            "directCrossDiscussionProviderRecord": "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl",
         },
         "status": "review-assignments-materialized",
     }
@@ -1461,6 +1475,12 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
     out_dir.mkdir(parents=True, exist_ok=True)
     policy_rev = str(args.policy_rev)
     span_ids = {str(row.get("id")) for row in source_spans if row.get("id")}
+    stale_source_spans = [
+        row
+        for row in source_spans
+        if row.get("kind") == "policy.sourceSpan.v1"
+        and row.get("sourceTrace", {}).get("rev") != policy_rev
+    ]
     accepted_disposition_span_ids = {
         str(span_id)
         for row in span_dispositions
@@ -1474,6 +1494,30 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
         for span_id in as_list(row.get("sourceSpanIds"))
         if span_id
     }
+    invalid_span_dispositions = [
+        row
+        for row in span_dispositions
+        if row.get("kind") == "policy.sourceSpanDisposition.v1"
+        and row.get("policyRev") == policy_rev
+        and (
+            row.get("generatedIsAuthority") is not False
+            or row.get("policyDeletionApproved") is not False
+        )
+    ]
+    nonaccepted_covering_span_dispositions = [
+        row
+        for row in span_dispositions
+        if row.get("kind") == "policy.sourceSpanDisposition.v1"
+        and row.get("policyRev") == policy_rev
+        and row.get("fixtureOnly") is False
+        and any(str(span_id) in span_ids for span_id in as_list(row.get("sourceSpanIds")))
+        and not (
+            row.get("status") == "accepted"
+            and row.get("accepted") is True
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+        )
+    ]
     accepted_genx = [
         row
         for row in fresh_genx_reviews
@@ -1484,9 +1528,17 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
         and row.get("policyBodyUsedAsSource") is False
         and row.get("fixtureOnly") is False
         and row.get("policyRev") == policy_rev
+        and row.get("id")
     ]
     missing_span_ids = sorted(span_ids - accepted_disposition_span_ids)
+    invalid_disposition_span_ids = sorted(accepted_disposition_span_ids - span_ids)
     gates = [
+        {
+            "gate_id": "source-spans-policy-rev-current",
+            "status": "pass" if not stale_source_spans else "blocked",
+            "blocker": None if not stale_source_spans else "sourceSpan sourceTrace.rev does not match policyRev",
+            "count": len(stale_source_spans),
+        },
         {
             "gate_id": "accepted-span-dispositions-cover-source-spans",
             "status": "pass" if not missing_span_ids else "blocked",
@@ -1494,14 +1546,36 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
             "count": len(missing_span_ids),
         },
         {
+            "gate_id": "accepted-span-dispositions-reference-source-spans",
+            "status": "pass" if not invalid_disposition_span_ids else "blocked",
+            "blocker": None if not invalid_disposition_span_ids else "accepted disposition references sourceSpan not in review input",
+            "count": len(invalid_disposition_span_ids),
+        },
+        {
             "gate_id": "fresh-genx-evidence-accepted",
             "status": "pass" if accepted_genx else "blocked",
             "blocker": None if accepted_genx else "accepted Fresh GenX reconstruction evidence is missing",
             "count": 0 if accepted_genx else 1,
         },
+        {
+            "gate_id": "span-dispositions-not-generated-authority",
+            "status": "pass" if not invalid_span_dispositions else "blocked",
+            "blocker": None if not invalid_span_dispositions else "span disposition claimed generated authority or deletion approval",
+            "count": len(invalid_span_dispositions),
+        },
+        {
+            "gate_id": "no-candidate-span-dispositions-for-covered-spans",
+            "status": "pass" if not nonaccepted_covering_span_dispositions else "blocked",
+            "blocker": None if not nonaccepted_covering_span_dispositions else "covered source span has non-accepted disposition row",
+            "count": len(nonaccepted_covering_span_dispositions),
+        },
     ]
     jsonl_write(out_dir / "accepted-coverage-materialization-gates.jsonl", gates)
+    jsonl_write(out_dir / "stale-source-spans.jsonl", stale_source_spans)
     jsonl_write(out_dir / "missing-accepted-coverage-source-spans.jsonl", [{"kind": "policySemantic.missingAcceptedCoverageSourceSpan.v1", "sourceSpanId": span_id} for span_id in missing_span_ids])
+    jsonl_write(out_dir / "invalid-disposition-source-spans.jsonl", [{"kind": "policySemantic.invalidDispositionSourceSpan.v1", "sourceSpanId": span_id} for span_id in invalid_disposition_span_ids])
+    jsonl_write(out_dir / "invalid-source-span-dispositions.jsonl", invalid_span_dispositions)
+    jsonl_write(out_dir / "nonaccepted-covering-source-span-dispositions.jsonl", nonaccepted_covering_span_dispositions)
     ok = all(row["status"] == "pass" for row in gates)
     if not ok:
         manifest = {
@@ -1514,7 +1588,11 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
             "policyDeletionApproved": False,
             "outputs": {
                 "gates": "accepted-coverage-materialization-gates.jsonl",
+                "staleSourceSpans": "stale-source-spans.jsonl",
                 "missingSourceSpans": "missing-accepted-coverage-source-spans.jsonl",
+                "invalidDispositionSourceSpans": "invalid-disposition-source-spans.jsonl",
+                "invalidSpanDispositions": "invalid-source-span-dispositions.jsonl",
+                "nonacceptedCoveringSpanDispositions": "nonaccepted-covering-source-span-dispositions.jsonl",
             },
             "status": "blocked",
         }
@@ -1536,6 +1614,7 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
         "fixtureOnly": False,
         "generatedIsAuthority": False,
         "policyDeletionApproved": False,
+        "cutoverReady": False,
     }
     jsonl_write(out_dir / "policy.acceptedCoverageProof.v1.jsonl", [proof])
     manifest = {
@@ -1546,6 +1625,7 @@ def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int
         "claimAllowed": False,
         "generatedIsAuthority": False,
         "policyDeletionApproved": False,
+        "cutoverReady": False,
         "coveredSourceSpanCount": len(span_ids),
         "freshGenXEvidenceCount": len(genx_ids),
         "outputs": {
