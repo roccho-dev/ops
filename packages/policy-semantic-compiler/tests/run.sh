@@ -11,6 +11,7 @@ mkdir -p "$work/semantic-review-blocked" "$work/semantic-review-disposition" "$w
 mkdir -p "$work/adrs-projection-accepted" "$work/adrs-projection-missing-proof" "$work/adrs-projection-fake-proof"
 mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disposition"
 mkdir -p "$work/adrs-projection-fixture-only"
+mkdir -p "$work/source-span-review-batches"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -136,6 +137,9 @@ policy-semantic-compiler review-adrs-projection-duckdb \
   --policy-rev rev-good \
   --out-dir "$work/adrs-projection-accepted" > "$work/adrs-projection-accepted.stdout.json"
 grep -q '"ok": true' "$work/adrs-projection-accepted.stdout.json"
+grep -q '"semanticCoverageReady": true' "$work/adrs-projection-accepted.stdout.json"
+grep -q '"cutoverReady": false' "$work/adrs-projection-accepted.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/adrs-projection-accepted.stdout.json"
 grep '"gate_id":"accepted-span-disposition-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
@@ -186,6 +190,15 @@ grep '"gate_id":"candidate-only-span-disposition"' "$work/adrs-projection-candid
 grep '"gate_id":"accepted-span-disposition-missing"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
 grep -q '"kind":"policySemantic.candidateOnlySpanDisposition.v1"' "$work/adrs-projection-candidate-disposition/candidate-only-span-dispositions.jsonl"
 grep -q '"kind":"policySemantic.missingAcceptedSpanDisposition.v1"' "$work/adrs-projection-candidate-disposition/missing-accepted-span-dispositions.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-batches \
+  --missing-span-dispositions "$work/adrs-projection-candidate-disposition/missing-accepted-span-dispositions.jsonl" \
+  --policy-rev rev-good \
+  --batch-size 1 \
+  --out-dir "$work/source-span-review-batches" > "$work/source-span-review-batches.stdout.json"
+grep -q '"batchCount": 1' "$work/source-span-review-batches.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewBatch.v1"' "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl"
+grep -q '"accepted":false' "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl"
 
 if policy-semantic-compiler review-adrs-projection-duckdb \
   --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \

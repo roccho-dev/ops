@@ -104,6 +104,13 @@ next ADRS review queue input:
 - `candidate-only-span-dispositions.jsonl`
 - `candidate-only-file-dispositions.jsonl`
 
+`materialize-source-span-review-batches` reads
+`missing-accepted-span-dispositions.jsonl` and emits
+`source-span-disposition-review-batches.jsonl`. These batch rows are review
+queue artifacts only; they set `accepted:false`, `claimAllowed:false`,
+`generatedIsAuthority:false`, and point to the next provider record
+`policy.sourceSpanDisposition.v1`.
+
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted
 coverage proof records and fresh GenX semantic reconstruction/review has no

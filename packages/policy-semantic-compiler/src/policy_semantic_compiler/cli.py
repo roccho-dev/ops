@@ -1121,7 +1121,8 @@ COPY (
         "kind": "policySemantic.adrsProjectionDuckdbReview.v1",
         "ok": ok,
         "status": "accepted" if ok else "blocked",
-        "cutoverReady": ok,
+        "semanticCoverageReady": ok,
+        "cutoverReady": False,
         "policyDeletionApproved": False,
         "generatedIsAuthority": False,
         "duckdbExecuted": True,
@@ -1140,6 +1141,60 @@ COPY (
     (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, sort_keys=True))
     return 0 if ok else 1
+
+
+def command_materialize_source_span_review_batches(args: argparse.Namespace) -> int:
+    input_path = Path(args.missing_span_dispositions)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    batch_size = int(args.batch_size)
+    policy_rev = str(args.policy_rev)
+    rows = read_jsonl(input_path)
+    sorted_rows = sorted(rows, key=lambda row: (str(row.get("sourcePath") or ""), int(row.get("startLine") or 0), str(row.get("sourceSpanId") or "")))
+    batches: list[dict] = []
+    for index in range(0, len(sorted_rows), batch_size):
+        items = sorted_rows[index : index + batch_size]
+        span_ids = [str(row.get("sourceSpanId")) for row in items if row.get("sourceSpanId")]
+        source_paths = sorted({str(row.get("sourcePath")) for row in items if row.get("sourcePath")})
+        batch_number = len(batches) + 1
+        batch_id = "policy-source-span-review-batch-" + sha256_bytes(("\0".join(span_ids) + f":{batch_number}").encode("utf-8"))[:20]
+        batches.append(
+            {
+                "kind": "policy.sourceSpanDispositionReviewBatch.v1",
+                "id": batch_id,
+                "policyRev": policy_rev,
+                "batchNumber": batch_number,
+                "sourceSpanCount": len(span_ids),
+                "sourceSpanIds": span_ids,
+                "sourcePaths": source_paths,
+                "input": str(input_path),
+                "accepted": False,
+                "claimAllowed": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+                "status": "review-required",
+                "nextRecord": "policy.sourceSpanDisposition.v1",
+            }
+        )
+    jsonl_write(out_dir / "source-span-disposition-review-batches.jsonl", batches)
+    manifest = {
+        "kind": "policy.sourceSpanDispositionReviewBatchRun.v1",
+        "ok": bool(batches) or len(rows) == 0,
+        "policyRev": policy_rev,
+        "input": str(input_path),
+        "batchSize": batch_size,
+        "sourceSpanCount": len(rows),
+        "batchCount": len(batches),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {"batches": "source-span-disposition-review-batches.jsonl"},
+        "status": "review-batches-materialized",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0
 
 
 def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
@@ -2275,6 +2330,12 @@ def main(argv: list[str] | None = None) -> int:
     adrs_projection_parser.add_argument("--out-dir", required=True)
     adrs_projection_parser.add_argument("--duckdb-bin", default="duckdb")
     adrs_projection_parser.set_defaults(func=command_review_adrs_projection_duckdb)
+    batch_parser = sub.add_parser("materialize-source-span-review-batches")
+    batch_parser.add_argument("--missing-span-dispositions", required=True)
+    batch_parser.add_argument("--policy-rev", required=True)
+    batch_parser.add_argument("--batch-size", type=int, default=100)
+    batch_parser.add_argument("--out-dir", required=True)
+    batch_parser.set_defaults(func=command_materialize_source_span_review_batches)
     args = parser.parse_args(argv)
     return args.func(args)
 
