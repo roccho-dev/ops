@@ -1,0 +1,32 @@
+{
+  "type": "policy.typedCoverageGapBatch.summary.v1",
+  "batch": "batch-generator-001",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsSliceRef": "a7c103bb16b9da0610e51ea2ecacbd6bfa6979b2",
+  "adrsSliceRef": "9b5f50bcbc7c80d151acfa8bb764348c726c38a2",
+  "decision": "PASS_AS_BATCH_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "remainingInputGapCount": 619,
+  "sourceClassCount": 9,
+  "selectedClass": "json-structured-policy",
+  "selectedGapCount": 203,
+  "deferredGapCount": 416,
+  "missingSelectedSources": 0,
+  "typedNodes": 203,
+  "typedEdges": 203,
+  "resolvedForBatch": 203,
+  "recomputedRemainingCoverageGaps": 416,
+  "batchSelectionRule": "largest deterministic sourceClass by count; tie-break lexicographically",
+  "fullCorpusEquivalenceGate": "BLOCK",
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "full corpus equivalence",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

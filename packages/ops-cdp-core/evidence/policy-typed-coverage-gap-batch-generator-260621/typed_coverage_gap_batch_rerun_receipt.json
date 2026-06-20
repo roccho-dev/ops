@@ -1,0 +1,15 @@
+{
+  "type": "policy.typedCoverageGapBatch.rerunReceipt.v1",
+  "batch": "batch-generator-001",
+  "deterministicRerunMatch": "PASS",
+  "hashes": {
+    "summary": "5c961cf4bfd4e555d1823105b3ebbcefda47de4fea954fde0153944c42e3f4ab",
+    "inventory": "7474b1e303036e65c38b2e746a9023ec7b77e202fc9615d2d8077130ced63167",
+    "classification": "71d96a732814e9281c94fc70e036a2527e7036f9cda09256dc569dac676859e0",
+    "manifest": "ad33d261a13a4bcb6fdb16b96af45a9de001b157094279f393e3ecdf691d813d",
+    "nodes": "cc39b884e56e6bf29644e7a9d29cda6cc0719376606ae23256e52413a9f1e486",
+    "edges": "b34c4de5594b86fc156e52de3d3104260384a0307b03f3b30c2047d9e02089f1",
+    "deltas": "546394df71baf75ca7499c0bb379fccb133ec2799005918207dd671b58bf10b1",
+    "controls": "d18055eeaef1d2daa08187618c578e8684bcc1612888828eda8e4b74a6171d07"
+  }
+}

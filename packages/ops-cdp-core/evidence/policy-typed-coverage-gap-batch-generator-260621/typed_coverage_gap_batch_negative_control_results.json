@@ -1,0 +1,48 @@
+{
+  "type": "policy.typedCoverageGapBatch.negativeControls.v1",
+  "batch": "batch-generator-001",
+  "decision": "PASS",
+  "selectedClass": "json-structured-policy",
+  "controls": [
+    {
+      "name": "batch-generator-inputs-fixed",
+      "status": "PASS"
+    },
+    {
+      "name": "remaining-gap-inventory-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "gap-classes-deterministic",
+      "status": "PASS"
+    },
+    {
+      "name": "batch-selection-rule-fixed",
+      "status": "PASS"
+    },
+    {
+      "name": "batch-typed-coverage-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "batch-source-trace-valid",
+      "status": "PASS"
+    },
+    {
+      "name": "batch-recompute-counts",
+      "status": "PASS"
+    },
+    {
+      "name": "batch-does-not-clear-retirement",
+      "status": "PASS"
+    },
+    {
+      "name": "generated-evidence-not-authority",
+      "status": "PASS"
+    },
+    {
+      "name": "deterministic-rerun-match",
+      "status": "PASS"
+    }
+  ]
+}
