@@ -1,0 +1,6 @@
+{"type":"policy.consumerCutover.controlResult.v1","name":"all-input-rows-classified","passed":true,"details":{"total":21,"rows":21}}
+{"type":"policy.consumerCutover.controlResult.v1","name":"still-active-zero","passed":true,"details":{"stillActive":0}}
+{"type":"policy.consumerCutover.controlResult.v1","name":"policy-git-url-mentions-are-non-runtime","passed":true,"details":{"bad":0}}
+{"type":"policy.consumerCutover.controlResult.v1","name":"package-name-policy-is-not-runtime-dependency","passed":true,"details":{"bad":0}}
+{"type":"policy.consumerCutover.controlResult.v1","name":"classification-records-remain-non-authority","passed":true,"details":{"bad":0}}
+{"type":"policy.consumerCutover.controlResult.v1","name":"retirement-stays-blocked","passed":true,"details":{"gate":"BLOCK"}}

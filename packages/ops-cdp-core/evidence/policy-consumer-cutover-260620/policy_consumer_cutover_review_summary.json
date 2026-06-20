@@ -1,0 +1,41 @@
+{
+  "type": "policy.consumerCutover.reviewSummary.v1",
+  "classifierVersion": "consumer-cutover-jq-v1",
+  "decision": "PASS",
+  "deletionReadiness": "BLOCK",
+  "total": 21,
+  "resolved": 21,
+  "stillActive": 0,
+  "byClass": {
+    "commented-example": 2,
+    "false-positive-domain-word": 4,
+    "false-positive-generic-policy-token": 1,
+    "false-positive-package-name": 7,
+    "fixture-only": 6,
+    "template-only": 1
+  },
+  "gates": [
+    {
+      "name": "active-policy-git-runtime-consumers-eliminated",
+      "status": "PASS",
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "policy-retirement-still-blocked-by-non-consumer-gates",
+      "status": "BLOCK",
+      "actual": "source/typed-compiler/semantic-equivalence gates remain",
+      "expected": "all retirement gates pass"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "semantic approval",
+    "canonical write",
+    "SSOT write"
+  ]
+}

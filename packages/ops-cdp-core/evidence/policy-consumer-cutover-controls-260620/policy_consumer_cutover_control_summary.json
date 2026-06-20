@@ -1,0 +1,7 @@
+{
+  "type": "policy.consumerCutover.controlSummary.v1",
+  "decision": "PASS",
+  "passed": 6,
+  "total": 6,
+  "scope": "consumer cutover classifier controls; not policy retirement approval"
+}
