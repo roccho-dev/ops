@@ -1,0 +1,26 @@
+{
+  "type": "policy.ownerAdoption.remainingGates.v1",
+  "gates": [
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK",
+      "reason": "missing explicit owner approval record"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    },
+    {
+      "name": "policy.git deletion/retirement approval",
+      "status": "BLOCK"
+    },
+    {
+      "name": "cutover readiness",
+      "status": "BLOCK"
+    }
+  ]
+}

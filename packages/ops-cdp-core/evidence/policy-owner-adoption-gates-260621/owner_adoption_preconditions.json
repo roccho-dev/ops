@@ -1,0 +1,8 @@
+{
+  "type": "policy.ownerAdoption.preconditions.v1",
+  "acceptedAuthorityPrecondition": "PASS",
+  "acceptedAuthorityDecision": "PASS_AS_ACCEPTED_AUTHORITY_CANDIDATE",
+  "coverageGapCount": 0,
+  "semanticDeltaUnresolved": 0,
+  "deletionReadiness": "BLOCK"
+}

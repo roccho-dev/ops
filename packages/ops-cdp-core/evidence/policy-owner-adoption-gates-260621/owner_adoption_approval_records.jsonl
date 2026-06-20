@@ -1,0 +1,1 @@
+{"type":"policy.ownerAdoption.approvalRecord.v1","approvalActor":null,"approvalAuthority":null,"decision":"MISSING_OWNER_APPROVAL","status":"BLOCK","reason":"Gen2/reviewer/automation records cannot substitute for owner adoption approval."}

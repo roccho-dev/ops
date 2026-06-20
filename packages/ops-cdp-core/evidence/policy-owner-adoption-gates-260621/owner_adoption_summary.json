@@ -1,0 +1,21 @@
+{
+  "type": "policy.ownerAdoption.summary.v1",
+  "decision": "BLOCK",
+  "ownerAdoptionGate": "BLOCK",
+  "deletionReadiness": "BLOCK",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "acceptedAuthorityPrecondition": "PASS",
+  "ownerApprovalRecordsPresent": false,
+  "approvalScopeExact": "BLOCK",
+  "noDelegatedImplicitApproval": "PASS",
+  "adoptionBoundaryExplicit": "PASS",
+  "mustNotClaim": [
+    "owner approval",
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "end-to-end retirement proof",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

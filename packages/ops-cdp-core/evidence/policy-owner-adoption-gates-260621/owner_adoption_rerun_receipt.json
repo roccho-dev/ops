@@ -1,0 +1,11 @@
+{
+  "type": "policy.ownerAdoption.rerunReceipt.v1",
+  "deterministicRerunMatch": "PASS",
+  "hashes": {
+    "summary": "02523b39f519213086ed529388b66cfd2f8b23dc6428d420c571f96cb586410e",
+    "scope": "dee8f77526de7190724da51885fca380e6ef53b21df40edf26a6fc1afa05aa35",
+    "approvals": "ce94c702b1cd53a337520973748386003f2464bc44fe004c2055ce597bd3be34",
+    "preconditions": "b339431c6dae2ee3a7ae37f87e2d1a4fc427a71a5ed5eabfd0fbad2bb1eacd30",
+    "gates": "1554d6a89213a601bcc2a7b8b54b0a478404c505491975033d1fb30a493a0011"
+  }
+}

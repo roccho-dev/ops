@@ -1,0 +1,15 @@
+{
+  "type": "policy.ownerAdoption.scope.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsAuthorityRef": "7fabb736ec0bbf9bc56056c0b6fc5bfa8cc0cdee",
+  "adrsAuthorityRef": "f4ccf6a23e7676b8c192d215bf77871bb5877994",
+  "adoptionScope": "adopt accepted full-corpus semantic equivalence authority boundary only",
+  "excludes": [
+    "policy.git deletion",
+    "cutover readiness",
+    "end-to-end retirement proof",
+    "canonical write",
+    "SSOT adoption"
+  ],
+  "ownerApprovalRequired": true
+}
