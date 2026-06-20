@@ -101,6 +101,47 @@ def validate_edge_spans(edges: list[dict]) -> list[str]:
     return [edge["id"] for edge in edges if not edge.get("sourceSpan")]
 
 
+def validate_edge_span_targets(source_root: Path, edges: list[dict]) -> list[str]:
+    failures = []
+    for edge in edges:
+        span = edge.get("sourceSpan") or {}
+        path = source_root / edge.get("sourcePath", "")
+        start = span.get("startLine")
+        end = span.get("endLine")
+        if not path.exists() or not isinstance(start, int) or not isinstance(end, int):
+            failures.append(edge["id"])
+            continue
+        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        if start < 1 or end < start or end > line_count:
+            failures.append(edge["id"])
+    return failures
+
+
+def review_consumer_classification(refs: list[dict]) -> dict:
+    false_positive_candidates = [
+        ref for ref in refs
+        if ref.get("refClass") in {"documentation", "generated-evidence", "path-mention"}
+        and ref.get("activeRuntimeCandidate")
+    ]
+    active_candidates = [ref for ref in refs if ref.get("refClass") == "active-runtime-candidate"]
+    return {
+        "falsePositiveCandidateCount": len(false_positive_candidates),
+        "activeRuntimeCandidateCount": len(active_candidates),
+        "rowCount": len(refs),
+    }
+
+
+def authority_currentness_review(edges: list[dict]) -> dict:
+    suspicious = []
+    for edge in edges:
+        text = edge.get("text", "").lower()
+        if edge.get("edgeKind") != "authority":
+            continue
+        if any(marker in text for marker in ["superseded", "generated", "evidence-only", "quoted anti-pattern"]):
+            suspicious.append(edge["id"])
+    return {"suspiciousAuthorityCount": len(suspicious), "suspiciousAuthorityIds": suspicious[:20]}
+
+
 def control_result(name: str, passed: bool, details: dict) -> dict:
     return {
         "name": name,
@@ -191,6 +232,93 @@ def main() -> int:
             "removed-source-span-detected",
             bool(validate_edge_spans(tampered_edges)),
             {"failureCount": len(validate_edge_spans(tampered_edges))},
+        ))
+
+        tampered_target_edges = [dict(row) for row in edges]
+        tampered_target_edges[0]["sourceSpan"] = {"startLine": 999, "endLine": 999}
+        results.append(control_result(
+            "wrong-line-source-span-detected",
+            bool(validate_edge_span_targets(fixture, tampered_target_edges)),
+            {"failureCount": len(validate_edge_span_targets(fixture, tampered_target_edges))},
+        ))
+
+        fixture = tmp_root / "consumer-false-positive"
+        generated = tmp_root / "out-consumer-false-positive"
+        fixture.mkdir(parents=True, exist_ok=True)
+        (fixture / "docs").mkdir()
+        (fixture / "docs" / "policy.md").write_text(
+            "Documentation mentions policy.git as a historical path only.\n"
+            "Evidence file path policy/git is quoted for migration notes.\n",
+            encoding="utf-8",
+        )
+        run = run_generator(generator, fixture, generated, args.policy_ref)
+        refs = load_jsonl(generated / "policy_consumer_refs.jsonl")
+        review = review_consumer_classification(refs)
+        results.append(control_result(
+            "consumer-doc-path-refs-not-active",
+            run["exitCode"] == 0 and review["falsePositiveCandidateCount"] == 0 and review["activeRuntimeCandidateCount"] == 0,
+            {"run": run, "consumerReview": review},
+        ))
+
+        fixture = tmp_root / "consumer-indirect-active"
+        generated = tmp_root / "out-consumer-indirect-active"
+        fixture.mkdir(parents=True, exist_ok=True)
+        (fixture / "packages").mkdir()
+        (fixture / "packages" / "runner.mjs").write_text(
+            "const source = 'policy repo runtime lookup';\n"
+            "const actor = 'agent consumer';\n",
+            encoding="utf-8",
+        )
+        run = run_generator(generator, fixture, generated, args.policy_ref)
+        refs = load_jsonl(generated / "policy_consumer_refs.jsonl")
+        review = review_consumer_classification(refs)
+        results.append(control_result(
+            "consumer-indirect-active-gap-detected",
+            run["exitCode"] == 0 and review["activeRuntimeCandidateCount"] == 0,
+            {
+                "run": run,
+                "consumerReview": review,
+                "gap": "active runtime reference with indirect wording is not detected by the current heuristic",
+            },
+        ))
+
+        fixture = tmp_root / "authority-currentness"
+        generated = tmp_root / "out-authority-currentness"
+        fixture.mkdir(parents=True, exist_ok=True)
+        (fixture / "policy.md").write_text(
+            "SSOT is the canonical authority.\n"
+            "Superseded text says legacy policy is authority but must remain inactive.\n"
+            "Generated evidence-only text says authority for audit notes.\n"
+            "Quoted anti-pattern: 'policy.git is canonical authority'.\n",
+            encoding="utf-8",
+        )
+        run = run_generator(generator, fixture, generated, args.policy_ref)
+        edges = load_jsonl(generated / "policy_semantic_edges.jsonl")
+        currentness = authority_currentness_review(edges)
+        results.append(control_result(
+            "authority-currentness-gaps-detected",
+            run["exitCode"] == 0 and currentness["suspiciousAuthorityCount"] >= 1,
+            {"run": run, "authorityCurrentness": currentness},
+        ))
+
+        fixture = tmp_root / "obligation-false-positive"
+        generated = tmp_root / "out-obligation-false-positive"
+        fixture.mkdir(parents=True, exist_ok=True)
+        (fixture / "policy.md").write_text(
+            "This advisory note is optional and permitted, not a required rule.\n"
+            "The word must appears inside a quoted anti-pattern and should not become an active obligation.\n",
+            encoding="utf-8",
+        )
+        run = run_generator(generator, fixture, generated, args.policy_ref)
+        edges = load_jsonl(generated / "policy_semantic_edges.jsonl")
+        obligation_false_positive_count = sum(
+            1 for edge in edges
+            if edge.get("edgeKind") == "obligation" and "quoted anti-pattern" in edge.get("text", "").lower()
+        )
+        results.append(control_result(
+            "obligation-quoted-antipattern-gap-detected",
+            run["exitCode"] == 0 and obligation_false_positive_count >= 1,
+            {"run": run, "obligationFalsePositiveCount": obligation_false_positive_count},
         ))
 
     passed = sum(1 for item in results if item["passed"])

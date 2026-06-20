@@ -2,9 +2,9 @@
   "decision": "BLOCK",
   "files": [
     {
-      "bytes": 2601,
+      "bytes": 2630,
       "path": "REVIEW_SUMMARY.json",
-      "sha256": "bf7eccf437111d800ffd4a5929cf9846907f2df2e3fb977c4b7c583ebc5d7b58"
+      "sha256": "a5f73fc9661bef30e0e1f48f8f837c7cb2c6f6c2b3bad35626264029e38de8af"
     },
     {
       "bytes": 14224,
@@ -30,6 +30,26 @@
       "bytes": 2885,
       "path": "gen2-impl-review/gen2-reviewable-baseline-review-summary.json",
       "sha256": "63d05bf188416f2f49fc953bb8ceb9571f10930191e6b81e7da78b41c9c9fd79"
+    },
+    {
+      "bytes": 899,
+      "path": "gen2-negative-control-traceability-review/README.md",
+      "sha256": "0a96d3565e581ef09d6d0b531327823ccd51cdaee7f11b360c99099d49fe469a"
+    },
+    {
+      "bytes": 9039,
+      "path": "gen2-negative-control-traceability-review/gen2-negative-control-traceability-impl-review.raw.txt",
+      "sha256": "d8fdff9caa4a15c9a69bbfd32e50763d420a6117ee3b80742fdf5fd3c1b56df8"
+    },
+    {
+      "bytes": 12756,
+      "path": "gen2-negative-control-traceability-review/gen2-negative-control-traceability-readback.raw.txt",
+      "sha256": "73a1e3f467967d1c8706c7351f02db100400cfa76f1e1db8f7d5e64006668229"
+    },
+    {
+      "bytes": 2479,
+      "path": "gen2-negative-control-traceability-review/gen2-negative-control-traceability-review-summary.json",
+      "sha256": "d3689440027b8e29d3ffd1c378d9b2a257847a180f0e19ff7315e901ae880794"
     },
     {
       "bytes": 890,
@@ -79,7 +99,7 @@
     {
       "bytes": 660,
       "path": "policy_independent_rerun_receipt.json",
-      "sha256": "7cbde2ebd1fee1dd18257a92f13afc644a96268425edb4483c687c09f476c634"
+      "sha256": "9bdf25447e79fc6783ca0b3c5ea3ebf88ebcbc76b7cfc44c07618bb022567173"
     },
     {
       "bytes": 0,
@@ -87,14 +107,14 @@
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
-      "bytes": 8881,
+      "bytes": 13787,
       "path": "policy_negative_control_results.json",
-      "sha256": "c0920e6372c4068ee6eb18f7d2d5eea0fd6c3e82694a0209753554c95f6a2053"
+      "sha256": "3d5db6014a68105e2eb744bf41a466d9493748e7b1fb5012351db671333131b4"
     },
     {
-      "bytes": 3030,
+      "bytes": 4249,
       "path": "policy_negative_control_traceability.json",
-      "sha256": "5e6631ccd0ea582d0e6588f1d7887acfdbd9e3b46ea2ebf9f073ae355e1bbc34"
+      "sha256": "194e9f86fc96cd7d93ace86e57b644696bd1f5e50512f99cd554c4a23cd11a27"
     },
     {
       "bytes": 1291,
@@ -147,9 +167,9 @@
       "sha256": "245cf08ca672dbd73c745801d92d054c5b97170f2a7098b9d2e10deb5f2697f4"
     },
     {
-      "bytes": 851,
+      "bytes": 852,
       "path": "policy_verifier_manifest.json",
-      "sha256": "38965c31e0ca51189e3c70f84611e47b5c74e54b3e43492f929ae27898059ba3"
+      "sha256": "abf31b23c71cf60a56c0a24bea79a9246fc9807e60c64a3cd1fb529ca0153242"
     },
     {
       "bytes": 832591,

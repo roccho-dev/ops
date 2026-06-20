@@ -1,6 +1,6 @@
 {
-  "executedControlCount": 9,
-  "plannedClassCount": 8,
+  "executedControlCount": 14,
+  "plannedClassCount": 13,
   "plannedToExecuted": [
     {
       "executed": [
@@ -12,11 +12,12 @@
     },
     {
       "executed": [
-        "missing-obligation-edge"
+        "missing-obligation-edge",
+        "obligation-quoted-antipattern-gap-detected"
       ],
-      "notes": "Current fixture covers missing obligation evidence, not nuanced weakening. Weakening false-positive cases remain future work.",
+      "notes": "Missing obligation blocks; quoted anti-pattern false positive is exposed as a remaining gap.",
       "planned": "weakened-obligation-edge",
-      "status": "executed-pass"
+      "status": "executed-pass-with-gap"
     },
     {
       "executed": [
@@ -37,6 +38,14 @@
     },
     {
       "executed": [
+        "wrong-line-source-span-detected"
+      ],
+      "notes": "Harness detects source span line outside source file bounds.",
+      "planned": "wrong-line-source-span",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
         "source-node-hashes-validate",
         "stale-source-node-detected"
       ],
@@ -46,38 +55,69 @@
     },
     {
       "executed": [
-        "active-consumer-ref-blocks"
+        "consumer-doc-path-refs-not-active"
       ],
-      "notes": "Current fixture proves active consumer references block. False-positive documentation/path triage remains future work.",
+      "notes": "Documentation/path refs are not classified as active runtime candidates.",
       "planned": "consumer-ref-false-positive",
-      "status": "partial-executed-pass"
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "consumer-indirect-active-gap-detected"
+      ],
+      "notes": "Indirect active runtime reference is not detected; the gap is now explicit.",
+      "planned": "consumer-ref-false-negative",
+      "status": "gap-detected-pass"
     },
     {
       "executed": [
         "active-consumer-ref-blocks"
       ],
-      "notes": "Current fixture proves at least one active policy.git reference is detected. Broader false-negative controls remain future work.",
-      "planned": "consumer-ref-false-negative",
-      "status": "partial-executed-pass"
+      "notes": "Direct active consumer ref still blocks.",
+      "planned": "active-consumer-ref-blocks",
+      "status": "executed-pass"
     },
     {
       "executed": [
         "source-file-with-no-edges"
       ],
-      "notes": "Additional executed control not present in the original seven-item plan; covers coverage gate failure.",
+      "notes": "Coverage gate blocks source without semantic edge.",
       "planned": "source-without-semantic-edge",
+      "status": "executed-pass"
+    },
+    {
+      "executed": [
+        "authority-currentness-gaps-detected"
+      ],
+      "notes": "Suspicious authority edges from superseded/generated/evidence/quoted material are exposed.",
+      "planned": "superseded-generated-evidence-authority",
+      "status": "gap-detected-pass"
+    },
+    {
+      "executed": [
+        "authority-currentness-gaps-detected"
+      ],
+      "notes": "Quoted anti-pattern authority text is exposed as suspicious.",
+      "planned": "quoted-antipattern-authority",
+      "status": "gap-detected-pass"
+    },
+    {
+      "executed": [
+        "wrong-line-source-span-detected"
+      ],
+      "notes": "Present but invalid source span target is detected.",
+      "planned": "source-span-target-validation",
       "status": "executed-pass"
     }
   ],
   "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
   "purpose": "Reconcile planned negative-control classes with the executed synthetic harness controls.",
   "remainingControlGaps": [
-    "weak obligation or permission text falsely extracted as obligation",
-    "documentation/path mention falsely classified as active runtime consumer",
-    "active runtime policy reference missed when wording changes",
-    "quoted anti-pattern treated as active allowed behavior",
-    "superseded/generated/evidence material treated as current authority",
-    "source span points to wrong file or wrong line while present"
+    "indirect active runtime policy references are still not classified as active by the baseline extractor",
+    "quoted anti-pattern obligations are still extracted by the heuristic and need typed semantics to suppress",
+    "superseded/generated/evidence/quoted authority material is exposed but not automatically excluded from current authority",
+    "wrong-file source span target still needs a fixture beyond wrong-line bounds",
+    "cross-file conflicting edges and supersession precedence remain future controls"
   ],
   "scope": "synthetic fixture controls; not deletion readiness",
   "type": "policy.negativeControlTraceability.v1"

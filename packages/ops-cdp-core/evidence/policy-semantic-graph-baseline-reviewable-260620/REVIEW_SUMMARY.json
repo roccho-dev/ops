@@ -75,9 +75,9 @@
   "negativeControls": "policy_negative_controls.json",
   "negativeControlsStatus": {
     "decision": "PASS",
-    "passed": 9,
-    "scope": "synthetic fixture controls; not deletion readiness",
-    "total": 9,
+    "passed": 14,
+    "scope": "synthetic fixture controls and gap-detection controls; not deletion readiness",
+    "total": 14,
     "traceability": "policy_negative_control_traceability.json"
   },
   "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",

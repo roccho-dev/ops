@@ -44,6 +44,10 @@ The controls use synthetic fixtures. They prove the current measurement harness
 can detect selected loss/tamper classes; they do not prove policy deletion
 readiness.
 
+The current control set also includes gap-detection controls for heuristic
+false positives and false negatives. A PASS on those controls can mean "the gap
+is explicitly detected and preserved", not that the gap is fixed.
+
 `policy_negative_control_traceability.json` maps planned control classes to the
 executed controls. Partial controls are explicit and remain future work.
 

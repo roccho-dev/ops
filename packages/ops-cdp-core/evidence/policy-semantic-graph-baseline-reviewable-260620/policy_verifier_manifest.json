@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 8552,
+      "bytes": 14630,
       "path": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-negative-controls.py",
       "role": "negative-control verifier",
-      "sha256": "e151ca7e78b4506b900f28ea50511873edeed4f5fc0f89fe1ee144ddb71c25c6"
+      "sha256": "754cca8e980da939f212e6b1a1100b7d7efbf3454e68680fbac79cf67652b5a4"
     },
     {
       "bytes": 20536,
