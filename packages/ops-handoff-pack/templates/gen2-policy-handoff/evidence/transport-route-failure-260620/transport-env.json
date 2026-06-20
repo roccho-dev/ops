@@ -1,0 +1,41 @@
+{
+  "addr": "127.0.0.1",
+  "canOverrideWorkerReadback": false,
+  "command": "project-transport-env",
+  "completionApproval": false,
+  "createdAt": "2026-06-20T11:20:54.431Z",
+  "dryRun": false,
+  "finishedAt": "2026-06-20T11:20:54.435Z",
+  "kind": "ops.projectTransportResult.v1",
+  "ok": false,
+  "probeAuthority": "advisory-target-project-probe",
+  "probes": [
+    {
+      "addr": "127.0.0.1",
+      "error": "connect ECONNREFUSED 127.0.0.1:9222",
+      "port": 9222,
+      "tcpConnect": false
+    },
+    {
+      "addr": "127.0.0.1",
+      "error": "connect ECONNREFUSED 127.0.0.1:9223",
+      "port": 9223,
+      "tcpConnect": false
+    },
+    {
+      "addr": "127.0.0.1",
+      "error": "connect ECONNREFUSED 127.0.0.1:9224",
+      "port": 9224,
+      "tcpConnect": false
+    }
+  ],
+  "projectAccessProbes": [],
+  "projectUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+  "recommendedRoute": null,
+  "routeDecision": false,
+  "sameRunReadbackOverridePolicy": "A failed or inconclusive route probe is advisory once same-run Project Source upload, thread creation, and delayed assistant readback prove worker-readable source.",
+  "selectedPort": null,
+  "semanticApproval": false,
+  "status": "no-cdp-port-reachable",
+  "workerReadableProofAuthority": "delayed-assistant-readback"
+}

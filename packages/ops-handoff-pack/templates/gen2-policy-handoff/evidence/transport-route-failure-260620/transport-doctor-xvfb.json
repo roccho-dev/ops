@@ -1,0 +1,172 @@
+{
+  "command": "project-transport-doctor",
+  "commands": [
+    {
+      "found": true,
+      "name": "chromium-cdp-chatgpt-doctor",
+      "path": "/nix/store/27y65ya18ldkfljja3biljk9k8rx84fg-chromium-cdp-chatgpt-doctor/bin/chromium-cdp-chatgpt-doctor"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-project-access-probe",
+      "path": "/nix/store/324c1qn1gncnixscq4228r03b0q07lgc-chromium-cdp-project-access-probe/bin/chromium-cdp-project-access-probe"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-upload-project-source-text",
+      "path": "/nix/store/ynb28cd8sas8jl2g2hyyv5mvhy2gia1p-chromium-cdp-upload-project-source-text/bin/chromium-cdp-upload-project-source-text"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-upload-project-source-file",
+      "path": "/nix/store/v9fhzs7jzsf90jx3f9ybk2x5dgjx38vw-chromium-cdp-upload-project-source-file/bin/chromium-cdp-upload-project-source-file"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-project-source-list",
+      "path": "/nix/store/n3562c5b3q256w8riz9bjcg6p275xzqr-chromium-cdp-project-source-list/bin/chromium-cdp-project-source-list"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-project-source-delete",
+      "path": "/nix/store/gr2y11j5gp8h6nzbanzh80i9z1gfdsbf-chromium-cdp-project-source-delete/bin/chromium-cdp-project-source-delete"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-create-project-thread",
+      "path": "/nix/store/24zgrhypy29xsa5q96g6m968glbxzyf4-chromium-cdp-create-project-thread/bin/chromium-cdp-create-project-thread"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-send-chatgpt",
+      "path": "/nix/store/q4a9icnwxwb4ayh3srrn2n3r3czzs2jb-chromium-cdp-send-chatgpt/bin/chromium-cdp-send-chatgpt"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-read-thread",
+      "path": "/nix/store/f5qvbky0lxfkr6qj3k0mhmz75qbjd18r-chromium-cdp-read-thread/bin/chromium-cdp-read-thread"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-fetch-artifact-strict",
+      "path": "/nix/store/bvzp4gamwaw6z1blyladj61axqwprbm2-chromium-cdp-fetch-artifact-strict/bin/chromium-cdp-fetch-artifact-strict"
+    },
+    {
+      "found": true,
+      "name": "cdp-bridge",
+      "path": "/nix/store/m1h5c0kkv835j2g5d33pih519w8ckgzf-cdp-bridge/bin/cdp-bridge"
+    }
+  ],
+  "completionApproval": false,
+  "createdAt": "2026-06-20T11:24:15.442Z",
+  "doctorCommand": {
+    "argv": [
+      "chromium-cdp-chatgpt-doctor",
+      "--addr",
+      "127.0.0.1",
+      "--json"
+    ],
+    "json": {
+      "ok": false,
+      "recommended": null,
+      "sessions": []
+    },
+    "returncode": 1,
+    "stderr": "",
+    "stdout": "{\n  \"ok\": false,\n  \"recommended\": null,\n  \"sessions\": []\n}\n"
+  },
+  "dryRun": false,
+  "finishedAt": "2026-06-20T11:24:16.658Z",
+  "kind": "ops.projectTransportResult.v1",
+  "missingCommands": [],
+  "missingTransportCommands": [],
+  "offlineOnly": false,
+  "ok": false,
+  "projectAccess": null,
+  "projectAccessCommand": {
+    "argv": [
+      "chromium-cdp-project-access-probe",
+      "--projectUrl",
+      "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "9222",
+      "--timeoutMs",
+      "180000",
+      "--json"
+    ],
+    "json": null,
+    "returncode": 1,
+    "stderr": "Error: Chrome CDP not available at 127.0.0.1:9222.\nRequested probe failed: command failed rc=1: cdp-bridge version --addr 127.0.0.1 --port 9222: cdp-bridge:error:fetch failed\n\n\nScanned ports: 9222, 9223, 9224, 9225\nRepair:\n  chromedevtoolprotocol-service-profile-bootstrap start\n  chromium-cdp --remote-debugging-port=9222\nThen retry the same command.\n    at requireCdp (file:///nix/store/09lr2pp4adm6whmibh2hsjlxngg6p7sm-chromium-cdp-src/core/connect.mjs:105:11)\n    at main (file:///nix/store/09lr2pp4adm6whmibh2hsjlxngg6p7sm-chromium-cdp-src/chromium-cdp-project-access-probe.mjs:118:16)\n    at run (file:///nix/store/09lr2pp4adm6whmibh2hsjlxngg6p7sm-chromium-cdp-src/cli/cli.mjs:170:16)\n    at file:///nix/store/09lr2pp4adm6whmibh2hsjlxngg6p7sm-chromium-cdp-src/chromium-cdp-project-access-probe.mjs:148:1\n    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)\n    at async file:///nix/store/09lr2pp4adm6whmibh2hsjlxngg6p7sm-chromium-cdp-src/cli/qjs-cli.mjs:33:1\n",
+    "stdout": ""
+  },
+  "projectUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+  "recommendedRoute": null,
+  "routeDecision": false,
+  "semanticApproval": false,
+  "status": "project-route-not-verified",
+  "transportCommands": [
+    {
+      "found": true,
+      "name": "project-transport-doctor",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-doctor"
+    },
+    {
+      "found": true,
+      "name": "project-transport-env",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-env"
+    },
+    {
+      "found": true,
+      "name": "project-source-put",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-source-put"
+    },
+    {
+      "found": true,
+      "name": "project-source-list",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-source-list"
+    },
+    {
+      "found": true,
+      "name": "project-source-delete",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-source-delete"
+    },
+    {
+      "found": true,
+      "name": "project-thread-create",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-thread-create"
+    },
+    {
+      "found": true,
+      "name": "project-thread-send",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-thread-send"
+    },
+    {
+      "found": true,
+      "name": "project-thread-readback",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-thread-readback"
+    },
+    {
+      "found": true,
+      "name": "project-artifact-fetch",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-artifact-fetch"
+    },
+    {
+      "found": true,
+      "name": "project-transport-claim",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-claim"
+    },
+    {
+      "found": true,
+      "name": "project-transport-health",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-health"
+    },
+    {
+      "found": true,
+      "name": "project-transport-run",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-run"
+    }
+  ],
+  "transportCommandsInPath": true
+}
