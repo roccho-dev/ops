@@ -6,7 +6,7 @@ SSOT authority.
 ## Proposal branch
 
 ```text
-ops.git:proposal/refs-vault-generated-manifest-receipt-260619
+ops.git:proposal/v-o-follow-refs-backup-env-260621
 ```
 
 ## Local package gates
@@ -26,6 +26,35 @@ P13 backup-all can emit a receipt containing the manifest digest and per-ref res
 P14 verify-all compares every generated manifest source head with the forge backup hash
 P15 orphan-audit rejects missing or extra forge refs relative to the generated snapshot
 ```
+
+## Current refs-backed proof 260621
+
+This proposal was consolidated with the current refs backup direction:
+
+- no hardcoded forge backup URL in the package
+- backup remote selected by `--remote`, manifest `targetForgeRepo`, or
+  `OPS_REFS_VAULT_REMOTE`
+- destination refs use `refs/heads/<repoId>/<branch>` with no extra `repos/`
+  prefix
+- `/home/nixos/git/refs.git` is the tested local refs backup store
+
+Ran on `nixos-vm` against the current SSOT bare root:
+
+```text
+source bare root: /home/nixos/repos/.bare
+local refs backup: /home/nixos/git/refs.git
+proof directory: /tmp/refs-backup-proof-260621
+manifest repos: 37
+backup refs: 262
+verify failed: 0
+orphan audit: ok
+restore proof: adrs, policy, ops, ui, agent-history, jsonlxlsx main restored
+```
+
+GitHub `roccho-dev/refs.git` received the new no-prefix refs. A direct
+`git push --mirror` was also tested and proved unsafe for this use case because
+it deletes remote-only historical refs; do not use mirror push as the publication
+path for this package.
 
 ## Current SSOT 37-bare proof
 

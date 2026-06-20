@@ -15,7 +15,7 @@ process.on("unhandledRejection", (e) => {
   process.exit(1);
 });
 
-const DEFAULT_REMOTE = "git@github.com:roccho-dev/refs.git";
+const REMOTE_ENV = "OPS_REFS_VAULT_REMOTE";
 const REPO_ID_RE = /^(?!\.)(?!.*\.\.)(?!.*\.lock$)(?!.*@\{)[A-Za-z0-9._-]+$/;
 
 class VaultError extends Error {}
@@ -139,7 +139,11 @@ function loadManifest(p) {
 function vaultRemote(manifest, override = null) {
   if (override) return override;
   const target = manifest.targetForgeRepo || {};
-  return target.sshUrl || target.url || DEFAULT_REMOTE;
+  const remote = target.sshUrl || target.url || process.env[REMOTE_ENV];
+  if (!remote) {
+    throw new VaultError(`backup remote is required: pass --remote, set manifest targetForgeRepo.sshUrl/url, or set ${REMOTE_ENV}`);
+  }
+  return remote;
 }
 
 // Python generator manifest_repos: yields [repo_id, repo] for repos with a repoId,
@@ -214,7 +218,7 @@ function discoverBareRepos(bareRoot, excludeFile = null) {
 
 function cmdGenerateManifest(args) {
   const discovered = discoverBareRepos(args.bare_root, args.exclude_file);
-  const remote = args.remote || DEFAULT_REMOTE;
+  const remote = args.remote || process.env[REMOTE_ENV] || null;
   const manifest = {
     kind: "ops.refsVault.generatedManifest.v1",
     authority: "filesystem-snapshot-not-ssot-authority",
@@ -242,7 +246,7 @@ function cmdGenerateManifest(args) {
 function namespacedHead(repoId, branch) {
   validateRepoId(repoId);
   validateBranch(branch);
-  return `refs/heads/repos/${repoId}/${branch}`;
+  return `refs/heads/${repoId}/${branch}`;
 }
 
 function lsRemote(remote, pattern) {
@@ -579,7 +583,12 @@ function cmdOrphanAudit(args) {
       sourceFailures.push({ repoId, sourceBarePath: source, error: errStr(exc) });
     }
   }
-  const vaultRefs = lsRemote(vault, "refs/heads/repos/*").map(([sha, ref]) => ({ hash: sha, ref }));
+  const vaultRefs = [];
+  for (const [repoId] of manifestRepos(manifest)) {
+    for (const [sha, ref] of lsRemote(vault, `refs/heads/${repoId}/*`)) {
+      vaultRefs.push({ hash: sha, ref });
+    }
+  }
   const vaultRefSet = new Set(vaultRefs.map((row) => row.ref));
   const missingRefs = [...expectedRefs].filter((ref) => !vaultRefSet.has(ref)).sort();
   const orphanRefs = vaultRefs
@@ -589,7 +598,7 @@ function cmdOrphanAudit(args) {
   const extraRepoIds = [
     ...new Set(
       orphanRefs
-        .map((ref) => ref.match(/^refs\/heads\/repos\/([^/]+)\//))
+        .map((ref) => ref.match(/^refs\/heads\/([^/]+)\//))
         .filter(Boolean)
         .map((m) => m[1])
         .filter((repoId) => !expectedRepoIds.has(repoId)),
@@ -618,11 +627,13 @@ function cmdAudit(args) {
   const manifest = loadManifest(args.manifest);
   const vault = vaultRemote(manifest, args.remote);
   const seen = {};
-  for (const [sha, ref] of lsRemote(vault, "refs/heads/repos/*")) {
-    const mo = ref.match(/^refs\/heads\/repos\/([^/]+)\/(.+)$/);
-    if (mo) {
-      if (!(mo[1] in seen)) seen[mo[1]] = [];
-      seen[mo[1]].push({ branch: mo[2], hash: sha });
+  for (const [repoId] of manifestRepos(manifest)) {
+    for (const [sha, ref] of lsRemote(vault, `refs/heads/${repoId}/*`)) {
+      const mo = ref.match(/^refs\/heads\/([^/]+)\/(.+)$/);
+      if (mo) {
+        if (!(mo[1] in seen)) seen[mo[1]] = [];
+        seen[mo[1]].push({ branch: mo[2], hash: sha });
+      }
     }
   }
   const expected = manifestRepos(manifest).map(([repoId]) => repoId);
@@ -757,7 +768,7 @@ function cmdSmokeLocal() {
     if (!oneRemoteHash(vault, vaultAlphaRef) || !oneRemoteHash(vault, vaultBetaRef)) {
       throw new VaultError("namespaced vault refs missing after backup-all");
     }
-    proof("P03", "repoId and branch map to refs/heads/repos/<repoId>/<branch>", [vaultAlphaRef, vaultBetaRef]);
+    proof("P03", "repoId and branch map to refs/heads/<repoId>/<branch>", [vaultAlphaRef, vaultBetaRef]);
 
     const audit = { manifest, remote: null };
     withRedirectStdout(() => cmdAudit(audit));

@@ -32,8 +32,8 @@ Stop conditions:
 | `generated-manifest-recorded` | generated manifest was not preserved with the run receipt |
 | `forge-backup-requested` | forge remote is missing, inaccessible, or has a diverged ref and no explicit force approval |
 | `forge-backup-verified` | source bare hash and forge hash differ |
-| `orphan-audit-verified` | forge backup has missing or extra `refs/heads/repos/*` refs relative to the generated snapshot |
-| `restore-requested` | requested `refs/heads/repos/<repoId>/<branch>` is missing |
+| `orphan-audit-verified` | forge backup has missing or extra `refs/heads/<repoId>/*` refs relative to the generated snapshot |
+| `restore-requested` | requested `refs/heads/<repoId>/<branch>` is missing |
 | `staging-bare-restored` | staging hash and forge hash differ |
 | `ssot-promotion-approved` | approval is missing or target bare has conflicting refs |
 

@@ -8,17 +8,17 @@ replaceable forge repository by namespaced refs.
 ```text
 local working clone
   -> git push or rsync
-  -> nixos-vm:$HOME/repos/<repoId>.git
+  -> nixos-vm:$HOME/repos/.bare/<repoId>.git
   -> ops-refs-vault backup-one / backup-all
-  -> git@github.com:roccho-dev/refs.git refs/heads/repos/<repoId>/<branch>
+  -> $OPS_REFS_VAULT_REMOTE refs/heads/<repoId>/<branch>
 ```
 
 Roles:
 
 | role | location |
 |---|---|
-| SSOT | `nixos-vm:$HOME/repos/<repoId>.git` repo-specific bare repo |
-| backup | single forge repo, normally `git@github.com:roccho-dev/refs.git` |
+| SSOT | `nixos-vm:$HOME/repos/.bare/<repoId>.git` repo-specific bare repo |
+| backup | single forge repo selected by `--remote`, manifest `targetForgeRepo`, or `OPS_REFS_VAULT_REMOTE` |
 | local | temporary workspace or working clone |
 | local -> SSOT | `git push` or `rsync`, outside this package's approval boundary |
 | SSOT -> backup | namespaced refs via this package |
@@ -38,9 +38,7 @@ backup run and preserve it with the backup receipt.
 {
   "kind": "ops.refsVault.generatedManifest.v1",
   "authority": "filesystem-snapshot-not-ssot-authority",
-  "targetForgeRepo": {
-    "sshUrl": "git@github.com:roccho-dev/refs.git"
-  },
+  "targetForgeRepo": {},
   "source": {
     "bareRoot": "/home/nixos/repos/.bare",
     "excludeFile": null,
@@ -62,6 +60,8 @@ normal operator route is to run on the host where the bare SSOT paths are local.
 Generate a snapshot manifest from the bare root:
 
 ```bash
+export OPS_REFS_VAULT_REMOTE=git@github.com:OWNER/refs.git
+
 ops-refs-vault generate-manifest \
   --bare-root /home/nixos/repos/.bare \
   --out /var/lib/ssot/refs-vault/runs/20260619/manifest.json
@@ -73,6 +73,8 @@ file is one repo ID per line and is validated against the discovered bare root.
 ## Back up
 
 ```bash
+export OPS_REFS_VAULT_REMOTE=git@github.com:OWNER/refs.git
+
 ops-refs-vault backup-one \
   --manifest refs-vault.manifest.json \
   --repo-id specs \
@@ -86,11 +88,17 @@ ops-refs-vault backup-all \
 The destination branch is:
 
 ```text
-refs/heads/repos/<repoId>/<branch>
+refs/heads/<repoId>/<branch>
 ```
 
 Default backup is no-force. Use `--force` only after an operator decision.
 Do not combine backup with restore promotion in the same run.
+
+Do not publish the refs backup with `git push --mirror`. The refs repository
+may contain remote-only historical refs that are outside the generated current
+snapshot, and mirror push would delete them. Use this package's `backup-all`
+route, or explicit non-delete refspecs, so backup publication never removes
+unrelated remote refs.
 
 ## Verify and audit
 
@@ -117,7 +125,7 @@ ops-refs-vault inventory \
 `verify-one` compares the bare SSOT branch hash with the forge backup hash.
 `verify-all` applies that comparison to every branch in the generated
 manifest. `orphan-audit` fails if the forge has missing or extra
-`refs/heads/repos/<repoId>/<branch>` refs relative to the generated snapshot.
+`refs/heads/<repoId>/<branch>` refs relative to the generated snapshot.
 
 ## Restore
 
@@ -137,7 +145,7 @@ Promotion into the SSOT location is a separate approved step:
 ops-refs-vault promote-staging-bare \
   --repo-id specs \
   --staging-bare /tmp/restored/specs.git \
-  --target-bare "$HOME/repos/specs.git" \
+  --target-bare "$HOME/repos/.bare/specs.git" \
   --confirm
 ```
 

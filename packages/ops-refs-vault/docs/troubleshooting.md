@@ -33,13 +33,13 @@ unless a separate operator-approved recovery command says so.
 
 ## GitHub is not SSOT
 
-`roccho-dev/refs` is a single forge backup. If it differs from the source bare
+The configured refs backup remote is a single forge backup. If it differs from the source bare
 SSOT, `verify-one` fails and the operator must decide which side is correct.
 
 ## orphan audit fails
 
 `orphan-audit` compares the generated manifest snapshot with
-`refs/heads/repos/*` in the forge backup. A failure means either:
+`refs/heads/<repoId>/*` in the forge backup. A failure means either:
 
 - a source ref from the manifest is missing in the forge backup;
 - the forge has an extra namespace/ref that no longer exists in the generated
