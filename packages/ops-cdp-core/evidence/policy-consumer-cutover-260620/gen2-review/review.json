@@ -1,0 +1,22 @@
+{
+  "type": "policy.consumerCutover.gen2Review.v1",
+  "reviewer": "ChatGPT remove-policy project",
+  "reviewConversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "opsCommit": "14454012c72f3bbc0c0962e30c1593964e107fd2",
+  "adrsCommit": "abcda0b6d2d137dfd6000589fa3703d1c7cbc061",
+  "verdict": "PASS",
+  "consumerGate": "PASS",
+  "deletionReadiness": "BLOCK",
+  "proposalQuality": "PASS for this bounded consumer cutover classifier lane. Based on the pasted evidence only, the 21 previously unresolved active-runtime-candidate rows are all classified, stillActive is 0, the active policy.git runtime consumer blocker is discharged for this 21-row input, and overall retirement remains BLOCK.",
+  "classificationReview": "PASS. The classes shown are plausible non-runtime classes for this lane: commented examples, fixtures, templates, package-name false positives, generic policy-token false positives, and domain-word false positives. The result is fail-closed enough because it resolves only this input set, preserves non-authority framing, and keeps the broader retirement gate blocked.",
+  "controlReview": "PASS. The 6 controls cover the bounded lane's key failure modes: all rows classified, still-active zero, policy.git URL mentions not treated as runtime when fixture/comment/template-only, package-name policy not treated as runtime dependency, classification records remaining non-authority, and retirement staying blocked. They are sufficient for this lane, not for overall retirement.",
+  "falseClaimReview": "PASS. No improper deletion, retirement, cutover, semantic completion, merge, canonical write, or SSOT write claim is visible in the pasted evidence. The summary explicitly keeps deletionReadiness=BLOCK and includes mustNotClaim boundaries.",
+  "blockers": [],
+  "minimalFixesBeforeThisLaneCanBeAccepted": [],
+  "remainingGatesForActualRetirement": [
+    {"name":"authority-bearing-untyped-sources-eliminated","status":"BLOCK","reason":"source/untyped authority rows remain outside this consumer-only lane"},
+    {"name":"typed-semantic-compiler-accepted","status":"BLOCK","reason":"consumer classifier is not an accepted typed semantic graph compiler"},
+    {"name":"semantic-equivalence-proof","status":"BLOCK","reason":"this lane classifies consumer references only and does not prove semantic completeness"},
+    {"name":"owner/authority adoption gates","status":"BLOCK","reason":"no merge, canonical write, SSOT write, deletion, or cutover approval is granted here"}
+  ]
+}
