@@ -1,0 +1,7 @@
+{
+  "type": "policy.ownerAdoptionValidator.rerunReceipt.v1",
+  "ranAt": "2026-06-21T00:00:00Z",
+  "caseCount": 10,
+  "passed": true,
+  "command": "python owner_adoption_validator.py owner_adoption_validator_cases.jsonl"
+}

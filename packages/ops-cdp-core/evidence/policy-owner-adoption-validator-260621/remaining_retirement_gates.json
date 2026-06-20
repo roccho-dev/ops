@@ -1,0 +1,17 @@
+{
+  "type": "policy.remainingRetirementGates.v1",
+  "currentGate": "explicit-owner-approval-record",
+  "currentGateStatus": "BLOCK_UNTIL_OWNER_RECORD",
+  "completedPreconditions": [
+    "accepted semantic authority evidence",
+    "owner decision packet",
+    "owner approval validator"
+  ],
+  "remainingGates": [
+    "explicit-owner-approval-record",
+    "adoption/cutover records",
+    "end-to-end retirement proof",
+    "canonical-write-and-SSOT-adoption",
+    "policy.git deletion-or-retirement approval"
+  ]
+}

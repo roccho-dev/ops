@@ -1,0 +1,24 @@
+{
+  "type": "policy.ownerAdoptionAcceptanceTransition.v1",
+  "precondition": "validatorGate PASS and explicit owner record verdict ACCEPT_SCOPE_ONLY",
+  "onAccept": [
+    "set ownerAdoptionGate PASS for fixed policy input ref only",
+    "continue to adoption/cutover records gate",
+    "keep deletionReadiness BLOCK until remaining gates pass"
+  ],
+  "onDeferredOrRejected": [
+    "keep ownerAdoptionGate BLOCK",
+    "do not proceed to cutover/deletion"
+  ],
+  "onReject": [
+    "treat record as invalid",
+    "keep ownerAdoptionGate BLOCK_UNTIL_OWNER_RECORD"
+  ],
+  "doesNotAuthorize": [
+    "policy.git deletion",
+    "policy.git retirement",
+    "cutover",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}
