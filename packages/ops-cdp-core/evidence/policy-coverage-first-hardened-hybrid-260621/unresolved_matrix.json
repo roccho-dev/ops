@@ -1,0 +1,12 @@
+{
+  "authorityRelevantUnresolvedCount": 2308,
+  "byDisposition": {
+    "example_or_fixture": 410,
+    "generated_evidence": 66,
+    "generated_or_example_code": 1065,
+    "historical_or_superseded": 766,
+    "quoted_or_imported_text": 1
+  },
+  "decision": "BLOCK",
+  "type": "policy.unresolvedMatrix.v0"
+}

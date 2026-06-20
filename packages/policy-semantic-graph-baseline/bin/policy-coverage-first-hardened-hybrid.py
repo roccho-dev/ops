@@ -200,6 +200,7 @@ def main() -> int:
 
     source_files = []
     blocks = []
+    table_cell_blocks = []
     dispositions = []
     signals = []
     candidates = []
@@ -241,6 +242,24 @@ def main() -> int:
                 "extractorVersion": VERSION,
             }
             dispositions.append(drow)
+            if block["blockType"] == "tableRow":
+                for col_index, cell in enumerate(block.get("tableCells", []), start=1):
+                    table_cell_blocks.append({
+                        "type": "policy.tableCellBlock.v0",
+                        "id": "cell:" + sha256_bytes(f"{block['id']}:{col_index}:{cell}".encode())[:20],
+                        "blockId": block["id"],
+                        "sourceFileId": block["sourceFileId"],
+                        "sourcePath": block["sourcePath"],
+                        "sourceHash": block["sourceHash"],
+                        "lineStart": block["lineStart"],
+                        "lineEnd": block["lineEnd"],
+                        "columnIndex": col_index,
+                        "headingPath": block["headingPath"],
+                        "cellText": cell[:1000],
+                        "cellTextDigest": sha256_bytes(cell.encode()),
+                        "schemaVersion": "tableCellBlock.v0",
+                        "extractorVersion": VERSION,
+                    })
             if authority_relevant and disp != "normative_candidate":
                 unresolved.append({
                     "type": "policy.unresolvedRow.v0",
@@ -290,21 +309,23 @@ def main() -> int:
 
     table_blocks = [row for row in blocks if row["blockType"] == "tableRow"]
     table_signals = [row for row in signals if any(b["id"] == row["blockId"] and b["blockType"] == "tableRow" for b in blocks)]
+    table_cell_expected = sum(len(row.get("tableCells", [])) for row in table_blocks)
     source_span_ok = all(row.get("lineStart") and row.get("lineEnd") and row.get("sourceHash") for row in candidates)
     authority_unresolved_count = len([row for row in unresolved if row.get("severity") == "BLOCK"])
-    conflict_count = 0
+    conflict_count = None
     accepted_compiler_authority = False
 
     gates = [
         gate("sourceFile-inventory", "PASS" if source_files else "BLOCK", len(source_files), ">0", "policy corpus files inventoried"),
         gate("mdBlock-coverage", "PASS" if blocks else "BLOCK", len(blocks), ">0", "addressable block rows produced"),
         gate("table-first-class", "PASS" if table_blocks else "BLOCK", len(table_blocks), ">0", "table rows are first-class spans when present"),
+        gate("tableCellBlock-coverage", "PASS" if (not table_blocks or len(table_cell_blocks) == table_cell_expected) else "BLOCK", len(table_cell_blocks), table_cell_expected, "table cells are addressable spans"),
         gate("disposition-before-semantics", "PASS" if len(dispositions) == len(blocks) else "BLOCK", len(dispositions), len(blocks), "every block has disposition before semantic promotion"),
         gate("source-span-integrity", "PASS" if source_span_ok else "BLOCK", source_span_ok, True, "semantic candidates have source hash and line spans"),
         gate("authorityRelevantUnresolved-zero", "PASS" if authority_unresolved_count == 0 else "BLOCK", authority_unresolved_count, 0, "authority-relevant unresolved rows must be zero for promotion"),
         gate("regression-fixtures-present", "PASS" if regression_fixtures else "BLOCK", len(regression_fixtures), ">0", "validator evidence converted to regression fixtures"),
         gate("accepted-compiler-authority", "PASS" if accepted_compiler_authority else "BLOCK", accepted_compiler_authority, True, "this proposal does not grant accepted compiler authority"),
-        gate("conflictMatrix-zero", "PASS" if conflict_count == 0 else "BLOCK", conflict_count, 0, "conflict graph is placeholder and must remain explicit"),
+        gate("conflictMatrix-evaluated", "BLOCK", "not evaluated", "implemented conflictMatrix and supersessionGraph", "placeholder conflict graph cannot pass"),
         gate("consumerCutoverGate", "BLOCK", "not evaluated", "all consumers use accepted projections and pass runtime/e2e checks", "consumer cutover is a later gate"),
     ]
     retirement_scopes = {"semanticPromotion", "ownerAdoptionForCorpus", "policyRetirement", "policyDeletion", "cutover", "canonicalWrite", "ssotAdoption"}
@@ -334,6 +355,7 @@ def main() -> int:
         "sourceFileCount": len(source_files),
         "mdBlockCount": len(blocks),
         "tableBlockCount": len(table_blocks),
+        "tableCellBlockCount": len(table_cell_blocks),
         "tableSignalCount": len(table_signals),
         "blockDispositionCount": len(dispositions),
         "normativeSignalCount": len(signals),
@@ -357,6 +379,7 @@ def main() -> int:
 
     write_jsonl(out_dir / "source_files.jsonl", source_files)
     write_jsonl(out_dir / "md_blocks.jsonl", blocks)
+    write_jsonl(out_dir / "table_cell_blocks.jsonl", table_cell_blocks)
     write_jsonl(out_dir / "block_dispositions.jsonl", dispositions)
     write_jsonl(out_dir / "normative_signals.jsonl", signals)
     write_jsonl(out_dir / "semantic_candidates.jsonl", candidates)
@@ -366,7 +389,13 @@ def main() -> int:
     write_json(out_dir / "gate_matrix.json", gate_matrix)
     write_json(out_dir / "coverage_report.json", coverage)
     write_json(out_dir / "authority_matrix.json", authority_matrix)
-    write_json(out_dir / "ontology.v0.schema.json", {"type":"policy.coverageFirstHardenedHybrid.ontologySchema.v0","records":["sourceFile.v0","mdBlock.v0","blockDisposition.v0","normativeSignal.v0","semanticCandidate.v0","acceptedSemanticRecord.v0","regressionFixture.v0","unresolvedRow.v0","gateMatrix.v0"],"ordering":["sourceFile","mdBlock/tableCellBlock","blockDisposition/currentness","normativeSignal","semanticCandidate","acceptedSemanticRecord"],"extractorVersion":VERSION})
+    write_json(out_dir / "conflict_matrix.json", {"type":"policy.conflictMatrix.v0","status":"BLOCK","reason":"not evaluated in this proposal; placeholder must not pass","conflictCount":"not evaluated"})
+    unresolved_matrix = {"type":"policy.unresolvedMatrix.v0","authorityRelevantUnresolvedCount":authority_unresolved_count,"byDisposition":{},"decision":"BLOCK" if authority_unresolved_count else "PASS"}
+    for row in unresolved:
+        key = row.get("disposition", "<missing>")
+        unresolved_matrix["byDisposition"][key] = unresolved_matrix["byDisposition"].get(key, 0) + 1
+    write_json(out_dir / "unresolved_matrix.json", unresolved_matrix)
+    write_json(out_dir / "ontology.v0.schema.json", {"type":"policy.coverageFirstHardenedHybrid.ontologySchema.v0","records":["sourceFile.v0","mdBlock.v0","tableCellBlock.v0","blockDisposition.v0","normativeSignal.v0","semanticCandidate.v0","acceptedSemanticRecord.v0","regressionFixture.v0","unresolvedRow.v0","gateMatrix.v0","conflictMatrix.v0"],"ordering":["sourceFile","mdBlock/tableCellBlock","blockDisposition/currentness","normativeSignal","semanticCandidate","acceptedSemanticRecord"],"extractorVersion":VERSION})
 
     audit = [
         "# Coverage-first hardened hybrid audit",
@@ -377,6 +406,7 @@ def main() -> int:
         f"- source files: {len(source_files)}",
         f"- blocks: {len(blocks)}",
         f"- table blocks: {len(table_blocks)}",
+        f"- table cell blocks: {len(table_cell_blocks)}",
         f"- normative signals: {len(signals)}",
         f"- semantic candidates: {len(candidates)}",
         f"- accepted semantic records: {len(accepted_records)}",
@@ -386,7 +416,8 @@ def main() -> int:
         "## Conclusion",
         "",
         "This run makes the route reviewable, but it does not approve policy.git retirement.",
-        "The corpus-level decision remains BLOCK because accepted compiler authority, consumer cutover, and retirement/adoption gates are not proven here.",
+        "The corpus-level decision remains BLOCK because accepted compiler authority, conflict evaluation, consumer cutover, and retirement/adoption gates are not proven here.",
+        "This is not final hardened-route completeness until conflictMatrix/supersessionGraph and consumer cutover are implemented and pass.",
         "",
         "## Non-compressed repo conclusion",
         "",
@@ -399,9 +430,9 @@ def main() -> int:
         "## Review x2 checklist",
         "",
         "1. Verify source hashes and spans in `source_files.jsonl`, `md_blocks.jsonl`, and `semantic_candidates.jsonl`.",
-        "2. Verify table rows are first-class rows in `md_blocks.jsonl`.",
+        "2. Verify table rows are first-class rows in `md_blocks.jsonl` and cells are addressable in `table_cell_blocks.jsonl`.",
         "3. Verify high-risk modal text in non-authority contexts is present in `unresolved_rows.jsonl`.",
-        "4. Verify `gate_matrix.json` keeps retirement/cutover/canonical/SSOT gates BLOCK.",
+        "4. Verify `gate_matrix.json` keeps retirement/cutover/canonical/SSOT gates BLOCK and conflictMatrix BLOCK/NOT_EVALUATED.",
         "5. Verify `regression_fixtures.jsonl` imports validator cases without making them authority.",
         "6. Verify no artifact grants owner/deletion/retirement/cutover/canonical/SSOT approval.",
     ]
@@ -418,6 +449,22 @@ def main() -> int:
     ])
     (out_dir / "authority_matrix.md").write_text("\n".join(matrix_md) + "\n", encoding="utf-8")
 
+    gate_md = ["# Gate matrix", "", "| Gate | Status | Actual | Expected |", "|---|---|---|---|"]
+    for g in gates:
+        gate_md.append(f"| {g['name']} | {g['status']} | {g['actual']} | {g['expected']} |")
+    (out_dir / "gate_matrix.md").write_text("\n".join(gate_md) + "\n", encoding="utf-8")
+
+    unresolved_md = ["# Unresolved matrix", "", f"- authorityRelevantUnresolvedCount: {authority_unresolved_count}", "", "| Disposition | Count |", "|---|---:|"]
+    for key, value in sorted(unresolved_matrix["byDisposition"].items()):
+        unresolved_md.append(f"| {key} | {value} |")
+    (out_dir / "unresolved_matrix.md").write_text("\n".join(unresolved_md) + "\n", encoding="utf-8")
+
+    drilldown = ["# Source to rule drilldown", "", "Sampled semantic candidates for reviewer entry. Full replay is in semantic_candidates.jsonl.", "", "| Source | Lines | Kind | Text |", "|---|---:|---|---|"]
+    for row in candidates[:200]:
+        text = row.get("text", "").replace("|", "\\|")[:180]
+        drilldown.append(f"| {row['sourcePath']} | {row['lineStart']}-{row['lineEnd']} | {row['candidateKind']} | {text} |")
+    (out_dir / "source_to_rule_drilldown.md").write_text("\n".join(drilldown) + "\n", encoding="utf-8")
+
     manifest_files = []
     for file_path in sorted(out_dir.rglob("*")):
         if file_path.is_file():
@@ -425,7 +472,7 @@ def main() -> int:
             manifest_files.append({"path": file_path.relative_to(out_dir).as_posix(), "sha256": sha256_bytes(data), "bytes": len(data)})
     write_json(out_dir / "manifest.json", {"type":"policy.coverageFirstHardenedHybrid.manifest.v0","policyRef":args.policy_ref,"decision":gate_status,"files":manifest_files})
 
-    print(json.dumps({"outDir": str(out_dir), "decision": gate_status, "sourceFileCount": len(source_files), "mdBlockCount": len(blocks), "normativeSignalCount": len(signals), "authorityRelevantUnresolvedCount": authority_unresolved_count, "regressionFixtureCount": len(regression_fixtures)}, sort_keys=True))
+    print(json.dumps({"outDir": str(out_dir), "decision": gate_status, "sourceFileCount": len(source_files), "mdBlockCount": len(blocks), "tableCellBlockCount": len(table_cell_blocks), "normativeSignalCount": len(signals), "authorityRelevantUnresolvedCount": authority_unresolved_count, "regressionFixtureCount": len(regression_fixtures)}, sort_keys=True))
     return 0
 
 

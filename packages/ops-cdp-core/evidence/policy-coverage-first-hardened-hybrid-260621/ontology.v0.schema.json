@@ -11,13 +11,15 @@
   "records": [
     "sourceFile.v0",
     "mdBlock.v0",
+    "tableCellBlock.v0",
     "blockDisposition.v0",
     "normativeSignal.v0",
     "semanticCandidate.v0",
     "acceptedSemanticRecord.v0",
     "regressionFixture.v0",
     "unresolvedRow.v0",
-    "gateMatrix.v0"
+    "gateMatrix.v0",
+    "conflictMatrix.v0"
   ],
   "type": "policy.coverageFirstHardenedHybrid.ontologySchema.v0"
 }

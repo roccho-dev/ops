@@ -23,6 +23,13 @@
       "status": "PASS"
     },
     {
+      "actual": 4498,
+      "expected": 4498,
+      "name": "tableCellBlock-coverage",
+      "reason": "table cells are addressable spans",
+      "status": "PASS"
+    },
+    {
       "actual": 57164,
       "expected": 57164,
       "name": "disposition-before-semantics",
@@ -58,11 +65,11 @@
       "status": "BLOCK"
     },
     {
-      "actual": 0,
-      "expected": 0,
-      "name": "conflictMatrix-zero",
-      "reason": "conflict graph is placeholder and must remain explicit",
-      "status": "PASS"
+      "actual": "not evaluated",
+      "expected": "implemented conflictMatrix and supersessionGraph",
+      "name": "conflictMatrix-evaluated",
+      "reason": "placeholder conflict graph cannot pass",
+      "status": "BLOCK"
     },
     {
       "actual": "not evaluated",

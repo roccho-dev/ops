@@ -1,11 +1,12 @@
 {
+  "conflictGateStatus": "BLOCK",
   "deterministicRerun": {
-    "fileCount": 15,
+    "fileCount": 21,
     "passed": true
   },
   "forbiddenApprovalTruths": [],
   "gateDecision": "BLOCK",
-  "mainOutputFileCount": 15,
+  "mainOutputFileCount": 21,
   "notes": [
     "PASS here means proposal evidence generated and fail-closed gates preserved; it is not retirement approval."
   ],
@@ -18,6 +19,7 @@
     "regression_fixtures": 14,
     "semantic_candidates": 3782,
     "source_files": 500,
+    "table_cell_blocks": 4498,
     "unresolved_rows": 2308
   },
   "status": "PASS",

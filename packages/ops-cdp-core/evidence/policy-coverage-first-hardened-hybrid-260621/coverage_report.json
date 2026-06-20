@@ -20,6 +20,7 @@
   "semanticCandidateCount": 3782,
   "sourceFileCount": 500,
   "tableBlockCount": 845,
+  "tableCellBlockCount": 4498,
   "tableSignalCount": 217,
   "type": "policy.coverageFirstHardenedHybrid.coverageReport.v0"
 }
