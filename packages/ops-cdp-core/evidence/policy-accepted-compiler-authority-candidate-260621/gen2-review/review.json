@@ -1,0 +1,25 @@
+{
+  "type": "policy.acceptedCompilerAuthority.gen2Review.v1",
+  "reviewer": "ChatGPT remove-policy project",
+  "reviewConversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "opsCommit": "f6522b84b22146dc9bb369a16885dfd44428c0bb",
+  "adrsCommit": "e6cc0f6df80e85bcc499e24557e4b2b169bcab0e",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "verdict": "PASS",
+  "acceptedCompilerAuthorityLaneGate": "PASS",
+  "acceptedAuthorityScope": "reduced-source13-typed-semantic-compiler-output only: deterministic projection of the 7 reviewed source13 typed-covered edges into typed-semantic-compiler-candidate-jq-v1 outputs. It excludes full natural-language corpus authority, the 6 non-authority-excluded rows, deletion readiness, cutover, owner/adoption, canonical write, and SSOT adoption.",
+  "fullNaturalLanguageCorpusAuthority": false,
+  "deletionReadiness": "BLOCK",
+  "proposalQuality": "PASS for this bounded accepted-compiler-authority lane. Based on the pasted evidence only, prior compiler candidate and semantic-equivalence candidate lanes passed, equivalenceDeltas=0, deterministic rerun passed, and the proposed authority scope is narrow and explicit. This review can satisfy the missing reviewer-acceptance-record control for the declared reduced/source13 scope only.",
+  "scopeBoundaryReview": "PASS. The scope is not ambiguous: authority is limited to the reduced source13 typed compiler output. It does not assert full policy corpus equivalence and does not convert non-authority exclusions into semantic approval. Remaining retirement gates stay BLOCK.",
+  "controlReview": "PASS. Before this review, controls were 7/8 with only reviewer-acceptance-record-present blocking. The other controls are sufficient for the declared scope because compiler candidate PASS, equivalence candidate PASS, controls PASS, equivalenceDeltas=0, and deterministic rerun passed. This JSON is the bounded reviewer acceptance record for that missing control, not an approval of retirement or cutover.",
+  "falseClaimReview": "PASS. No improper policy.git retirement, deletion, cutover approval, semantic completion, full corpus semantic equivalence, owner approval, merge approval, canonical write, or SSOT adoption claim is accepted. Accepted compiler authority here means only candidate-to-accepted authority for the declared reduced/source13 projection scope.",
+  "blockers": [],
+  "minimalFixesBeforeThisLaneCanBeAccepted": [],
+  "remainingGatesForActualRetirement": [
+    {"name":"full-natural-language-policy-semantic-equivalence","status":"BLOCK","reason":"this lane accepts only reduced source13 compiler authority, not full corpus semantic equivalence"},
+    {"name":"owner/adoption-gates","status":"BLOCK","reason":"no owner approval, adoption record, cutover record, or final authority transfer is granted"},
+    {"name":"end-to-end-retirement-proof","status":"BLOCK","reason":"this lane does not prove policy.git can be absent or retired while all consumers and authority routes pass"},
+    {"name":"canonical-write-and-ssot-adoption","status":"BLOCK","reason":"no merge, canonical write, SSOT write, deletion, retirement, or cutover approval is granted"}
+  ]
+}

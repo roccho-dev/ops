@@ -1,0 +1,15 @@
+{
+  "type": "policy.acceptedCompilerAuthority.postReviewSummary.v1",
+  "decision": "PASS_FOR_ACCEPTED_COMPILER_AUTHORITY_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "acceptedAuthorityScope": "reduced-source13-typed-semantic-compiler-output only",
+  "fullNaturalLanguageCorpusAuthority": false,
+  "controls": {"decision":"PASS", "passed":8, "total":8, "completedBy":"gen2-reviewer-acceptance-record"},
+  "remainingRetirementGates": [
+    {"name":"full-natural-language-policy-semantic-equivalence","status":"BLOCK"},
+    {"name":"owner/adoption-gates","status":"BLOCK"},
+    {"name":"end-to-end-retirement-proof","status":"BLOCK"},
+    {"name":"canonical-write-and-ssot-adoption","status":"BLOCK"}
+  ],
+  "mustNotClaim": ["policy.git retirement","policy.git deletion","cutover approval","merge approval","completion approval","full corpus semantic equivalence","owner approval","canonical write","SSOT adoption"]
+}
