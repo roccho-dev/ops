@@ -1,0 +1,9 @@
+{
+  "canonicalAuthority": "unchanged SSOT; no canonical merge or adoption implied",
+  "corpusReadinessAuthority": "reducer gateMatrix only",
+  "generatedArtifactsAuthority": "not independently editable authority",
+  "ownerResetRoute": "out-of-scope unless owner/root explicitly accepts semantic loss and consumer breakage",
+  "routeAuthority": "proposal-evidence-only",
+  "type": "policy.coverageFirstHardenedHybrid.authorityMatrix.v0",
+  "validatorRole": "regression fixture or local lane evidence only"
+}

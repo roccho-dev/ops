@@ -1,0 +1,104 @@
+{
+  "decision": "BLOCK",
+  "gates": [
+    {
+      "actual": 500,
+      "expected": ">0",
+      "name": "sourceFile-inventory",
+      "reason": "policy corpus files inventoried",
+      "status": "PASS"
+    },
+    {
+      "actual": 57164,
+      "expected": ">0",
+      "name": "mdBlock-coverage",
+      "reason": "addressable block rows produced",
+      "status": "PASS"
+    },
+    {
+      "actual": 845,
+      "expected": ">0",
+      "name": "table-first-class",
+      "reason": "table rows are first-class spans when present",
+      "status": "PASS"
+    },
+    {
+      "actual": 4498,
+      "expected": 4498,
+      "name": "tableCellBlock-coverage",
+      "reason": "table cells are addressable spans",
+      "status": "PASS"
+    },
+    {
+      "actual": 57164,
+      "expected": 57164,
+      "name": "disposition-before-semantics",
+      "reason": "every block has disposition before semantic promotion",
+      "status": "PASS"
+    },
+    {
+      "actual": true,
+      "expected": true,
+      "name": "source-span-integrity",
+      "reason": "semantic candidates have source hash and line spans",
+      "status": "PASS"
+    },
+    {
+      "actual": 2308,
+      "expected": 0,
+      "name": "authorityRelevantUnresolved-zero",
+      "reason": "authority-relevant unresolved rows must be zero for promotion",
+      "status": "BLOCK"
+    },
+    {
+      "actual": 14,
+      "expected": ">0",
+      "name": "regression-fixtures-present",
+      "reason": "validator evidence converted to regression fixtures",
+      "status": "PASS"
+    },
+    {
+      "actual": false,
+      "expected": true,
+      "name": "accepted-compiler-authority",
+      "reason": "this proposal does not grant accepted compiler authority",
+      "status": "BLOCK"
+    },
+    {
+      "actual": "not evaluated",
+      "expected": "implemented conflictMatrix and supersessionGraph",
+      "name": "conflictMatrix-evaluated",
+      "reason": "placeholder conflict graph cannot pass",
+      "status": "BLOCK"
+    },
+    {
+      "actual": "not evaluated",
+      "expected": "all consumers use accepted projections and pass runtime/e2e checks",
+      "name": "consumerCutoverGate",
+      "reason": "consumer cutover is a later gate",
+      "status": "BLOCK"
+    }
+  ],
+  "noApprovalGranted": {
+    "canonicalWriteApproval": false,
+    "cutoverApproval": false,
+    "ownerApproval": false,
+    "policyGitDeletionApproval": false,
+    "policyGitRetirementApproval": false,
+    "semanticCompletionApproval": false,
+    "ssotAdoptionApproval": false
+  },
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "reducerRule": "validatorPass may set regressionCoverage only; it cannot set retirement/cutover/canonical/SSOT gates to PASS and cannot reduce authorityRelevantUnresolved count.",
+  "retirementScopedGates": [
+    "canonicalWrite",
+    "cutover",
+    "ownerAdoptionForCorpus",
+    "policyDeletion",
+    "policyRetirement",
+    "semanticPromotion",
+    "ssotAdoption"
+  ],
+  "route": "COVERAGE_FIRST_HARDENED_HYBRID",
+  "type": "policy.coverageFirstHardenedHybrid.gateMatrix.v0"
+}

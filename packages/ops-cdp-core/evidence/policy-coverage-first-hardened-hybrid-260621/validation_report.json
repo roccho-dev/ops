@@ -1,0 +1,27 @@
+{
+  "conflictGateStatus": "BLOCK",
+  "deterministicRerun": {
+    "fileCount": 21,
+    "passed": true
+  },
+  "forbiddenApprovalTruths": [],
+  "gateDecision": "BLOCK",
+  "mainOutputFileCount": 21,
+  "notes": [
+    "PASS here means proposal evidence generated and fail-closed gates preserved; it is not retirement approval."
+  ],
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "regressionFixtureCountIs14": true,
+  "rowCounts": {
+    "block_dispositions": 57164,
+    "md_blocks": 57164,
+    "normative_signals": 3782,
+    "regression_fixtures": 14,
+    "semantic_candidates": 3782,
+    "source_files": 500,
+    "table_cell_blocks": 4498,
+    "unresolved_rows": 2308
+  },
+  "status": "PASS",
+  "type": "policy.coverageFirstHardenedHybrid.validationReport.v0"
+}
