@@ -991,7 +991,11 @@ SELECT 'generated-rows-not-authority',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
        CASE WHEN count(*) = 0 THEN NULL ELSE 'projection/generated row claimed authority' END,
        count(*)
-FROM coverage_proofs
+FROM (
+  SELECT id, generatedIsAuthority, policyDeletionApproved FROM coverage_proofs
+  UNION ALL
+  SELECT id, generatedIsAuthority, policyDeletionApproved FROM span_dispositions
+) generated_authority_candidates
 WHERE generatedIsAuthority <> false OR policyDeletionApproved <> false;
 
 COPY (SELECT gate_id, status, blocker, count FROM gate_results ORDER BY gate_id)
@@ -1443,6 +1447,112 @@ def command_materialize_accepted_source_span_dispositions(args: argparse.Namespa
             "completionCheck": "completion-check/manifest.json",
         },
         "status": "accepted-dispositions-materialized",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0
+
+
+def command_materialize_accepted_coverage_proof(args: argparse.Namespace) -> int:
+    source_spans = read_jsonl(Path(args.source_spans))
+    span_dispositions = read_jsonl(Path(args.source_span_dispositions))
+    fresh_genx_reviews = read_jsonl(Path(args.fresh_genx_reviews))
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy_rev = str(args.policy_rev)
+    span_ids = {str(row.get("id")) for row in source_spans if row.get("id")}
+    accepted_disposition_span_ids = {
+        str(span_id)
+        for row in span_dispositions
+        if row.get("kind") == "policy.sourceSpanDisposition.v1"
+        and row.get("status") == "accepted"
+        and row.get("accepted") is True
+        and row.get("policyRev") == policy_rev
+        and row.get("fixtureOnly") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+        for span_id in as_list(row.get("sourceSpanIds"))
+        if span_id
+    }
+    accepted_genx = [
+        row
+        for row in fresh_genx_reviews
+        if row.get("kind") == "policy.freshGenXReconstructionReview.v1"
+        and row.get("status") == "accepted"
+        and row.get("noRemainingObjections") is True
+        and row.get("memoryUsed") is False
+        and row.get("policyBodyUsedAsSource") is False
+        and row.get("fixtureOnly") is False
+        and row.get("policyRev") == policy_rev
+    ]
+    missing_span_ids = sorted(span_ids - accepted_disposition_span_ids)
+    gates = [
+        {
+            "gate_id": "accepted-span-dispositions-cover-source-spans",
+            "status": "pass" if not missing_span_ids else "blocked",
+            "blocker": None if not missing_span_ids else "sourceSpan lacks accepted disposition",
+            "count": len(missing_span_ids),
+        },
+        {
+            "gate_id": "fresh-genx-evidence-accepted",
+            "status": "pass" if accepted_genx else "blocked",
+            "blocker": None if accepted_genx else "accepted Fresh GenX reconstruction evidence is missing",
+            "count": 0 if accepted_genx else 1,
+        },
+    ]
+    jsonl_write(out_dir / "accepted-coverage-materialization-gates.jsonl", gates)
+    jsonl_write(out_dir / "missing-accepted-coverage-source-spans.jsonl", [{"kind": "policySemantic.missingAcceptedCoverageSourceSpan.v1", "sourceSpanId": span_id} for span_id in missing_span_ids])
+    ok = all(row["status"] == "pass" for row in gates)
+    if not ok:
+        manifest = {
+            "kind": "policy.acceptedCoverageProofMaterializationRun.v1",
+            "ok": False,
+            "policyRev": policy_rev,
+            "accepted": False,
+            "claimAllowed": False,
+            "generatedIsAuthority": False,
+            "policyDeletionApproved": False,
+            "outputs": {
+                "gates": "accepted-coverage-materialization-gates.jsonl",
+                "missingSourceSpans": "missing-accepted-coverage-source-spans.jsonl",
+            },
+            "status": "blocked",
+        }
+        (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(manifest, sort_keys=True))
+        return 1
+
+    genx_ids = [str(row.get("id")) for row in accepted_genx if row.get("id")]
+    proof = {
+        "kind": "policy.acceptedCoverageProof.v1",
+        "id": "policy-accepted-coverage-proof-" + sha256_bytes((policy_rev + "\0" + "\0".join(sorted(span_ids))).encode("utf-8"))[:20],
+        "policyRev": policy_rev,
+        "coveredSourceSpanIds": sorted(span_ids),
+        "coveredSourceSpanCount": len(span_ids),
+        "freshGenXEvidenceIds": genx_ids,
+        "accepted": True,
+        "status": "accepted",
+        "noRemainingObjections": True,
+        "fixtureOnly": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+    }
+    jsonl_write(out_dir / "policy.acceptedCoverageProof.v1.jsonl", [proof])
+    manifest = {
+        "kind": "policy.acceptedCoverageProofMaterializationRun.v1",
+        "ok": True,
+        "policyRev": policy_rev,
+        "accepted": True,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "coveredSourceSpanCount": len(span_ids),
+        "freshGenXEvidenceCount": len(genx_ids),
+        "outputs": {
+            "acceptedCoverageProof": "policy.acceptedCoverageProof.v1.jsonl",
+            "gates": "accepted-coverage-materialization-gates.jsonl",
+        },
+        "status": "accepted-coverage-proof-materialized",
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, sort_keys=True))
@@ -2610,6 +2720,13 @@ def main(argv: list[str] | None = None) -> int:
     disposition_parser.add_argument("--disposition", default="represented")
     disposition_parser.add_argument("--out-dir", required=True)
     disposition_parser.set_defaults(func=command_materialize_accepted_source_span_dispositions)
+    coverage_parser = sub.add_parser("materialize-accepted-coverage-proof")
+    coverage_parser.add_argument("--source-spans", required=True)
+    coverage_parser.add_argument("--source-span-dispositions", required=True)
+    coverage_parser.add_argument("--fresh-genx-reviews", required=True)
+    coverage_parser.add_argument("--policy-rev", required=True)
+    coverage_parser.add_argument("--out-dir", required=True)
+    coverage_parser.set_defaults(func=command_materialize_accepted_coverage_proof)
     args = parser.parse_args(argv)
     return args.func(args)
 

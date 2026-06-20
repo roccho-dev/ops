@@ -128,6 +128,12 @@ discussion results keep the gate blocked.
 It is still not a coverage proof or semantic equivalence proof; those remain
 separate ADRS records and DuckDB gates.
 
+`materialize-accepted-coverage-proof` emits accepted
+`policy.acceptedCoverageProof.v1` only when accepted span dispositions cover the
+input source spans and accepted Fresh GenX no-objection evidence is present.
+Missing disposition coverage or missing Fresh GenX evidence keeps the
+materialization blocked.
+
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted
 coverage proof records and fresh GenX semantic reconstruction/review has no
