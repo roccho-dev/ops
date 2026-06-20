@@ -1,0 +1,38 @@
+{
+  "type": "policy.retirementReadiness.status.v1",
+  "status": "BLOCKED_NOT_READY_FOR_POLICY_GIT_RETIREMENT",
+  "policyInputRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsProposalRef": "240ed1575e38c3d234517221dfaa768ec2b742ef",
+  "adrsProposalRef": "9f1cefc94e6409e4b77e5e989a7fd7745aabf945",
+  "decisionDate": "2026-06-21",
+  "whatIsProven": [
+    "heuristic baseline and reviewability evidence exist",
+    "source/consumer false blockers were reduced",
+    "reduced/source13 compiler authority candidate was accepted for reduced scope",
+    "semantic equivalence candidate passed for reduced scope",
+    "full corpus equivalence was tested and failed as blocking evidence"
+  ],
+  "currentDeletionBlockers": [
+    {"name":"full-natural-language-policy-semantic-equivalence","status":"BLOCK"},
+    {"name":"authorityClassificationGate","status":"BLOCK","notInBaselineSourceInventory":103,"unresolvedAuthorityCandidates":64},
+    {"name":"typedCoverageGate","status":"BLOCK","coverageGapRecords":644},
+    {"name":"semanticDeltaGate","status":"BLOCK","unresolved":644,"expected":0},
+    {"name":"owner/adoption-gates","status":"BLOCK"},
+    {"name":"end-to-end-retirement-proof","status":"BLOCK"},
+    {"name":"canonical-write-and-ssot-adoption","status":"BLOCK"}
+  ],
+  "mustNotClaim": [
+    "policy.git deletion approval",
+    "cutover readiness",
+    "full corpus semantic completion",
+    "owner approval",
+    "canonical adoption"
+  ],
+  "futureWork": [
+    "remediate or resolve 103 source inventory gaps",
+    "classify or resolve 64 authority candidates",
+    "eliminate or justify 644 coverage gaps and semantic deltas",
+    "rerun full corpus equivalence",
+    "only then proceed to owner/adoption and end-to-end retirement proof"
+  ]
+}
