@@ -1,0 +1,6 @@
+[22661:22661:0620/112302.665535:ERROR:chrome/browser/net/system_network_context_manager.cc:965] Cannot use V8 Proxy resolver in single process mode.
+[22661:22661:0620/112302.683574:ERROR:chrome/browser/net/system_network_context_manager.cc:965] Cannot use V8 Proxy resolver in single process mode.
+[22661:22661:0620/112302.697867:ERROR:chrome/browser/net/system_network_context_manager.cc:965] Cannot use V8 Proxy resolver in single process mode.
+
+DevTools listening on ws://127.0.0.1:9222/devtools/browser/0405a9e8-3a12-478e-bd58-3e5910ecac6d
+[22661:22661:0620/112302.814053:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.UPower was not provided by any .service files

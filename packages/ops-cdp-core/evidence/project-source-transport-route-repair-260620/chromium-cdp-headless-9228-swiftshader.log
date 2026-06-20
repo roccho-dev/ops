@@ -1,0 +1,13 @@
+
+DevTools listening on ws://127.0.0.1:9228/devtools/browser/5f6158fa-891a-40d5-adb6-bd0204499dd6
+[2195:2195:0620/113717.376581:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.UPower was not provided by any .service files
+[2195:2583:0620/113722.767431:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[2599:2599:0620/113731.357593:ERROR:gpu/command_buffer/service/gl_utils.cc:431] [.WebGL-0x2bac00137c00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[2599:2599:0620/113731.391816:ERROR:gpu/command_buffer/service/gl_utils.cc:431] [.WebGL-0x2bac00137c00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[2195:2583:0620/113743.715802:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[2195:2195:0620/113750.199185:ERROR:content/common/zygote/zygote_communication_linux.cc:291] Failed to send GetTerminationStatus message to zygote
+[2195:2195:0620/113750.201311:ERROR:content/common/zygote/zygote_communication_linux.cc:291] Failed to send GetTerminationStatus message to zygote
+[2195:2195:0620/113750.204641:ERROR:content/common/zygote/zygote_communication_linux.cc:291] Failed to send GetTerminationStatus message to zygote
+[2195:2195:0620/113750.217788:ERROR:content/common/zygote/zygote_communication_linux.cc:291] Failed to send GetTerminationStatus message to zygote
+[2195:2583:0620/113750.228728:ERROR:google_apis/gcm/engine/connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2
+[2195:2195:0620/113750.238018:ERROR:content/common/zygote/zygote_communication_linux.cc:291] Failed to send GetTerminationStatus message to zygote

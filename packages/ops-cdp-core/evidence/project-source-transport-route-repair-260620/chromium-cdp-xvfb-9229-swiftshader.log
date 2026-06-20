@@ -1,0 +1,7 @@
+
+DevTools listening on ws://127.0.0.1:9229/devtools/browser/eff2e620-0bfc-44dd-aa7a-247341e11f6c
+[6181:6181:0620/113837.062818:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.UPower was not provided by any .service files
+[6181:6620:0620/113840.498052:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[6181:6620:0620/113901.076602:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[6181:6181:0620/113903.111598:ERROR:content/common/zygote/zygote_communication_linux.cc:291] Failed to send GetTerminationStatus message to zygote
+[6181:6620:0620/113903.135434:ERROR:google_apis/gcm/engine/connection_factory_impl.cc:483] ConnectionHandler failed with net error: -2

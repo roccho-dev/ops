@@ -1,0 +1,369 @@
+- navigation "サイドバー":
+  - button "サイドバーを開く":
+  - link "新しいチャット":
+    - /url: /
+    - generic: 新しいチャット
+  - button "チャットを検索":
+    - generic: チャットを検索
+  - button "最近のチャット":
+    - generic: 最近のチャット
+  - button "プロファイルメニューを開く"
+- heading "チャット履歴" [level=2]
+- navigation "チャット履歴":
+  - link "ホーム":
+    - /url: /
+    - generic: ChatGPT Pro
+  - button "サイドバーを閉じる" [expanded]:
+  - list:
+    - link "新しいチャット Control Shift O":
+      - /url: /
+      - generic: 新しいチャット
+      - generic "Control":
+        - generic: Ctrl
+        - text: +
+      - generic "Shift":
+        - generic: Shift
+        - text: +
+      - generic: O
+    - button "チャットを検索 Control K":
+      - generic: チャットを検索
+      - generic "Control":
+        - generic: Ctrl
+        - text: +
+      - generic: K
+  - link "ライブラリ":
+    - /url: /library
+    - generic: ライブラリ
+  - link "予定済み":
+    - /url: /scheduled
+    - generic: 予定済み
+  - link "アプリ":
+    - /url: /apps
+    - generic: アプリ
+  - generic: さらに表示
+  - button "プロジェクト" [expanded]:
+    - heading "プロジェクト" [level=2]
+  - button "プロジェクトを新規作成":
+  - button "チャットを整理":
+  - list:
+    - button "shopping":
+      - generic: shopping
+    - button "プロジェクトのホームを開く":
+    - button "shopping のプロジェクトオプションを開く":
+    - button "gpt-raw":
+      - generic: gpt-raw
+    - button "プロジェクトのホームを開く":
+    - button "gpt-raw のプロジェクトオプションを開く":
+    - button "repo-governance":
+      - generic: repo-governance
+    - button "プロジェクトのホームを開く":
+    - button "repo-governance のプロジェクトオプションを開く":
+    - button "parse-pdf":
+      - generic: parse-pdf
+    - button "プロジェクトのホームを開く":
+    - button "parse-pdf のプロジェクトオプションを開く":
+    - button "projection-logs":
+      - generic: projection-logs
+    - button "プロジェクトのホームを開く":
+    - button "projection-logs のプロジェクトオプションを開く":
+    - button "remove-policy":
+      - generic: remove-policy
+    - button "プロジェクトのホームを開く":
+    - button "remove-policy のプロジェクトオプションを開く":
+    - button "さらに表示":
+      - generic: さらに表示
+  - button "チャット" [expanded]:
+    - heading "チャット" [level=2]
+  - link "新しいチャット":
+    - /url: /
+  - button "チャットを整理":
+  - list:
+    - link "GitHub Branch Creation Task":
+      - /url: /c/6a363498-4890-83e8-b10e-2ab6c8ba978a
+      - generic: GitHub Branch Creation Task
+      - button "GitHub Branch Creation Taskをピン留め":
+      - button "GitHub Branch Creation Task の会話オプションを開く":
+    - link "リモート操作と引き継ぎ、未読":
+      - /url: /c/6a3676a5-2ee0-83ee-b8ff-d371b4574caa?messageId=finalAgentTurnStart
+      - generic: リモート操作と引き継ぎ
+      - button "リモート操作と引き継ぎをピン留め":
+      - button "リモート操作と引き継ぎ の会話オプションを開く":
+    - link "Unified diff patch request、未読":
+      - /url: /c/6a362f2c-de2c-83ee-8f18-a9fb60aabc42?messageId=finalAgentTurnStart
+      - generic: Unified diff patch request
+      - button "Unified diff patch requestをピン留め":
+      - button "Unified diff patch request の会話オプションを開く":
+    - link "VCツール選択肢":
+      - /url: /c/6a362523-6c50-83e8-b216-f22a110e2f41
+      - generic: VCツール選択肢
+      - button "VCツール選択肢をピン留め":
+      - button "VCツール選択肢 の会話オプションを開く":
+    - link "GitHub Branch Commit Proof":
+      - /url: /c/6a361f7b-d7dc-83ee-bd98-3359d446e7c0
+      - generic: GitHub Branch Commit Proof
+      - button "GitHub Branch Commit Proofをピン留め":
+      - button "GitHub Branch Commit Proof の会話オプションを開く":
+    - link "GitHub App Proof Task":
+      - /url: /c/6a3617bc-323c-83e8-b5ae-5b021bd7ccb3
+      - generic: GitHub App Proof Task
+      - button "GitHub App Proof Taskをピン留め":
+      - button "GitHub App Proof Task の会話オプションを開く":
+    - link "Git diff implementation request、未読":
+      - /url: /c/6a360dde-c23c-83ee-80b9-c9edaa11b6cf?messageId=finalAgentTurnStart
+      - generic: Git diff implementation request
+      - button "Git diff implementation requestをピン留め":
+      - button "Git diff implementation request の会話オプションを開く":
+    - link "GitHub File JSON Output、未読":
+      - /url: /c/6a360ffa-96dc-83e8-b1a2-d53b5a5fe15e?messageId=finalAgentTurnStart
+      - generic: GitHub File JSON Output
+      - button "GitHub File JSON Outputをピン留め":
+      - button "GitHub File JSON Output の会話オプションを開く":
+    - link "Git diff patch request、未読":
+      - /url: /c/6a360c8b-2938-83ee-a4e6-dad521dd31d0?messageId=finalAgentTurnStart
+      - generic: Git diff patch request
+      - button "Git diff patch requestをピン留め":
+      - button "Git diff patch request の会話オプションを開く":
+    - link "GitHub Readability Test、未読":
+      - /url: /c/6a360fbd-41e4-83e8-8443-ec2bbe237568?messageId=finalAgentTurnStart
+      - generic: GitHub Readability Test
+      - button "GitHub Readability Testをピン留め":
+      - button "GitHub Readability Test の会話オプションを開く":
+    - link "Checklist for ChatGPT Development、未読":
+      - /url: /c/6a360752-33f0-83ee-b738-ed2ff02d19a7?messageId=finalAgentTurnStart
+      - generic "Checklist for ChatGPT Development"
+      - button "Checklist for ChatGPT Developmentをピン留め":
+      - button "Checklist for ChatGPT Development の会話オプションを開く":
+    - link "Windows対応とBinary VC":
+      - /url: /c/6a35e771-fb64-83ee-8969-74456cc0a4fa
+      - generic: Windows対応とBinary VC
+      - button "Windows対応とBinary VCをピン留め":
+      - button "Windows対応とBinary VC の会話オプションを開く":
+    - link "Codex App Linux使用方法":
+      - /url: /c/6a35e0fa-7200-83e8-b8d1-f69744fb43c9
+      - generic: Codex App Linux使用方法
+      - button "Codex App Linux使用方法をピン留め":
+      - button "Codex App Linux使用方法 の会話オプションを開く":
+    - link "再現性の確認":
+      - /url: /c/6a35954e-d400-83e8-8b45-eb69f62d07e3
+      - generic: 再現性の確認
+      - button "再現性の確認をピン留め":
+      - button "再現性の確認 の会話オプションを開く":
+    - link "CDPツールの使用方法":
+      - /url: /c/6a348755-ce8c-83ee-9428-28621181e676
+      - generic: CDPツールの使用方法
+      - button "CDPツールの使用方法をピン留め":
+      - button "CDPツールの使用方法 の会話オプションを開く":
+    - link "ソフトウェア請負業":
+      - /url: /c/6a347ec4-2ee0-83ee-b373-5569c5f80473
+      - generic: ソフトウェア請負業
+      - button "ソフトウェア請負業をピン留め":
+      - button "ソフトウェア請負業 の会話オプションを開く":
+    - link "OpenHSPとは":
+      - /url: /c/6a3447ff-d670-83e8-a0a7-c40cf8efbc52
+      - generic: OpenHSPとは
+      - button "OpenHSPとはをピン留め":
+      - button "OpenHSPとは の会話オプションを開く":
+    - link "Linux開発ビルド Nixos":
+      - /url: /c/6a33c91a-9000-83e8-9afa-a2a598618595
+      - generic: Linux開発ビルド Nixos
+      - button "Linux開発ビルド Nixosをピン留め":
+      - button "Linux開発ビルド Nixos の会話オプションを開く":
+    - link "Swarm Kimi":
+      - /url: /c/6a2e316f-80d0-83ee-b2e4-098766f65a56
+      - generic: Swarm Kimi
+      - button "Swarm Kimiをピン留め":
+      - button "Swarm Kimi の会話オプションを開く":
+    - link "knowanything":
+      - /url: /c/6a32540e-bdb0-83e8-a48b-40e08b2f2559
+      - generic: knowanything
+      - button "knowanythingをピン留め":
+      - button "knowanything の会話オプションを開く":
+    - link "K8sとAIエージェントの未来":
+      - /url: /c/6a321eda-b974-83e8-bfd4-0f08742df972
+      - generic: K8sとAIエージェントの未来
+      - button "K8sとAIエージェントの未来をピン留め":
+      - button "K8sとAIエージェントの未来 の会話オプションを開く":
+    - link "接続制限に関する質問":
+      - /url: /c/6a31dfe2-d640-83ee-a117-84075b4ef76c
+      - generic: 接続制限に関する質問
+      - button "接続制限に関する質問をピン留め":
+      - button "接続制限に関する質問 の会話オプションを開く":
+    - link "お金と幸福の関係":
+      - /url: /c/6a30f323-9f08-83e8-823b-32308c7a0383
+      - generic: お金と幸福の関係
+      - button "お金と幸福の関係をピン留め":
+      - button "お金と幸福の関係 の会話オプションを開く":
+    - link "Deno CSSインポート質問":
+      - /url: /c/6a30a05c-08ec-83e8-9428-9085f2d3279c
+      - generic: Deno CSSインポート質問
+      - button "Deno CSSインポート質問をピン留め":
+      - button "Deno CSSインポート質問 の会話オプションを開く":
+    - link "Tailnet 接続問題":
+      - /url: /c/6a2fe691-fd68-83ee-8f93-6203c4730a72
+      - generic: Tailnet 接続問題
+      - button "Tailnet 接続問題をピン留め":
+      - button "Tailnet 接続問題 の会話オプションを開く":
+    - link "GitHub App 状態確認":
+      - /url: /c/6a2fbf25-4de0-83ee-b592-b365be98f151
+      - generic: GitHub App 状態確認
+      - button "GitHub App 状態確認をピン留め":
+      - button "GitHub App 状態確認 の会話オプションを開く":
+    - link "Replicated Wikiの利用状況":
+      - /url: /c/6a2f935e-7df8-83e8-a8dc-5e1ca816cbf7
+      - generic: Replicated Wikiの利用状況
+      - button "Replicated Wikiの利用状況をピン留め":
+      - button "Replicated Wikiの利用状況 の会話オプションを開く":
+    - link "作業ブランチ":
+      - /url: /c/6a2f697e-9254-83ee-ad0f-c5803ac25a0d
+      - generic: 作業ブランチ
+      - button "作業ブランチをピン留め":
+      - button "作業ブランチ の会話オプションを開く":
+- button "Tetsuya Takasawa Proさんのプロファイルメニューを開く":
+  - generic: Tetsuya Takasawa
+  - generic: Pro
+  - button "アプリをダウンロード":
+- banner
+- main:
+  - 'button "プロジェクトのアイコンと色のメニューを開く。選択中のアイコン: フォルダー。選択中のアイコンの色: デフォルトの色、ライトモードでは黒、ダークモードでは白。"':
+    - img "カスタムカラーのフォルダー"
+  - heading "remove-policyのタイトルを編集する" [level=1]:
+    - button "remove-policyのタイトルを編集する": remove-policy
+  - generic "お知らせ":
+    - button "共有する":
+      - generic: 共有する
+  - button "プロジェクトの詳細を表示する":
+  - button "ファイルなどを追加":
+  - textbox "remove-policy 内の新しいチャット" [active]:
+    - paragraph: remove-policy 内の新しいチャット
+  - button "最高":
+    - generic: 最高
+  - button "音声入力を開始":
+  - button "音声を開始する":
+  - button
+  - button
+  - tablist "プロジェクトセクション":
+    - tab "チャット"
+    - tab "情報源" [selected]
+  - 'button "ソースを並べ替え: 新しい順"':
+    - generic: 新しい順
+  - 'button "ソースを絞り込む: すべて"':
+    - generic: すべて
+  - tabpanel:
+    - region "情報源":
+      - button "情報源を追加する":
+        - text: 情報源を追加する
+      - button "Choose File"
+      - button "REVIEWER_REQUEST_ATTEMPT2.md ファイル · 2026年6月19日":
+        - generic "REVIEWER_REQUEST_ATTEMPT2.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "REVIEWER_REQUEST_ATTEMPT2.md ファイル · 2026年6月19日":
+        - generic "REVIEWER_REQUEST_ATTEMPT2.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "HOST_EVIDENCE_ATTEMPT2.md ファイル · 2026年6月19日":
+        - generic "HOST_EVIDENCE_ATTEMPT2.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "HOST_EVIDENCE_ATTEMPT2.md ファイル · 2026年6月19日":
+        - generic "HOST_EVIDENCE_ATTEMPT2.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "result.260619.attempt2.json ファイル · 2026年6月19日":
+        - generic "result.260619.attempt2.json"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "result.260619.attempt2.json ファイル · 2026年6月19日":
+        - generic "result.260619.attempt2.json"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "semantic-migration-proof-kit-260619-attempt2.zip.sha256 ファイル · 2026年6月19日":
+        - generic "semantic-migration-proof-kit-260619-attempt2.zip.sha256"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "semantic-migration-proof-kit-260619-attempt2.zip.sha256 ファイル · 2026年6月19日":
+        - generic "semantic-migration-proof-kit-260619-attempt2.zip.sha256"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "semantic-migration-proof-kit-260619-attempt2.zip Zip アーカイブ · 2026年6月19日":
+        - generic "semantic-migration-proof-kit-260619-attempt2.zip"
+        - generic: Zip アーカイブ · 2026年6月19日
+      - button "ソースの操作":
+      - button "cdp-file-upload-smoke-260619.zip Zip アーカイブ · 2026年6月19日":
+        - generic "cdp-file-upload-smoke-260619.zip"
+        - generic: Zip アーカイブ · 2026年6月19日
+      - button "ソースの操作":
+      - button "cdp-file-upload-smoke-260619.zip Zip アーカイブ · 2026年6月19日":
+        - generic "cdp-file-upload-smoke-260619.zip"
+        - generic: Zip アーカイブ · 2026年6月19日
+      - button "ソースの操作":
+      - button "cdp-file-upload-smoke-260619.txt ドキュメント · 2026年6月19日":
+        - generic "cdp-file-upload-smoke-260619.txt"
+        - generic: ドキュメント · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_SEMANTIC_WORKER_REQUEST.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_SEMANTIC_WORKER_REQUEST.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_SEMANTIC_KNOWN_GATES.json ファイル · 2026年6月19日":
+        - generic "260619_POLICY_SEMANTIC_KNOWN_GATES.json"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_SEMANTIC_HANDOFF_MANIFEST.json ファイル · 2026年6月19日":
+        - generic "260619_POLICY_SEMANTIC_HANDOFF_MANIFEST.json"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_SEMANTIC_EXPECTED_OUTPUTS.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_SEMANTIC_EXPECTED_OUTPUTS.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_SEMANTIC_BACKGROUND.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_SEMANTIC_BACKGROUND.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part07.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part07.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part06.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part06.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part05.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part05.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part04.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part04.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part03.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part03.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part02.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part02.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_EXCERPTS.part01.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_EXCERPTS.part01.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_POLICY_CORPUS_PARTS_INDEX.md ファイル · 2026年6月19日":
+        - generic "260619_POLICY_CORPUS_PARTS_INDEX.md"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_LOOSE_SHA256SUMS.txt ドキュメント · 2026年6月19日":
+        - generic "260619_LOOSE_SHA256SUMS.txt"
+        - generic: ドキュメント · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_ADRS_RETIREMENT_ROW.jsonl ファイル · 2026年6月19日":
+        - generic "260619_ADRS_RETIREMENT_ROW.jsonl"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+      - button "260619_ADRS_RETIREMENT_DIFF.patch ファイル · 2026年6月19日":
+        - generic "260619_ADRS_RETIREMENT_DIFF.patch"
+        - generic: ファイル · 2026年6月19日
+      - button "ソースの操作":
+- alert
+- status

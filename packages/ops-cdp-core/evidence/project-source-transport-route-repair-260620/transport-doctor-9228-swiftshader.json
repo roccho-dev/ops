@@ -1,0 +1,252 @@
+{
+  "command": "project-transport-doctor",
+  "commands": [
+    {
+      "found": true,
+      "name": "chromium-cdp-chatgpt-doctor",
+      "path": "/nix/store/27y65ya18ldkfljja3biljk9k8rx84fg-chromium-cdp-chatgpt-doctor/bin/chromium-cdp-chatgpt-doctor"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-project-access-probe",
+      "path": "/nix/store/324c1qn1gncnixscq4228r03b0q07lgc-chromium-cdp-project-access-probe/bin/chromium-cdp-project-access-probe"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-upload-project-source-text",
+      "path": "/nix/store/ynb28cd8sas8jl2g2hyyv5mvhy2gia1p-chromium-cdp-upload-project-source-text/bin/chromium-cdp-upload-project-source-text"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-upload-project-source-file",
+      "path": "/nix/store/v9fhzs7jzsf90jx3f9ybk2x5dgjx38vw-chromium-cdp-upload-project-source-file/bin/chromium-cdp-upload-project-source-file"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-project-source-list",
+      "path": "/nix/store/n3562c5b3q256w8riz9bjcg6p275xzqr-chromium-cdp-project-source-list/bin/chromium-cdp-project-source-list"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-project-source-delete",
+      "path": "/nix/store/gr2y11j5gp8h6nzbanzh80i9z1gfdsbf-chromium-cdp-project-source-delete/bin/chromium-cdp-project-source-delete"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-create-project-thread",
+      "path": "/nix/store/24zgrhypy29xsa5q96g6m968glbxzyf4-chromium-cdp-create-project-thread/bin/chromium-cdp-create-project-thread"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-send-chatgpt",
+      "path": "/nix/store/q4a9icnwxwb4ayh3srrn2n3r3czzs2jb-chromium-cdp-send-chatgpt/bin/chromium-cdp-send-chatgpt"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-read-thread",
+      "path": "/nix/store/f5qvbky0lxfkr6qj3k0mhmz75qbjd18r-chromium-cdp-read-thread/bin/chromium-cdp-read-thread"
+    },
+    {
+      "found": true,
+      "name": "chromium-cdp-fetch-artifact-strict",
+      "path": "/nix/store/bvzp4gamwaw6z1blyladj61axqwprbm2-chromium-cdp-fetch-artifact-strict/bin/chromium-cdp-fetch-artifact-strict"
+    },
+    {
+      "found": true,
+      "name": "cdp-bridge",
+      "path": "/nix/store/m1h5c0kkv835j2g5d33pih519w8ckgzf-cdp-bridge/bin/cdp-bridge"
+    }
+  ],
+  "completionApproval": false,
+  "createdAt": "2026-06-20T11:37:27.162Z",
+  "doctorCommand": {
+    "argv": [
+      "chromium-cdp-chatgpt-doctor",
+      "--addr",
+      "127.0.0.1",
+      "--json"
+    ],
+    "json": {
+      "ok": true,
+      "recommended": {
+        "addr": "127.0.0.1",
+        "port": 9228,
+        "reason": "APP_TAB_NOT_FOUND",
+        "status": "target-not-found",
+        "title": "",
+        "url": ""
+      },
+      "sessions": [
+        {
+          "addr": "127.0.0.1",
+          "browser": "Chrome/147.0.7727.116",
+          "pageCount": 1,
+          "port": 9228,
+          "reason": "APP_TAB_NOT_FOUND",
+          "recommended": true,
+          "status": "target-not-found",
+          "title": "",
+          "url": ""
+        }
+      ]
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "{\n  \"ok\": true,\n  \"recommended\": {\n    \"addr\": \"127.0.0.1\",\n    \"port\": 9228,\n    \"status\": \"target-not-found\",\n    \"reason\": \"APP_TAB_NOT_FOUND\",\n    \"url\": \"\",\n    \"title\": \"\"\n  },\n  \"sessions\": [\n    {\n      \"addr\": \"127.0.0.1\",\n      \"port\": 9228,\n      \"browser\": \"Chrome/147.0.7727.116\",\n      \"pageCount\": 1,\n      \"status\": \"target-not-found\",\n      \"reason\": \"APP_TAB_NOT_FOUND\",\n      \"url\": \"\",\n      \"title\": \"\",\n      \"recommended\": true\n    }\n  ]\n}\n"
+  },
+  "dryRun": false,
+  "finishedAt": "2026-06-20T11:37:30.057Z",
+  "kind": "ops.projectTransportResult.v1",
+  "missingCommands": [],
+  "missingTransportCommands": [],
+  "offlineOnly": false,
+  "ok": false,
+  "projectAccess": {
+    "addr": "127.0.0.1",
+    "kind": "ops.projectAccessProbe.v1",
+    "ok": false,
+    "page": {
+      "bodySample": "",
+      "denied": false,
+      "hasProjectHref": true,
+      "hasProjectShell": false,
+      "href": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+      "loginActions": [],
+      "loginUrl": false,
+      "readyState": "complete",
+      "title": "Just a moment..."
+    },
+    "port": 9228,
+    "projectId": "6a3484c5583881918758f110063340d9",
+    "projectUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+    "reason": "TARGET_PROJECT_SHELL_NOT_VISIBLE",
+    "status": "project-access-shell-missing",
+    "target": {
+      "id": "C1733F95D5CE1391BF9A6B174B243C6B",
+      "title": "Just a moment...",
+      "url": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project?__cf_chl_rt_tk=6T28_JXauVVGIF5EXIRFK5Qu310kGJtGzUKeECGCpnE-1781955450-1.0.1.1-SXMOjRSf7QbYt8RCwECGnFZFcIDHGoicutDdT5QJMHg"
+    }
+  },
+  "projectAccessCommand": {
+    "argv": [
+      "chromium-cdp-project-access-probe",
+      "--projectUrl",
+      "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "9228",
+      "--timeoutMs",
+      "180000",
+      "--json"
+    ],
+    "json": {
+      "addr": "127.0.0.1",
+      "kind": "ops.projectAccessProbe.v1",
+      "ok": false,
+      "page": {
+        "bodySample": "",
+        "denied": false,
+        "hasProjectHref": true,
+        "hasProjectShell": false,
+        "href": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+        "loginActions": [],
+        "loginUrl": false,
+        "readyState": "complete",
+        "title": "Just a moment..."
+      },
+      "port": 9228,
+      "projectId": "6a3484c5583881918758f110063340d9",
+      "projectUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+      "reason": "TARGET_PROJECT_SHELL_NOT_VISIBLE",
+      "status": "project-access-shell-missing",
+      "target": {
+        "id": "C1733F95D5CE1391BF9A6B174B243C6B",
+        "title": "Just a moment...",
+        "url": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project?__cf_chl_rt_tk=6T28_JXauVVGIF5EXIRFK5Qu310kGJtGzUKeECGCpnE-1781955450-1.0.1.1-SXMOjRSf7QbYt8RCwECGnFZFcIDHGoicutDdT5QJMHg"
+      }
+    },
+    "returncode": 1,
+    "stderr": "",
+    "stdout": "{\n  \"kind\": \"ops.projectAccessProbe.v1\",\n  \"ok\": false,\n  \"status\": \"project-access-shell-missing\",\n  \"reason\": \"TARGET_PROJECT_SHELL_NOT_VISIBLE\",\n  \"projectUrl\": \"https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project\",\n  \"projectId\": \"6a3484c5583881918758f110063340d9\",\n  \"addr\": \"127.0.0.1\",\n  \"port\": 9228,\n  \"target\": {\n    \"id\": \"C1733F95D5CE1391BF9A6B174B243C6B\",\n    \"url\": \"https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project?__cf_chl_rt_tk=6T28_JXauVVGIF5EXIRFK5Qu310kGJtGzUKeECGCpnE-1781955450-1.0.1.1-SXMOjRSf7QbYt8RCwECGnFZFcIDHGoicutDdT5QJMHg\",\n    \"title\": \"Just a moment...\"\n  },\n  \"page\": {\n    \"href\": \"https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project\",\n    \"title\": \"Just a moment...\",\n    \"readyState\": \"complete\",\n    \"hasProjectHref\": true,\n    \"hasProjectShell\": false,\n    \"denied\": false,\n    \"loginUrl\": false,\n    \"loginActions\": [],\n    \"bodySample\": \"\"\n  }\n}\n"
+  },
+  "projectUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+  "recommendedRoute": null,
+  "requestedSession": {
+    "addr": "127.0.0.1",
+    "browser": "Chrome/147.0.7727.116",
+    "pageCount": 1,
+    "port": 9228,
+    "reason": "APP_TAB_NOT_FOUND",
+    "recommended": true,
+    "status": "target-not-found",
+    "title": "",
+    "url": ""
+  },
+  "routeDecision": false,
+  "semanticApproval": false,
+  "status": "project-access-shell-missing",
+  "transportCommands": [
+    {
+      "found": true,
+      "name": "project-transport-doctor",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-doctor"
+    },
+    {
+      "found": true,
+      "name": "project-transport-env",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-env"
+    },
+    {
+      "found": true,
+      "name": "project-source-put",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-source-put"
+    },
+    {
+      "found": true,
+      "name": "project-source-list",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-source-list"
+    },
+    {
+      "found": true,
+      "name": "project-source-delete",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-source-delete"
+    },
+    {
+      "found": true,
+      "name": "project-thread-create",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-thread-create"
+    },
+    {
+      "found": true,
+      "name": "project-thread-send",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-thread-send"
+    },
+    {
+      "found": true,
+      "name": "project-thread-readback",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-thread-readback"
+    },
+    {
+      "found": true,
+      "name": "project-artifact-fetch",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-artifact-fetch"
+    },
+    {
+      "found": true,
+      "name": "project-transport-claim",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-claim"
+    },
+    {
+      "found": true,
+      "name": "project-transport-health",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-health"
+    },
+    {
+      "found": true,
+      "name": "project-transport-run",
+      "path": "/nix/store/3qmx8f049kjrbf6cv3in94nlf96qbibv-cdp/bin/project-transport-run"
+    }
+  ],
+  "transportCommandsInPath": true
+}

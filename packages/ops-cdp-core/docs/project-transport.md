@@ -148,3 +148,26 @@ reject the fresh profile, copy an existing authenticated snapshot into a fresh
 runtime profile, then prove the requested Project URL, Project Source upload,
 thread creation, and delayed readback. This does not prove credential or OTP
 automation.
+
+## External-state transport gate
+
+Project Source-only handoffs can be structurally valid while still blocked by
+the browser session route. Treat this as a transport/external-state blocker, not
+as a policy or packet failure.
+
+The route remains blocked until the same authenticated browser/CDP session can:
+
+1. open the target Project;
+2. show the Project Source surface;
+3. upload the fixed revisioned files unchanged;
+4. list or read back those uploaded sources; and
+5. create the target worker thread with delayed worker-readable readback.
+
+Do not bypass this gate by inlining source bodies, attaching files to a thread,
+or base64-encoding payloads. A user-provided Project Source-capable upload
+surface is acceptable only when the transport actor records file list, hashes,
+route evidence, and worker-readable readback, while semantic judgment stays with
+the Gen1 reviewer.
+
+The 2026-06-20 route-repair evidence is recorded under
+`packages/ops-cdp-core/evidence/project-source-transport-route-repair-260620/`.
