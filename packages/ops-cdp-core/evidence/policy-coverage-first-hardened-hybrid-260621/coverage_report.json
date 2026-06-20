@@ -1,0 +1,25 @@
+{
+  "acceptedSemanticRecordCount": 0,
+  "authorityRelevantUnresolvedCount": 2308,
+  "blockDispositionCount": 57164,
+  "decision": "BLOCK",
+  "mdBlockCount": 57164,
+  "metricsSeparated": [
+    "spanCoverage",
+    "tableCoverage",
+    "signalCoverage",
+    "semanticCoverage",
+    "behaviorCoverage",
+    "conflictCoverage",
+    "consumerCoverage",
+    "buyerProjectionCoverage"
+  ],
+  "normativeSignalCount": 3782,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "regressionFixtureCount": 14,
+  "semanticCandidateCount": 3782,
+  "sourceFileCount": 500,
+  "tableBlockCount": 845,
+  "tableSignalCount": 217,
+  "type": "policy.coverageFirstHardenedHybrid.coverageReport.v0"
+}

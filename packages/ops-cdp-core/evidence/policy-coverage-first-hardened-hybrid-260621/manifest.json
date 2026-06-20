@@ -1,0 +1,82 @@
+{
+  "decision": "BLOCK",
+  "files": [
+    {
+      "bytes": 1582,
+      "path": "README.audit.md",
+      "sha256": "2ee42d2b8ef938f48e4d54dd0681a5bda9e491de13a25ee0bb160f385df22ad5"
+    },
+    {
+      "bytes": 0,
+      "path": "accepted_semantic_records.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 507,
+      "path": "authority_matrix.json",
+      "sha256": "897655b1f359ae7a54cdac9b4650316b986ec5e540b4e09fbd9b07f01ddc34fc"
+    },
+    {
+      "bytes": 525,
+      "path": "authority_matrix.md",
+      "sha256": "9dd5e06f988597ec9f4a31ea794038ba884a6e741091b0b917d29eeca41a7d24"
+    },
+    {
+      "bytes": 26138909,
+      "path": "block_dispositions.jsonl",
+      "sha256": "e1ee37a002a90891aa36cfae84c6b81c2c4744e169ab6e15d638b173d623e779"
+    },
+    {
+      "bytes": 685,
+      "path": "coverage_report.json",
+      "sha256": "5879f9dde69b08e696c7d6ba163e3a405df26d3f77c7b62be343b7b908cef271"
+    },
+    {
+      "bytes": 2824,
+      "path": "gate_matrix.json",
+      "sha256": "d92962ce0f6fc0af86b7e2e546981dda5333e0e347d3a7746f5fc5db8aa1cc87"
+    },
+    {
+      "bytes": 31409068,
+      "path": "md_blocks.jsonl",
+      "sha256": "0b609f72c5dee557395fb38ac7b2b7e3afb5794acbfbd37cdf1d5e779fbaa078"
+    },
+    {
+      "bytes": 3790979,
+      "path": "normative_signals.jsonl",
+      "sha256": "c34caa883ad510ae1467254987a76e21ea8b80127f095ff51d18b63e427fb3c6"
+    },
+    {
+      "bytes": 555,
+      "path": "ontology.v0.schema.json",
+      "sha256": "2f821554348967ef6a8d73547c9fb4d6c7fcd382cb0be7815e0b2996f344dfa3"
+    },
+    {
+      "bytes": 19503,
+      "path": "regression_fixtures.jsonl",
+      "sha256": "bfba74648600240c06e8c6242b05339b105ba7a5acfcbfeb64eb0ee40c725620"
+    },
+    {
+      "bytes": 4154051,
+      "path": "semantic_candidates.jsonl",
+      "sha256": "de04d79c7dc1c6b7d5f7783f43faed4690046a4f4e9265a7c033ee4275768e05"
+    },
+    {
+      "bytes": 209337,
+      "path": "source_files.jsonl",
+      "sha256": "264ae8e111997b9abe7a558f03d064c371fbb6f31c64e911441639c8974097de"
+    },
+    {
+      "bytes": 933803,
+      "path": "unresolved_rows.jsonl",
+      "sha256": "cd740e24316f859856060a925161678c777b732b15ad34651eb04b07e3cc08e6"
+    },
+    {
+      "bytes": 707,
+      "path": "validation_report.json",
+      "sha256": "a5b118dfacdc2b4554b241d79feff9602578d3e0206ed328068db113c2df907e"
+    }
+  ],
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "type": "policy.coverageFirstHardenedHybrid.manifest.v0"
+}
