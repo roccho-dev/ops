@@ -1,0 +1,14 @@
+{
+  "kind": "manualProjectSourceUploadKit.v1",
+  "createdAt": "2026-06-20T11:53:07Z",
+  "targetProjectUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9/project",
+  "targetProjectNameObserved": "remove-policy",
+  "sourceDirectory": "/home/nixos/work/gen2-chatgpt-two-thread-packet-proof-260620/project-source-upload-260620-gen2-split",
+  "fileCount": 13,
+  "hashFile": "files.sha256",
+  "policyStatus": "PASS",
+  "packetStatus": "PASS",
+  "transportStatus": "PENDING_USER_PROVIDED_PROJECT_SOURCE_SURFACE",
+  "forbiddenFallbacks": ["inline-source-body", "thread-attachment", "base64"],
+  "nextThreadFunction": "impl-work"
+}

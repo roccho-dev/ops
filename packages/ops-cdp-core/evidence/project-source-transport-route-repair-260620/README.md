@@ -76,3 +76,11 @@ durable, authenticated Project Source transport route:
 6. require worker-readable readback before any semantic work continues.
 
 Until that route exists, the Gen2 work/review proof remains incomplete.
+
+## Manual Continuation Kit
+
+`manual-project-source-upload-kit-260620/` records a Gen1-reviewed transport-only
+continuation kit for a user-provided Project Source upload surface. It is not
+completion proof. It preserves the same fixed revisioned packet files, local
+hashes, forbidden fallbacks, and Gen1 readback gate while automation remains
+blocked.
