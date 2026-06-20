@@ -53,6 +53,35 @@ grep -q '"gate_id":"policy-absent-consumers-pass","status":"blocked"' "$work/del
 grep -q '"gate_id":"deletion-approved","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
 grep -q '"consumerPassedWithoutPolicyGit": false' "$work/deletion-readiness/absent-simulation.json"
 
+grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"consumerProofsPass": false' "$work/deletion-readiness.stdout.json"
+
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --repo-root /home/nixos/repos/bootstrap \
+  --consumer-proof-command 'printf consumer-proof-pass' \
+  --out-dir "$work/deletion-readiness-consumer-proof-pass" > "$work/deletion-readiness-consumer-proof-pass.stdout.json"; then
+  echo "deletion readiness unexpectedly passed with only consumer proof command" >&2
+  exit 1
+fi
+grep -q '"consumerProofsPass": true' "$work/deletion-readiness-consumer-proof-pass.stdout.json"
+grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"pass"' "$work/deletion-readiness-consumer-proof-pass/deletion-readiness-gates.jsonl"
+grep -q '"status":"pass"' "$work/deletion-readiness-consumer-proof-pass/consumer-proof-results.jsonl"
+grep -q '"cutoverReady": false' "$work/deletion-readiness-consumer-proof-pass.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/deletion-readiness-consumer-proof-pass.stdout.json"
+
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --repo-root /home/nixos/repos/bootstrap \
+  --consumer-proof-command 'printf consumer-proof-fail >&2; exit 7' \
+  --out-dir "$work/deletion-readiness-consumer-proof-fail" > "$work/deletion-readiness-consumer-proof-fail.stdout.json"; then
+  echo "deletion readiness unexpectedly passed with failing consumer proof command" >&2
+  exit 1
+fi
+grep -q '"consumerProofsPass": false' "$work/deletion-readiness-consumer-proof-fail.stdout.json"
+grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$work/deletion-readiness-consumer-proof-fail/deletion-readiness-gates.jsonl"
+grep -q '"exitCode":7' "$work/deletion-readiness-consumer-proof-fail/consumer-proof-results.jsonl"
+
 if policy-semantic-compiler review-semantic-coverage \
   --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
   --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \

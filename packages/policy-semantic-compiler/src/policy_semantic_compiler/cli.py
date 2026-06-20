@@ -1859,12 +1859,57 @@ def deletion_run_absent_simulation(policy_root: Path, out_dir: Path) -> dict:
     }
 
 
+
+def deletion_run_consumer_proof_commands(commands: list[str]) -> list[dict]:
+    results: list[dict] = []
+    for index, command in enumerate(commands, start=1):
+        try:
+            completed = subprocess.run(
+                command,
+                shell=True,
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+            results.append(
+                {
+                    "kind": "policyDeletion.consumerProofResult.v1",
+                    "id": f"consumer-proof-{index}",
+                    "command": command,
+                    "exitCode": completed.returncode,
+                    "status": "pass" if completed.returncode == 0 else "blocked",
+                    "stdoutSnippet": completed.stdout[:4000],
+                    "stderrSnippet": completed.stderr[:4000],
+                    "claimAllowed": False,
+                    "cutoverReady": False,
+                    "policyDeletionApproved": False,
+                }
+            )
+        except subprocess.TimeoutExpired as exc:
+            results.append(
+                {
+                    "kind": "policyDeletion.consumerProofResult.v1",
+                    "id": f"consumer-proof-{index}",
+                    "command": command,
+                    "exitCode": None,
+                    "status": "blocked",
+                    "error": "timeout",
+                    "stdoutSnippet": (exc.stdout or "")[:4000] if isinstance(exc.stdout, str) else "",
+                    "stderrSnippet": (exc.stderr or "")[:4000] if isinstance(exc.stderr, str) else "",
+                    "claimAllowed": False,
+                    "cutoverReady": False,
+                    "policyDeletionApproved": False,
+                }
+            )
+    return results
+
 def command_review_deletion_readiness(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     roots = [Path(item) for item in (args.repo_root or [])]
     reference_rows = deletion_scan_roots(roots)
     absent = deletion_run_absent_simulation(Path(args.policy_root), out_dir)
+    consumer_proofs = deletion_run_consumer_proof_commands(args.consumer_proof_command or [])
     active_refs = [row for row in reference_rows if row.get("activeRuntimeCandidate")]
     missing_scan_roots = [row for row in reference_rows if row.get("referenceClass") == "missing-scan-root"]
     deletion_approved = False
@@ -1872,10 +1917,13 @@ def command_review_deletion_readiness(args: argparse.Namespace) -> int:
     typed_gate(gates, "scan-roots-present", len(missing_scan_roots) == 0 and bool(roots), {"missingScanRootCount": len(missing_scan_roots), "missingScanRoots": missing_scan_roots[:25], "scannedRootCount": len(roots)})
     typed_gate(gates, "active-policy-consumers-zero", len(active_refs) == 0 and len(missing_scan_roots) == 0, {"activeRuntimeReferenceCount": len(active_refs), "activeRuntimeReferences": active_refs[:25]})
     typed_gate(gates, "policy-absent-consumers-pass", absent.get("consumerPassedWithoutPolicyGit") is True, {"absentSimulation": absent})
+    consumer_proofs_pass = bool(consumer_proofs) and all(row.get("status") == "pass" for row in consumer_proofs)
+    typed_gate(gates, "explicit-consumer-proofs-pass", consumer_proofs_pass, {"consumerProofCount": len(consumer_proofs), "consumerProofs": consumer_proofs[:25]})
     typed_gate(gates, "deletion-approved", deletion_approved, {"policyDeletionApproved": deletion_approved, "reason": "owner deletion approval is not accepted in this review"})
     typed_gate(gates, "deletion-readiness-does-not-claim-cutover", True, {"cutoverReady": False, "policyDeletionApproved": False})
     jsonl_write(out_dir / "consumer-references.jsonl", reference_rows)
     jsonl_write(out_dir / "deletion-readiness-gates.jsonl", gates)
+    jsonl_write(out_dir / "consumer-proof-results.jsonl", consumer_proofs)
     (out_dir / "absent-simulation.json").write_text(json.dumps(absent, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     ok = all(row.get("status") == "pass" for row in gates)
     manifest = {
@@ -1886,7 +1934,9 @@ def command_review_deletion_readiness(args: argparse.Namespace) -> int:
         "policyDeletionApproved": False,
         "activeRuntimeReferenceCount": len(active_refs),
         "policyAbsentConsumersPass": absent.get("consumerPassedWithoutPolicyGit") is True,
-        "outputs": {"consumerReferences": "consumer-references.jsonl", "gates": "deletion-readiness-gates.jsonl", "absentSimulation": "absent-simulation.json"},
+        "consumerProofsPass": consumer_proofs_pass,
+        "consumerProofCount": len(consumer_proofs),
+        "outputs": {"consumerReferences": "consumer-references.jsonl", "gates": "deletion-readiness-gates.jsonl", "absentSimulation": "absent-simulation.json", "consumerProofResults": "consumer-proof-results.jsonl"},
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, sort_keys=True))
@@ -2042,6 +2092,7 @@ def main(argv: list[str] | None = None) -> int:
     deletion_parser = sub.add_parser("review-deletion-readiness")
     deletion_parser.add_argument("--policy-root", default=str(DEFAULT_POLICY_ROOT))
     deletion_parser.add_argument("--repo-root", action="append")
+    deletion_parser.add_argument("--consumer-proof-command", action="append")
     deletion_parser.add_argument("--out-dir", required=True)
     deletion_parser.set_defaults(func=command_review_deletion_readiness)
     fixture_parser = sub.add_parser("check-fixtures")

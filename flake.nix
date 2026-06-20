@@ -413,6 +413,26 @@
                 grep -q '"policyDeletionApproved": false' "$out/deletion-readiness.stdout.json"
                 grep -q '"gate_id":"active-policy-consumers-zero","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
                 grep -q '"gate_id":"policy-absent-consumers-pass","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                grep -q '"consumerProofsPass": false' "$out/deletion-readiness.stdout.json"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root ${./packages/policy-semantic-compiler} \
+                  --consumer-proof-command 'printf consumer-proof-pass' \
+                  --out-dir "$out/deletion-readiness-consumer-proof-pass" \
+                  > "$out/deletion-readiness-consumer-proof-pass.stdout.json"
+                grep -q '"consumerProofsPass": true' "$out/deletion-readiness-consumer-proof-pass.stdout.json"
+                grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"pass"' "$out/deletion-readiness-consumer-proof-pass/deletion-readiness-gates.jsonl"
+                grep -q '"status":"pass"' "$out/deletion-readiness-consumer-proof-pass/consumer-proof-results.jsonl"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root ${./packages/policy-semantic-compiler} \
+                  --consumer-proof-command 'printf consumer-proof-fail >&2; exit 7' \
+                  --out-dir "$out/deletion-readiness-consumer-proof-fail" \
+                  > "$out/deletion-readiness-consumer-proof-fail.stdout.json"
+                grep -q '"consumerProofsPass": false' "$out/deletion-readiness-consumer-proof-fail.stdout.json"
+                grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$out/deletion-readiness-consumer-proof-fail/deletion-readiness-gates.jsonl"
+                grep -q '"exitCode":7' "$out/deletion-readiness-consumer-proof-fail/consumer-proof-results.jsonl"
                 ! policy-semantic-compiler review-deletion-readiness \
                   --policy-root "$out/missing-policy-root" \
                   --repo-root "$out/does-not-exist" \
