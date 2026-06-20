@@ -14,6 +14,7 @@ mkdir -p "$work/adrs-projection-fixture-only"
 mkdir -p "$work/source-span-review-batches"
 mkdir -p "$work/source-span-review-assignments"
 mkdir -p "$work/source-span-review-completion-blocked" "$work/source-span-review-completion-accepted"
+mkdir -p "$work/source-span-dispositions-blocked" "$work/source-span-dispositions-accepted"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -236,6 +237,28 @@ policy-semantic-compiler check-source-span-review-completion \
   --policy-rev rev-good \
   --out-dir "$work/source-span-review-completion-accepted" > "$work/source-span-review-completion-accepted.stdout.json"
 grep -q '"ok": true' "$work/source-span-review-completion-accepted.stdout.json"
+
+if policy-semantic-compiler materialize-accepted-source-span-dispositions \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-results "$work/source-span-review-results.jsonl" \
+  --discussion-results "$work/source-span-discussion-results.jsonl" \
+  --policy-rev wrong-rev \
+  --out-dir "$work/source-span-dispositions-blocked" > "$work/source-span-dispositions-blocked.stdout.json"; then
+  echo "source span disposition materialization unexpectedly passed for wrong policy rev" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/source-span-dispositions-blocked.stdout.json"
+policy-semantic-compiler materialize-accepted-source-span-dispositions \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-results "$work/source-span-review-results.jsonl" \
+  --discussion-results "$work/source-span-discussion-results.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-dispositions-accepted" > "$work/source-span-dispositions-accepted.stdout.json"
+grep -q '"ok": true' "$work/source-span-dispositions-accepted.stdout.json"
+grep -q '"kind":"policy.sourceSpanDisposition.v1"' "$work/source-span-dispositions-accepted/policy.sourceSpanDisposition.v1.jsonl"
+grep -q '"accepted":true' "$work/source-span-dispositions-accepted/policy.sourceSpanDisposition.v1.jsonl"
 
 if policy-semantic-compiler review-adrs-projection-duckdb \
   --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \

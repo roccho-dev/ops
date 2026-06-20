@@ -1358,6 +1358,97 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
     return 0 if ok else 1
 
 
+def command_materialize_accepted_source_span_dispositions(args: argparse.Namespace) -> int:
+    assignments = read_jsonl(Path(args.assignments))
+    review_results = read_jsonl(Path(args.review_results))
+    discussion_results = read_jsonl(Path(args.discussion_results))
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy_rev = str(args.policy_rev)
+    completion_args = argparse.Namespace(
+        assignments=args.assignments,
+        required_discussions=args.required_discussions,
+        review_results=args.review_results,
+        discussion_results=args.discussion_results,
+        policy_rev=policy_rev,
+        out_dir=str(out_dir / "completion-check"),
+    )
+    completion_rc = command_check_source_span_review_completion(completion_args)
+    if completion_rc != 0:
+        manifest = {
+            "kind": "policy.sourceSpanDispositionMaterializationRun.v1",
+            "ok": False,
+            "policyRev": policy_rev,
+            "accepted": False,
+            "claimAllowed": False,
+            "generatedIsAuthority": False,
+            "policyDeletionApproved": False,
+            "blocker": "source span review completion check did not pass",
+            "outputs": {"completionCheck": "completion-check/manifest.json"},
+            "status": "blocked",
+        }
+        (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(manifest, sort_keys=True))
+        return 1
+
+    result_by_batch: dict[str, list[dict]] = {}
+    for row in review_results:
+        if row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1" and row.get("status") == "accepted":
+            result_by_batch.setdefault(str(row.get("batchId")), []).append(row)
+    discussion_by_batch = {
+        str(row.get("batchId")): row
+        for row in discussion_results
+        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1" and row.get("status") == "accepted"
+    }
+    assignments_by_batch: dict[str, list[dict]] = {}
+    for row in assignments:
+        assignments_by_batch.setdefault(str(row.get("batchId")), []).append(row)
+
+    disposition_rows: list[dict] = []
+    for batch_id, batch_assignments in sorted(assignments_by_batch.items()):
+        source_span_ids = sorted({span_id for assignment in batch_assignments for span_id in as_list(assignment.get("sourceSpanIds")) if span_id})
+        reviewers = sorted({str(row.get("reviewerId")) for row in result_by_batch.get(batch_id, []) if row.get("reviewerId")})
+        discussion = discussion_by_batch.get(batch_id, {})
+        disposition_rows.append(
+            {
+                "kind": "policy.sourceSpanDisposition.v1",
+                "id": "policy-source-span-disposition-" + sha256_bytes((batch_id + "\0" + "\0".join(source_span_ids)).encode("utf-8"))[:20],
+                "policyRev": policy_rev,
+                "batchId": batch_id,
+                "sourceSpanIds": source_span_ids,
+                "sourceSpanCount": len(source_span_ids),
+                "disposition": str(args.disposition),
+                "reviewerIds": reviewers,
+                "directCrossDiscussionId": discussion.get("id"),
+                "accepted": True,
+                "status": "accepted",
+                "fixtureOnly": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+            }
+        )
+    jsonl_write(out_dir / "policy.sourceSpanDisposition.v1.jsonl", disposition_rows)
+    manifest = {
+        "kind": "policy.sourceSpanDispositionMaterializationRun.v1",
+        "ok": True,
+        "policyRev": policy_rev,
+        "accepted": True,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "batchCount": len(disposition_rows),
+        "sourceSpanCount": sum(row["sourceSpanCount"] for row in disposition_rows),
+        "outputs": {
+            "sourceSpanDispositions": "policy.sourceSpanDisposition.v1.jsonl",
+            "completionCheck": "completion-check/manifest.json",
+        },
+        "status": "accepted-dispositions-materialized",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0
+
+
 def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
     table_defaults = {
         "sources": [],
@@ -2510,6 +2601,15 @@ def main(argv: list[str] | None = None) -> int:
     completion_parser.add_argument("--policy-rev", required=True)
     completion_parser.add_argument("--out-dir", required=True)
     completion_parser.set_defaults(func=command_check_source_span_review_completion)
+    disposition_parser = sub.add_parser("materialize-accepted-source-span-dispositions")
+    disposition_parser.add_argument("--assignments", required=True)
+    disposition_parser.add_argument("--required-discussions", required=True)
+    disposition_parser.add_argument("--review-results", required=True)
+    disposition_parser.add_argument("--discussion-results", required=True)
+    disposition_parser.add_argument("--policy-rev", required=True)
+    disposition_parser.add_argument("--disposition", default="represented")
+    disposition_parser.add_argument("--out-dir", required=True)
+    disposition_parser.set_defaults(func=command_materialize_accepted_source_span_dispositions)
     args = parser.parse_args(argv)
     return args.func(args)
 

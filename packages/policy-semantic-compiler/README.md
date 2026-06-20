@@ -123,6 +123,11 @@ accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`
 with peer replies read and no remaining objections. Missing review results or
 discussion results keep the gate blocked.
 
+`materialize-accepted-source-span-dispositions` emits accepted
+`policy.sourceSpanDisposition.v1` rows only after the completion checker passes.
+It is still not a coverage proof or semantic equivalence proof; those remain
+separate ADRS records and DuckDB gates.
+
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted
 coverage proof records and fresh GenX semantic reconstruction/review has no
