@@ -1,0 +1,57 @@
+{
+  "kind": "policy.semanticGraphPartialGapControls.gen2ImplReviewEvidenceSummary.v1",
+  "date": "2026-06-20",
+  "conversationUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "fixedMirror": "https://github.com/roccho-dev/public/tree/6ee30cccaace04e1dcc68d3bd8967931bf16425f",
+  "mirrorCommit": "6ee30cccaace04e1dcc68d3bd8967931bf16425f",
+  "refs": {
+    "policyInput": "334997669f1889a8e2658730c616d2d4510d4536",
+    "ops": "proposal/project-source-transport-route-repair-260620@3a3aad63954142b5516d3d02141b2f05f5f81b74",
+    "adrs": "proposal/gen2-handoff-evidence-260620@9d6a15347759d3327e56a1836be6972726e502ec"
+  },
+  "gen2": {
+    "actor": "Gen2 ChatGPT",
+    "threadFunction": "impl-review",
+    "readbackCompleted": true,
+    "reviewPerformed": true,
+    "implementationPerformed": false,
+    "verdict": "PASS",
+    "blockers": [],
+    "acceptedAsSyntheticGapDetectionEvidence": true,
+    "passed": 14,
+    "total": 14
+  },
+  "authorityBoundary": {
+    "degradedExternalReadableMirrorEvidenceOnly": true,
+    "notProjectSourceProof": true,
+    "mirrorIsNotCanonicalSsot": true,
+    "negativeControlPassIsSyntheticAndGapDetectionHarnessEvidenceOnly": true,
+    "gapDetectedPassMeansDetectedNotResolved": true,
+    "baselineDeletionReadinessDecisionRemainsBlock": true,
+    "deletionApproval": false,
+    "cutoverApproval": false,
+    "semanticApproval": false,
+    "completionApproval": false,
+    "mergeApproval": false,
+    "canonicalWrite": false,
+    "ssotWrite": false
+  },
+  "remainingGaps": [
+    "indirect active runtime policy references are still not classified as active by the baseline extractor",
+    "quoted anti-pattern obligations are still extracted by the heuristic and need typed semantics to suppress",
+    "superseded/generated/evidence/quoted authority material is exposed but not automatically excluded from current authority",
+    "wrong-file source span target still needs a fixture beyond wrong-line bounds",
+    "cross-file conflicting edges and supersession precedence remain future controls"
+  ],
+  "remainingImprovements": [
+    "add wrong-file source span target fixture",
+    "add cross-file conflict controls and supersession-precedence controls",
+    "promote from heuristic keyword extraction to accepted typed semantic graph compiler",
+    "classify indirect active runtime references as active when semantically equivalent",
+    "suppress quoted anti-pattern obligations and non-current authority material through typed semantics"
+  ],
+  "readLimitations": [
+    "large JSONL bodies metadata-only; no full row-by-row validation"
+  ],
+  "nextWorkUnit": "wrong-file source span plus cross-file conflict and supersession precedence controls, then typed semantic compiler lane"
+}

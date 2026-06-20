@@ -1,0 +1,234 @@
+GEN2_PARTIAL_GAP_CONTROLS_IMPL_REVIEW = {
+"actor": "Gen2 ChatGPT",
+"threadFunction": "impl-review",
+"reviewPerformed": true,
+"implementationPerformed": false,
+"fixedMirror": {
+"url": "https://github.com/roccho-dev/public/tree/6ee30cccaace04e1dcc68d3bd8967931bf16425f
+",
+"commit": "6ee30cccaace04e1dcc68d3bd8967931bf16425f",
+"accessMethod": "raw.githubusercontent.com paths derived from the fixed mirror commit"
+},
+"authorityBoundary": {
+"degradedExternalMirrorEvidenceOnly": true,
+"notProjectSourceProof": true,
+"mirrorIsNotCanonicalSsot": true,
+"deletionApproval": false,
+"cutoverApproval": false,
+"semanticApproval": false,
+"completionApproval": false,
+"mergeApproval": false,
+"canonicalWrite": false,
+"ssotWrite": false,
+"evidence": "README says this mirror is degraded external-readable evidence only and not Project Source proof, canonical SSOT, or approval for retirement, deletion, cutover, merge, completion, semantic approval, canonical write, or SSOT write. 
+GitHub
+"
+},
+"verdict": "PASS",
+"negativeControlReview": {
+"acceptableAsSyntheticHarnessEvidence": true,
+"notDeletionReadinessEvidence": true,
+"observedDecision": "PASS",
+"passed": 14,
+"total": 14,
+"visibleControlNames": [
+"missing-deny-edge",
+"missing-obligation-edge",
+"missing-activation-edge",
+"source-file-with-no-edges",
+"active-consumer-ref-blocks",
+"source-node-hashes-validate",
+"stale-source-node-detected",
+"edge-source-spans-validate",
+"removed-source-span-detected",
+"wrong-line-source-span-detected",
+"consumer-doc-path-refs-not-active",
+"consumer-indirect-active-gap-detected",
+"authority-currentness-gaps-detected",
+"obligation-quoted-antipattern-gap-detected"
+],
+"challenge": "Accepted only at the stated ceiling: synthetic fixture controls and gap-detection controls. The result file reports 14/14 PASS, but the same artifact scope is explicitly not deletion readiness. 
+GitHub
+",
+"independentRerun": {
+"acceptable": true,
+"exitCode": 0,
+"resultSha256": "3d5db6014a68105e2eb744bf41a466d9493748e7b1fb5012351db671333131b4",
+"evidence": "Independent rerun receipt records exitCode 0 and the same negative-control result path/hash. 
+GitHub
+"
+}
+},
+"traceabilityReview": {
+"acceptable": true,
+"plannedClassCount": 13,
+"executedControlCount": 14,
+"statusDistinctionOk": true,
+"statusesObserved": [
+"executed-pass",
+"executed-pass-with-gap",
+"gap-detected-pass"
+],
+"challenge": "Traceability separates normal executed passes from passes that still carry gaps. It also records gap-detected-pass for cases where the harness exposed an unresolved detection/classification problem rather than resolving it. 
+GitHub
+"
+},
+"gapDetectionReview": {
+"acceptable": true,
+"gapDetectedPassDoesNotPretendResolved": true,
+"examples": [
+{
+"control": "consumer-indirect-active-gap-detected",
+"meaning": "indirect active runtime reference is still not detected by the current heuristic; the gap is explicit"
+},
+{
+"control": "authority-currentness-gaps-detected",
+"meaning": "suspicious authority edges from superseded/generated/evidence/quoted material are exposed, not automatically excluded"
+},
+{
+"control": "obligation-quoted-antipattern-gap-detected",
+"meaning": "quoted anti-pattern obligation false positive is exposed as a remaining semantic gap"
+}
+],
+"evidence": "The results file marks these controls as passed because the gaps are detected/exposed, and the traceability file lists the same unresolved gaps. 
+GitHub
++1
+"
+},
+"baselineDecisionBoundary": {
+"decisionRemains": "BLOCK",
+"notDeletionReady": true,
+"blockersPreserved": [
+{
+"name": "all-source-files-have-semantic-edges",
+"actual": 64,
+"expected": 0,
+"status": "BLOCK"
+},
+{
+"name": "active-policy-repo-consumer-refs-eliminated",
+"actual": 89,
+"expected": 0,
+"status": "BLOCK"
+},
+{
+"name": "heuristic-extraction-not-final-authority",
+"actual": "heuristic-keyword-baseline",
+"expected": "accepted typed semantic graph compiler",
+"status": "BLOCK"
+}
+],
+"supportingFacts": {
+"coverageRatio": 0.9017,
+"filesWithEdges": 587,
+"filesWithoutEdges": 64,
+"consumerRefCount": 89,
+"semanticEdgeCount": 24109,
+"sourceNodeCount": 651
+},
+"evidence": "REVIEW_SUMMARY and deletion-readiness gates both keep the decision at BLOCK with 64 files without edges, 89 consumer refs, and heuristic extraction not being final authority. 
+GitHub
++1
+"
+},
+"findings": [
+{
+"id": "F1",
+"severity": "pass",
+"finding": "The 14 controls are acceptable as synthetic measurement-harness and gap-detection evidence only.",
+"evidence": "negative_control_results: decision PASS, passed 14, total 14. 
+GitHub
+"
+},
+{
+"id": "F2",
+"severity": "pass",
+"finding": "Traceability correctly distinguishes executed-pass, executed-pass-with-gap, and gap-detected-pass.",
+"evidence": "traceability plannedToExecuted entries use all three statuses and preserve notes. 
+GitHub
+"
+},
+{
+"id": "F3",
+"severity": "pass",
+"finding": "gap-detected-pass is used as a visible unresolved-gap marker, not a semantic-resolution claim.",
+"evidence": "remainingControlGaps explicitly list unresolved indirect refs, quoted obligation extraction, authority currentness exposure, wrong-file span fixture, and future conflict/supersession controls. 
+GitHub
+"
+},
+{
+"id": "F4",
+"severity": "pass",
+"finding": "No false deletion, cutover, semantic approval, merge, canonical write, or SSOT write claim was found in the inspected review entrypoints.",
+"evidence": "README and REVIEW_SUMMARY mustNotClaim list preserve these boundaries. 
+GitHub
++1
+"
+},
+{
+"id": "F5",
+"severity": "non-blocking-limitation",
+"finding": "policy_negative_controls.json is a plan artifact marked planned-not-executed; the actual execution evidence is in policy_negative_control_results.json and reconciled by traceability.",
+"evidence": "plan says status planned-not-executed; results and traceability provide executed 14-control evidence. 
+GitHub
++2
+GitHub
++2
+"
+}
+],
+"blockers": [],
+"remainingGaps": [
+"indirect active runtime policy references are still not classified as active by the baseline extractor",
+"quoted anti-pattern obligations are still extracted by the heuristic and need typed semantics to suppress",
+"superseded/generated/evidence/quoted authority material is exposed but not automatically excluded from current authority",
+"wrong-file source span target still needs a fixture beyond wrong-line bounds",
+"cross-file conflicting edges and supersession precedence remain future controls"
+],
+"remainingImprovements": [
+"Add wrong-file source span target fixture, not only wrong-line/out-of-bounds coverage.",
+"Add cross-file conflict controls and supersession-precedence controls.",
+"Promote from heuristic keyword extraction to accepted typed semantic graph compiler before any deletion-readiness claim.",
+"Classify indirect active runtime references as active when semantically equivalent to direct runtime dependency.",
+"Suppress quoted anti-pattern obligations and non-current authority material through typed semantics rather than heuristic filtering."
+],
+"readLimitations": {
+"largeJsonlBodiesFullyRead": false,
+"metadataOnlyLargeFiles": [
+"baseline-reviewable/policy_semantic_edges.jsonl",
+"baseline-reviewable/policy_source_nodes.jsonl",
+"baseline-reviewable/policy_consumer_refs.jsonl",
+"baseline-reviewable/policy_untyped_sources.jsonl",
+"baseline-reviewable/shards/policy_semantic_edges/part-000.jsonl through part-024.jsonl",
+"baseline-reviewable/shards/policy_source_nodes/part-000.jsonl"
+],
+"metadataSourcesUsed": [
+"baseline-reviewable/manifest.json",
+"baseline-reviewable/policy_semantic_edges.index.json",
+"baseline-reviewable/policy_source_nodes.index.json",
+"baseline-reviewable/policy_consumer_refs.index.json",
+"baseline-reviewable/policy_untyped_sources.index.json",
+"baseline-reviewable/policy_semantic_edges.shards.json",
+"baseline-reviewable/policy_source_nodes.shards.json",
+"files.sha256"
+],
+"evidence": "Shard manifests and indexes give counts and hashes for 24,109 semantic edges, 651 source nodes, 89 consumer refs, and 64 untyped sources; I did not perform full row-by-row validation of the large JSONL/shard bodies. 
+GitHub
++5
+GitHub
++5
+GitHub
++5
+"
+},
+"mustNotClaim": [
+"policy.git retirement",
+"policy.git deletion",
+"cutover approval",
+"merge approval",
+"completion approval",
+"semantic approval",
+"canonical write",
+"SSOT write"
+]
+}
