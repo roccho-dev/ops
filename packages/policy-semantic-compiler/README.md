@@ -96,6 +96,14 @@ authority. The accepted coverage proof must be `accepted:true`,
 where `memoryUsed:false`, `policyBodyUsedAsSource:false`, and
 `noRemainingObjections:true`.
 
+When blocked, the command also emits detail JSONL files that can be used as the
+next ADRS review queue input:
+
+- `missing-accepted-span-dispositions.jsonl`
+- `missing-accepted-coverage.jsonl`
+- `candidate-only-span-dispositions.jsonl`
+- `candidate-only-file-dispositions.jsonl`
+
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted
 coverage proof records and fresh GenX semantic reconstruction/review has no

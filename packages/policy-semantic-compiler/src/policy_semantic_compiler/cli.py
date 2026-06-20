@@ -752,6 +752,10 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
 
     dispositions_path = optional_files["dispositions"]
     csv_path = out_dir / "adrs-projection-duckdb-gates.csv"
+    missing_span_dispositions_csv_path = out_dir / "missing-accepted-span-dispositions.csv"
+    missing_coverage_csv_path = out_dir / "missing-accepted-coverage.csv"
+    candidate_span_dispositions_csv_path = out_dir / "candidate-only-span-dispositions.csv"
+    candidate_file_dispositions_csv_path = out_dir / "candidate-only-file-dispositions.csv"
     runner = out_dir / "adrs-projection-duckdb.sql"
     expected_rev = str(args.policy_rev)
     dispositions_source = (
@@ -992,6 +996,53 @@ WHERE generatedIsAuthority <> false OR policyDeletionApproved <> false;
 
 COPY (SELECT gate_id, status, blocker, count FROM gate_results ORDER BY gate_id)
 TO {sql_quote(str(csv_path))} (HEADER, DELIMITER ',');
+
+COPY (
+  SELECT ss.id AS sourceSpanId,
+         ss.sourceFileId AS sourceFileId,
+         ss.sourceTrace.path AS sourcePath,
+         ss.sourceTrace.startLine AS startLine,
+         ss.sourceTrace.endLine AS endLine
+  FROM source_spans ss
+  LEFT JOIN accepted_span_disposition_ids d ON d.id = ss.id
+  WHERE d.id IS NULL
+  ORDER BY sourcePath, startLine, sourceSpanId
+) TO {sql_quote(str(missing_span_dispositions_csv_path))} (HEADER, DELIMITER ',');
+
+COPY (
+  SELECT r.id AS sourceSpanId,
+         ss.sourceFileId AS sourceFileId,
+         ss.sourceTrace.path AS sourcePath,
+         ss.sourceTrace.startLine AS startLine,
+         ss.sourceTrace.endLine AS endLine
+  FROM review_required_spans r
+  JOIN source_spans ss ON ss.id = r.id
+  LEFT JOIN covered_span_ids c ON c.id = r.id
+  WHERE c.id IS NULL
+  ORDER BY sourcePath, startLine, sourceSpanId
+) TO {sql_quote(str(missing_coverage_csv_path))} (HEADER, DELIMITER ',');
+
+COPY (
+  SELECT id AS dispositionId,
+         status,
+         accepted,
+         policyRev,
+         disposition,
+         sourceSpanIds
+  FROM span_dispositions
+  WHERE status IS NOT NULL AND status <> 'accepted'
+  ORDER BY dispositionId
+) TO {sql_quote(str(candidate_span_dispositions_csv_path))} (HEADER, DELIMITER ',');
+
+COPY (
+  SELECT id AS dispositionId,
+         sourceFileId,
+         status,
+         requiresIndividualSemanticApproval
+  FROM dispositions
+  WHERE status IS NOT NULL AND status <> 'accepted'
+  ORDER BY sourceFileId, dispositionId
+) TO {sql_quote(str(candidate_file_dispositions_csv_path))} (HEADER, DELIMITER ',');
 """.lstrip(),
         encoding="utf-8",
     )
@@ -1030,6 +1081,39 @@ TO {sql_quote(str(csv_path))} (HEADER, DELIMITER ',');
             }
             for row in csv.DictReader(handle)
         ]
+
+    detail_outputs = {
+        "missingAcceptedSpanDispositions": (
+            missing_span_dispositions_csv_path,
+            out_dir / "missing-accepted-span-dispositions.jsonl",
+            "policySemantic.missingAcceptedSpanDisposition.v1",
+        ),
+        "missingAcceptedCoverage": (
+            missing_coverage_csv_path,
+            out_dir / "missing-accepted-coverage.jsonl",
+            "policySemantic.missingAcceptedCoverage.v1",
+        ),
+        "candidateOnlySpanDispositions": (
+            candidate_span_dispositions_csv_path,
+            out_dir / "candidate-only-span-dispositions.jsonl",
+            "policySemantic.candidateOnlySpanDisposition.v1",
+        ),
+        "candidateOnlyFileDispositions": (
+            candidate_file_dispositions_csv_path,
+            out_dir / "candidate-only-file-dispositions.jsonl",
+            "policySemantic.candidateOnlyFileDisposition.v1",
+        ),
+    }
+    for _name, (csv_detail_path, jsonl_detail_path, kind) in detail_outputs.items():
+        with csv_detail_path.open("r", encoding="utf-8", newline="") as handle:
+            rows = []
+            for index, row in enumerate(csv.DictReader(handle), start=1):
+                clean_row = {key: value for key, value in row.items() if value not in {"", None}}
+                clean_row["kind"] = kind
+                clean_row["rowNumber"] = index
+                rows.append(clean_row)
+        jsonl_write(jsonl_detail_path, rows)
+
     ok = bool(gates) and all(row["status"] == "pass" for row in gates)
     blockers = [row["blocker"] for row in gates if row["status"] != "pass" and row["blocker"]]
     jsonl_write(out_dir / "adrs-projection-duckdb-gates.jsonl", gates)
@@ -1046,6 +1130,10 @@ TO {sql_quote(str(csv_path))} (HEADER, DELIMITER ',');
         "outputs": {
             "gates": "adrs-projection-duckdb-gates.jsonl",
             "gatesCsv": "adrs-projection-duckdb-gates.csv",
+            "missingAcceptedSpanDispositions": "missing-accepted-span-dispositions.jsonl",
+            "missingAcceptedCoverage": "missing-accepted-coverage.jsonl",
+            "candidateOnlySpanDispositions": "candidate-only-span-dispositions.jsonl",
+            "candidateOnlyFileDispositions": "candidate-only-file-dispositions.jsonl",
             "sql": "adrs-projection-duckdb.sql",
         },
     }
