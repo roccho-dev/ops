@@ -1,0 +1,65 @@
+{
+  "kind": "policy.semanticGraphBaselineReviewable.gen2ImplReviewEvidenceSummary.v1",
+  "date": "2026-06-20",
+  "conversationUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a369e4c-4f98-83ee-bd85-240998e068b3",
+  "fixedMirror": "https://github.com/roccho-dev/public/tree/90fd045fd268bb01683d4a8526260fd230542e08",
+  "mirrorCommit": "90fd045fd268bb01683d4a8526260fd230542e08",
+  "refs": {
+    "policyInput": "334997669f1889a8e2658730c616d2d4510d4536",
+    "ops": "proposal/project-source-transport-route-repair-260620@d856b5688d7d4e45d641c61e31078c82f68a9d85",
+    "adrs": "proposal/gen2-handoff-evidence-260620@fee3bc1f15d58fdd6962c0cd468e0485cd1ae506"
+  },
+  "gen2": {
+    "actor": "Gen2 ChatGPT",
+    "threadFunction": "impl-review",
+    "readbackCompleted": true,
+    "reviewPerformed": true,
+    "implementationPerformed": false,
+    "verdict": "PASS",
+    "reportedDecision": "BLOCK",
+    "decisionAcceptedAsImprovedBaselineEvidence": true,
+    "reviewAcceptedAsEvidence": true
+  },
+  "formatDeviation": {
+    "missingRequestedWrapperName": true,
+    "rawEvidencePreservedUnchanged": true
+  },
+  "authorityBoundary": {
+    "degradedExternalReadableMirrorEvidenceOnly": true,
+    "notProjectSourceProof": true,
+    "mirrorIsNotCanonicalSsot": true,
+    "retirementApproval": false,
+    "deletionApproval": false,
+    "cutoverApproval": false,
+    "mergeApproval": false,
+    "completionApproval": false,
+    "semanticApproval": false,
+    "canonicalWrite": false,
+    "ssotWrite": false
+  },
+  "acceptedReviewabilityArtifacts": [
+    "REVIEW_SUMMARY.json",
+    "semantic/source shard manifests",
+    "semantic/source/consumer/untyped indexes",
+    "policy_negative_controls.json as planned-not-executed",
+    "policy_rerun_transcript.json"
+  ],
+  "retainedReadLimitations": [
+    "no row-by-row validation of 24109 semantic edges",
+    "no full shard body validation",
+    "no row-by-row validation of 651 source nodes",
+    "no row-by-row validation of 89 consumer refs",
+    "no row-by-row validation of 64 untyped sources",
+    "no canonical Project Source or SSOT access by Gen2"
+  ],
+  "remainingImprovements": [
+    "execute negative controls and publish result records",
+    "add independent rerun receipt with command environment exit code hashes verifier identity",
+    "reduce untyped source files 64 to 0 through typed coverage or non-normative exclusions",
+    "reduce active policy repo consumer refs 89 to 0 with migration evidence and false-positive/false-negative review",
+    "replace heuristic-keyword-baseline with accepted typed semantic graph compiler",
+    "add compact row samples per shard or index bucket",
+    "map each blocking gate to next authority repo/worktree and non-approval boundary"
+  ],
+  "nextWorkUnit": "executed negative-control fixtures plus independent rerun receipt before source/consumer reduction"
+}

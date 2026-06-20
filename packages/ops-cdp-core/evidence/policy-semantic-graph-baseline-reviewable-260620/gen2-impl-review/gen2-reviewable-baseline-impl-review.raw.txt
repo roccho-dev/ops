@@ -1,0 +1,198 @@
+{
+"actor": "Gen2 ChatGPT",
+"threadFunction": "impl-review",
+"reviewPerformed": true,
+"implementationPerformed": false,
+"fixedMirror": {
+"url": "https://github.com/roccho-dev/public/tree/90fd045fd268bb01683d4a8526260fd230542e08
+",
+"commit": "90fd045fd268bb01683d4a8526260fd230542e08"
+},
+"authorityBoundary": {
+"degradedExternalReadableMirrorEvidenceOnly": true,
+"notProjectSourceProof": true,
+"mirrorIsNotCanonicalSsot": true,
+"retirementApproval": false,
+"deletionApproval": false,
+"cutoverApproval": false,
+"mergeApproval": false,
+"completionApproval": false,
+"semanticApproval": false,
+"canonicalWrite": false,
+"ssotWrite": false
+},
+"verdict": "PASS",
+"findings": [
+{
+"severity": "info",
+"item": "evidence boundary",
+"evidence": "README states this mirror is degraded external-readable evidence only, not Project Source proof, not canonical SSOT, and not approval for retirement, deletion, cutover, merge, completion, semantic approval, canonical write, or SSOT write. 
+GitHub
+",
+"reason": "The mirror preserves the required authority boundary.",
+"requiredFix": "None for this baseline evidence review."
+},
+{
+"severity": "info",
+"item": "review input manifest",
+"evidence": "REVIEW_INPUT_MANIFEST.json reports threadFunction=impl-review, decision=BLOCK, projectSourceProof=false, and canonicalSsot=false. 
+GitHub
+",
+"reason": "The input manifest aligns the actor/function and prevents promotion beyond degraded mirror evidence.",
+"requiredFix": "None for this baseline evidence review."
+},
+{
+"severity": "blocker",
+"item": "all-source-files-have-semantic-edges",
+"evidence": "REVIEW_SUMMARY and deletion-readiness gates report actual=64, expected=0, status=BLOCK. 
+GitHub
++1
+",
+"reason": "The baseline correctly fails closed because 64 source files have no semantic edges.",
+"requiredFix": "Add accepted typed semantic coverage for all source files, then regenerate the baseline from canonical evidence."
+},
+{
+"severity": "blocker",
+"item": "active-policy-repo-consumer-refs-eliminated",
+"evidence": "REVIEW_SUMMARY and gates report actual=89, expected=0, status=BLOCK; consumer index reports rowCount=89 with 21 active-runtime-candidate refs. 
+GitHub
++2
+GitHub
++2
+",
+"reason": "The baseline correctly blocks deletion readiness while policy repo references remain.",
+"requiredFix": "Migrate or classify active policy repo consumers to zero accepted active refs before any deletion-readiness claim."
+},
+{
+"severity": "blocker",
+"item": "heuristic-extraction-not-final-authority",
+"evidence": "Deletion-readiness gates report actual=heuristic-keyword-baseline, expected=accepted typed semantic graph compiler, status=BLOCK. 
+GitHub
+",
+"reason": "The baseline correctly refuses to treat heuristic extraction as final semantic authority.",
+"requiredFix": "Replace or supplement the heuristic baseline with an accepted typed semantic graph compiler and rerun."
+},
+{
+"severity": "major",
+"item": "negative controls",
+"evidence": "policy_negative_controls.json is status=planned-not-executed and lists dropped-deny-edge, weakened-obligation-edge, missing-activation-edge, removed-source-span, stale-source-node, and consumer-ref controls. 
+GitHub
+",
+"reason": "This is acceptable for an improved BLOCK baseline because it does not claim negative-control execution, but it is not enough for semantic approval or cutover readiness.",
+"requiredFix": "Execute these negative controls and publish machine-readable results before any higher verdict."
+},
+{
+"severity": "minor",
+"item": "rerun transcript",
+"evidence": "policy_rerun_transcript.json records the local command, policyRef, outputDir, and note that reviewers must still verify hashes and SSOT refs. 
+GitHub
+",
+"reason": "The transcript improves reproducibility but is still local proposal evidence, not independent rerun proof in this review.",
+"requiredFix": "Add independent rerun receipts with environment, command exit code, output hashes, and canonical input verification."
+},
+{
+"severity": "info",
+"item": "counterexamples",
+"evidence": "counterexamples.md lists decision=BLOCK, 64 untyped source files, 89 active policy repo consumer references, and extractor class=heuristic baseline, not accepted typed compiler. 
+GitHub
+",
+"reason": "Concrete counterexamples support the BLOCK decision rather than undermining it.",
+"requiredFix": "Keep counterexamples and update them after each baseline rerun."
+}
+],
+"baselineDecisionReview": {
+"reportedDecision": "BLOCK",
+"decisionAcceptedAsImprovedBaselineEvidence": true,
+"reason": "The improved baseline is acceptable as a first reproducible reviewable deletion-readiness baseline with a BLOCK result because it makes the blocking conditions explicit, keeps authority flags low, adds shard/index review surfaces, and does not claim deletion, cutover, semantic approval, completion, canonical write, or SSOT write."
+},
+"reviewabilityArtifacts": {
+"reviewSummary": "accepted",
+"shardManifests": "accepted",
+"indexes": "accepted",
+"negativeControls": "accepted",
+"rerunTranscript": "accepted"
+},
+"gateReview": [
+{
+"gate": "all-source-files-have-semantic-edges",
+"reportedStatus": "BLOCK",
+"accepted": true,
+"notes": "Coherent fail-closed gate: actual 64 untyped files vs expected 0."
+},
+{
+"gate": "all-required-edge-kinds-observed",
+"reportedStatus": "PASS",
+"accepted": true,
+"notes": "Graph coverage reports no missing edge kinds and observed activation, authority, consumer, deny, evidence, obligation, and replacement."
+},
+{
+"gate": "low-density-prose-reviewed",
+"reportedStatus": "PASS",
+"accepted": true,
+"notes": "Reported actual 0 vs expected 0; accepted only as heuristic baseline evidence, not semantic completeness."
+},
+{
+"gate": "active-policy-repo-consumer-refs-eliminated",
+"reportedStatus": "BLOCK",
+"accepted": true,
+"notes": "Coherent fail-closed gate: actual 89 consumer refs vs expected 0; consumer index splits 21 active-runtime-candidate and 68 non-active candidate rows."
+},
+{
+"gate": "heuristic-extraction-not-final-authority",
+"reportedStatus": "BLOCK",
+"accepted": true,
+"notes": "Correctly blocks any higher authority claim because the extractor class remains heuristic-keyword-baseline rather than accepted typed semantic graph compiler."
+}
+],
+"readLimitations": [
+{
+"file": "baseline-reviewable/policy_semantic_edges.jsonl",
+"limitation": "Did not validate all 24109 rows row-by-row; relied on REVIEW_SUMMARY, policy_semantic_edges.index.json, files.sha256, and shard manifest metadata.",
+"impact": "Supports acceptance only as degraded reviewable BLOCK baseline evidence, not full semantic validation."
+},
+{
+"file": "baseline-reviewable/shards/policy_semantic_edges/part-000.jsonl..part-024.jsonl",
+"limitation": "Did not read every shard body; inspected shard count, row ranges, byte counts, and hashes from policy_semantic_edges.shards.json.",
+"impact": "No claim of full shard-body validation."
+},
+{
+"file": "baseline-reviewable/policy_source_nodes.jsonl",
+"limitation": "Did not validate all 651 source-node rows row-by-row; relied on source-node index and shard manifest metadata.",
+"impact": "No claim of full source-node semantic validation."
+},
+{
+"file": "baseline-reviewable/policy_consumer_refs.jsonl",
+"limitation": "Did not inspect all 89 consumer reference rows; relied on consumer index and counterexample samples.",
+"impact": "Consumer-ref gate accepted as fail-closed BLOCK evidence only."
+},
+{
+"file": "baseline-reviewable/policy_untyped_sources.jsonl",
+"limitation": "Did not inspect all 64 untyped source rows; relied on untyped-source index and counterexample samples.",
+"impact": "Untyped-source gate accepted as fail-closed BLOCK evidence only."
+},
+{
+"file": "canonical Project Source and canonical SSOT",
+"limitation": "Not accessed; review used only the fixed public mirror.",
+"impact": "This review cannot upgrade the mirror to Project Source proof, canonical SSOT proof, deletion readiness, or cutover readiness."
+}
+],
+"remainingImprovements": [
+"Execute negative controls and publish result records, not only the planned control list.",
+"Add independent rerun receipt with exact command, environment, exit code, generated file hashes, and verifier identity.",
+"Reduce untyped source files from 64 to 0 through accepted typed semantic coverage or explicit non-normative exclusion records.",
+"Reduce active policy repo consumer references from 89 to 0, with migration evidence and false-positive/false-negative review.",
+"Replace heuristic-keyword-baseline with an accepted typed semantic graph compiler before any higher readiness claim.",
+"Add compact row samples per shard or per index bucket so reviewers can challenge representative records without reading every large JSONL body.",
+"Add explicit mapping from each blocking gate to the next required authority repo/worktree and non-approval boundary."
+],
+"mustNotClaim": [
+"policy.git retirement",
+"policy.git deletion",
+"cutover approval",
+"merge approval",
+"completion approval",
+"semantic approval",
+"canonical write",
+"SSOT write"
+]
+}
