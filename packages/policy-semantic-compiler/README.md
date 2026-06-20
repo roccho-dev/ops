@@ -133,6 +133,12 @@ Each work order is scoped to one reviewer assignment, embeds only the ADRS
 projection packet fields, and lists the required review-result fields. Work
 orders are not approval records.
 
+`materialize-source-span-review-result-templates` converts reviewer work orders
+into `policy.sourceSpanDispositionReviewResultTemplate.v1` skeletons. Templates
+pre-fill assignment, reviewer, packet, and source span IDs, but keep
+`accepted:false`, `packetRead:false`, and empty disposition/rationale fields
+until an actual reviewer returns evidence.
+
 `check-source-span-review-completion` verifies that each assignment has an
 accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an
 accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`

@@ -1827,6 +1827,88 @@ def command_materialize_source_span_review_work_orders(args: argparse.Namespace)
     return 0 if ok else 1
 
 
+def command_materialize_source_span_review_result_templates(args: argparse.Namespace) -> int:
+    work_orders = read_jsonl(Path(args.work_orders))
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy_rev = str(args.policy_rev)
+    templates: list[dict] = []
+    invalid_work_orders: list[dict] = []
+    for order in work_orders:
+        if not (
+            order.get("kind") == "policy.sourceSpanDispositionReviewerWorkOrder.v1"
+            and order.get("policyRev") == policy_rev
+            and order.get("accepted") is False
+            and order.get("generatedIsAuthority") is False
+            and order.get("policyDeletionApproved") is False
+            and order.get("status") == "assigned-review-required"
+            and order.get("requiredOutputRecord") == "policy.sourceSpanDispositionReviewResult.v1"
+        ):
+            invalid_work_orders.append(
+                {
+                    "kind": "policySemantic.invalidReviewResultTemplateWorkOrder.v1",
+                    "workOrderId": order.get("id"),
+                }
+            )
+            continue
+        template_id = "policy-source-span-review-result-template-" + sha256_bytes(str(order.get("id")).encode("utf-8"))[:20]
+        templates.append(
+            {
+                "kind": "policy.sourceSpanDispositionReviewResultTemplate.v1",
+                "id": template_id,
+                "policyRev": policy_rev,
+                "workOrderId": order.get("id"),
+                "assignmentId": order.get("assignmentId"),
+                "batchId": order.get("batchId"),
+                "batchNumber": order.get("batchNumber"),
+                "reviewerId": order.get("reviewerId"),
+                "packetId": order.get("packetId"),
+                "packetRead": False,
+                "sourceSpanIds": order.get("sourceSpanIds", []),
+                "sourceSpanCount": order.get("sourceSpanCount"),
+                "disposition": None,
+                "rationale": None,
+                "noRemainingObjections": False,
+                "requiredBeforeAccepted": [
+                    "reviewer reads only ADRS projection workOrder.reviewInput",
+                    "packetRead is true",
+                    "disposition is set",
+                    "rationale is set",
+                    "noRemainingObjections is true",
+                    "sourceSpanIds remain unchanged from work order",
+                ],
+                "accepted": False,
+                "claimAllowed": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+                "status": "template-review-required",
+            }
+        )
+    jsonl_write(out_dir / "policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl", templates)
+    jsonl_write(out_dir / "invalid-review-result-template-work-orders.jsonl", invalid_work_orders)
+    ok = bool(templates) and not invalid_work_orders
+    manifest = {
+        "kind": "policy.sourceSpanDispositionReviewResultTemplateRun.v1",
+        "ok": ok,
+        "policyRev": policy_rev,
+        "workOrderCount": len(work_orders),
+        "templateCount": len(templates),
+        "invalidWorkOrderCount": len(invalid_work_orders),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {
+            "templates": "policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl",
+            "invalidWorkOrders": "invalid-review-result-template-work-orders.jsonl",
+        },
+        "status": "review-result-templates-materialized" if ok else "blocked",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
+
 def command_check_source_span_review_completion(args: argparse.Namespace) -> int:
     assignments = read_jsonl(Path(args.assignments))
     required_discussions = read_jsonl(Path(args.required_discussions))
@@ -3409,6 +3491,11 @@ def main(argv: list[str] | None = None) -> int:
     work_order_parser.add_argument("--policy-rev", required=True)
     work_order_parser.add_argument("--out-dir", required=True)
     work_order_parser.set_defaults(func=command_materialize_source_span_review_work_orders)
+    result_template_parser = sub.add_parser("materialize-source-span-review-result-templates")
+    result_template_parser.add_argument("--work-orders", required=True)
+    result_template_parser.add_argument("--policy-rev", required=True)
+    result_template_parser.add_argument("--out-dir", required=True)
+    result_template_parser.set_defaults(func=command_materialize_source_span_review_result_templates)
     completion_parser = sub.add_parser("check-source-span-review-completion")
     completion_parser.add_argument("--assignments", required=True)
     completion_parser.add_argument("--required-discussions", required=True)

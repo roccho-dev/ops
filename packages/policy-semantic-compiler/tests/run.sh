@@ -15,6 +15,7 @@ mkdir -p "$work/source-span-review-batches"
 mkdir -p "$work/source-span-review-assignments"
 mkdir -p "$work/source-span-review-packets"
 mkdir -p "$work/source-span-review-work-orders"
+mkdir -p "$work/source-span-review-result-templates"
 mkdir -p "$work/source-span-review-completion-blocked" "$work/source-span-review-completion-accepted"
 mkdir -p "$work/source-span-dispositions-blocked" "$work/source-span-dispositions-accepted"
 mkdir -p "$work/accepted-coverage-proof-blocked" "$work/accepted-coverage-proof-fake-authority" "$work/accepted-coverage-proof-invalid-reference" "$work/accepted-coverage-proof-stale-span" "$work/accepted-coverage-proof-fixture-only-covering" "$work/accepted-coverage-proof-fixture-only-accepted" "$work/accepted-coverage-proof-accepted"
@@ -239,6 +240,15 @@ grep -q '"ok": true' "$work/source-span-review-work-orders.stdout.json"
 grep -q '"workOrderCount": 2' "$work/source-span-review-work-orders.stdout.json"
 grep -q '"kind":"policy.sourceSpanDispositionReviewerWorkOrder.v1"' "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl"
 grep -q '"accepted":false' "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-result-templates \
+  --work-orders "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-result-templates" > "$work/source-span-review-result-templates.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-result-templates.stdout.json"
+grep -q '"templateCount": 2' "$work/source-span-review-result-templates.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewResultTemplate.v1"' "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl"
+grep -q '"packetRead":false' "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl"
 
 mkdir -p "$work/adrs-projection-review-provider-records" "$work/adrs-projection-review-provider-gated"
 cp "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/"*.jsonl "$work/adrs-projection-review-provider-records/"
