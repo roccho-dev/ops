@@ -704,6 +704,7 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
         "review_work_orders": records_dir / "policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl",
         "review_result_templates": records_dir / "policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl",
         "required_discussions": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl",
+        "direct_discussion_templates": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl",
         "review_results": records_dir / "policy.sourceSpanDispositionReviewResult.v1.jsonl",
         "discussion_results": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussion.v1.jsonl",
     }
@@ -1140,6 +1141,7 @@ COPY (
     review_work_orders = read_jsonl(optional_files["review_work_orders"]) if optional_files["review_work_orders"].exists() else []
     review_result_templates = read_jsonl(optional_files["review_result_templates"]) if optional_files["review_result_templates"].exists() else []
     required_discussions = read_jsonl(optional_files["required_discussions"]) if optional_files["required_discussions"].exists() else []
+    direct_discussion_templates = read_jsonl(optional_files["direct_discussion_templates"]) if optional_files["direct_discussion_templates"].exists() else []
     review_results = read_jsonl(optional_files["review_results"]) if optional_files["review_results"].exists() else []
     discussion_results = read_jsonl(optional_files["discussion_results"]) if optional_files["discussion_results"].exists() else []
 
@@ -1208,20 +1210,25 @@ COPY (
             packets_with_missing_projection_fields.append(str(row.get("id")))
         if packet_span_ids == batch_span_ids_by_batch.get(batch_id, set()) and not missing_projection and row.get("id"):
             valid_packet_ids_by_batch[batch_id] = str(row.get("id"))
-    valid_required_discussion_batch_ids = {
-        str(row.get("batchId"))
-        for row in required_discussions
-        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"
-        and row.get("policyRev") == expected_rev
-        and row.get("accepted") is False
-        and row.get("generatedIsAuthority") is False
-        and row.get("policyDeletionApproved") is False
-        and row.get("sameRevisionRequired") is True
-        and row.get("peerRepliesReadRequired") is True
-        and row.get("noRemainingObjectionsRequired") is True
-        and row.get("status") == "direct-cross-discussion-required"
-        and str(row.get("batchId")) in batch_ids
-    }
+    valid_required_discussion_batch_ids: set[str] = set()
+    required_discussion_id_by_batch: dict[str, str] = {}
+    for row in required_discussions:
+        if (
+            row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"
+            and row.get("policyRev") == expected_rev
+            and row.get("accepted") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+            and row.get("sameRevisionRequired") is True
+            and row.get("peerRepliesReadRequired") is True
+            and row.get("noRemainingObjectionsRequired") is True
+            and row.get("status") == "direct-cross-discussion-required"
+            and str(row.get("batchId")) in batch_ids
+            and row.get("id")
+        ):
+            batch_id = str(row.get("batchId"))
+            valid_required_discussion_batch_ids.add(batch_id)
+            required_discussion_id_by_batch[batch_id] = str(row.get("id"))
     assignment_span_ids = {
         (str(row.get("batchId")), str(row.get("reviewerId"))): {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
         for row in valid_assignments
@@ -1272,6 +1279,7 @@ COPY (
         else:
             invalid_work_order_ids.append(str(row.get("id") or row.get("assignmentId")))
     valid_template_work_order_ids: set[str] = set()
+    review_result_template_ids_by_batch: dict[str, set[str]] = {}
     invalid_template_ids: list[str] = []
     for row in review_result_templates:
         if not (
@@ -1299,9 +1307,42 @@ COPY (
             and row.get("noRemainingObjections") is False
         )
         if valid_shape:
+            template_id = str(row.get("id"))
             valid_template_work_order_ids.add(work_order_id)
+            review_result_template_ids_by_batch.setdefault(str(row.get("batchId")), set()).add(template_id)
         else:
             invalid_template_ids.append(str(row.get("id") or work_order_id))
+    valid_direct_template_batch_ids: set[str] = set()
+    invalid_direct_template_ids: list[str] = []
+    for row in direct_discussion_templates:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1"
+            and row.get("policyRev") == expected_rev
+            and row.get("accepted") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+            and row.get("status") == "template-cross-discussion-required"
+            and str(row.get("batchId")) in batch_ids
+        ):
+            continue
+        batch_id = str(row.get("batchId"))
+        reviewer_ids = {str(item) for item in as_list(row.get("reviewerIds")) if item}
+        peer_read_reviewers = {str(item) for item in as_list(row.get("peerRepliesReadByReviewerIds")) if item}
+        template_ids = {str(item) for item in as_list(row.get("reviewResultTemplateIds")) if item}
+        valid_shape = (
+            row.get("requiredDiscussionId") == required_discussion_id_by_batch.get(batch_id)
+            and reviewer_ids == batch_assignment_reviewers.get(batch_id, set())
+            and peer_read_reviewers == set()
+            and template_ids == review_result_template_ids_by_batch.get(batch_id, set())
+            and row.get("sameRevision") is False
+            and row.get("peerRepliesRead") is False
+            and row.get("noRemainingObjections") is False
+            and row.get("rationale") is None
+        )
+        if valid_shape:
+            valid_direct_template_batch_ids.add(batch_id)
+        else:
+            invalid_direct_template_ids.append(str(row.get("id") or batch_id))
     valid_review_results = []
     invalid_review_result_ids: list[str] = []
     for row in review_results:
@@ -1373,6 +1414,7 @@ COPY (
     assignments_missing_work_orders = sorted(assignment_ids - valid_work_order_assignment_ids)
     work_orders_missing_templates = sorted(work_order_ids - valid_template_work_order_ids)
     batches_missing_required_discussion = sorted(batch_ids - valid_required_discussion_batch_ids)
+    batches_missing_direct_templates = sorted(batch_ids - valid_direct_template_batch_ids)
     missing_review_result_pairs = sorted(
         (batch_id, reviewer_id)
         for batch_id, reviewers in batch_assignment_reviewers.items()
@@ -1442,6 +1484,18 @@ COPY (
             "count": len(batches_missing_required_discussion),
         },
         {
+            "gate_id": "review-batches-have-direct-cross-discussion-templates",
+            "status": "pass" if not batches_missing_direct_templates else "blocked",
+            "blocker": None if not batches_missing_direct_templates else "review batch lacks non-authoritative direct cross-discussion template",
+            "count": len(batches_missing_direct_templates),
+        },
+        {
+            "gate_id": "direct-cross-discussion-templates-match-required-discussions",
+            "status": "pass" if not invalid_direct_template_ids else "blocked",
+            "blocker": None if not invalid_direct_template_ids else "direct cross-discussion template does not match required discussion, reviewers, result templates, or empty acceptance fields",
+            "count": len(invalid_direct_template_ids),
+        },
+        {
             "gate_id": "review-assignments-have-accepted-results",
             "status": "pass" if not missing_review_result_pairs else "blocked",
             "blocker": None if not missing_review_result_pairs else "review assignments lack accepted results",
@@ -1478,6 +1532,8 @@ COPY (
     jsonl_write(out_dir / "review-work-orders-missing-result-templates.jsonl", [{"kind": "policySemantic.reviewWorkOrderMissingResultTemplate.v1", "workOrderId": work_order_id} for work_order_id in work_orders_missing_templates])
     jsonl_write(out_dir / "invalid-review-result-templates.jsonl", [{"kind": "policySemantic.invalidReviewResultTemplate.v1", "templateId": template_id} for template_id in invalid_template_ids])
     jsonl_write(out_dir / "review-batches-missing-required-discussion.jsonl", [{"kind": "policySemantic.reviewBatchMissingRequiredDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_required_discussion])
+    jsonl_write(out_dir / "review-batches-missing-direct-discussion-templates.jsonl", [{"kind": "policySemantic.reviewBatchMissingDirectDiscussionTemplate.v1", "batchId": batch_id} for batch_id in batches_missing_direct_templates])
+    jsonl_write(out_dir / "invalid-direct-discussion-templates.jsonl", [{"kind": "policySemantic.invalidDirectDiscussionTemplate.v1", "templateId": template_id} for template_id in invalid_direct_template_ids])
     jsonl_write(out_dir / "review-assignments-missing-accepted-results.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingAcceptedResult.v1", "batchId": batch_id, "reviewerId": reviewer_id} for batch_id, reviewer_id in missing_review_result_pairs])
     jsonl_write(out_dir / "invalid-review-results.jsonl", [{"kind": "policySemantic.invalidReviewResult.v1", "reviewResultId": result_id} for result_id in invalid_review_result_ids])
     jsonl_write(out_dir / "review-batches-missing-accepted-discussions.jsonl", [{"kind": "policySemantic.reviewBatchMissingAcceptedDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_accepted_discussion])
@@ -1517,6 +1573,8 @@ COPY (
             "reviewWorkOrdersMissingResultTemplates": "review-work-orders-missing-result-templates.jsonl",
             "invalidReviewResultTemplates": "invalid-review-result-templates.jsonl",
             "reviewBatchesMissingRequiredDiscussion": "review-batches-missing-required-discussion.jsonl",
+            "reviewBatchesMissingDirectDiscussionTemplates": "review-batches-missing-direct-discussion-templates.jsonl",
+            "invalidDirectDiscussionTemplates": "invalid-direct-discussion-templates.jsonl",
             "reviewAssignmentsMissingAcceptedResults": "review-assignments-missing-accepted-results.jsonl",
             "invalidReviewResults": "invalid-review-results.jsonl",
             "reviewBatchesMissingAcceptedDiscussions": "review-batches-missing-accepted-discussions.jsonl",
@@ -1969,6 +2027,135 @@ def command_materialize_source_span_review_result_templates(args: argparse.Names
     return 0 if ok else 1
 
 
+def command_materialize_source_span_direct_cross_discussion_templates(args: argparse.Namespace) -> int:
+    required_discussions = read_jsonl(Path(args.required_discussions))
+    review_result_templates = read_jsonl(Path(args.review_result_templates))
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy_rev = str(args.policy_rev)
+    templates_by_batch: dict[str, list[dict]] = {}
+    invalid_review_result_templates: list[dict] = []
+    for row in review_result_templates:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionReviewResultTemplate.v1"
+            and row.get("policyRev") == policy_rev
+            and row.get("accepted") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+            and row.get("status") == "template-review-required"
+            and row.get("id")
+            and row.get("batchId")
+            and row.get("reviewerId")
+        ):
+            invalid_review_result_templates.append(
+                {
+                    "kind": "policySemantic.invalidDirectDiscussionTemplateReviewResultTemplate.v1",
+                    "templateId": row.get("id"),
+                }
+            )
+            continue
+        templates_by_batch.setdefault(str(row.get("batchId")), []).append(row)
+
+    templates: list[dict] = []
+    invalid_required_discussions: list[dict] = []
+    missing_review_result_templates: list[dict] = []
+    for required in required_discussions:
+        if not (
+            required.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"
+            and required.get("policyRev") == policy_rev
+            and required.get("accepted") is False
+            and required.get("generatedIsAuthority") is False
+            and required.get("policyDeletionApproved") is False
+            and required.get("sameRevisionRequired") is True
+            and required.get("peerRepliesReadRequired") is True
+            and required.get("noRemainingObjectionsRequired") is True
+            and required.get("status") == "direct-cross-discussion-required"
+            and required.get("id")
+            and required.get("batchId")
+        ):
+            invalid_required_discussions.append(
+                {
+                    "kind": "policySemantic.invalidDirectDiscussionTemplateRequiredDiscussion.v1",
+                    "requiredDiscussionId": required.get("id"),
+                }
+            )
+            continue
+        batch_id = str(required.get("batchId"))
+        batch_templates = templates_by_batch.get(batch_id, [])
+        if not batch_templates:
+            missing_review_result_templates.append(
+                {
+                    "kind": "policySemantic.directDiscussionTemplateMissingReviewResultTemplates.v1",
+                    "requiredDiscussionId": required.get("id"),
+                    "batchId": batch_id,
+                }
+            )
+            continue
+        reviewer_ids = sorted({str(row.get("reviewerId")) for row in batch_templates if row.get("reviewerId")})
+        review_template_ids = sorted({str(row.get("id")) for row in batch_templates if row.get("id")})
+        template_id = "policy-source-span-direct-cross-discussion-template-" + sha256_bytes(str(required.get("id")).encode("utf-8"))[:20]
+        templates.append(
+            {
+                "kind": "policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1",
+                "id": template_id,
+                "policyRev": policy_rev,
+                "requiredDiscussionId": required.get("id"),
+                "batchId": batch_id,
+                "batchNumber": required.get("batchNumber"),
+                "reviewerIds": reviewer_ids,
+                "reviewResultTemplateIds": review_template_ids,
+                "peerRepliesReadByReviewerIds": [],
+                "sameRevision": False,
+                "peerRepliesRead": False,
+                "noRemainingObjections": False,
+                "rationale": None,
+                "requiredBeforeAccepted": [
+                    "accepted review results exist for all reviewResultTemplateIds",
+                    "peerRepliesReadByReviewerIds covers reviewerIds",
+                    "sameRevision is true",
+                    "peerRepliesRead is true",
+                    "noRemainingObjections is true",
+                    "rationale is set",
+                ],
+                "accepted": False,
+                "claimAllowed": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+                "status": "template-cross-discussion-required",
+            }
+        )
+    jsonl_write(out_dir / "policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl", templates)
+    jsonl_write(out_dir / "invalid-direct-discussion-template-required-discussions.jsonl", invalid_required_discussions)
+    jsonl_write(out_dir / "invalid-direct-discussion-template-review-result-templates.jsonl", invalid_review_result_templates)
+    jsonl_write(out_dir / "direct-discussion-template-missing-review-result-templates.jsonl", missing_review_result_templates)
+    ok = bool(templates) and not invalid_required_discussions and not invalid_review_result_templates and not missing_review_result_templates
+    manifest = {
+        "kind": "policy.sourceSpanDispositionDirectCrossDiscussionTemplateRun.v1",
+        "ok": ok,
+        "policyRev": policy_rev,
+        "requiredDiscussionCount": len(required_discussions),
+        "reviewResultTemplateCount": len(review_result_templates),
+        "templateCount": len(templates),
+        "invalidRequiredDiscussionCount": len(invalid_required_discussions),
+        "invalidReviewResultTemplateCount": len(invalid_review_result_templates),
+        "missingReviewResultTemplateCount": len(missing_review_result_templates),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {
+            "templates": "policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl",
+            "invalidRequiredDiscussions": "invalid-direct-discussion-template-required-discussions.jsonl",
+            "invalidReviewResultTemplates": "invalid-direct-discussion-template-review-result-templates.jsonl",
+            "missingReviewResultTemplates": "direct-discussion-template-missing-review-result-templates.jsonl",
+        },
+        "status": "direct-cross-discussion-templates-materialized" if ok else "blocked",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
+
 def command_check_source_span_review_completion(args: argparse.Namespace) -> int:
     assignments = read_jsonl(Path(args.assignments))
     required_discussions = read_jsonl(Path(args.required_discussions))
@@ -1984,7 +2171,13 @@ def command_check_source_span_review_completion(args: argparse.Namespace) -> int
     packet_ids_by_batch = {
         str(row.get("batchId")): str(row.get("id"))
         for row in review_packets
-        if row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1" and row.get("id")
+        if row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1"
+        and row.get("policyRev") == args.policy_rev
+        and row.get("accepted") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+        and row.get("status") == "review-required"
+        and row.get("id")
     }
     accepted_reviews: set[tuple[str, str]] = set()
     invalid_review_results: list[dict] = []
@@ -3556,6 +3749,12 @@ def main(argv: list[str] | None = None) -> int:
     result_template_parser.add_argument("--policy-rev", required=True)
     result_template_parser.add_argument("--out-dir", required=True)
     result_template_parser.set_defaults(func=command_materialize_source_span_review_result_templates)
+    discussion_template_parser = sub.add_parser("materialize-source-span-direct-cross-discussion-templates")
+    discussion_template_parser.add_argument("--required-discussions", required=True)
+    discussion_template_parser.add_argument("--review-result-templates", required=True)
+    discussion_template_parser.add_argument("--policy-rev", required=True)
+    discussion_template_parser.add_argument("--out-dir", required=True)
+    discussion_template_parser.set_defaults(func=command_materialize_source_span_direct_cross_discussion_templates)
     completion_parser = sub.add_parser("check-source-span-review-completion")
     completion_parser.add_argument("--assignments", required=True)
     completion_parser.add_argument("--required-discussions", required=True)

@@ -139,6 +139,14 @@ pre-fill assignment, reviewer, packet, and source span IDs, but keep
 `accepted:false`, `packetRead:false`, and empty disposition/rationale fields
 until an actual reviewer returns evidence.
 
+`materialize-source-span-direct-cross-discussion-templates` converts required
+direct cross-discussion rows plus review-result templates into
+`policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1` skeletons. These
+records pre-fill batch, reviewer, and review-result-template IDs, but keep
+`accepted:false`, `sameRevision:false`, `peerRepliesRead:false`, and
+`noRemainingObjections:false` until reviewers exchange replies on the same
+revision.
+
 `check-source-span-review-completion` verifies that each assignment has an
 accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an
 accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`
