@@ -12,6 +12,7 @@ mkdir -p "$work/adrs-projection-accepted" "$work/adrs-projection-missing-proof" 
 mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disposition"
 mkdir -p "$work/adrs-projection-fixture-only"
 mkdir -p "$work/source-span-review-batches"
+mkdir -p "$work/source-span-review-assignments"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -199,6 +200,15 @@ policy-semantic-compiler materialize-source-span-review-batches \
 grep -q '"batchCount": 1' "$work/source-span-review-batches.stdout.json"
 grep -q '"kind":"policy.sourceSpanDispositionReviewBatch.v1"' "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl"
 grep -q '"accepted":false' "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl"
+
+policy-semantic-compiler assign-source-span-review-batches \
+  --batches "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl" \
+  --reviewers reviewer-a,reviewer-b \
+  --out-dir "$work/source-span-review-assignments" > "$work/source-span-review-assignments.stdout.json"
+grep -q '"assignmentCount": 2' "$work/source-span-review-assignments.stdout.json"
+grep -q '"directCrossDiscussionRequiredCount": 1' "$work/source-span-review-assignments.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl"
+grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl"
 
 if policy-semantic-compiler review-adrs-projection-duckdb \
   --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \

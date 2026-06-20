@@ -111,6 +111,12 @@ queue artifacts only; they set `accepted:false`, `claimAllowed:false`,
 `generatedIsAuthority:false`, and point to the next provider record
 `policy.sourceSpanDisposition.v1`.
 
+`assign-source-span-review-batches` reads those batch rows and emits one
+assignment per reviewer plus a direct cross-discussion requirement per batch.
+The output still does not approve any disposition; it only records the
+reviewer work that must happen before ADRS can append accepted
+`policy.sourceSpanDisposition.v1` rows.
+
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted
 coverage proof records and fresh GenX semantic reconstruction/review has no

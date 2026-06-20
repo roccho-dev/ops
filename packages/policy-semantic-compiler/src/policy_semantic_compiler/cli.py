@@ -1197,6 +1197,83 @@ def command_materialize_source_span_review_batches(args: argparse.Namespace) -> 
     return 0
 
 
+def command_assign_source_span_review_batches(args: argparse.Namespace) -> int:
+    batches_path = Path(args.batches)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    reviewer_ids = [item.strip() for item in str(args.reviewers).split(",") if item.strip()]
+    if len(reviewer_ids) < 2:
+        print(json.dumps({"ok": False, "error": "at least two reviewers are required", "reviewers": reviewer_ids}, sort_keys=True))
+        return 1
+    batches = read_jsonl(batches_path)
+    assignments: list[dict] = []
+    discussion_rows: list[dict] = []
+    for batch in batches:
+        batch_id = str(batch.get("id"))
+        batch_number = batch.get("batchNumber")
+        for reviewer_id in reviewer_ids:
+            assignments.append(
+                {
+                    "kind": "policy.sourceSpanDispositionReviewAssignment.v1",
+                    "id": "policy-source-span-review-assignment-" + sha256_bytes(f"{batch_id}:{reviewer_id}".encode("utf-8"))[:20],
+                    "policyRev": batch.get("policyRev"),
+                    "batchId": batch_id,
+                    "batchNumber": batch_number,
+                    "reviewerId": reviewer_id,
+                    "sourceSpanCount": batch.get("sourceSpanCount"),
+                    "sourceSpanIds": batch.get("sourceSpanIds", []),
+                    "requiredOutputRecord": "policy.sourceSpanDisposition.v1",
+                    "peerReplyRequired": True,
+                    "accepted": False,
+                    "claimAllowed": False,
+                    "generatedIsAuthority": False,
+                    "policyDeletionApproved": False,
+                    "status": "assigned-review-required",
+                }
+            )
+        discussion_rows.append(
+            {
+                "kind": "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1",
+                "id": "policy-source-span-review-cross-discussion-" + sha256_bytes(batch_id.encode("utf-8"))[:20],
+                "policyRev": batch.get("policyRev"),
+                "batchId": batch_id,
+                "batchNumber": batch_number,
+                "reviewerIds": reviewer_ids,
+                "sameRevisionRequired": True,
+                "peerRepliesReadRequired": True,
+                "noRemainingObjectionsRequired": True,
+                "accepted": False,
+                "claimAllowed": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+                "status": "direct-cross-discussion-required",
+            }
+        )
+    jsonl_write(out_dir / "source-span-disposition-review-assignments.jsonl", assignments)
+    jsonl_write(out_dir / "source-span-disposition-direct-cross-discussion-required.jsonl", discussion_rows)
+    manifest = {
+        "kind": "policy.sourceSpanDispositionReviewAssignmentRun.v1",
+        "ok": bool(batches),
+        "input": str(batches_path),
+        "batchCount": len(batches),
+        "reviewerIds": reviewer_ids,
+        "assignmentCount": len(assignments),
+        "directCrossDiscussionRequiredCount": len(discussion_rows),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {
+            "assignments": "source-span-disposition-review-assignments.jsonl",
+            "directCrossDiscussionRequired": "source-span-disposition-direct-cross-discussion-required.jsonl",
+        },
+        "status": "review-assignments-materialized",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if batches else 1
+
+
 def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
     table_defaults = {
         "sources": [],
@@ -2336,6 +2413,11 @@ def main(argv: list[str] | None = None) -> int:
     batch_parser.add_argument("--batch-size", type=int, default=100)
     batch_parser.add_argument("--out-dir", required=True)
     batch_parser.set_defaults(func=command_materialize_source_span_review_batches)
+    assignment_parser = sub.add_parser("assign-source-span-review-batches")
+    assignment_parser.add_argument("--batches", required=True)
+    assignment_parser.add_argument("--reviewers", default="reviewer-a,reviewer-b")
+    assignment_parser.add_argument("--out-dir", required=True)
+    assignment_parser.set_defaults(func=command_assign_source_span_review_batches)
     args = parser.parse_args(argv)
     return args.func(args)
 
