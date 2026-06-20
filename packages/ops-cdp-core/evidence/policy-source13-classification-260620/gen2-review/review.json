@@ -1,0 +1,22 @@
+{
+  "type": "policy.source13.gen2Review.v1",
+  "reviewer": "ChatGPT remove-policy project",
+  "reviewConversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "opsCommit": "3c3cde059b003ecd694983259a663d676b92e815",
+  "adrsCommit": "476f4b5524d900e4976eb26309272131efc3bc75",
+  "verdict": "PASS",
+  "sourceGate": "PASS",
+  "deletionReadiness": "BLOCK",
+  "proposalQuality": "PASS for this bounded source13 classifier lane. Based on the pasted evidence only, the 13 remaining authority-bearing untyped source candidates are all classified, stillUntypedAuthority is 0, 7 rows are typed-covered, 6 rows are non-authority-excluded, and the broader deletion/cutover decision remains BLOCK.",
+  "classificationReview": "PASS. The split is fail-closed enough for this lane: localizer evidence heads, generated coverage receipt, dependency note, and example template are excluded as non-authority; package/example README rows are not silently dropped but converted into typed package boundary/example/no-side-effect/no-goal edges. The lane discharges only the 13-row source blocker, not semantic equivalence.",
+  "controlReview": "PASS. The 6 controls cover the bounded lane's core risks: all 13 rows classified, still-untyped authority zero, typed edge count matching covered rows, classification records remaining non-authority, typed edge records carrying trace fields, and retirement staying blocked. They are sufficient for this lane, not sufficient for actual policy retirement.",
+  "falseClaimReview": "PASS. No improper deletion, retirement, cutover, semantic completion, merge, canonical write, or SSOT write claim is visible in the pasted evidence. The summary keeps deletionReadiness=BLOCK and explicitly lists mustNotClaim boundaries.",
+  "blockers": [],
+  "minimalFixesBeforeThisLaneCanBeAccepted": [],
+  "remainingGatesForActualRetirement": [
+    {"name":"typed-semantic-compiler-accepted","status":"BLOCK","reason":"source13 classifier is not an accepted typed semantic graph compiler"},
+    {"name":"semantic-equivalence-proof","status":"BLOCK","reason":"7 typed-covered rows reduce this blocker but do not prove full semantic equivalence of policy logic"},
+    {"name":"owner/adoption-gates","status":"BLOCK","reason":"no merge, canonical write, SSOT write, deletion, retirement, or cutover approval is granted here"},
+    {"name":"end-to-end-retirement-proof","status":"BLOCK","reason":"consumer and source blockers may be locally discharged, but accepted compiler, equivalence, adoption, and final authority gates remain outside this lane"}
+  ]
+}
