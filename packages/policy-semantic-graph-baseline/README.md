@@ -23,3 +23,21 @@ Reviewability outputs:
 
 The generator remains a heuristic baseline. A `BLOCK` result is useful evidence;
 it is not deletion readiness, semantic approval, cutover approval, or SSOT write.
+
+Negative controls:
+
+```sh
+python packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-negative-controls.py \
+  --generator packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py \
+  --policy-ref 334997669f1889a8e2658730c616d2d4510d4536 \
+  --out-dir packages/ops-cdp-core/evidence/policy-semantic-graph-baseline-reviewable-260620
+```
+
+This emits:
+
+- `policy_negative_control_results.json`
+- `policy_independent_rerun_receipt.json`
+
+The controls use synthetic fixtures. They prove the current measurement harness
+can detect selected loss/tamper classes; they do not prove policy deletion
+readiness.

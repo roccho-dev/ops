@@ -1,0 +1,223 @@
+{
+  "controls": [
+    {
+      "details": {
+        "gate": {
+          "actual": [
+            "deny"
+          ],
+          "expected": [],
+          "name": "all-required-edge-kinds-observed",
+          "status": "BLOCK"
+        },
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/missing-deny",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-missing-deny"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-missing-deny\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 7, \"sourceNodeCount\": 1}"
+        }
+      },
+      "name": "missing-deny-edge",
+      "passed": true
+    },
+    {
+      "details": {
+        "gate": {
+          "actual": [
+            "obligation"
+          ],
+          "expected": [],
+          "name": "all-required-edge-kinds-observed",
+          "status": "BLOCK"
+        },
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/missing-obligation",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-missing-obligation"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-missing-obligation\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 7, \"sourceNodeCount\": 1}"
+        }
+      },
+      "name": "missing-obligation-edge",
+      "passed": true
+    },
+    {
+      "details": {
+        "gate": {
+          "actual": [
+            "activation"
+          ],
+          "expected": [],
+          "name": "all-required-edge-kinds-observed",
+          "status": "BLOCK"
+        },
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/missing-activation",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-missing-activation"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-missing-activation\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 6, \"sourceNodeCount\": 1}"
+        }
+      },
+      "name": "missing-activation-edge",
+      "passed": true
+    },
+    {
+      "details": {
+        "gate": {
+          "actual": 1,
+          "expected": 0,
+          "name": "all-source-files-have-semantic-edges",
+          "status": "BLOCK"
+        },
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/empty-source",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-empty-source"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-empty-source\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 0, \"sourceNodeCount\": 1}"
+        }
+      },
+      "name": "source-file-with-no-edges",
+      "passed": true
+    },
+    {
+      "details": {
+        "consumerIndex": {
+          "activeRuntimeCandidateCount": 0,
+          "byRefClass": {
+            "documentation": 1
+          },
+          "nonActiveCandidateCount": 1,
+          "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+          "rowCount": 1,
+          "type": "policy.consumerRefIndex.v1"
+        },
+        "gate": {
+          "actual": 1,
+          "expected": 0,
+          "name": "active-policy-repo-consumer-refs-eliminated",
+          "status": "BLOCK"
+        },
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/consumer-ref",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-consumer-ref"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-consumer-ref\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 9, \"sourceNodeCount\": 1}"
+        }
+      },
+      "name": "active-consumer-ref-blocks",
+      "passed": true
+    },
+    {
+      "details": {
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/all-edges",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-all-edges"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-all-edges\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 8, \"sourceNodeCount\": 1}"
+        },
+        "sourceNodeCount": 1
+      },
+      "name": "source-node-hashes-validate",
+      "passed": true
+    },
+    {
+      "details": {
+        "failureCount": 1
+      },
+      "name": "stale-source-node-detected",
+      "passed": true
+    },
+    {
+      "details": {
+        "run": {
+          "command": [
+            "/nix/store/m1fw8l8y9ycxh5dzispbb7cwl6rra14l-python3-3.13.12/bin/python",
+            "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+            "--policy-root",
+            "/tmp/policy-negative-controls-49ktxiyw/all-edges",
+            "--policy-ref",
+            "334997669f1889a8e2658730c616d2d4510d4536",
+            "--out-dir",
+            "/tmp/policy-negative-controls-49ktxiyw/out-all-edges"
+          ],
+          "exitCode": 0,
+          "stderr": "",
+          "stdout": "{\"decision\": \"BLOCK\", \"outDir\": \"/tmp/policy-negative-controls-49ktxiyw/out-all-edges\", \"policyRef\": \"334997669f1889a8e2658730c616d2d4510d4536\", \"semanticEdgeCount\": 8, \"sourceNodeCount\": 1}"
+        },
+        "semanticEdgeCount": 8
+      },
+      "name": "edge-source-spans-validate",
+      "passed": true
+    },
+    {
+      "details": {
+        "failureCount": 1
+      },
+      "name": "removed-source-span-detected",
+      "passed": true
+    }
+  ],
+  "decision": "PASS",
+  "passed": 9,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "runtime": {
+    "generator": "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.42",
+    "python": "3.13.12 (main, Feb  3 2026, 17:53:27) [GCC 15.2.0]"
+  },
+  "total": 9,
+  "type": "policy.negativeControlResults.v1"
+}

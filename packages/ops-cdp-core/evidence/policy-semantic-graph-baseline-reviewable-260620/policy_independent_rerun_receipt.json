@@ -1,0 +1,13 @@
+{
+  "exitCode": 0,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "resultPath": "policy_negative_control_results.json",
+  "resultSha256": "c0920e6372c4068ee6eb18f7d2d5eea0fd6c3e82694a0209753554c95f6a2053",
+  "runtime": {
+    "generator": "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.42",
+    "python": "3.13.12 (main, Feb  3 2026, 17:53:27) [GCC 15.2.0]"
+  },
+  "type": "policy.independentRerunReceipt.v1",
+  "verifier": "policy-semantic-graph-negative-controls.py"
+}
