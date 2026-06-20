@@ -1,0 +1,55 @@
+{
+  "kind": "policy.semanticGraphNegativeControls.gen2ImplReviewEvidenceSummary.v1",
+  "date": "2026-06-20",
+  "conversationUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a14f-d8f4-83ee-a36e-22ac0a016620",
+  "fixedMirror": "https://github.com/roccho-dev/public/tree/fcc7bcf3e9f267f4f49f3a7391a91d12f5814c7e",
+  "mirrorCommit": "fcc7bcf3e9f267f4f49f3a7391a91d12f5814c7e",
+  "refs": {
+    "policyInput": "334997669f1889a8e2658730c616d2d4510d4536",
+    "ops": "proposal/project-source-transport-route-repair-260620@781c88a544e28f5fe54fb98ea3a21bdd92283cf0",
+    "adrs": "proposal/gen2-handoff-evidence-260620@9cd87569931add0a8e60c8173e64c69aad393dfc"
+  },
+  "gen2": {
+    "actor": "Gen2 ChatGPT",
+    "threadFunction": "impl-review",
+    "readbackCompleted": true,
+    "reviewPerformed": true,
+    "implementationPerformed": false,
+    "verdict": "PASS",
+    "reportedNegativeControlDecision": "PASS",
+    "passed": 9,
+    "total": 9,
+    "acceptedAsSyntheticHarnessEvidence": true
+  },
+  "authorityBoundary": {
+    "degradedExternalReadableMirrorEvidenceOnly": true,
+    "notProjectSourceProof": true,
+    "mirrorIsNotCanonicalSsot": true,
+    "negativeControlPassIsSyntheticHarnessEvidenceOnly": true,
+    "baselineDeletionReadinessDecisionRemainsBlock": true,
+    "retirementApproval": false,
+    "deletionApproval": false,
+    "cutoverApproval": false,
+    "mergeApproval": false,
+    "completionApproval": false,
+    "semanticApproval": false,
+    "canonicalWrite": false,
+    "ssotWrite": false
+  },
+  "retainedReadLimitations": [
+    "no full row-by-row validation of 24109 semantic edges",
+    "no full shard-body review",
+    "no full source node row validation",
+    "no full consumer ref row triage",
+    "verifier script was not included in mirror as hashed file"
+  ],
+  "remainingImprovements": [
+    "publish reconciled negative-control plan matching the nine executed controls",
+    "publish negative-control verifier script and hash in mirror",
+    "add controls for false semantic positives",
+    "add controls for cross-file semantics and generated/evidence authority confusion",
+    "add sampled or full row-level review before stronger claims",
+    "replace heuristic keyword baseline with accepted typed semantic graph compiler"
+  ],
+  "nextWorkUnit": "publish verifier script/hash and reconciled negative-control plan, then rerun Gen2 review"
+}

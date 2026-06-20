@@ -1,0 +1,177 @@
+{
+"GEN2_NEGATIVE_CONTROLS_IMPL_REVIEW": {
+"actor": "Gen2 ChatGPT",
+"threadFunction": "impl-review",
+"reviewPerformed": true,
+"implementationPerformed": false,
+"fixedMirror": {
+"url": "https://github.com/roccho-dev/public/tree/fcc7bcf3e9f267f4f49f3a7391a91d12f5814c7e
+",
+"commit": "fcc7bcf3e9f267f4f49f3a7391a91d12f5814c7e"
+},
+"authorityBoundary": {
+"degradedExternalReadableMirrorEvidenceOnly": true,
+"notProjectSourceProof": true,
+"mirrorIsNotCanonicalSsot": true,
+"negativeControlPassIsSyntheticHarnessEvidenceOnly": true,
+"baselineDeletionReadinessDecisionRemainsBlock": true,
+"retirementApproval": false,
+"deletionApproval": false,
+"cutoverApproval": false,
+"mergeApproval": false,
+"completionApproval": false,
+"semanticApproval": false,
+"canonicalWrite": false,
+"ssotWrite": false
+},
+"verdict": "PASS",
+"findings": [
+{
+"severity": "info",
+"item": "negative-control execution result",
+"evidence": "baseline-reviewable/policy_negative_control_results.json reports decision=PASS, passed=9, total=9, and includes all nine requested executed controls.",
+"reason": "The controls exercise missing required edge kinds, edge/source traceability, source hash freshness, and active consumer-reference blocking. This is acceptable for synthetic measurement-harness evidence.",
+"requiredFix": "None for this evidence step."
+},
+{
+"severity": "info",
+"item": "independent rerun receipt",
+"evidence": "baseline-reviewable/policy_independent_rerun_receipt.json reports verifier=policy-semantic-graph-negative-controls.py, exitCode=0, resultPath=policy_negative_control_results.json, resultSha256=c0920e6372c4068ee6eb18f7d2d5eea0fd6c3e82694a0209753554c95f6a2053, plus runtime metadata.",
+"reason": "The receipt is adequate to tie the rerun to the published result artifact at mirror-evidence level.",
+"requiredFix": "For stronger future evidence, publish the verifier script/hash and exact rerun command inputs."
+},
+{
+"severity": "info",
+"item": "deletion-readiness boundary",
+"evidence": "baseline-reviewable/REVIEW_SUMMARY.json and baseline-reviewable/policy_deletion_readiness_gates.json both report decision=BLOCK.",
+"reason": "The mirror preserves that negative-control PASS does not change deletion readiness. Blocking gates remain: untyped source files, active consumer references, and heuristic extractor not accepted typed compiler.",
+"requiredFix": "None for preserving the BLOCK boundary."
+},
+{
+"severity": "major",
+"item": "semantic strength limit",
+"evidence": "baseline-reviewable/REVIEW_SUMMARY.json states reviewLimit='heuristic baseline and fail-closed BLOCK evidence'; tool/bin/policy-semantic-graph-baseline.py uses keyword extraction rules.",
+"reason": "The harness catches obvious measurement failures, but does not prove semantic equivalence, obligation strength, role scope correctness, source span correctness against every row, or consumer cutover.",
+"requiredFix": "Next work must add typed semantic compiler fixtures and reviewed row-level or sampled validation, without upgrading this evidence to cutover approval."
+},
+{
+"severity": "minor",
+"item": "negative-control plan/result vocabulary mismatch",
+"evidence": "baseline-reviewable/policy_negative_controls.json is status=planned-not-executed and names seven planned classes, while policy_negative_control_results.json contains nine executed control names.",
+"reason": "This is not blocking because the executed result file is explicit, but the plan should be reconciled with the executed controls to reduce reviewer confusion.",
+"requiredFix": "Publish a superseding negative-control plan whose control names match the executed harness, or link each executed control to the planned mutation class."
+}
+],
+"negativeControlReview": {
+"reportedDecision": "PASS",
+"passed": 9,
+"total": 9,
+"acceptedAsSyntheticHarnessEvidence": true,
+"reason": "All nine requested controls are present in the executed results and passed. Acceptance is limited to synthetic measurement-harness behavior; it is not semantic approval and not deletion readiness."
+},
+"rerunReceiptReview": {
+"exitCode": 0,
+"resultSha256": "c0920e6372c4068ee6eb18f7d2d5eea0fd6c3e82694a0209753554c95f6a2053",
+"accepted": true,
+"notes": "Adequate for this mirror-evidence step because it records verifier name, exit code, result path, result hash, policyRef, and runtime metadata. It is not sufficient for Project Source proof or canonical SSOT proof."
+},
+"baselineDecisionBoundary": {
+"reportedBaselineDecision": "BLOCK",
+"deletionReadinessStillBlocked": true,
+"notes": "The mirror reports BLOCK in REVIEW_SUMMARY and policy_deletion_readiness_gates. Negative-control PASS is explicitly scoped as synthetic fixture controls and not deletion readiness."
+},
+"controlReview": [
+{
+"control": "missing-deny-edge",
+"accepted": true,
+"notes": "Coherent obvious-failure control: removing deny evidence causes required edge-kind gate to BLOCK."
+},
+{
+"control": "missing-obligation-edge",
+"accepted": true,
+"notes": "Coherent obvious-failure control: removing obligation evidence causes required edge-kind gate to BLOCK."
+},
+{
+"control": "missing-activation-edge",
+"accepted": true,
+"notes": "Coherent obvious-failure control: removing activation evidence causes required edge-kind gate to BLOCK."
+},
+{
+"control": "source-file-with-no-edges",
+"accepted": true,
+"notes": "Coherent coverage control: a source file with no semantic edges blocks all-source-files-have-semantic-edges."
+},
+{
+"control": "active-consumer-ref-blocks",
+"accepted": true,
+"notes": "Coherent boundary control: consumer references still force BLOCK. However, future controls should distinguish false positive documentation mentions from active runtime references."
+},
+{
+"control": "source-node-hashes-validate",
+"accepted": true,
+"notes": "Coherent integrity control: source nodes carry hashes and can be validated at the harness level."
+},
+{
+"control": "stale-source-node-detected",
+"accepted": true,
+"notes": "Coherent freshness control: stale source-node hash mutation is detected."
+},
+{
+"control": "edge-source-spans-validate",
+"accepted": true,
+"notes": "Coherent traceability control: semantic edges include source spans. This does not equal full row-by-row span validation for all large JSONL bodies."
+},
+{
+"control": "removed-source-span-detected",
+"accepted": true,
+"notes": "Coherent traceability mutation control: removed source span is detected."
+}
+],
+"readLimitations": [
+{
+"file": "baseline-reviewable/policy_semantic_edges.jsonl",
+"limitation": "I did not perform full row-by-row validation of the 24,109-edge JSONL body.",
+"impact": "No claim of complete edge correctness, semantic equivalence, or full span validation is made."
+},
+{
+"file": "baseline-reviewable/shards/policy_semantic_edges/part-000.jsonl through part-024.jsonl",
+"limitation": "I relied on shard manifest/index/hash metadata, not full shard-body review.",
+"impact": "The review can accept manifest-level shard evidence only."
+},
+{
+"file": "baseline-reviewable/policy_source_nodes.jsonl and shards/policy_source_nodes/part-000.jsonl",
+"limitation": "I relied on index/shard metadata for the 651 source nodes.",
+"impact": "No claim of complete source-node row-level validation is made."
+},
+{
+"file": "baseline-reviewable/policy_consumer_refs.jsonl",
+"limitation": "I relied on the consumer-ref index and summary counts, not full row-by-row triage.",
+"impact": "The active-consumer BLOCK remains valid, but individual consumer classifications are not fully reviewed here."
+},
+{
+"file": "tool/bin/policy-semantic-graph-baseline.py",
+"limitation": "The published tool shows heuristic keyword extraction, but the separate negative-control verifier script is not published as a hashed file in the mirror.",
+"impact": "The rerun receipt is acceptable for this evidence step, but stronger future reproducibility should include the verifier implementation and hash."
+}
+],
+"remainingImprovements": [
+"Publish a reconciled negative-control plan matching the nine executed controls.",
+"Publish the negative-control verifier script and its hash, not only its name in the receipt.",
+"Add controls for false semantic positives: weak permission misread as MUST, documentation mention misread as active consumer, quoted anti-pattern misread as allowed behavior, and role scope widening.",
+"Add controls for cross-file semantics: source span exists but points to the wrong file or wrong line, duplicate conflicting edges, superseded policy text still treated as active, and generated/evidence material treated as authority.",
+"Add sampled or full row-level review for semantic edges, source nodes, consumer refs, and untyped sources before any stronger claim.",
+"Move from heuristic-keyword-baseline toward an accepted typed semantic graph compiler, with deterministic fixtures and reviewed semantic equivalence cases.",
+"Keep deletion-readiness BLOCK until all source files have semantic coverage, active consumer refs are eliminated, and the accepted typed compiler replaces heuristic extraction."
+],
+"mustNotClaim": [
+"policy.git retirement",
+"policy.git deletion",
+"cutover approval",
+"merge approval",
+"completion approval",
+"semantic approval",
+"canonical write",
+"SSOT write"
+]
+}
+}
