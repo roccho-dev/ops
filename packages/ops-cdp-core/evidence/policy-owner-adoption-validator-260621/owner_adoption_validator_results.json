@@ -78,6 +78,12 @@
       "expected": "REJECT",
       "actual": "REJECT",
       "pass": true
+    },
+    {
+      "caseId": "reject-automation-delegated-approval",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "pass": true
     }
   ],
   "allPass": true

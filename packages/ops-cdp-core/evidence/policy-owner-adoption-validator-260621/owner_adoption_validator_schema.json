@@ -39,12 +39,14 @@
     "missing explicit doesNotApprove boundaries",
     "Gen0 delegated approval",
     "Gen1 delegated approval",
-    "partial doesNotApprove boundary omissions"
+    "partial doesNotApprove boundary omissions",
+    "automation delegated approval"
   ],
   "deferOrRejectVerdict": "BLOCK_WITH_OWNER_DECISION",
   "negativeCoverageFixes": [
     "Gen0 delegated approval rejected",
     "Gen1 delegated approval rejected",
+    "automation delegated approval rejected",
     "partial boundary omission rejected"
   ]
 }

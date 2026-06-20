@@ -7,8 +7,8 @@
   "policyInputRef": "334997669f1889a8e2658730c616d2d4510d4536",
   "opsEvidenceRef": "2249fb84a6c0ba50b95b489f46e9c2b8a2734a8d",
   "adrsEvidenceRef": "98fea894a7637ab0d02354f680e4f27df7b144e8",
-  "caseCount": 13,
-  "passedCaseCount": 13,
+  "caseCount": 14,
+  "passedCaseCount": 14,
   "nextTransitionReady": true,
   "mustNotClaim": [
     "owner approval",
@@ -22,6 +22,7 @@
   "reviewFixesApplied": [
     "explicit Gen0 delegated approval rejection",
     "explicit Gen1 delegated approval rejection",
+    "explicit automation delegated approval rejection",
     "partial doesNotApprove boundary omission rejection"
   ]
 }
