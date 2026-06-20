@@ -18,3 +18,4 @@
 {"kind":"package","name":"ops-handoff-pack","runtime":"node","entry":"packages/ops-handoff-pack/bin/ops-handoff-pack.mjs","bin":"ops-handoff-pack","deps":["git","node","ops-handoff-core"],"env":[]}
 {"kind":"package","name":"ops-build-receipt-check","runtime":"node","entry":"packages/ops-build-receipt-check/bin/ops-build-receipt-check.mjs","bin":"ops-build-receipt-check","deps":["node"],"env":[]}
 {"kind":"package","name":"find-packages","runtime":"node","entry":"packages/find-packages/bin/find-packages.mjs","bin":"find-packages","deps":["node"],"env":[]}
+{"kind":"package","name":"ui-raw-loop-runtime","runtime":"node","entry":"packages/ui-raw-loop-runtime/bin/ui-raw-loop-runtime.mjs","bin":"ui-raw-loop-runtime","deps":["node"],"env":[]}
