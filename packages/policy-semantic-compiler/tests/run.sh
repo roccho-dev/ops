@@ -10,6 +10,7 @@ mkdir -p "$work/projected-real" "$work/projected-fixture"
 mkdir -p "$work/semantic-review-blocked" "$work/semantic-review-disposition" "$work/semantic-review-accepted"
 mkdir -p "$work/adrs-projection-accepted" "$work/adrs-projection-missing-proof" "$work/adrs-projection-fake-proof"
 mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disposition"
+mkdir -p "$work/adrs-projection-fixture-only"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -108,6 +109,8 @@ policy-semantic-compiler review-adrs-projection-duckdb \
 grep -q '"ok": true' "$work/adrs-projection-accepted.stdout.json"
 grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"fresh-genx-evidence-accepted"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"fixture-only-proof-rejected"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"generated-rows-not-authority"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 
 if policy-semantic-compiler review-adrs-projection-duckdb \
@@ -146,6 +149,16 @@ if policy-semantic-compiler review-adrs-projection-duckdb \
   exit 1
 fi
 grep '"gate_id":"candidate-only-disposition"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-fixture-only" > "$work/adrs-projection-fixture-only.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with fixture-only proof" >&2
+  exit 1
+fi
+grep '"gate_id":"fresh-genx-evidence-accepted"' "$work/adrs-projection-fixture-only/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"fixture-only-proof-rejected"' "$work/adrs-projection-fixture-only/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
 
 policy-semantic-compiler compile \
   --policy-root "$policy_root" \

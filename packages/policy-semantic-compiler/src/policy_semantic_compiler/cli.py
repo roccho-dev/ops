@@ -693,6 +693,7 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
         "semantic_nodes": records_dir / "policy.semanticNode.v1.jsonl",
         "semantic_edges": records_dir / "policy.semanticEdge.v1.jsonl",
         "coverage_proofs": records_dir / "policy.acceptedCoverageProof.v1.jsonl",
+        "fresh_genx_reviews": records_dir / "policy.freshGenXReconstructionReview.v1.jsonl",
     }
     optional_files = {
         "dispositions": records_dir / "policy.sourceFileDisposition.v1.jsonl",
@@ -764,6 +765,7 @@ CREATE OR REPLACE TABLE source_spans AS SELECT * FROM read_json_auto({sql_quote(
 CREATE OR REPLACE TABLE semantic_nodes AS SELECT * FROM read_json_auto({sql_quote(str(required_files["semantic_nodes"]))});
 CREATE OR REPLACE TABLE semantic_edges AS SELECT * FROM read_json_auto({sql_quote(str(required_files["semantic_edges"]))});
 CREATE OR REPLACE TABLE coverage_proofs AS SELECT * FROM read_json_auto({sql_quote(str(required_files["coverage_proofs"]))});
+CREATE OR REPLACE TABLE fresh_genx_reviews AS SELECT * FROM read_json_auto({sql_quote(str(required_files["fresh_genx_reviews"]))});
 CREATE OR REPLACE TABLE dispositions AS SELECT * FROM {dispositions_source};
 
 CREATE OR REPLACE TABLE endpoint_ids AS
@@ -781,15 +783,42 @@ CREATE OR REPLACE TABLE review_required_spans AS
 SELECT id FROM source_spans
 EXCEPT SELECT id FROM non_normative_span_ids;
 
-CREATE OR REPLACE TABLE accepted_coverage_proofs AS
+CREATE OR REPLACE TABLE coverage_proof_candidates AS
 SELECT *
 FROM coverage_proofs
 WHERE kind = 'policy.acceptedCoverageProof.v1'
   AND accepted = true
   AND status = 'accepted'
+  AND policyRev = {sql_quote(expected_rev)};
+
+CREATE OR REPLACE TABLE accepted_fresh_genx_reviews AS
+SELECT *
+FROM fresh_genx_reviews
+WHERE kind = 'policy.freshGenXReconstructionReview.v1'
+  AND status = 'accepted'
+  AND noRemainingObjections = true
+  AND memoryUsed = false
+  AND policyBodyUsedAsSource = false
+  AND fixtureOnly = false
+  AND policyRev = {sql_quote(expected_rev)};
+
+CREATE OR REPLACE TABLE coverage_proof_genx_ids AS
+SELECT id AS proof_id, unnest(freshGenXEvidenceIds) AS genx_id
+FROM coverage_proof_candidates;
+
+CREATE OR REPLACE TABLE accepted_coverage_proofs AS
+SELECT c.*
+FROM coverage_proof_candidates c
+WHERE c.noRemainingObjections = true
   AND generatedIsAuthority = false
   AND policyDeletionApproved = false
-  AND policyRev = {sql_quote(expected_rev)};
+  AND c.fixtureOnly = false
+  AND EXISTS (
+    SELECT 1
+    FROM coverage_proof_genx_ids p
+    JOIN accepted_fresh_genx_reviews g ON g.id = p.genx_id
+    WHERE p.proof_id = c.id
+  );
 
 CREATE OR REPLACE TABLE covered_span_ids AS
 SELECT DISTINCT unnest(coveredSourceSpanIds) AS id FROM accepted_coverage_proofs;
@@ -870,6 +899,25 @@ SELECT 'accepted-coverage-missing',
 FROM review_required_spans r
 LEFT JOIN covered_span_ids c ON c.id = r.id
 WHERE c.id IS NULL
+UNION ALL
+SELECT 'fresh-genx-evidence-accepted',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'accepted coverage proof lacks accepted fresh GenX no-objection evidence' END,
+       count(*)
+FROM coverage_proof_candidates c
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM coverage_proof_genx_ids p
+  JOIN accepted_fresh_genx_reviews g ON g.id = p.genx_id
+  WHERE p.proof_id = c.id
+)
+UNION ALL
+SELECT 'fixture-only-proof-rejected',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'fixture-only proof cannot satisfy accepted coverage' END,
+       count(*)
+FROM coverage_proof_candidates
+WHERE fixtureOnly = true
 UNION ALL
 SELECT 'candidate-only-disposition',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,

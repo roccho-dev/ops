@@ -81,6 +81,7 @@ records directory and runs DuckDB-backed fail-closed gates. It expects:
 - `policy.semanticNode.v1`
 - `policy.semanticEdge.v1`
 - `policy.acceptedCoverageProof.v1`
+- `policy.freshGenXReconstructionReview.v1`
 - optional `policy.sourceFileDisposition.v1`
 
 The command requires `--policy-rev` and rejects stale source traces, orphan
@@ -88,7 +89,10 @@ span/node/edge references, missing accepted coverage, candidate-only
 dispositions, contradictory dispositions, and any generated/projection row that
 claims authority. The accepted coverage proof must be `accepted:true`,
 `status:"accepted"`, match the target policy revision, set
-`generatedIsAuthority:false`, and keep `policyDeletionApproved:false`.
+`generatedIsAuthority:false`, keep `policyDeletionApproved:false`, set
+`fixtureOnly:false`, and reference accepted Fresh GenX reconstruction evidence
+where `memoryUsed:false`, `policyBodyUsedAsSource:false`, and
+`noRemainingObjections:true`.
 
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted

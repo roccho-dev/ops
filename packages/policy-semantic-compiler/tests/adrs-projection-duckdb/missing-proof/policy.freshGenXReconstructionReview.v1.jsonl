@@ -1,0 +1,1 @@
+{"id":"genx:blocked","kind":"policy.freshGenXReconstructionReview.v1","status":"blocked","policyRev":"rev-good","memoryUsed":false,"policyBodyUsedAsSource":false,"fixtureOnly":false,"noRemainingObjections":false,"reviewerIds":[],"inputs":["adrs-projection","ops-duckdb-output"]}
