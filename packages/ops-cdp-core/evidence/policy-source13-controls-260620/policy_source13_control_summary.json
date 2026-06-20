@@ -1,0 +1,7 @@
+{
+  "type": "policy.source13.controlSummary.v1",
+  "decision": "PASS",
+  "passed": 6,
+  "total": 6,
+  "scope": "source13 classifier controls; not policy retirement approval"
+}

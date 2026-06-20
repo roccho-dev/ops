@@ -1,0 +1,6 @@
+{"type":"policy.source13.controlResult.v1","name":"all-13-input-rows-classified","passed":true,"details":{"total":13,"rows":13}}
+{"type":"policy.source13.controlResult.v1","name":"still-untyped-authority-zero","passed":true,"details":{"stillUntypedAuthority":0}}
+{"type":"policy.source13.controlResult.v1","name":"typed-edge-count-matches-covered-rows","passed":true,"details":{"typedEdges":7,"edgeRows":7}}
+{"type":"policy.source13.controlResult.v1","name":"classification-records-remain-non-authority","passed":true,"details":{"bad":0}}
+{"type":"policy.source13.controlResult.v1","name":"typed-edge-records-have-trace-fields","passed":true,"details":{"bad":0}}
+{"type":"policy.source13.controlResult.v1","name":"retirement-stays-blocked","passed":true,"details":{"gate":"BLOCK"}}

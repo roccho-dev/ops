@@ -1,0 +1,45 @@
+{
+  "type": "policy.source13.reviewSummary.v1",
+  "classifierVersion": "source13-classifier-jq-v1",
+  "decision": "PASS",
+  "deletionReadiness": "BLOCK",
+  "total": 13,
+  "stillUntypedAuthority": 0,
+  "typedEdgeCount": 7,
+  "byDisposition": {
+    "non-authority-excluded": 6,
+    "typed-covered": 7
+  },
+  "byClass": {
+    "example-boundary": 2,
+    "generated-coverage-receipt": 1,
+    "localizer-evidence-head": 3,
+    "non-policy-template-example": 1,
+    "package-boundary": 5,
+    "runtime-dependency-note": 1
+  },
+  "gates": [
+    {
+      "name": "authority-bearing-untyped-sources-eliminated",
+      "status": "PASS",
+      "actual": 0,
+      "expected": 0
+    },
+    {
+      "name": "policy-retirement-still-blocked-by-compiler-and-equivalence",
+      "status": "BLOCK",
+      "actual": "typed compiler and semantic equivalence gates remain",
+      "expected": "accepted compiler and equivalence proof"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "semantic approval",
+    "canonical write",
+    "SSOT write"
+  ]
+}
