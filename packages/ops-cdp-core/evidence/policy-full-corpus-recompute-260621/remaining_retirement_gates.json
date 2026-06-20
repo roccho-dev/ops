@@ -1,0 +1,18 @@
+{
+  "type": "policy.fullCorpusRecompute.remainingRetirementGates.v1",
+  "deletionReadiness": "BLOCK",
+  "gates": [
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    }
+  ]
+}

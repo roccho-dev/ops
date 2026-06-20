@@ -1,0 +1,60 @@
+{
+  "type": "policy.fullCorpusRecompute.summary.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "BLOCK",
+  "evidenceQuality": "PASS_AS_RECOMPUTE_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "sourceReconciliationApplied": true,
+  "mmdEvidenceApplied": true,
+  "inventoryGate": {
+    "status": "PASS",
+    "total": 754,
+    "unresolvedInventoryGaps": 0,
+    "structuralOrNonAuthority": 97
+  },
+  "acceptedTypedEvidence": {
+    "source13Edges": 7,
+    "mmdEdges": 202,
+    "coveredSourceFiles": 13
+  },
+  "typedCoverageGate": {
+    "status": "BLOCK",
+    "recomputedCoverageGaps": 644
+  },
+  "semanticDeltaGate": {
+    "status": "BLOCK",
+    "unresolved": 644,
+    "expected": 0
+  },
+  "fullCorpusEquivalenceGate": {
+    "status": "BLOCK"
+  },
+  "remainingRetirementGates": [
+    {
+      "name": "full-natural-language-policy-semantic-equivalence",
+      "status": "BLOCK"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

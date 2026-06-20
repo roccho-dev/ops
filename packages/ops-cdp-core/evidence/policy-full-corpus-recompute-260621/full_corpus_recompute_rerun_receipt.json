@@ -1,0 +1,6 @@
+{
+  "type": "policy.fullCorpusRecompute.rerunReceipt.v1",
+  "passed": true,
+  "inputBundleSha256": "62994a7ab7137a7177217eddf71bc35ba7b8ebec85af1fcd8220c44291010c64",
+  "method": "deterministic recompute from prior full corpus plus reconciliation plus mmd/source13 typed evidence"
+}

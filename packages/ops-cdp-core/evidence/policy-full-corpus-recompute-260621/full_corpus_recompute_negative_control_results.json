@@ -1,0 +1,19 @@
+{
+  "type": "policy.fullCorpusRecompute.negativeControlResults.v1",
+  "decision": "PASS",
+  "passed": 10,
+  "total": 10,
+  "deletionReadiness": "BLOCK",
+  "controls": [
+    "full-corpus-recompute-inputs-fixed",
+    "source-reconciliation-applied",
+    "mmd-evidence-applied",
+    "authority-classification-recomputed",
+    "typed-coverage-recomputed",
+    "semantic-delta-recomputed",
+    "unresolved-deltas-zero-or-blocked",
+    "omitted-mmd-edge-detected",
+    "does-not-clear-retirement",
+    "deterministic-rerun-match"
+  ]
+}

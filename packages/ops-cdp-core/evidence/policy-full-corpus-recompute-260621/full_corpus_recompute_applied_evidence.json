@@ -1,0 +1,23 @@
+{
+  "type": "policy.fullCorpusRecompute.appliedEvidence.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "deletionReadiness": "BLOCK",
+  "inputs": [
+    {
+      "name": "priorFullCorpus",
+      "path": "policy-full-corpus-equivalence-candidate-260621"
+    },
+    {
+      "name": "sourceInventoryReconciliation",
+      "path": "policy-source-inventory-reconciliation-260621"
+    },
+    {
+      "name": "mmdAuthorityReview",
+      "path": "policy-mmd-authority-review-260621"
+    },
+    {
+      "name": "typedCompilerCandidate",
+      "path": "policy-typed-compiler-candidate-260621"
+    }
+  ]
+}
