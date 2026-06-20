@@ -1,0 +1,6 @@
+{
+  "type": "policy.fullCorpus.rerunReceipt.v1",
+  "passed": true,
+  "inputBundleSha256": "e46fd16953edd691b65f158ebd3a2f44f4a3527fd5ebc51cd04948744b6b7725",
+  "method": "deterministic sorted inventory plus jq classification"
+}

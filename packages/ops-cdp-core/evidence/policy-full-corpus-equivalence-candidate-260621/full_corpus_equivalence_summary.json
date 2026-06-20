@@ -1,0 +1,59 @@
+{
+  "type": "policy.fullCorpus.equivalenceSummary.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "BLOCK",
+  "evidenceQuality": "PASS_AS_BLOCKING_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "fullNaturalLanguageCorpusAuthority": false,
+  "fullCorpusEquivalenceGate": {
+    "status": "BLOCK",
+    "reason": "accepted compiler authority is reduced/source13 scoped and does not cover the full natural-language policy corpus"
+  },
+  "inventoryGate": {
+    "status": "PASS",
+    "inventoryCount": 754,
+    "classificationCount": 754,
+    "coverageCount": 754
+  },
+  "authorityClassificationGate": {
+    "status": "BLOCK",
+    "notInBaselineSourceInventory": 103,
+    "unresolvedAuthorityCandidates": 64
+  },
+  "typedCoverageGate": {
+    "status": "BLOCK",
+    "baselineSemanticEdges": 24109,
+    "acceptedReducedCompilerEdges": 7,
+    "coverageGapRecords": 644
+  },
+  "semanticDeltaGate": {
+    "status": "BLOCK",
+    "unresolved": 644,
+    "expected": 0
+  },
+  "remainingRetirementGates": [
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "full corpus semantic equivalence",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

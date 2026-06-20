@@ -1,0 +1,17 @@
+{
+  "type": "policy.fullCorpus.negativeControlResults.v1",
+  "decision": "PASS",
+  "passed": 8,
+  "total": 8,
+  "deletionReadiness": "BLOCK",
+  "controls": [
+    "inventory-omission-detected-by-count",
+    "unclassified-source-detected",
+    "unmapped-authority-unit-blocks",
+    "dropped-edge-blocks",
+    "weakened-modality-not-approved",
+    "generated-evidence-authority-confusion-blocks",
+    "full-corpus-does-not-clear-retirement",
+    "deterministic-rerun-match"
+  ]
+}

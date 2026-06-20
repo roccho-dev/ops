@@ -1,0 +1,49 @@
+{
+  "type": "policy.fullCorpus.manifest.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "BLOCK",
+  "evidenceQuality": "PASS_AS_BLOCKING_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "files": [
+    {
+      "path": "full_corpus_authority_classification.jsonl",
+      "sha256": "990625b69f730f42053f8d353e590457151f785b94a1fa2e9599a68fe3878a19",
+      "bytes": 433818
+    },
+    {
+      "path": "full_corpus_equivalence_summary.json",
+      "sha256": "06c46f7078889283145d61b33b4b6a17b85e1e56ada29e6e4c2e5c37692228be",
+      "bytes": 1526
+    },
+    {
+      "path": "full_corpus_negative_control_results.json",
+      "sha256": "b7abcd05ecbf346234a5b70ae7e5fef321beaa9e5980211e376fb33937379688",
+      "bytes": 477
+    },
+    {
+      "path": "full_corpus_rerun_receipt.json",
+      "sha256": "e4202ac2c0771ab1da86fbe9424f7f0502400a6336278497c0313921180ba0d8",
+      "bytes": 228
+    },
+    {
+      "path": "full_corpus_semantic_deltas.jsonl",
+      "sha256": "03f5f2ae867a50c3431f484ab18e4ccd16df10620759130ccd03cebc1e7d31c4",
+      "bytes": 190175
+    },
+    {
+      "path": "full_corpus_source_inventory.jsonl",
+      "sha256": "9493ea7281642d0eb9ca57b1f7ad54e6dc529c8ed9c7aff1286333e828b6afbb",
+      "bytes": 196763
+    },
+    {
+      "path": "full_corpus_typed_coverage.jsonl",
+      "sha256": "26f9010c621cd9036d9ec942b52548a6dad3a7391dc0c9893d1e43aeeea4fd9f",
+      "bytes": 292453
+    },
+    {
+      "path": "remaining_retirement_gates.json",
+      "sha256": "82f3f25a8a57406eabf4ef6fd85dfff496804cee7d1add2638ed9c7e9ead8e87",
+      "bytes": 356
+    }
+  ]
+}
