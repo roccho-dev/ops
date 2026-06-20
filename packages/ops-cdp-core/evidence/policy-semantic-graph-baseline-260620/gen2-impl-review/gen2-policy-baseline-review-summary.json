@@ -1,0 +1,53 @@
+{
+  "kind": "policy.semanticGraphBaseline.gen2ImplReviewEvidenceSummary.v1",
+  "date": "2026-06-20",
+  "conversationUrl": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a3699c1-3e04-83ee-b55c-f9ee0d538ee5",
+  "fixedMirror": "https://github.com/roccho-dev/public/tree/0c4329bbed0c864534e13d1c69fa8ff82ffb7278/policy-semantic-baseline-mirror-260620",
+  "mirrorCommit": "0c4329bbed0c864534e13d1c69fa8ff82ffb7278",
+  "ssotRefs": {
+    "ops": "proposal/project-source-transport-route-repair-260620@5c037c3807fc0e19bcae0e1ff2823e796a527cc6",
+    "adrs": "proposal/gen2-handoff-evidence-260620@312a2de63c73ead345908e551788643139f05a34",
+    "policy": "proposal/bounded-external-readable-mirror-260620@7255ab1938ec6b671a303019b6f6f6ffd89ef008"
+  },
+  "gen2": {
+    "actor": "Gen2 ChatGPT",
+    "threadFunction": "impl-review",
+    "readbackCompleted": true,
+    "reviewPerformed": true,
+    "implementationPerformed": false,
+    "verdict": "PASS",
+    "reportedBaselineDecision": "BLOCK",
+    "decisionAcceptedAsFirstBaseline": true
+  },
+  "boundary": {
+    "degradedExternalMirrorEvidenceOnly": true,
+    "notProjectSourceProof": true,
+    "mirrorIsNotCanonicalSsot": true,
+    "deletionApproval": false,
+    "cutoverApproval": false,
+    "semanticApproval": false,
+    "completionApproval": false,
+    "mergeApproval": false,
+    "canonicalWrite": false,
+    "ssotWrite": false
+  },
+  "readLimitations": [
+    "baseline/policy_semantic_edges.jsonl body not fully read by Gen2; manifest/hash/aggregate only",
+    "baseline/policy_source_nodes.jsonl body not fully read by Gen2; manifest/hash/aggregate only",
+    "baseline/policy_consumer_refs.jsonl only partially reviewed by Gen2",
+    "baseline/policy_untyped_sources.jsonl not independently parsed by Gen2",
+    "tool was reviewed but not executed by Gen2"
+  ],
+  "requiredMirrorImprovements": [
+    "split policy_semantic_edges.jsonl into smaller sha256-addressed shards",
+    "add policy_semantic_edges.index.json with row and edge-kind counts",
+    "add policy_source_nodes.index.json with row and path-prefix counts",
+    "add deterministic rerun transcript",
+    "add negative-control fixture outputs",
+    "classify consumer refs by active/generated/evidence/doc/path/triage",
+    "classify untyped files by normative/generated/package-metadata/code/evidence/template/not-applicable",
+    "add compact REVIEW_SUMMARY.json",
+    "add line-addressable samples for edge kinds and gate failure classes"
+  ],
+  "evidenceIntegrityNote": "Gen2 returned JSON-shaped text with a raw newline inside URL string; raw response is preserved separately and this summary is the normalized evidence record."
+}

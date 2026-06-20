@@ -1,0 +1,201 @@
+{
+"GEN2_POLICY_BASELINE_IMPL_REVIEW": {
+"actor": "Gen2 ChatGPT",
+"threadFunction": "impl-review",
+"reviewPerformed": true,
+"implementationPerformed": false,
+"fixedMirror": {
+"url": "https://github.com/roccho-dev/public/tree/0c4329bbed0c864534e13d1c69fa8ff82ffb7278/policy-semantic-baseline-mirror-260620
+",
+"commit": "0c4329bbed0c864534e13d1c69fa8ff82ffb7278"
+},
+"authorityBoundary": {
+"degradedExternalMirrorEvidenceOnly": true,
+"notProjectSourceProof": true,
+"mirrorIsNotCanonicalSsot": true,
+"deletionApproval": false,
+"cutoverApproval": false,
+"semanticApproval": false,
+"completionApproval": false,
+"canonicalWrite": false,
+"ssotWrite": false
+},
+"verdict": "PASS",
+"findings": [
+{
+"severity": "info",
+"item": "First baseline decision is correctly BLOCK",
+"evidence": "README reports Primary result: BLOCK and states the mirror is degraded transport only, not canonical SSOT, not Project Source proof, and not approval for semantic, completion, merge, deletion, cutover, or canonical write. 
+GitHub
+",
+"reason": "A deletion-readiness baseline should fail closed until all semantic coverage and consumer cutover gates are closed.",
+"requiredFix": "None for first baseline."
+},
+{
+"severity": "info",
+"item": "Authority boundary is explicitly preserved",
+"evidence": "REVIEW_INPUT_MANIFEST.json sets transportLane=external-readable-public-mirror-degraded, projectSourceProof=false, canonicalSsot=false, decision=BLOCK, and denies approval/write fallbacks including deletion, cutover, merge, completion, semantic approval, canonical-write, ssot-write, inline-source-body, thread-attachment, and base64-fallback. 
+GitHub
+",
+"reason": "The baseline is framed as evidence only and does not promote transport evidence into authority.",
+"requiredFix": "None for first baseline."
+},
+{
+"severity": "info",
+"item": "Blocking gates are coherent for a first baseline",
+"evidence": "policy_deletion_readiness_gates.json reports BLOCK for all-source-files-have-semantic-edges with actual=64 expected=0, BLOCK for active-policy-repo-consumer-refs-eliminated with actual=89 expected=0, and BLOCK for heuristic-extraction-not-final-authority because actual=heuristic-keyword-baseline while expected=accepted typed semantic graph compiler. 
+GitHub
+",
+"reason": "These gates directly prevent the dangerous false conclusion that a heuristic graph or partial coverage proves deletion readiness.",
+"requiredFix": "None for first baseline; later baseline should split consumer refs by active, stale, generated, doc-only, and false-positive classes."
+},
+{
+"severity": "major",
+"item": "Heuristic extraction is intentionally not final authority",
+"evidence": "The tool uses keyword line matching for edge kinds such as deny, obligation, activation, consumer, authority, replacement, and evidence, and the tool README says it emits evidence and does not decide that policy.git can be retired. 
+GitHub
++1
+",
+"reason": "This is acceptable only because the result is BLOCK. It would be misleading if treated as semantic completeness or deletion readiness.",
+"requiredFix": "Before any stronger verdict, replace or supplement the heuristic with accepted typed semantic graph compiler output and negative controls."
+},
+{
+"severity": "major",
+"item": "Large semantic edge body could not be fully validated in this review",
+"evidence": "manifest.json lists policy_semantic_edges.jsonl as 18,475,360 bytes with sha256 e5f9906fcf75409c776391b1ab6b3d2b00f86f2bb89206cf32058248525acdde, but raw fetch returned an internal fetch error in this environment. 
+GitHub
++1
+",
+"reason": "I can verify its existence, expected size/hash by manifest, and downstream aggregate claims, but not every JSONL row or source span.",
+"requiredFix": "Add split shards, sampled row index, per-kind counts, first/last row hashes, and a small verifier transcript so reviewers can validate without loading one 18 MB raw blob."
+},
+{
+"severity": "major",
+"item": "Counterexamples are useful but not sufficient as negative controls",
+"evidence": "counterexamples.md lists untyped source files=64, low-density prose files=0, active policy repo consumer references=89, and extractor class=heuristic baseline. 
+GitHub
+",
+"reason": "These are good BLOCK evidence, but they are mainly observed gaps, not mutation tests proving the detector catches semantic loss.",
+"requiredFix": "Add explicit negative-control fixtures for dropped deny edge, weakened obligation edge, removed activation edge, consumer-ref false positive/false negative, generated artifact exemption, and source-span tampering."
+},
+{
+"severity": "minor",
+"item": "Untyped file gate may over-block package/code files",
+"evidence": "policy_untyped_sources.jsonl includes package.json files, small .mjs index files, evidence head text files, and templates as untyped because no heuristic semantic edge was extracted. 
+GitHub
+",
+"reason": "This is safe for BLOCK, but the next baseline should distinguish normative source files from non-normative package metadata or generated/evidence files.",
+"requiredFix": "Add source classification fields: normative, generated, package-metadata, evidence, code, template, doc, and not-applicable reason."
+},
+{
+"severity": "minor",
+"item": "Consumer-ref gate may include false positives",
+"evidence": "policy_consumer_refs.jsonl includes examples such as package path mentions, board JSONL text, proposal prose, flake description, and issue evidence lines. 
+GitHub
++1
+",
+"reason": "Counting all policy mentions as active consumer refs is conservative and safe for BLOCK, but it may overstate actual migration blockers.",
+"requiredFix": "Add ref classes: active runtime consumer, stale historical evidence, generated projection, doc mention, path mention, and needs-human-triage."
+}
+],
+"baselineDecisionReview": {
+"reportedDecision": "BLOCK",
+"decisionAcceptedAsFirstBaseline": true,
+"reason": "Accepted as first reproducible deletion-readiness baseline evidence because it fails closed, exposes semantic gaps and consumer references, and preserves non-approval boundaries. Acceptance is limited to degraded external-mirror evidence and does not validate unread large JSONL bodies row-by-row."
+},
+"gateReview": [
+{
+"gate": "all-source-files-have-semantic-edges",
+"reportedStatus": "BLOCK",
+"accepted": true,
+"notes": "Coherent as a conservative first gate. actual=64 expected=0 aligns with coverage filesWithoutEdges=64 and coverageRatio=0.9017. 
+GitHub
++1
+"
+},
+{
+"gate": "all-required-edge-kinds-observed",
+"reportedStatus": "PASS",
+"accepted": true,
+"notes": "Accept only as edge-kind presence, not semantic completeness. coverage reports observed kinds activation, authority, consumer, deny, evidence, obligation, replacement and no missing edge kinds. 
+GitHub
+"
+},
+{
+"gate": "low-density-prose-reviewed",
+"reportedStatus": "PASS",
+"accepted": true,
+"notes": "Accept as reported aggregate only. policy_low_density_prose.jsonl has empty SHA-256 in manifest, but the heuristic nature limits authority. 
+GitHub
++1
+"
+},
+{
+"gate": "active-policy-repo-consumer-refs-eliminated",
+"reportedStatus": "BLOCK",
+"accepted": true,
+"notes": "Coherent for first baseline because policy_graph_coverage reports consumerRefCount=89 and gates require 0. However, next review needs active-vs-historical triage. 
+GitHub
++1
+"
+},
+{
+"gate": "heuristic-extraction-not-final-authority",
+"reportedStatus": "BLOCK",
+"accepted": true,
+"notes": "Essential gate. The tool itself is keyword-based and the gate correctly blocks treating heuristic extraction as an accepted typed semantic graph compiler. 
+GitHub
++1
+"
+}
+],
+"readLimitations": [
+{
+"file": "baseline/policy_semantic_edges.jsonl",
+"limitation": "Could not fetch/read the 18,475,360-byte raw body in this review; only manifest size/hash and aggregate coverage references were observed.",
+"impact": "I cannot claim full row-level validation, exact row count, per-edge source-span integrity, or absence of malformed rows."
+},
+{
+"file": "baseline/policy_source_nodes.jsonl",
+"limitation": "GitHub/raw display did not provide inspectable body content in this review, though manifest reports 200,558 bytes and coverage reports sourceNodeCount=651.",
+"impact": "I can accept source-node count and hash only as manifest/aggregate evidence, not row-by-row validation."
+},
+{
+"file": "baseline/policy_consumer_refs.jsonl",
+"limitation": "Only a displayed prefix/sample was visible; the full 89-reference body was not fully reviewed.",
+"impact": "I can accept consumerRefCount=89 as aggregate evidence, but cannot classify all refs as truly active."
+},
+{
+"file": "baseline/policy_untyped_sources.jsonl",
+"limitation": "Visible enough to confirm representative untyped entries, but full parsing was not independently executed.",
+"impact": "I can accept the 64 untyped count as manifest/coverage evidence, not as independently recomputed fact."
+},
+{
+"file": "tool/bin/policy-semantic-graph-baseline.py",
+"limitation": "Read as rendered raw one-line content, not executed against a policy checkout in this environment.",
+"impact": "I reviewed algorithm shape and output logic, but did not reproduce the baseline artifacts from source."
+}
+],
+"requiredMirrorImprovements": [
+"Split policy_semantic_edges.jsonl into smaller shards with sha256 for each shard.",
+"Add policy_semantic_edges.index.json with rowCount, per-edgeKind counts, first/last row ids, and sourceSpan coverage count.",
+"Add policy_source_nodes.index.json with rowCount, per-kind counts, path prefix counts, first/last row ids, and total bytes.",
+"Add a deterministic rerun transcript showing command, policy checkout identity, output directory, sha256sum -c result, and diff/no-drift result.",
+"Add negative-control fixture outputs proving dropped deny, weakened obligation, missing activation, removed source span, stale source node, and consumer-ref false positive are caught.",
+"Add consumer-ref triage fields distinguishing active runtime dependency, generated/evidence/history, doc-only mention, path-only mention, and requires-human-review.",
+"Add source classification for untyped files: normative, generated, package metadata, code, evidence, template, and not-applicable.",
+"Add a compact REVIEW_SUMMARY.json that contains all gate counts, hashes, and sample evidence without requiring the 18 MB JSONL body.",
+"Add line-addressable samples for each edge kind and for each gate failure class."
+],
+"mustNotClaim": [
+"policy.git retirement",
+"policy.git deletion",
+"cutover approval",
+"merge approval",
+"completion approval",
+"semantic approval",
+"canonical write",
+"SSOT write"
+]
+}
+}

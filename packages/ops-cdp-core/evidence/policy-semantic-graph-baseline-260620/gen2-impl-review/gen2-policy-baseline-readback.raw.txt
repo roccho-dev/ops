@@ -1,0 +1,216 @@
+{
+"schema": "GEN2_POLICY_BASELINE_REVIEW_READBACK.v1",
+"artifactName": "GEN2_POLICY_BASELINE_REVIEW_READBACK.json",
+"actorBinding": {
+"actor": "Gen2 ChatGPT",
+"role": "role.chatgpt.thread",
+"threadFunction": "impl-review",
+"task": "policy semantic graph deletion-readiness baseline",
+"mode": "readback-only",
+"reviewPerformed": false,
+"implementationPerformed": false
+},
+"fixedMirror": {
+"url": "https://github.com/roccho-dev/public/tree/0c4329bbed0c864534e13d1c69fa8ff82ffb7278/policy-semantic-baseline-mirror-260620
+",
+"repository": "roccho-dev/public",
+"path": "policy-semantic-baseline-mirror-260620",
+"commitRefRead": "0c4329bbed0c864534e13d1c69fa8ff82ffb7278",
+"transportLane": "external-readable-public-mirror-degraded"
+},
+"filesRead": [
+{
+"path": "README.md",
+"status": "read"
+},
+{
+"path": "REVIEW_INPUT_MANIFEST.json",
+"status": "read"
+},
+{
+"path": "GEN2_BASELINE_REVIEW_INITIAL_PROMPT.md",
+"status": "read"
+},
+{
+"path": "files.sha256",
+"status": "read"
+},
+{
+"path": "baseline/manifest.json",
+"status": "read"
+},
+{
+"path": "baseline/policy_deletion_readiness_gates.json",
+"status": "read"
+},
+{
+"path": "baseline/policy_graph_coverage.json",
+"status": "read"
+},
+{
+"path": "baseline/policy_graph_coverage.md",
+"status": "read"
+},
+{
+"path": "baseline/counterexamples.md",
+"status": "read"
+},
+{
+"path": "baseline/policy_consumer_refs.jsonl",
+"status": "partially_read_via_rendered_raw_output"
+},
+{
+"path": "baseline/policy_low_density_prose.jsonl",
+"status": "read_empty_file"
+},
+{
+"path": "baseline/policy_untyped_sources.jsonl",
+"status": "opened_but_body_not_visible_in_tool_output"
+},
+{
+"path": "baseline/policy_source_nodes.jsonl",
+"status": "opened_metadata_observed_body_not_fully_visible"
+},
+{
+"path": "baseline/policy_semantic_edges.jsonl",
+"status": "opened_metadata_observed_body_not_readable"
+},
+{
+"path": "tool/README.md",
+"status": "read"
+},
+{
+"path": "tool/bin/policy-semantic-graph-baseline.py",
+"status": "read"
+}
+],
+"hashManifestReferencesSaw": [
+{
+"path": "baseline/counterexamples.md",
+"sha256": "79eefd57f2202f1c9c69cec6e844a9cdad4d454128fa22cc7374ce08c55779d4"
+},
+{
+"path": "baseline/manifest.json",
+"sha256": "c61eca65915a55c74da78f26efacc29b888f639521db58a46331cff13b4e65eb"
+},
+{
+"path": "baseline/policy_consumer_refs.jsonl",
+"sha256": "de41e391ffbd11c851c9bd3be8fe04244bc24cfbe1a2d4dde1c0aea40951d2ce"
+},
+{
+"path": "baseline/policy_deletion_readiness_gates.json",
+"sha256": "1c2c068bbd3dfffab6bf58145ca2b57111b09aa8dd4c267d7641363970cb03a4"
+},
+{
+"path": "baseline/policy_graph_coverage.json",
+"sha256": "eea060fbe72c13e73d7528c25c0a44a13eda5a340e444f5cba8f5e294f7e6fe0"
+},
+{
+"path": "baseline/policy_graph_coverage.md",
+"sha256": "58ce30f0716d972049a60aa60579cbc5500e3d3fa66c49c6290daa071773bb62"
+},
+{
+"path": "baseline/policy_low_density_prose.jsonl",
+"sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+},
+{
+"path": "baseline/policy_semantic_edges.jsonl",
+"sha256": "e5f9906fcf75409c776391b1ab6b3d2b00f86f2bb89206cf32058248525acdde"
+},
+{
+"path": "baseline/policy_source_nodes.jsonl",
+"sha256": "ea9a31c952987d3cfd241d6133509459ba370bcf7f62c4d2b67cf71cf71246f6"
+},
+{
+"path": "baseline/policy_untyped_sources.jsonl",
+"sha256": "14efbb3355bcb753f787c2a6fbb9af1b395b4d0d89cc0c849e2ec32aeff07268"
+},
+{
+"path": "GEN2_BASELINE_REVIEW_INITIAL_PROMPT.md",
+"sha256": "550a4b7bb767e01ca1d02dd530260d9e2eadc745de10e7930eebd63e2b14d461"
+},
+{
+"path": "README.md",
+"sha256": "507495b1e7650907bfebedc4fe911ffd3512c200bedbd2a6a754ed3ddf33e6c0"
+},
+{
+"path": "REVIEW_INPUT_MANIFEST.json",
+"sha256": "0e37889955861385976b876fd843712a48a2938463f17c39c86aad98279c7549"
+},
+{
+"path": "tool/bin/policy-semantic-graph-baseline.py",
+"sha256": "4d4482a6a4429af8d5607f6473bfbc0917c63b13eb1bbc6ae2883c3fc953c268"
+},
+{
+"path": "tool/README.md",
+"sha256": "3425ec91f4f968aadeafe3f67dc08f7756ac29067f771e7f00eb83d1d3d736aa"
+}
+],
+"manifestReferencesSaw": {
+"reviewInputManifest": {
+"kind": "policy.semanticGraphBaseline.reviewInput.v1",
+"threadFunction": "impl-review",
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+"opsProposalRef": "proposal/project-source-transport-route-repair-260620",
+"opsCommit": "5c037c3",
+"adrsProposalRef": "proposal/gen2-handoff-evidence-260620",
+"adrsCommit": "312a2de",
+"decision": "BLOCK",
+"projectSourceProof": false,
+"canonicalSsot": false,
+"requiredReadback": "GEN2_POLICY_BASELINE_REVIEW_READBACK.json"
+},
+"baselineManifest": {
+"type": "policy.semanticGraphBaselineManifest.v1",
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+"decision": "BLOCK",
+"fileCount": 9
+}
+},
+"authorityBoundaryConfirmations": {
+"degradedExternalMirrorEvidenceOnly": true,
+"notProjectSourceProof": true,
+"mirrorIsNotCanonicalSsot": true,
+"semanticApproval": false,
+"completionApproval": false,
+"mergeApproval": false,
+"deletionApproval": false,
+"cutoverApproval": false,
+"canonicalWrite": false,
+"ssotWrite": false
+},
+"willNotClaim": [
+"policy.git retirement",
+"deletion",
+"cutover",
+"merge",
+"completion",
+"semantic approval",
+"canonical write",
+"SSOT write"
+],
+"transportFallbacksNotUsed": [
+"inline source body",
+"thread attachment",
+"base64 fallback"
+],
+"filesCouldNotRead": [
+{
+"path": "baseline/policy_semantic_edges.jsonl",
+"reason": "GitHub blob page reports the file is too large to display; raw fetch returned an internal fetch error. Hash, size, path, and file metadata were observed from manifests and GitHub metadata."
+},
+{
+"path": "baseline/policy_source_nodes.jsonl",
+"reason": "GitHub metadata showed 651 lines / 196 KB, but rendered body content was not fully visible in the tool output."
+},
+{
+"path": "baseline/policy_untyped_sources.jsonl",
+"reason": "Raw URL opened, but body content was not visible in the tool output."
+}
+],
+"reviewStatus": {
+"reviewStarted": false,
+"reviewVerdictIssued": false,
+"implementationChanged": false
+}
+}
