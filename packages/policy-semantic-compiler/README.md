@@ -80,14 +80,16 @@ records directory and runs DuckDB-backed fail-closed gates. It expects:
 - `policy.sourceSpan.v1`
 - `policy.semanticNode.v1`
 - `policy.semanticEdge.v1`
+- `policy.sourceSpanDisposition.v1`
 - `policy.acceptedCoverageProof.v1`
 - `policy.freshGenXReconstructionReview.v1`
 - optional `policy.sourceFileDisposition.v1`
 
 The command requires `--policy-rev` and rejects stale source traces, orphan
 span/node/edge references, missing accepted coverage, candidate-only
-dispositions, contradictory dispositions, and any generated/projection row that
-claims authority. The accepted coverage proof must be `accepted:true`,
+file or span dispositions, contradictory dispositions, source spans without
+accepted span disposition, and any generated/projection row that claims
+authority. The accepted coverage proof must be `accepted:true`,
 `status:"accepted"`, match the target policy revision, set
 `generatedIsAuthority:false`, keep `policyDeletionApproved:false`, set
 `fixtureOnly:false`, and reference accepted Fresh GenX reconstruction evidence

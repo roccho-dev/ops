@@ -1,0 +1,1 @@
+{"id":"span-disposition:candidate","kind":"policy.sourceSpanDisposition.v1","accepted":false,"status":"candidate","policyRev":"rev-good","sourceSpanIds":["span:one"],"disposition":"represented","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}

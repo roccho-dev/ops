@@ -136,6 +136,7 @@ policy-semantic-compiler review-adrs-projection-duckdb \
   --policy-rev rev-good \
   --out-dir "$work/adrs-projection-accepted" > "$work/adrs-projection-accepted.stdout.json"
 grep -q '"ok": true' "$work/adrs-projection-accepted.stdout.json"
+grep '"gate_id":"accepted-span-disposition-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"fresh-genx-evidence-accepted"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
@@ -178,6 +179,8 @@ if policy-semantic-compiler review-adrs-projection-duckdb \
   exit 1
 fi
 grep '"gate_id":"candidate-only-disposition"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"candidate-only-span-disposition"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"accepted-span-disposition-missing"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
 
 if policy-semantic-compiler review-adrs-projection-duckdb \
   --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \

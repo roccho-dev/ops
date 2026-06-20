@@ -692,6 +692,7 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
         "source_spans": records_dir / "policy.sourceSpan.v1.jsonl",
         "semantic_nodes": records_dir / "policy.semanticNode.v1.jsonl",
         "semantic_edges": records_dir / "policy.semanticEdge.v1.jsonl",
+        "span_dispositions": records_dir / "policy.sourceSpanDisposition.v1.jsonl",
         "coverage_proofs": records_dir / "policy.acceptedCoverageProof.v1.jsonl",
         "fresh_genx_reviews": records_dir / "policy.freshGenXReconstructionReview.v1.jsonl",
     }
@@ -764,6 +765,7 @@ CREATE OR REPLACE TABLE source_files AS SELECT * FROM read_json_auto({sql_quote(
 CREATE OR REPLACE TABLE source_spans AS SELECT * FROM read_json_auto({sql_quote(str(required_files["source_spans"]))});
 CREATE OR REPLACE TABLE semantic_nodes AS SELECT * FROM read_json_auto({sql_quote(str(required_files["semantic_nodes"]))});
 CREATE OR REPLACE TABLE semantic_edges AS SELECT * FROM read_json_auto({sql_quote(str(required_files["semantic_edges"]))});
+CREATE OR REPLACE TABLE span_dispositions AS SELECT * FROM read_json_auto({sql_quote(str(required_files["span_dispositions"]))});
 CREATE OR REPLACE TABLE coverage_proofs AS SELECT * FROM read_json_auto({sql_quote(str(required_files["coverage_proofs"]))});
 CREATE OR REPLACE TABLE fresh_genx_reviews AS SELECT * FROM read_json_auto({sql_quote(str(required_files["fresh_genx_reviews"]))});
 CREATE OR REPLACE TABLE dispositions AS SELECT * FROM {dispositions_source};
@@ -779,9 +781,29 @@ FROM source_spans ss
 JOIN dispositions d ON d.sourceFileId = ss.sourceFileId
 WHERE d.status = 'accepted' AND d.requiresIndividualSemanticApproval = false;
 
+CREATE OR REPLACE TABLE accepted_span_dispositions AS
+SELECT *
+FROM span_dispositions
+WHERE kind = 'policy.sourceSpanDisposition.v1'
+  AND accepted = true
+  AND status = 'accepted'
+  AND policyRev = {sql_quote(expected_rev)}
+  AND fixtureOnly = false
+  AND generatedIsAuthority = false
+  AND policyDeletionApproved = false;
+
+CREATE OR REPLACE TABLE accepted_span_disposition_ids AS
+SELECT DISTINCT TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS id FROM accepted_span_dispositions;
+
+CREATE OR REPLACE TABLE accepted_non_normative_span_ids AS
+SELECT DISTINCT TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS id
+FROM accepted_span_dispositions
+WHERE disposition IN ('non-normative', 'duplicate', 'superseded', 'retired');
+
 CREATE OR REPLACE TABLE review_required_spans AS
 SELECT id FROM source_spans
-EXCEPT SELECT id FROM non_normative_span_ids;
+EXCEPT SELECT id FROM non_normative_span_ids
+EXCEPT SELECT id FROM accepted_non_normative_span_ids;
 
 CREATE OR REPLACE TABLE coverage_proof_candidates AS
 SELECT *
@@ -803,7 +825,7 @@ WHERE kind = 'policy.freshGenXReconstructionReview.v1'
   AND policyRev = {sql_quote(expected_rev)};
 
 CREATE OR REPLACE TABLE coverage_proof_genx_ids AS
-SELECT id AS proof_id, unnest(freshGenXEvidenceIds) AS genx_id
+SELECT id AS proof_id, TRIM(BOTH '"' FROM CAST(unnest(freshGenXEvidenceIds) AS VARCHAR)) AS genx_id
 FROM coverage_proof_candidates;
 
 CREATE OR REPLACE TABLE accepted_coverage_proofs AS
@@ -821,13 +843,13 @@ WHERE c.noRemainingObjections = true
   );
 
 CREATE OR REPLACE TABLE covered_span_ids AS
-SELECT DISTINCT unnest(coveredSourceSpanIds) AS id FROM accepted_coverage_proofs;
+SELECT DISTINCT TRIM(BOTH '"' FROM CAST(unnest(coveredSourceSpanIds) AS VARCHAR)) AS id FROM accepted_coverage_proofs;
 
 CREATE OR REPLACE TABLE node_span_ids AS
-SELECT DISTINCT unnest(sourceSpanIds) AS id FROM semantic_nodes;
+SELECT DISTINCT TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS id FROM semantic_nodes;
 
 CREATE OR REPLACE TABLE edge_span_ids AS
-SELECT DISTINCT unnest(sourceSpanIds) AS id FROM semantic_edges;
+SELECT DISTINCT TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS id FROM semantic_edges;
 
 CREATE OR REPLACE TABLE gate_results AS
 SELECT 'adrs-projection-duckdb-executed' AS gate_id, 'pass' AS status, NULL AS blocker, 0 AS count
@@ -855,7 +877,7 @@ SELECT 'orphan-node-source-span',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
        CASE WHEN count(*) = 0 THEN NULL ELSE 'semanticNode.sourceSpanIds contains missing sourceSpan' END,
        count(*)
-FROM (SELECT id AS node_id, unnest(sourceSpanIds) AS span_id FROM semantic_nodes) ns
+FROM (SELECT id AS node_id, TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS span_id FROM semantic_nodes) ns
 LEFT JOIN source_spans ss ON ss.id = ns.span_id
 WHERE ss.id IS NULL
 UNION ALL
@@ -874,7 +896,7 @@ SELECT 'orphan-edge-source-span',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
        CASE WHEN count(*) = 0 THEN NULL ELSE 'semanticEdge.sourceSpanIds contains missing sourceSpan' END,
        count(*)
-FROM (SELECT id AS edge_id, unnest(sourceSpanIds) AS span_id FROM semantic_edges) es
+FROM (SELECT id AS edge_id, TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS span_id FROM semantic_edges) es
 LEFT JOIN source_spans ss ON ss.id = es.span_id
 WHERE ss.id IS NULL
 UNION ALL
@@ -891,6 +913,14 @@ SELECT 'accepted-coverage-proof-present',
        CASE WHEN count(*) > 0 THEN NULL ELSE 'accepted coverage proof is missing' END,
        count(*)
 FROM accepted_coverage_proofs
+UNION ALL
+SELECT 'accepted-span-disposition-missing',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'sourceSpan lacks accepted span disposition' END,
+       count(*)
+FROM source_spans ss
+LEFT JOIN accepted_span_disposition_ids d ON d.id = ss.id
+WHERE d.id IS NULL
 UNION ALL
 SELECT 'accepted-coverage-missing',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
@@ -925,6 +955,21 @@ SELECT 'candidate-only-disposition',
        count(*)
 FROM dispositions
 WHERE status IS NOT NULL AND status <> 'accepted'
+UNION ALL
+SELECT 'candidate-only-span-disposition',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'candidate span disposition cannot satisfy accepted coverage' END,
+       count(*)
+FROM span_dispositions
+WHERE status IS NOT NULL AND status <> 'accepted'
+UNION ALL
+SELECT 'span-disposition-missing-source-span',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'span disposition references missing sourceSpan' END,
+       count(*)
+FROM (SELECT id AS disposition_id, TRIM(BOTH '"' FROM CAST(unnest(sourceSpanIds) AS VARCHAR)) AS span_id FROM span_dispositions) sd
+LEFT JOIN source_spans ss ON ss.id = sd.span_id
+WHERE ss.id IS NULL
 UNION ALL
 SELECT 'contradictory-disposition',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
