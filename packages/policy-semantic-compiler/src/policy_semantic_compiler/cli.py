@@ -1274,6 +1274,90 @@ def command_assign_source_span_review_batches(args: argparse.Namespace) -> int:
     return 0 if batches else 1
 
 
+def command_check_source_span_review_completion(args: argparse.Namespace) -> int:
+    assignments = read_jsonl(Path(args.assignments))
+    required_discussions = read_jsonl(Path(args.required_discussions))
+    review_results = read_jsonl(Path(args.review_results)) if args.review_results else []
+    discussion_results = read_jsonl(Path(args.discussion_results)) if args.discussion_results else []
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    accepted_reviews = {
+        (str(row.get("batchId")), str(row.get("reviewerId")))
+        for row in review_results
+        if row.get("kind") == "policy.sourceSpanDispositionReviewResult.v1"
+        and row.get("status") == "accepted"
+        and row.get("accepted") is True
+        and row.get("policyRev") == args.policy_rev
+        and row.get("fixtureOnly") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+    }
+    missing_assignments = [
+        row
+        for row in assignments
+        if (str(row.get("batchId")), str(row.get("reviewerId"))) not in accepted_reviews
+    ]
+    accepted_discussions = {
+        str(row.get("batchId"))
+        for row in discussion_results
+        if row.get("kind") == "policy.sourceSpanDispositionDirectCrossDiscussion.v1"
+        and row.get("status") == "accepted"
+        and row.get("accepted") is True
+        and row.get("policyRev") == args.policy_rev
+        and row.get("sameRevision") is True
+        and row.get("peerRepliesRead") is True
+        and row.get("noRemainingObjections") is True
+        and row.get("fixtureOnly") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+    }
+    missing_discussions = [
+        row
+        for row in required_discussions
+        if str(row.get("batchId")) not in accepted_discussions
+    ]
+    gates = [
+        {
+            "gate_id": "source-span-review-assignments-accepted",
+            "status": "pass" if not missing_assignments else "blocked",
+            "blocker": None if not missing_assignments else "review assignments missing accepted results",
+            "count": len(missing_assignments),
+        },
+        {
+            "gate_id": "source-span-direct-cross-discussions-accepted",
+            "status": "pass" if not missing_discussions else "blocked",
+            "blocker": None if not missing_discussions else "direct cross-discussions missing accepted no-objection results",
+            "count": len(missing_discussions),
+        },
+    ]
+    jsonl_write(out_dir / "source-span-review-completion-gates.jsonl", gates)
+    jsonl_write(out_dir / "missing-source-span-review-assignments.jsonl", missing_assignments)
+    jsonl_write(out_dir / "missing-source-span-direct-cross-discussions.jsonl", missing_discussions)
+    ok = all(row["status"] == "pass" for row in gates)
+    manifest = {
+        "kind": "policy.sourceSpanDispositionReviewCompletionCheck.v1",
+        "ok": ok,
+        "policyRev": args.policy_rev,
+        "assignmentCount": len(assignments),
+        "missingAssignmentCount": len(missing_assignments),
+        "directCrossDiscussionRequiredCount": len(required_discussions),
+        "missingDirectCrossDiscussionCount": len(missing_discussions),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {
+            "gates": "source-span-review-completion-gates.jsonl",
+            "missingAssignments": "missing-source-span-review-assignments.jsonl",
+            "missingDirectCrossDiscussions": "missing-source-span-direct-cross-discussions.jsonl",
+        },
+        "status": "pass" if ok else "blocked",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
+
 def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
     table_defaults = {
         "sources": [],
@@ -2418,6 +2502,14 @@ def main(argv: list[str] | None = None) -> int:
     assignment_parser.add_argument("--reviewers", default="reviewer-a,reviewer-b")
     assignment_parser.add_argument("--out-dir", required=True)
     assignment_parser.set_defaults(func=command_assign_source_span_review_batches)
+    completion_parser = sub.add_parser("check-source-span-review-completion")
+    completion_parser.add_argument("--assignments", required=True)
+    completion_parser.add_argument("--required-discussions", required=True)
+    completion_parser.add_argument("--review-results")
+    completion_parser.add_argument("--discussion-results")
+    completion_parser.add_argument("--policy-rev", required=True)
+    completion_parser.add_argument("--out-dir", required=True)
+    completion_parser.set_defaults(func=command_check_source_span_review_completion)
     args = parser.parse_args(argv)
     return args.func(args)
 

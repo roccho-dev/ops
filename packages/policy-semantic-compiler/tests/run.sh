@@ -13,6 +13,7 @@ mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disp
 mkdir -p "$work/adrs-projection-fixture-only"
 mkdir -p "$work/source-span-review-batches"
 mkdir -p "$work/source-span-review-assignments"
+mkdir -p "$work/source-span-review-completion-blocked" "$work/source-span-review-completion-accepted"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -209,6 +210,32 @@ grep -q '"assignmentCount": 2' "$work/source-span-review-assignments.stdout.json
 grep -q '"directCrossDiscussionRequiredCount": 1' "$work/source-span-review-assignments.stdout.json"
 grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl"
 grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl"
+
+if policy-semantic-compiler check-source-span-review-completion \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-completion-blocked" > "$work/source-span-review-completion-blocked.stdout.json"; then
+  echo "source span review completion unexpectedly passed without results" >&2
+  exit 1
+fi
+grep -q '"missingAssignmentCount": 2' "$work/source-span-review-completion-blocked.stdout.json"
+grep -q '"missingDirectCrossDiscussionCount": 1' "$work/source-span-review-completion-blocked.stdout.json"
+cat > "$work/source-span-review-results.jsonl" <<EOF
+{"kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$(grep -m1 -o '"batchId":"[^"]*"' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" | cut -d'"' -f4)","reviewerId":"reviewer-a","policyRev":"rev-good","accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+{"kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$(grep -m1 -o '"batchId":"[^"]*"' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" | cut -d'"' -f4)","reviewerId":"reviewer-b","policyRev":"rev-good","accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+cat > "$work/source-span-discussion-results.jsonl" <<EOF
+{"kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$(grep -m1 -o '"batchId":"[^"]*"' "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" | cut -d'"' -f4)","policyRev":"rev-good","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+policy-semantic-compiler check-source-span-review-completion \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-results "$work/source-span-review-results.jsonl" \
+  --discussion-results "$work/source-span-discussion-results.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-completion-accepted" > "$work/source-span-review-completion-accepted.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-completion-accepted.stdout.json"
 
 if policy-semantic-compiler review-adrs-projection-duckdb \
   --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \

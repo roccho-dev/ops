@@ -117,6 +117,12 @@ The output still does not approve any disposition; it only records the
 reviewer work that must happen before ADRS can append accepted
 `policy.sourceSpanDisposition.v1` rows.
 
+`check-source-span-review-completion` verifies that each assignment has an
+accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an
+accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`
+with peer replies read and no remaining objections. Missing review results or
+discussion results keep the gate blocked.
+
 This checker can support the claim `facilitation policy semantic reconstruction
 is proven for this policy ref` only after the ADRS provider emits accepted
 coverage proof records and fresh GenX semantic reconstruction/review has no
