@@ -1,0 +1,8 @@
+{
+  "type": "policy.semanticEquivalence.negativeControlSummary.v1",
+  "decision": "PASS",
+  "passed": 12,
+  "total": 12,
+  "deletionReadiness": "BLOCK",
+  "scope": "candidate equivalence controls; not retirement approval"
+}

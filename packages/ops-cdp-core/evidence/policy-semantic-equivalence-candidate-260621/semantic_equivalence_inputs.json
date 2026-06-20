@@ -1,0 +1,1 @@
+{"type":"policy.semanticEquivalence.inputs.v1","compilerVersion":"semantic-equivalence-candidate-jq-v1","policyRef":"334997669f1889a8e2658730c616d2d4510d4536","typedCompilerVersion":"typed-semantic-compiler-candidate-jq-v1","inputs":{"typedCompilerDecision":"PASS_FOR_COMPILER_CANDIDATE","source13Decision":"PASS"},"deletionReadiness":"BLOCK","claimAllowed":false}

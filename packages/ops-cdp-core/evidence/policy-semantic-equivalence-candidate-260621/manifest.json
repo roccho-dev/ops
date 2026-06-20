@@ -1,0 +1,29 @@
+{
+  "type": "policy.semanticEquivalence.manifest.v1",
+  "compilerVersion": "semantic-equivalence-candidate-jq-v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "decision": "PASS_FOR_EQUIVALENCE_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "files": [
+    {
+      "path": "semantic_equivalence_deltas.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "semantic_equivalence_inputs.json",
+      "sha256": "55364e13052e81e597d2f61a5d890a86139cb790990f243f6f2c9da7b999ec4f",
+      "bytes": 365
+    },
+    {
+      "path": "semantic_equivalence_source_map.jsonl",
+      "sha256": "07c60490757c75aabdd2858503f82df63d3df177ae5c2042397ad65491fe4dfe",
+      "bytes": 12151
+    },
+    {
+      "path": "semantic_equivalence_summary.json",
+      "sha256": "e3e585e2ad72cfe653425320627a03d7ebe5bcb703d1966b6ec6c6c17f103029",
+      "bytes": 1913
+    }
+  ]
+}

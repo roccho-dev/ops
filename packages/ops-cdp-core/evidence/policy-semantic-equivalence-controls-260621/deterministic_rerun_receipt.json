@@ -1,0 +1,6 @@
+{
+  "type": "policy.semanticEquivalence.deterministicRerunReceipt.v1",
+  "passed": true,
+  "originalManifestSha256": "a56d52fd72fd36979003d97c48605731cb4e749bad7f866b454eb45cff95e1b6",
+  "rerunManifestSha256": "a56d52fd72fd36979003d97c48605731cb4e749bad7f866b454eb45cff95e1b6"
+}

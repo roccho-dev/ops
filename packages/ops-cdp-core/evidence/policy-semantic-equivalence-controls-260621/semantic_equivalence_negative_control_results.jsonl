@@ -1,0 +1,12 @@
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"semantic-equivalence-inputs-fixed","passed":true,"details":{"policyRef":"334997669f1889a8e2658730c616d2d4510d4536"}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"authority-bearing-sources-covered","passed":true,"details":{"unmapped":0}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"semantic-deltas-zero-or-blocked","passed":true,"details":{"unresolved":0,"decision":"PASS_FOR_EQUIVALENCE_CANDIDATE"}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"typed-edge-source-trace-valid","passed":true,"details":{"bad":0}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"candidate-does-not-claim-final-authority","passed":true,"details":{"finalClaimBad":false}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"manifest-hashes-validate","passed":true,"details":{"bad":0}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"deterministic-rerun-match","passed":true,"details":{"type":"policy.semanticEquivalence.deterministicRerunReceipt.v1","passed":true,"originalManifestSha256":"a56d52fd72fd36979003d97c48605731cb4e749bad7f866b454eb45cff95e1b6","rerunManifestSha256":"a56d52fd72fd36979003d97c48605731cb4e749bad7f866b454eb45cff95e1b6"}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"negative-dropped-edge-detected","passed":true,"details":{"deltas":2}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"negative-weakened-text-detected","passed":true,"details":{"deltas":1}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"negative-stale-source-hash-detected","passed":true,"details":{"deltas":3}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"negative-generated-authority-confusion-detected","passed":true,"details":{"deltas":1}}
+{"type":"policy.semanticEquivalence.negativeControlResult.v1","name":"negative-final-authority-claim-detected","passed":true,"details":{"detected":true}}

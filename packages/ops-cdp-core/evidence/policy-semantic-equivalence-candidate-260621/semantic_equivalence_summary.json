@@ -1,0 +1,65 @@
+{
+  "type": "policy.semanticEquivalence.reviewSummary.v1",
+  "compilerVersion": "semantic-equivalence-candidate-jq-v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "typedCompilerVersion": "typed-semantic-compiler-candidate-jq-v1",
+  "decision": "PASS_FOR_EQUIVALENCE_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "scope": "candidate equivalence between source13 authority dispositions and typed semantic compiler candidate outputs; not full retirement approval",
+  "sourceGate": {
+    "status": "PASS",
+    "total": 13,
+    "typedCovered": 7,
+    "nonAuthorityExcluded": 6
+  },
+  "edgeGate": {
+    "status": "PASS",
+    "source13Edges": 7,
+    "compiledEdges": 7
+  },
+  "semanticDeltaGate": {
+    "status": "PASS",
+    "unresolved": 0,
+    "expected": 0
+  },
+  "candidateEquivalenceGate": {
+    "status": "PASS_FOR_CANDIDATE",
+    "expected": "source13 typed edges are preserved exactly by compiler candidate"
+  },
+  "remainingRetirementGates": [
+    {
+      "name": "accepted-typed-semantic-compiler-authority",
+      "status": "BLOCK",
+      "actual": "candidate proof only",
+      "expected": "accepted compiler authority"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK",
+      "actual": "not granted",
+      "expected": "owner approval and adoption/cutover records"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK",
+      "actual": "not proven",
+      "expected": "policy.git absent or retired with all consumers passing"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK",
+      "actual": "not granted",
+      "expected": "canonical adoption record"
+    }
+  ],
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "accepted compiler authority",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}
