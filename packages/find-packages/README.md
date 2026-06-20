@@ -11,3 +11,6 @@ This placement is intentionally temporary and follows the current repo conventio
 - `bin/find-packages.mjs` is the CLI adapter.
 - `sql/*.duckdb.sql` are read-model templates, not package truth.
 - `adrs.git` owns the decision proposal for the documentation-surface IR.
+- `eligible` and `missingGoalNonGoal` are projection fields from `adrs`.
+- `find-packages --require-eligible` filters out `eligible=false` rows and exits non-zero when no eligible match remains.
+- This is a discovery/consume gate for package reuse, not an approval to merge or fire work.

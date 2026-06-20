@@ -1,4 +1,4 @@
-export const outputHeaders = ["repo", "kind", "pkg", "role", "count", "examples", "source", "authority"];
+export const outputHeaders = ["repo", "kind", "pkg", "role", "eligible", "missingGoalNonGoal", "count", "examples", "source", "authority"];
 
 export function parseProjection(raw) {
   if (!raw) return [];
@@ -19,10 +19,11 @@ export function normalizeRows(rows) {
   return rows.map(normalizeRow).filter((r) => r.pkg || r.repo || r.examples);
 }
 
-export function searchPackages(rows, { query = "", role = "" } = {}) {
+export function searchPackages(rows, { query = "", role = "", requireEligible = false } = {}) {
   const q = String(query || "").toLowerCase();
   const wantedRole = String(role || "").toLowerCase();
   return rows.filter((row) => {
+    if (requireEligible && row.eligible === "false") return false;
     const haystack = Object.values(row).join(" ").toLowerCase();
     if (q && !haystack.includes(q)) return false;
     if (wantedRole && !String(row.role || "").toLowerCase().includes(wantedRole)) return false;
@@ -73,11 +74,19 @@ function normalizeRow(row) {
     kind: first(row.kind, row.type, row.recordKind, row.category),
     pkg,
     role: first(row.role, row.capability, row.responsibility, row.whenToUse, row.tags),
+    eligible: normalizeEligible(row.eligible),
+    missingGoalNonGoal: first(row.missingGoalNonGoal, row.missingGoalNonGoals, row.missingRequiredFields),
     count: first(row.count, row.hits, row.n, row.total),
     examples,
     source,
     authority: first(row.authority, row.status, row.state, row.proofState, row.acceptance),
   };
+}
+
+function normalizeEligible(value) {
+  if (value === true) return "true";
+  if (value === false) return "false";
+  return first(value);
 }
 
 function first(...values) {
