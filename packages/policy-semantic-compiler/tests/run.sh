@@ -257,6 +257,7 @@ cp "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssig
 cp "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl" "$work/adrs-projection-review-provider-records/"
 cp "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" "$work/adrs-projection-review-provider-records/"
 cp "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl" "$work/adrs-projection-review-provider-records/"
 if policy-semantic-compiler review-adrs-projection-duckdb \
   --adrs-records-dir "$work/adrs-projection-review-provider-records" \
   --policy-rev rev-good \
@@ -271,6 +272,8 @@ grep '"gate_id":"review-packets-match-batch-spans"' "$work/adrs-projection-revie
 grep '"gate_id":"review-packets-have-projection-fields"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"review-assignments-have-work-orders"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"review-work-orders-match-assignments-and-packets"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-work-orders-have-result-templates"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-result-templates-match-work-orders"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"review-batches-have-direct-cross-discussion-required"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
 grep '"gate_id":"review-assignments-have-accepted-results"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
 grep '"gate_id":"review-assignments-have-accepted-results"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"count":2'

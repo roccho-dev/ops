@@ -702,6 +702,7 @@ def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
         "review_assignments": records_dir / "policy.sourceSpanDispositionReviewAssignment.v1.jsonl",
         "review_packets": records_dir / "policy.sourceSpanDispositionReviewPacket.v1.jsonl",
         "review_work_orders": records_dir / "policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl",
+        "review_result_templates": records_dir / "policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl",
         "required_discussions": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl",
         "review_results": records_dir / "policy.sourceSpanDispositionReviewResult.v1.jsonl",
         "discussion_results": records_dir / "policy.sourceSpanDispositionDirectCrossDiscussion.v1.jsonl",
@@ -1137,6 +1138,7 @@ COPY (
     review_assignments = read_jsonl(optional_files["review_assignments"]) if optional_files["review_assignments"].exists() else []
     review_packets = read_jsonl(optional_files["review_packets"]) if optional_files["review_packets"].exists() else []
     review_work_orders = read_jsonl(optional_files["review_work_orders"]) if optional_files["review_work_orders"].exists() else []
+    review_result_templates = read_jsonl(optional_files["review_result_templates"]) if optional_files["review_result_templates"].exists() else []
     required_discussions = read_jsonl(optional_files["required_discussions"]) if optional_files["required_discussions"].exists() else []
     review_results = read_jsonl(optional_files["review_results"]) if optional_files["review_results"].exists() else []
     discussion_results = read_jsonl(optional_files["discussion_results"]) if optional_files["discussion_results"].exists() else []
@@ -1233,6 +1235,8 @@ COPY (
         if row.get("id")
     }
     valid_work_order_assignment_ids: set[str] = set()
+    work_order_ids: set[str] = set()
+    work_order_shape_by_id: dict[str, dict] = {}
     invalid_work_order_ids: list[str] = []
     for row in review_work_orders:
         if not (
@@ -1256,9 +1260,49 @@ COPY (
             and "sourceSpans" in row.get("reviewInput", {})
         )
         if valid_shape:
+            work_order_id = str(row.get("id"))
+            work_order_ids.add(work_order_id)
             valid_work_order_assignment_ids.add(str(row.get("assignmentId")))
+            work_order_shape_by_id[work_order_id] = {
+                "assignmentId": row.get("assignmentId"),
+                "batchId": row.get("batchId"),
+                "reviewerId": row.get("reviewerId"),
+                "packetId": row.get("packetId"),
+                "sourceSpanIds": work_order_span_ids,
+            }
         else:
             invalid_work_order_ids.append(str(row.get("id") or row.get("assignmentId")))
+    valid_template_work_order_ids: set[str] = set()
+    invalid_template_ids: list[str] = []
+    for row in review_result_templates:
+        if not (
+            row.get("kind") == "policy.sourceSpanDispositionReviewResultTemplate.v1"
+            and row.get("policyRev") == expected_rev
+            and row.get("accepted") is False
+            and row.get("generatedIsAuthority") is False
+            and row.get("policyDeletionApproved") is False
+            and row.get("status") == "template-review-required"
+            and str(row.get("workOrderId")) in work_order_ids
+        ):
+            continue
+        work_order_id = str(row.get("workOrderId"))
+        expected_shape = work_order_shape_by_id.get(work_order_id, {})
+        template_span_ids = {str(span_id) for span_id in as_list(row.get("sourceSpanIds")) if span_id}
+        valid_shape = (
+            row.get("assignmentId") == expected_shape.get("assignmentId")
+            and row.get("batchId") == expected_shape.get("batchId")
+            and row.get("reviewerId") == expected_shape.get("reviewerId")
+            and row.get("packetId") == expected_shape.get("packetId")
+            and template_span_ids == expected_shape.get("sourceSpanIds")
+            and row.get("packetRead") is False
+            and row.get("disposition") is None
+            and row.get("rationale") is None
+            and row.get("noRemainingObjections") is False
+        )
+        if valid_shape:
+            valid_template_work_order_ids.add(work_order_id)
+        else:
+            invalid_template_ids.append(str(row.get("id") or work_order_id))
     valid_review_results = []
     invalid_review_result_ids: list[str] = []
     for row in review_results:
@@ -1328,6 +1372,7 @@ COPY (
     batches_missing_two_reviewers = sorted(batch_id for batch_id in batch_ids if len(batch_assignment_reviewers.get(batch_id, set())) < 2)
     batches_missing_review_packets = sorted(batch_ids - valid_packet_batch_ids)
     assignments_missing_work_orders = sorted(assignment_ids - valid_work_order_assignment_ids)
+    work_orders_missing_templates = sorted(work_order_ids - valid_template_work_order_ids)
     batches_missing_required_discussion = sorted(batch_ids - valid_required_discussion_batch_ids)
     missing_review_result_pairs = sorted(
         (batch_id, reviewer_id)
@@ -1380,6 +1425,18 @@ COPY (
             "count": len(invalid_work_order_ids),
         },
         {
+            "gate_id": "review-work-orders-have-result-templates",
+            "status": "pass" if not work_orders_missing_templates else "blocked",
+            "blocker": None if not work_orders_missing_templates else "review work order lacks non-authoritative result template",
+            "count": len(work_orders_missing_templates),
+        },
+        {
+            "gate_id": "review-result-templates-match-work-orders",
+            "status": "pass" if not invalid_template_ids else "blocked",
+            "blocker": None if not invalid_template_ids else "review result template does not match work order or is pre-filled as accepted",
+            "count": len(invalid_template_ids),
+        },
+        {
             "gate_id": "review-batches-have-direct-cross-discussion-required",
             "status": "pass" if not batches_missing_required_discussion else "blocked",
             "blocker": None if not batches_missing_required_discussion else "review batch lacks direct cross-discussion requirement",
@@ -1419,6 +1476,8 @@ COPY (
     jsonl_write(out_dir / "review-packets-missing-projection-fields.jsonl", [{"kind": "policySemantic.reviewPacketMissingProjectionFields.v1", "packetId": packet_id} for packet_id in packets_with_missing_projection_fields])
     jsonl_write(out_dir / "review-assignments-missing-work-orders.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingWorkOrder.v1", "assignmentId": assignment_id} for assignment_id in assignments_missing_work_orders])
     jsonl_write(out_dir / "invalid-review-work-orders.jsonl", [{"kind": "policySemantic.invalidReviewWorkOrder.v1", "workOrderId": work_order_id} for work_order_id in invalid_work_order_ids])
+    jsonl_write(out_dir / "review-work-orders-missing-result-templates.jsonl", [{"kind": "policySemantic.reviewWorkOrderMissingResultTemplate.v1", "workOrderId": work_order_id} for work_order_id in work_orders_missing_templates])
+    jsonl_write(out_dir / "invalid-review-result-templates.jsonl", [{"kind": "policySemantic.invalidReviewResultTemplate.v1", "templateId": template_id} for template_id in invalid_template_ids])
     jsonl_write(out_dir / "review-batches-missing-required-discussion.jsonl", [{"kind": "policySemantic.reviewBatchMissingRequiredDiscussion.v1", "batchId": batch_id} for batch_id in batches_missing_required_discussion])
     jsonl_write(out_dir / "review-assignments-missing-accepted-results.jsonl", [{"kind": "policySemantic.reviewAssignmentMissingAcceptedResult.v1", "batchId": batch_id, "reviewerId": reviewer_id} for batch_id, reviewer_id in missing_review_result_pairs])
     jsonl_write(out_dir / "invalid-review-results.jsonl", [{"kind": "policySemantic.invalidReviewResult.v1", "reviewResultId": result_id} for result_id in invalid_review_result_ids])
@@ -1456,6 +1515,8 @@ COPY (
             "reviewPacketsMissingProjectionFields": "review-packets-missing-projection-fields.jsonl",
             "reviewAssignmentsMissingWorkOrders": "review-assignments-missing-work-orders.jsonl",
             "invalidReviewWorkOrders": "invalid-review-work-orders.jsonl",
+            "reviewWorkOrdersMissingResultTemplates": "review-work-orders-missing-result-templates.jsonl",
+            "invalidReviewResultTemplates": "invalid-review-result-templates.jsonl",
             "reviewBatchesMissingRequiredDiscussion": "review-batches-missing-required-discussion.jsonl",
             "reviewAssignmentsMissingAcceptedResults": "review-assignments-missing-accepted-results.jsonl",
             "invalidReviewResults": "invalid-review-results.jsonl",
