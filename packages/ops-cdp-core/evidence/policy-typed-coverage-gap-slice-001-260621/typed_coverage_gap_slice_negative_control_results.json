@@ -1,0 +1,43 @@
+{
+  "type": "policy.typedCoverageGapSlice.negativeControls.v1",
+  "slice": "slice-001",
+  "decision": "PASS",
+  "controls": [
+    {
+      "name": "inputs-fixed",
+      "status": "PASS"
+    },
+    {
+      "name": "selection-deterministic-first-25",
+      "status": "PASS"
+    },
+    {
+      "name": "selected-source-present",
+      "status": "PASS"
+    },
+    {
+      "name": "typed-node-per-selected-gap",
+      "status": "PASS"
+    },
+    {
+      "name": "typed-edge-per-selected-gap",
+      "status": "PASS"
+    },
+    {
+      "name": "selected-delta-resolved-or-blocked",
+      "status": "PASS"
+    },
+    {
+      "name": "remaining-count-recomputed",
+      "status": "PASS"
+    },
+    {
+      "name": "retirement-not-cleared",
+      "status": "PASS"
+    },
+    {
+      "name": "generated-evidence-not-authority",
+      "status": "PASS"
+    }
+  ]
+}

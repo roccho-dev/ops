@@ -1,0 +1,13 @@
+{
+  "type": "policy.typedCoverageGapSlice.rerunReceipt.v1",
+  "slice": "slice-001",
+  "deterministicRerunMatch": "PASS",
+  "hashes": {
+    "summary": "b34c082a2ecb2e3231f1b49a14a159163350358a57776f0d08cb9d906c7f77fa",
+    "manifest": "597b2e4806e1f9b734e1d11c137136f6e472d2d9127ec37f6f0685e34a29ebb1",
+    "nodes": "0e098cca2a4653a232ab1e533434d1ae19fd0215eb92beb720282a00278079da",
+    "edges": "02fbb5950423d5920d7b93279027066b3b82ddcd740e3a6e6e1766f23619a17d",
+    "deltas": "f0be488069bbef8be2d78c73babaa4b241ed2919d836b2ed48d47494b96f959c",
+    "controls": "c2331ac8532f7c6041dab38caa6aee21aaef12927dd882a7a797e8185fd0d7a7"
+  }
+}

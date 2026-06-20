@@ -1,0 +1,30 @@
+{
+  "type": "policy.typedCoverageGapSlice.summary.v1",
+  "slice": "slice-001",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsRecomputeRef": "c582c020cec6ac7b15f9aa3dc1464378442d0502",
+  "adrsRecomputeRef": "f798bfab8e64cf6165ab8188cefaaf6250af5508",
+  "decision": "PASS_AS_SLICE_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "inputGapCount": 644,
+  "selectedGapCount": 25,
+  "deferredGapCount": 619,
+  "missingSelectedSources": 0,
+  "typedNodes": 25,
+  "typedEdges": 25,
+  "resolvedForSlice": 25,
+  "recomputedRemainingCoverageGaps": 619,
+  "selectionRule": "stable sort by path over full_corpus_recomputed_typed_coverage not-covered rows; first 25 selected; rest deferred",
+  "fullCorpusEquivalenceGate": "BLOCK",
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "full corpus equivalence",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}
