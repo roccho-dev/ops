@@ -1,0 +1,25 @@
+{
+  "type": "policy.typedBridge.gen2Review.v1",
+  "reviewer": "ChatGPT remove-policy project",
+  "reviewConversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "reviewInput": "pasted evidence from SSOT proposals; GitHub transport branch was not treated as authority",
+  "opsCommit": "2714131f4af0b449d43bcb285b287c37c90f3569",
+  "adrsCommit": "3ffcd2afccc677ed0bc6042930fe376e54913b53",
+  "verdict": "PASS",
+  "deletionReadiness": "BLOCK",
+  "proposalQuality": "PASS for the bounded typed bridge/reducer lane. The proposal reduces review noise from the heuristic baseline while preserving BLOCK gates and does not claim semantic completeness, deletion readiness, cutover, merge, canonical write, or SSOT write. Review is based only on the pasted evidence, not independent SSOT checkout or executable rerun.",
+  "sourceReducerReview": "PASS. Source reduction is structured and fail-closed for this lane: 64 baseline rows are split into 51 typed exclusions and 13 unresolved rows. The unresolved rows remain machine-readable, the gate authority-bearing-untyped-sources-eliminated remains BLOCK with actual=13 expected=0, and exclusions reportedly carry classifierVersion, claimAllowed=false, baselineRecord evidence, and classifier description.",
+  "consumerReducerReview": "PASS. Consumer reduction is structured and fail-closed for this lane: 89 baseline rows are split into 68 non-active exclusions and 21 unresolved active-runtime-candidate rows. The active-runtime-policy-consumers-eliminated gate remains BLOCK with actual=21 expected=0, and controls preserve active runtime candidates while excluding only non-active consumer refs.",
+  "typedBridgeAuthorityReview": "PASS. The bridge is correctly framed as typed reduction over a heuristic baseline, not as accepted typed semantic graph compiler authority. The typed-semantic-compiler-accepted gate remains BLOCK with actual=typed-bridge-over-heuristic-baseline expected=accepted typed semantic graph compiler.",
+  "controlReview": "PASS. The 9 controls are sufficient for this bounded bridge lane because they check non-clearing of source and consumer gates, typed compiler still blocking, required fields, machine-readable unresolved rows, non-active-only consumer exclusions, active-runtime preservation, and authority-source preservation. They are not sufficient for deletion readiness, and they do not claim to be.",
+  "falseClaimReview": "PASS. No improper promotion is visible in the pasted evidence. Exclusions use claimAllowed=false, the review summary keeps decision=BLOCK and baselineDecision=BLOCK, and mustNotClaim explicitly forbids policy.git retirement, policy.git deletion, cutover approval, merge approval, completion approval, semantic approval, canonical write, and SSOT write.",
+  "blockers": [],
+  "minimalFixesBeforeThisLaneCanBeAccepted": [],
+  "remainingGatesForActualRetirement": [
+    {"name":"authority-bearing-untyped-sources-eliminated","status":"BLOCK","actual":13,"expected":0},
+    {"name":"active-runtime-policy-consumers-eliminated","status":"BLOCK","actual":21,"expected":0},
+    {"name":"typed-semantic-compiler-accepted","status":"BLOCK","actual":"typed-bridge-over-heuristic-baseline","expected":"accepted typed semantic graph compiler"},
+    {"name":"semantic-equivalence-proof","status":"BLOCK","actual":"not proven by this bridge","expected":"accepted typed semantic graph equivalence evidence"},
+    {"name":"consumer-cutover-proof","status":"BLOCK","actual":"21 active-runtime candidates remain","expected":"0 active policy.git runtime consumers"}
+  ]
+}
