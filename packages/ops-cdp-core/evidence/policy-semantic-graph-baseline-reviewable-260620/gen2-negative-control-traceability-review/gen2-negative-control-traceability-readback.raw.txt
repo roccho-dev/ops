@@ -1,0 +1,425 @@
+{
+"artifact": "GEN2_NEGATIVE_CONTROL_TRACEABILITY_READBACK.json",
+"actorBinding": {
+"actor": "Gen2 ChatGPT",
+"threadFunction": "impl-review"
+},
+"mode": "readback-only",
+"fixedMirror": {
+"url": "https://github.com/roccho-dev/public/tree/87105e1e806f41bea45f73afd5c2b4d26604d3b8
+",
+"exactCommitOrRefRead": "87105e1e806f41bea45f73afd5c2b4d26604d3b8"
+},
+"readMethod": {
+"source": "fixed public GitHub mirror at exact commit plus raw.githubusercontent.com paths for files under the same commit",
+"fallbackUsed": false,
+"fallbacks": {
+"inlineSourceBody": false,
+"threadAttachment": false,
+"base64Fallback": false
+}
+},
+"filesRead": [
+"README.md",
+"GEN2_REVIEWABLE_BASELINE_REVIEW_INITIAL_PROMPT.md",
+"REVIEW_INPUT_MANIFEST.json",
+"files.sha256",
+"tool/README.md",
+"baseline-reviewable/manifest.json",
+"baseline-reviewable/REVIEW_SUMMARY.json",
+"baseline-reviewable/policy_negative_control_results.json",
+"baseline-reviewable/policy_negative_control_traceability.json",
+"baseline-reviewable/policy_verifier_manifest.json",
+"baseline-reviewable/policy_independent_rerun_receipt.json",
+"baseline-reviewable/policy_negative_controls.json",
+"baseline-reviewable/policy_deletion_readiness_gates.json",
+"baseline-reviewable/policy_graph_coverage.json",
+"baseline-reviewable/policy_semantic_edges.shards.json",
+"baseline-reviewable/policy_source_nodes.shards.json",
+"baseline-reviewable/policy_semantic_edges.index.json",
+"baseline-reviewable/policy_source_nodes.index.json",
+"baseline-reviewable/policy_consumer_refs.index.json",
+"baseline-reviewable/policy_untyped_sources.index.json"
+],
+"hashManifestReferencesSeen": [
+{
+"path": "files.sha256",
+"scope": "top-level hash listing for mirror files and shard files"
+},
+{
+"path": "baseline-reviewable/manifest.json",
+"scope": "baseline-reviewable manifest with per-file bytes and sha256"
+},
+{
+"path": "baseline-reviewable/policy_verifier_manifest.json",
+"scope": "negative-control verifier and baseline generator file hashes"
+},
+{
+"path": "baseline-reviewable/policy_semantic_edges.shards.json",
+"scope": "semantic edge shard paths, row ranges, bytes, sha256"
+},
+{
+"path": "baseline-reviewable/policy_source_nodes.shards.json",
+"scope": "source node shard path, row range, bytes, sha256"
+}
+],
+"sawFiles": {
+"REVIEW_INPUT_MANIFEST.json": true,
+"baseline-reviewable/REVIEW_SUMMARY.json": true,
+"baseline-reviewable/policy_negative_control_results.json": true,
+"baseline-reviewable/policy_negative_control_traceability.json": true,
+"baseline-reviewable/policy_verifier_manifest.json": true,
+"baseline-reviewable/policy_independent_rerun_receipt.json": true,
+"baseline-reviewable/policy_negative_controls.json": true,
+"baseline-reviewable/policy_deletion_readiness_gates.json": true,
+"baseline-reviewable/policy_graph_coverage.json": true,
+"baseline-reviewable/policy_semantic_edges.shards.json": true,
+"baseline-reviewable/policy_source_nodes.shards.json": true,
+"baseline-reviewable/policy_semantic_edges.index.json": true,
+"baseline-reviewable/policy_source_nodes.index.json": true,
+"baseline-reviewable/policy_consumer_refs.index.json": true,
+"baseline-reviewable/policy_untyped_sources.index.json": true
+},
+"observedReviewInputManifest": {
+"kind": "policy.semanticGraphBaseline.reviewableInput.v1",
+"threadFunction": "impl-review",
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+"opsProposalRef": "proposal/project-source-transport-route-repair-260620",
+"opsCommit": "484e8af532ab72db323d5714e727ea6b896326ce",
+"adrsProposalRef": "proposal/gen2-handoff-evidence-260620",
+"adrsCommit": "923990cad147c8c48b37e52ba10521ab6dfd80f8",
+"decision": "BLOCK",
+"projectSourceProof": false,
+"canonicalSsot": false,
+"requiredReadback": "GEN2_REVIEWABLE_BASELINE_READBACK.json"
+},
+"observedReviewSummary": {
+"type": "policy.reviewSummary.v1",
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+"decision": "BLOCK",
+"reviewLimit": "This remains a heuristic baseline and fail-closed BLOCK evidence.",
+"negativeControlsStatus": {
+"decision": "PASS",
+"passed": 9,
+"total": 9,
+"scope": "synthetic fixture controls; not deletion readiness",
+"traceability": "policy_negative_control_traceability.json"
+},
+"coverage": {
+"sourceNodeCount": 651,
+"semanticEdgeCount": 24109,
+"consumerRefCount": 89,
+"coverageRatio": 0.9017,
+"filesWithEdges": 587,
+"filesWithoutEdges": 64,
+"edgeKindsObserved": [
+"activation",
+"authority",
+"consumer",
+"deny",
+"evidence",
+"obligation",
+"replacement"
+],
+"edgeKindsMissing": [],
+"lowDensityProseFiles": 0
+},
+"mustNotClaim": [
+"policy.git retirement",
+"policy.git deletion",
+"cutover approval",
+"merge approval",
+"completion approval",
+"semantic approval",
+"canonical write",
+"SSOT write"
+]
+},
+"observedNegativeControlResultSummary": {
+"type": "policy.negativeControlResults.v1",
+"decision": "PASS",
+"passed": 9,
+"total": 9,
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+"controlNamesVisible": [
+"missing-deny-edge",
+"missing-obligation-edge",
+"missing-activation-edge",
+"source-file-with-no-edges",
+"active-consumer-ref-blocks",
+"source-node-hashes-validate",
+"stale-source-node-detected",
+"edge-source-spans-validate",
+"removed-source-span-detected"
+],
+"runtime": {
+"generator": "/home/nixos/work/ops-project-source-transport-route-repair-260620/packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+"platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.42",
+"python": "3.13.12 (main, Feb 3 2026, 17:53:27) [GCC 15.2.0]"
+}
+},
+"observedTraceabilitySummary": {
+"type": "policy.negativeControlTraceability.v1",
+"purpose": "Reconcile planned negative-control classes with the executed synthetic harness controls.",
+"scope": "synthetic fixture controls; not deletion readiness",
+"plannedClassCount": 8,
+"executedControlCount": 9,
+"partialExecutedPassClasses": [
+"consumer-ref-false-positive",
+"consumer-ref-false-negative"
+],
+"remainingControlGaps": [
+"weak obligation or permission text falsely extracted as obligation",
+"documentation/path mention falsely classified as active runtime consumer",
+"active runtime policy reference missed when wording changes",
+"quoted anti-pattern treated as active allowed behavior",
+"superseded/generated/evidence material treated as current authority",
+"source span points to wrong file or wrong line while present"
+],
+"plannedToExecutedVisible": [
+{
+"planned": "dropped-deny-edge",
+"executed": [
+"missing-deny-edge"
+],
+"status": "executed-pass"
+},
+{
+"planned": "weakened-obligation-edge",
+"executed": [
+"missing-obligation-edge"
+],
+"status": "executed-pass",
+"note": "Current fixture covers missing obligation evidence, not nuanced weakening; weakening false-positive cases remain future work."
+},
+{
+"planned": "missing-activation-edge",
+"executed": [
+"missing-activation-edge"
+],
+"status": "executed-pass"
+},
+{
+"planned": "removed-source-span",
+"executed": [
+"edge-source-spans-validate",
+"removed-source-span-detected"
+],
+"status": "executed-pass"
+},
+{
+"planned": "stale-source-node",
+"executed": [
+"source-node-hashes-validate",
+"stale-source-node-detected"
+],
+"status": "executed-pass"
+},
+{
+"planned": "consumer-ref-false-positive",
+"executed": [
+"active-consumer-ref-blocks"
+],
+"status": "partial-executed-pass"
+},
+{
+"planned": "consumer-ref-false-negative",
+"executed": [
+"active-consumer-ref-blocks"
+],
+"status": "partial-executed-pass"
+},
+{
+"planned": "source-without-semantic-edge",
+"executed": [
+"source-file-with-no-edges"
+],
+"status": "executed-pass"
+}
+]
+},
+"observedVerifierManifest": {
+"type": "policy.verifierManifest.v1",
+"scope": "negative-control verifier and baseline generator hashes for external review mirror",
+"note": "Publishing these hashes supports reviewability only; it is not Project Source proof or canonical SSOT proof.",
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+"verifier": {
+"path": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-negative-controls.py",
+"role": "negative-control verifier",
+"sha256": "e151ca7e78b4506b900f28ea50511873edeed4f5fc0f89fe1ee144ddb71c25c6",
+"bytes": 8552
+},
+"baselineGenerator": {
+"path": "packages/policy-semantic-graph-baseline/bin/policy-semantic-graph-baseline.py",
+"role": "baseline generator",
+"sha256": "eea525565df66ff09dffe7121fe7361866f0b0c4eb62e854230ed562e9787230",
+"bytes": 20536
+}
+},
+"observedIndependentRerunReceipt": {
+"type": "policy.independentRerunReceipt.v1",
+"exitCode": 0,
+"resultPath": "policy_negative_control_results.json",
+"resultSha256": "c0920e6372c4068ee6eb18f7d2d5eea0fd6c3e82694a0209753554c95f6a2053",
+"verifier": "policy-semantic-graph-negative-controls.py",
+"policyRef": "334997669f1889a8e2658730c616d2d4510d4536"
+},
+"observedDeletionReadinessGates": {
+"type": "policy.deletionReadinessGates.v1",
+"decision": "BLOCK",
+"notDeletionReady": true,
+"gates": [
+{
+"name": "all-source-files-have-semantic-edges",
+"status": "BLOCK",
+"actual": 64,
+"expected": 0
+},
+{
+"name": "all-required-edge-kinds-observed",
+"status": "PASS",
+"actual": [],
+"expected": []
+},
+{
+"name": "low-density-prose-reviewed",
+"status": "PASS",
+"actual": 0,
+"expected": 0
+},
+{
+"name": "active-policy-repo-consumer-refs-eliminated",
+"status": "BLOCK",
+"actual": 89,
+"expected": 0
+},
+{
+"name": "heuristic-extraction-not-final-authority",
+"status": "BLOCK",
+"actual": "heuristic-keyword-baseline",
+"expected": "accepted typed semantic graph compiler"
+}
+]
+},
+"observedIndexesAndShards": {
+"policy_graph_coverage.json": {
+"sourceNodeCount": 651,
+"semanticEdgeCount": 24109,
+"consumerRefCount": 89,
+"filesWithEdges": 587,
+"filesWithoutEdges": 64,
+"coverageRatio": 0.9017
+},
+"policy_semantic_edges.index.json": {
+"rowCount": 24109,
+"sourceSpanCount": 24109,
+"byEdgeKind": {
+"activation": 2335,
+"authority": 3703,
+"consumer": 7055,
+"deny": 1668,
+"evidence": 5464,
+"obligation": 2737,
+"replacement": 1147
+}
+},
+"policy_source_nodes.index.json": {
+"rowCount": 651,
+"normativeCount": 424,
+"nonNormativeCount": 227,
+"totalBytes": 14877701
+},
+"policy_consumer_refs.index.json": {
+"rowCount": 89,
+"activeRuntimeCandidateCount": 21,
+"nonActiveCandidateCount": 68,
+"byRefClass": {
+"active-runtime-candidate": 21,
+"documentation": 27,
+"generated-evidence": 39,
+"path-mention": 2
+}
+},
+"policy_untyped_sources.index.json": {
+"rowCount": 64,
+"normativeCount": 13,
+"nonNormativeCount": 51
+},
+"policy_semantic_edges.shards.json": {
+"rowCount": 24109,
+"shardSize": 1000,
+"shardCount": 25,
+"firstShard": "shards/policy_semantic_edges/part-000.jsonl",
+"lastShard": "shards/policy_semantic_edges/part-024.jsonl"
+},
+"policy_source_nodes.shards.json": {
+"rowCount": 651,
+"shardSize": 1000,
+"shardCount": 1,
+"firstShard": "shards/policy_source_nodes/part-000.jsonl",
+"lastShard": "shards/policy_source_nodes/part-000.jsonl"
+}
+},
+"authorityConfirmations": {
+"degradedExternalReadableMirrorEvidenceOnly": true,
+"notProjectSourceProof": true,
+"mirrorIsNotCanonicalSSOT": true,
+"negativeControlPassOnlySyntheticMeasurementHarnessEvidence": true,
+"negativeControlPassDoesNotChangeBaselineDeletionReadinessDecision": true,
+"baselineDeletionReadinessDecisionRemainsBlock": true,
+"verifierManifestReviewabilityEvidenceOnly": true,
+"verifierManifestNotProjectSourceProof": true,
+"verifierManifestNotCanonicalSSOTProof": true,
+"willNotClaimPolicyGitRetirement": true,
+"willNotClaimPolicyGitDeletion": true,
+"willNotClaimCutover": true,
+"willNotClaimMerge": true,
+"willNotClaimCompletion": true,
+"willNotClaimSemanticApproval": true,
+"willNotClaimCanonicalWrite": true,
+"willNotClaimSSOTWrite": true
+},
+"filesCouldNotReadOrOnlyInspectedByMetadata": [
+{
+"path": "baseline-reviewable/policy_semantic_edges.jsonl",
+"status": "not read row-by-row",
+"inspectionBasis": "manifest, index, and shard metadata only",
+"reason": "large JSONL body"
+},
+{
+"path": "baseline-reviewable/policy_source_nodes.jsonl",
+"status": "not read row-by-row",
+"inspectionBasis": "manifest, index, and shard metadata only",
+"reason": "large JSONL body"
+},
+{
+"path": "baseline-reviewable/policy_consumer_refs.jsonl",
+"status": "not read row-by-row",
+"inspectionBasis": "index and manifest metadata only",
+"reason": "not required for readback summary"
+},
+{
+"path": "baseline-reviewable/policy_untyped_sources.jsonl",
+"status": "not read row-by-row",
+"inspectionBasis": "index and manifest metadata only",
+"reason": "not required for readback summary"
+},
+{
+"path": "baseline-reviewable/shards/policy_semantic_edges/*.jsonl",
+"status": "not read row-by-row",
+"inspectionBasis": "policy_semantic_edges.shards.json and manifest hashes only",
+"reason": "large shard set"
+},
+{
+"path": "baseline-reviewable/shards/policy_source_nodes/part-000.jsonl",
+"status": "not read row-by-row",
+"inspectionBasis": "policy_source_nodes.shards.json and manifest hash only",
+"reason": "large shard body"
+}
+],
+"reviewStatus": {
+"reviewPerformed": false,
+"implementationPerformed": false,
+"readbackOnly": true
+}
+}
