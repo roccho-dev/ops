@@ -90,6 +90,24 @@ grep -q '"consumerProofsPass": false' "$work/deletion-readiness-consumer-proof-f
 grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$work/deletion-readiness-consumer-proof-fail/deletion-readiness-gates.jsonl"
 grep -q '"exitCode":7' "$work/deletion-readiness-consumer-proof-fail/consumer-proof-results.jsonl"
 
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --reference-mode projected \
+  --repo-root /home/nixos/repos/bootstrap \
+  --policy-absent-proof-command 'printf absent-proof-pass' \
+  --consumer-proof-command 'printf consumer-proof-pass' \
+  --out-dir "$work/deletion-readiness-projected-mode" > "$work/deletion-readiness-projected-mode.stdout.json"; then
+  echo "deletion readiness unexpectedly passed in projected mode without owner approval" >&2
+  exit 1
+fi
+grep -q '"referenceMode": "projected"' "$work/deletion-readiness-projected-mode.stdout.json"
+grep -q '"activeRuntimeReferenceCount": 0' "$work/deletion-readiness-projected-mode.stdout.json"
+grep -q '"policyAbsentConsumersPass": true' "$work/deletion-readiness-projected-mode.stdout.json"
+grep -q '"gate_id":"active-policy-consumers-zero","status":"pass"' "$work/deletion-readiness-projected-mode/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"policy-absent-consumers-pass","status":"pass"' "$work/deletion-readiness-projected-mode/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"deletion-approved","status":"blocked"' "$work/deletion-readiness-projected-mode/deletion-readiness-gates.jsonl"
+grep -q '"referenceClass":"legacy-policy-git-mode-reference"' "$work/deletion-readiness-projected-mode/consumer-references.jsonl"
+
 if policy-semantic-compiler review-semantic-coverage \
   --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
   --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \

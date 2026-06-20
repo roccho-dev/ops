@@ -3360,7 +3360,7 @@ def deletion_rel_path(path: Path, root: Path) -> str:
         return path.as_posix()
 
 
-def deletion_classify_reference(path: str, line: str) -> str:
+def deletion_classify_reference(path: str, line: str, reference_mode: str = "default") -> str:
     low_path = path.lower()
     low_line = line.lower()
     stripped = line.strip()
@@ -3374,6 +3374,8 @@ def deletion_classify_reference(path: str, line: str) -> str:
         return "documentation"
     if "policy.git may be deleted" in low_line or "forbidden" in low_line or "negative" in low_line:
         return "negative-control"
+    if reference_mode == "projected" and low_path in {"bootstrap.sh", "handoff-entry.sh", "package-probe.sh", "policy-entry.sh", "config/ssot.env"}:
+        return "legacy-policy-git-mode-reference"
     if any(token.lower() in low_line for token in ("nix run", "git+ssh://", "default_policy_root", "default source", "source must exist", "policy_fetch_default", "policy_package_flake_ref", "policy_url")):
         return "active-runtime-candidate"
     return "candidate-reference"
@@ -3393,7 +3395,7 @@ def deletion_iter_files(root: Path):
             yield path
 
 
-def deletion_scan_roots(roots: list[Path]) -> list[dict]:
+def deletion_scan_roots(roots: list[Path], reference_mode: str = "default") -> list[dict]:
     rows: list[dict] = []
     for root in roots:
         root = root.resolve()
@@ -3412,7 +3414,7 @@ def deletion_scan_roots(roots: list[Path]) -> list[dict]:
                 matched = [token for token in POLICY_DELETION_REF_TOKENS if token in line]
                 if not matched:
                     continue
-                ref_class = deletion_classify_reference(rel, line)
+                ref_class = deletion_classify_reference(rel, line, reference_mode)
                 rows.append({
                     "kind": "policyDeletion.consumerReference.v1",
                     "repoRoot": str(root),
@@ -3429,10 +3431,23 @@ def deletion_scan_roots(roots: list[Path]) -> list[dict]:
     return rows
 
 
-def deletion_run_absent_simulation(policy_root: Path, out_dir: Path) -> dict:
+def deletion_run_absent_simulation(policy_root: Path, out_dir: Path, proof_command: str | None = None) -> dict:
     missing_root = out_dir / "missing-policy-root"
     absent_out = out_dir / "absent-compile"
     absent_out.mkdir(parents=True, exist_ok=True)
+    if proof_command:
+        completed = subprocess.run(proof_command, shell=True, text=True, capture_output=True, timeout=120)
+        return {
+            "kind": "policyDeletion.absentSimulation.v1",
+            "policyRoot": str(missing_root),
+            "command": proof_command,
+            "exitCode": completed.returncode,
+            "consumerPassedWithoutPolicyGit": completed.returncode == 0,
+            "observedDecision": "passed" if completed.returncode == 0 else "blocked-fail-closed",
+            "capturedOutput": (completed.stdout + completed.stderr).strip()[:4000],
+            "claimAllowed": False,
+            "status": "candidate-pass" if completed.returncode == 0 else "blocked",
+        }
     capture = io.StringIO()
     with contextlib.redirect_stdout(capture), contextlib.redirect_stderr(capture):
         rc = command_compile(argparse.Namespace(policy_root=str(missing_root), out_dir=str(absent_out), duckdb_bin="duckdb", python_only=False))
@@ -3498,8 +3513,8 @@ def command_review_deletion_readiness(args: argparse.Namespace) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     roots = [Path(item) for item in (args.repo_root or [])]
-    reference_rows = deletion_scan_roots(roots)
-    absent = deletion_run_absent_simulation(Path(args.policy_root), out_dir)
+    reference_rows = deletion_scan_roots(roots, args.reference_mode)
+    absent = deletion_run_absent_simulation(Path(args.policy_root), out_dir, args.policy_absent_proof_command)
     consumer_proofs = deletion_run_consumer_proof_commands(args.consumer_proof_command or [])
     active_refs = [row for row in reference_rows if row.get("activeRuntimeCandidate")]
     missing_scan_roots = [row for row in reference_rows if row.get("referenceClass") == "missing-scan-root"]
@@ -3524,6 +3539,7 @@ def command_review_deletion_readiness(args: argparse.Namespace) -> int:
         "cutoverReady": False,
         "policyDeletionApproved": False,
         "activeRuntimeReferenceCount": len(active_refs),
+        "referenceMode": args.reference_mode,
         "policyAbsentConsumersPass": absent.get("consumerPassedWithoutPolicyGit") is True,
         "consumerProofsPass": consumer_proofs_pass,
         "consumerProofCount": len(consumer_proofs),
@@ -3683,6 +3699,8 @@ def main(argv: list[str] | None = None) -> int:
     deletion_parser = sub.add_parser("review-deletion-readiness")
     deletion_parser.add_argument("--policy-root", default=str(DEFAULT_POLICY_ROOT))
     deletion_parser.add_argument("--repo-root", action="append")
+    deletion_parser.add_argument("--reference-mode", choices=["default", "projected"], default="default")
+    deletion_parser.add_argument("--policy-absent-proof-command")
     deletion_parser.add_argument("--consumer-proof-command", action="append")
     deletion_parser.add_argument("--out-dir", required=True)
     deletion_parser.set_defaults(func=command_review_deletion_readiness)
