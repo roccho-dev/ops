@@ -120,6 +120,13 @@ reviewer work that must happen before ADRS can append accepted
 provider records `policy.sourceSpanDispositionReviewAssignment.v1.jsonl` and
 `policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl`.
 
+`materialize-source-span-review-packets` joins ADRS
+`policy.sourceSpan.v1` rows to review batches and emits
+`policy.sourceSpanDispositionReviewPacket.v1.jsonl`. Packets include only
+projection fields such as `sourceTrace`, `sha256`, detection metadata, and
+`excerpt`; they are reviewer input records, not approval records, and instruct
+reviewers not to read the `policy.git` body.
+
 `check-source-span-review-completion` verifies that each assignment has an
 accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an
 accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`

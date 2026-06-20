@@ -1429,6 +1429,101 @@ def command_assign_source_span_review_batches(args: argparse.Namespace) -> int:
     return 0 if batches else 1
 
 
+def command_materialize_source_span_review_packets(args: argparse.Namespace) -> int:
+    source_spans = read_jsonl(Path(args.source_spans))
+    batches = read_jsonl(Path(args.batches))
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy_rev = str(args.policy_rev)
+    span_by_id = {str(row.get("id")): row for row in source_spans if row.get("kind") == "policy.sourceSpan.v1" and row.get("id")}
+    packets: list[dict] = []
+    missing_refs: list[dict] = []
+    stale_spans: list[dict] = []
+    for batch in batches:
+        if batch.get("kind") != "policy.sourceSpanDispositionReviewBatch.v1":
+            continue
+        batch_id = str(batch.get("id"))
+        spans: list[dict] = []
+        for span_id_value in as_list(batch.get("sourceSpanIds")):
+            span_id = str(span_id_value)
+            span = span_by_id.get(span_id)
+            if not span:
+                missing_refs.append(
+                    {
+                        "kind": "policySemantic.reviewPacketMissingSourceSpan.v1",
+                        "batchId": batch_id,
+                        "sourceSpanId": span_id,
+                    }
+                )
+                continue
+            if span.get("sourceTrace", {}).get("rev") != policy_rev:
+                stale_spans.append(
+                    {
+                        "kind": "policySemantic.reviewPacketStaleSourceSpan.v1",
+                        "batchId": batch_id,
+                        "sourceSpanId": span_id,
+                        "sourceTrace": span.get("sourceTrace"),
+                    }
+                )
+            spans.append(
+                {
+                    "sourceSpanId": span_id,
+                    "sourceFileId": span.get("sourceFileId"),
+                    "sourceTrace": span.get("sourceTrace"),
+                    "startLine": span.get("startLine"),
+                    "endLine": span.get("endLine"),
+                    "sha256": span.get("sha256"),
+                    "excerpt": span.get("excerpt"),
+                    "detection": span.get("detection"),
+                }
+            )
+        packets.append(
+            {
+                "kind": "policy.sourceSpanDispositionReviewPacket.v1",
+                "id": "policy-source-span-review-packet-" + sha256_bytes(batch_id.encode("utf-8"))[:20],
+                "policyRev": policy_rev,
+                "batchId": batch_id,
+                "batchNumber": batch.get("batchNumber"),
+                "sourceSpanCount": len(spans),
+                "sourceSpans": spans,
+                "sourcePaths": batch.get("sourcePaths", []),
+                "reviewInstruction": "Review each sourceSpan from ADRS projection fields only; do not read policy.git body. Emit policy.sourceSpanDispositionReviewResult.v1 for the assigned batch.",
+                "requiredOutputRecord": "policy.sourceSpanDispositionReviewResult.v1",
+                "accepted": False,
+                "claimAllowed": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+                "status": "review-required",
+            }
+        )
+    jsonl_write(out_dir / "policy.sourceSpanDispositionReviewPacket.v1.jsonl", packets)
+    jsonl_write(out_dir / "review-packet-missing-source-spans.jsonl", missing_refs)
+    jsonl_write(out_dir / "review-packet-stale-source-spans.jsonl", stale_spans)
+    ok = not missing_refs and not stale_spans and bool(packets)
+    manifest = {
+        "kind": "policy.sourceSpanDispositionReviewPacketRun.v1",
+        "ok": ok,
+        "policyRev": policy_rev,
+        "batchCount": len(batches),
+        "packetCount": len(packets),
+        "missingSourceSpanCount": len(missing_refs),
+        "staleSourceSpanCount": len(stale_spans),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {
+            "packets": "policy.sourceSpanDispositionReviewPacket.v1.jsonl",
+            "missingSourceSpans": "review-packet-missing-source-spans.jsonl",
+            "staleSourceSpans": "review-packet-stale-source-spans.jsonl",
+        },
+        "status": "review-packets-materialized" if ok else "blocked",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
+
 def command_check_source_span_review_completion(args: argparse.Namespace) -> int:
     assignments = read_jsonl(Path(args.assignments))
     required_discussions = read_jsonl(Path(args.required_discussions))
@@ -2920,6 +3015,12 @@ def main(argv: list[str] | None = None) -> int:
     assignment_parser.add_argument("--reviewers", default="reviewer-a,reviewer-b")
     assignment_parser.add_argument("--out-dir", required=True)
     assignment_parser.set_defaults(func=command_assign_source_span_review_batches)
+    packet_parser = sub.add_parser("materialize-source-span-review-packets")
+    packet_parser.add_argument("--source-spans", required=True)
+    packet_parser.add_argument("--batches", required=True)
+    packet_parser.add_argument("--policy-rev", required=True)
+    packet_parser.add_argument("--out-dir", required=True)
+    packet_parser.set_defaults(func=command_materialize_source_span_review_packets)
     completion_parser = sub.add_parser("check-source-span-review-completion")
     completion_parser.add_argument("--assignments", required=True)
     completion_parser.add_argument("--required-discussions", required=True)

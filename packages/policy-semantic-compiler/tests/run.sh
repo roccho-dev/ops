@@ -13,6 +13,7 @@ mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disp
 mkdir -p "$work/adrs-projection-fixture-only"
 mkdir -p "$work/source-span-review-batches"
 mkdir -p "$work/source-span-review-assignments"
+mkdir -p "$work/source-span-review-packets"
 mkdir -p "$work/source-span-review-completion-blocked" "$work/source-span-review-completion-accepted"
 mkdir -p "$work/source-span-dispositions-blocked" "$work/source-span-dispositions-accepted"
 mkdir -p "$work/accepted-coverage-proof-blocked" "$work/accepted-coverage-proof-fake-authority" "$work/accepted-coverage-proof-invalid-reference" "$work/accepted-coverage-proof-stale-span" "$work/accepted-coverage-proof-fixture-only-covering" "$work/accepted-coverage-proof-fixture-only-accepted" "$work/accepted-coverage-proof-accepted"
@@ -216,6 +217,17 @@ grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source
 grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl"
 grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssignment.v1.jsonl"
 grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-packets \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/policy.sourceSpan.v1.jsonl" \
+  --batches "$work/source-span-review-batches/policy.sourceSpanDispositionReviewBatch.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-packets" > "$work/source-span-review-packets.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-packets.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewPacket.v1"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+grep -q '"status":"review-required"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+grep -q '"accepted":false' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+grep -q '"excerpt"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
 
 mkdir -p "$work/adrs-projection-review-provider-records" "$work/adrs-projection-review-provider-gated"
 cp "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/"*.jsonl "$work/adrs-projection-review-provider-records/"
