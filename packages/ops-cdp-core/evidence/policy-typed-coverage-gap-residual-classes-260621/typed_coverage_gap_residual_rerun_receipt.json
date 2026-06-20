@@ -1,0 +1,14 @@
+{
+  "type": "policy.typedCoverageGapResidual.rerunReceipt.v1",
+  "deterministicRerunMatch": "PASS",
+  "hashes": {
+    "summary": "3893e4ef4129e7e2d10defa05b6b2b36e0042a39146e6b2d2d2e38a423b1c105",
+    "inventory": "234303f8911bf9071045b98def72dceeaad2c877dc9d2c1f3688cd1129154939",
+    "manifest": "7f71c5b192307fd08c1e16d2c1a95bfb43e2a37cea7810019472cab6ab6a8d20",
+    "nodes": "65d352560461cd66030d1ba936a78f78ad08a22ba5db8b51100dfcc69ba9c329",
+    "edges": "ae3d0f8e6a32172bd7d90308c5dbe29cfc3ea3cae74487f2d7ad910f4465e3f2",
+    "deltas": "ef3e7ba3b485188bbf792bec649d7b7638acafc1c788ce1e89bb01686d1ffcb0",
+    "controls": "851d32e9f11c34fb4efe4fb3d164bb1b98637aae5b1ec374ed3b9457653047b3",
+    "recheck": "ac0eae394e7f80c86bfc0f35d5797871eb8746e2b5bab218f55a9e7cacee2b53"
+  }
+}

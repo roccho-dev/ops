@@ -1,0 +1,21 @@
+{
+  "type": "policy.typedCoverageGapResidual.remainingRetirementGates.v1",
+  "gates": [
+    {
+      "name": "deletionReadiness",
+      "status": "BLOCK"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    }
+  ]
+}

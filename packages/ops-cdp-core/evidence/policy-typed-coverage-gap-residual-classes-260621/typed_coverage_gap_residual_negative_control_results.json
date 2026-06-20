@@ -1,0 +1,46 @@
+{
+  "type": "policy.typedCoverageGapResidual.negativeControls.v1",
+  "decision": "PASS",
+  "controls": [
+    {
+      "name": "residual-inputs-fixed",
+      "status": "PASS"
+    },
+    {
+      "name": "residual-class-inventory-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "residual-selection-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "residual-typed-coverage-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "residual-source-trace-valid",
+      "status": "PASS"
+    },
+    {
+      "name": "residual-per-class-counts-recomputed",
+      "status": "PASS"
+    },
+    {
+      "name": "coverage-gap-count-zero-or-blocked",
+      "status": "PASS"
+    },
+    {
+      "name": "semantic-delta-zero-or-blocked",
+      "status": "PASS"
+    },
+    {
+      "name": "residual-does-not-clear-retirement",
+      "status": "PASS"
+    },
+    {
+      "name": "deterministic-rerun-match",
+      "status": "PASS"
+    }
+  ]
+}

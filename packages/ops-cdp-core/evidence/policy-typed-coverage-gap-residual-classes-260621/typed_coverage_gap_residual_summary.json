@@ -1,0 +1,30 @@
+{
+  "type": "policy.typedCoverageGapResidual.summary.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsPrevRef": "7bb2721f59b73c263db68494e17a303ec469ad69",
+  "adrsPrevRef": "cc9da536cf7dff592c56d96ef641598aa0159398",
+  "decision": "PASS_AS_RESIDUAL_EVIDENCE",
+  "deletionReadiness": "BLOCK",
+  "inputGapCount": 89,
+  "sourceClassCount": 6,
+  "selectedGapCount": 89,
+  "deferredGapCount": 0,
+  "missingSelectedSources": 0,
+  "typedNodes": 89,
+  "typedEdges": 89,
+  "resolvedForResidual": 89,
+  "recomputedRemainingCoverageGaps": 0,
+  "coverageGapCountGate": "PASS",
+  "semanticDeltaGate": "PASS",
+  "fullCorpusEquivalenceGate": "PASS_AS_CANDIDATE",
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

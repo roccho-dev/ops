@@ -1,0 +1,11 @@
+{
+  "type": "policy.fullCorpusEquivalenceRecheck.v1",
+  "coverageGapCount": 0,
+  "semanticDeltaUnresolved": 0,
+  "typedCoverageGate": "PASS",
+  "semanticDeltaGate": "PASS",
+  "fullCorpusEquivalenceGate": "PASS_AS_CANDIDATE",
+  "negativeControls": "PASS",
+  "deletionReadiness": "BLOCK",
+  "claimAllowed": false
+}
