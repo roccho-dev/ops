@@ -1,0 +1,2 @@
+{"id":"edge:one","kind":"policy.semanticEdge.v1","edgeKind":"span-supports-semantic-node","from":"span:one","to":"node:one","sourceSpanIds":["span:one"],"sourceTrace":{"repo":"policy","rev":"rev-good","path":"POLICY.md","startLine":1,"endLine":1},"status":"candidate"}
+{"id":"edge:two","kind":"policy.semanticEdge.v1","edgeKind":"span-supports-semantic-node","from":"span:two","to":"node:one","sourceSpanIds":["span:two"],"sourceTrace":{"repo":"policy","rev":"rev-good","path":"POLICY.md","startLine":2,"endLine":2},"status":"candidate"}

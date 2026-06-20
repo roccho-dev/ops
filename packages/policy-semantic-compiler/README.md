@@ -71,6 +71,32 @@ until every review-required source span has accepted semantic approval,
 dispositions are accepted authority, an accepted semantic equivalence proof
 exists, and graph integrity/orphan counts are zero.
 
+## ADRS Projection DuckDB Review
+
+`review-adrs-projection-duckdb` consumes ADRS projection records directly from a
+records directory and runs DuckDB-backed fail-closed gates. It expects:
+
+- `policy.sourceFile.v1`
+- `policy.sourceSpan.v1`
+- `policy.semanticNode.v1`
+- `policy.semanticEdge.v1`
+- `policy.acceptedCoverageProof.v1`
+- optional `policy.sourceFileDisposition.v1`
+
+The command requires `--policy-rev` and rejects stale source traces, orphan
+span/node/edge references, missing accepted coverage, candidate-only
+dispositions, contradictory dispositions, and any generated/projection row that
+claims authority. The accepted coverage proof must be `accepted:true`,
+`status:"accepted"`, match the target policy revision, set
+`generatedIsAuthority:false`, and keep `policyDeletionApproved:false`.
+
+This checker can support the claim `facilitation policy semantic reconstruction
+is proven for this policy ref` only after the ADRS provider emits accepted
+coverage proof records and fresh GenX semantic reconstruction/review has no
+remaining objections. It still cannot approve `policy.git` deletion; deletion
+requires separate active-consumer-zero, policy-absent consumer pass, accepted
+projected entry source, and owner deletion approval evidence.
+
 ## Typed JSON Extractor
 
 `extract-typed-json` is a candidate-only `typed-json-v1` extractor for structured policy files such as schemas, routers, role profiles, protocol envelopes, and kernel indexes. It emits ADR-compatible candidate records with object-pointer `sourceTrace.jsonPointer` values plus fail-closed gates.

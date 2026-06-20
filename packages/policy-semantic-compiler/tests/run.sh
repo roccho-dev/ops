@@ -8,6 +8,8 @@ work="${1:-$(mktemp -d)}"
 mkdir -p "$work/run-a" "$work/run-b" "$work/python-only"
 mkdir -p "$work/projected-real" "$work/projected-fixture"
 mkdir -p "$work/semantic-review-blocked" "$work/semantic-review-disposition" "$work/semantic-review-accepted"
+mkdir -p "$work/adrs-projection-accepted" "$work/adrs-projection-missing-proof" "$work/adrs-projection-fake-proof"
+mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disposition"
 
 policy-semantic-compiler check-fixtures \
   --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
@@ -22,7 +24,7 @@ policy-semantic-compiler check-fresh-agent-cases \
   --fixtures "$pkg_root/tests/fresh-agent-cases.jsonl" > "$work/fresh-agent-cases.json"
 grep -q '"ok": true' "$work/fresh-agent-cases.json"
 
-python "$pkg_root/tests/typed-json-fixture.py" "$work" > "$work/typed-json-fixture.json"
+python3 "$pkg_root/tests/typed-json-fixture.py" "$work" > "$work/typed-json-fixture.json"
 grep -q '"ok": true' "$work/typed-json-fixture.json"
 
 policy-semantic-compiler extract-typed-json   --policy-root "$policy_root"   --out-dir "$work/typed-json-current" > "$work/typed-json-current.stdout.json"
@@ -83,8 +85,8 @@ grep -q '"candidateSourceFileDispositionRows": 1' "$work/semantic-review-disposi
 grep -q '"source file dispositions are not accepted authority"' "$work/semantic-review-disposition.stdout.json"
 grep -q '"equivalenceProofPresent": false' "$work/semantic-review-disposition.stdout.json"
 grep -q '"cutoverReady": false' "$work/semantic-review-disposition.stdout.json"
-grep -q '"reviewRequiredSpanCount": 0' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl"
-grep -q '"fileClassNonNormativeSpanCount": 2' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl"
+grep -q '"reviewRequiredSpanCount":0' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl"
+test "$(grep -c '"fileClassNonNormativeSpanCount":1' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl")" -eq 2
 
 policy-semantic-compiler review-semantic-coverage \
   --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
@@ -98,6 +100,52 @@ grep -q '"acceptedSemanticApprovalCount": 2' "$work/semantic-review-accepted.std
 grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-accepted.stdout.json"
 grep -q '"equivalenceProofPresent": true' "$work/semantic-review-accepted.stdout.json"
 grep -q '"cutoverReady": true' "$work/semantic-review-accepted.stdout.json"
+
+policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/accepted" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-accepted" > "$work/adrs-projection-accepted.stdout.json"
+grep -q '"ok": true' "$work/adrs-projection-accepted.stdout.json"
+grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"generated-rows-not-authority"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/missing-proof" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-missing-proof" > "$work/adrs-projection-missing-proof.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed without accepted proof" >&2
+  exit 1
+fi
+grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-missing-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-missing-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fake-proof" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-fake-proof" > "$work/adrs-projection-fake-proof.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with fake generated authority proof" >&2
+  exit 1
+fi
+grep '"gate_id":"generated-rows-not-authority"' "$work/adrs-projection-fake-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/stale-ref" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-stale-ref" > "$work/adrs-projection-stale-ref.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with stale policy ref" >&2
+  exit 1
+fi
+grep '"gate_id":"policy-ref-current"' "$work/adrs-projection-stale-ref/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-candidate-disposition" > "$work/adrs-projection-candidate-disposition.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with candidate-only disposition" >&2
+  exit 1
+fi
+grep '"gate_id":"candidate-only-disposition"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
 
 policy-semantic-compiler compile \
   --policy-root "$policy_root" \

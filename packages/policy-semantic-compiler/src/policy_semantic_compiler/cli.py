@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -95,6 +96,10 @@ def sha256_tree(paths: Iterable[Path], root: Path) -> str:
 
 def shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def sql_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 def repo_metadata(policy_root: Path) -> dict:
@@ -675,6 +680,285 @@ def command_review_semantic_coverage(args: argparse.Namespace) -> int:
     )
     print(json.dumps(summary, sort_keys=True))
     return 0 if cutover_ready else 1
+
+
+def command_review_adrs_projection_duckdb(args: argparse.Namespace) -> int:
+    records_dir = Path(args.adrs_records_dir)
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    required_files = {
+        "source_files": records_dir / "policy.sourceFile.v1.jsonl",
+        "source_spans": records_dir / "policy.sourceSpan.v1.jsonl",
+        "semantic_nodes": records_dir / "policy.semanticNode.v1.jsonl",
+        "semantic_edges": records_dir / "policy.semanticEdge.v1.jsonl",
+        "coverage_proofs": records_dir / "policy.acceptedCoverageProof.v1.jsonl",
+    }
+    optional_files = {
+        "dispositions": records_dir / "policy.sourceFileDisposition.v1.jsonl",
+    }
+    missing_files = [str(path) for path in required_files.values() if not path.exists()]
+    if missing_files:
+        gates = [
+            {
+                "gate_id": "adrs-required-record-files-present",
+                "status": "blocked",
+                "blocker": "missing required ADRS projection record files",
+                "details": missing_files,
+            }
+        ]
+        jsonl_write(out_dir / "adrs-projection-duckdb-gates.jsonl", gates)
+        manifest = {
+            "kind": "policySemantic.adrsProjectionDuckdbReview.v1",
+            "ok": False,
+            "status": "blocked",
+            "cutoverReady": False,
+            "policyDeletionApproved": False,
+            "generatedIsAuthority": False,
+            "duckdbExecuted": False,
+            "blockers": ["missing required ADRS projection record files"],
+            "outputs": {"gates": "adrs-projection-duckdb-gates.jsonl"},
+        }
+        (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(manifest, sort_keys=True))
+        return 1
+
+    duckdb = shutil.which(args.duckdb_bin) if "/" not in args.duckdb_bin else args.duckdb_bin
+    if not duckdb:
+        gates = [
+            {
+                "gate_id": "adrs-projection-duckdb-executed",
+                "status": "blocked",
+                "blocker": f"DuckDB executable not found: {args.duckdb_bin}",
+            }
+        ]
+        jsonl_write(out_dir / "adrs-projection-duckdb-gates.jsonl", gates)
+        manifest = {
+            "kind": "policySemantic.adrsProjectionDuckdbReview.v1",
+            "ok": False,
+            "status": "blocked",
+            "cutoverReady": False,
+            "policyDeletionApproved": False,
+            "generatedIsAuthority": False,
+            "duckdbExecuted": False,
+            "blockers": [gates[0]["blocker"]],
+            "outputs": {"gates": "adrs-projection-duckdb-gates.jsonl"},
+        }
+        (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(manifest, sort_keys=True))
+        return 1
+
+    dispositions_path = optional_files["dispositions"]
+    csv_path = out_dir / "adrs-projection-duckdb-gates.csv"
+    runner = out_dir / "adrs-projection-duckdb.sql"
+    expected_rev = str(args.policy_rev)
+    dispositions_source = (
+        f"read_json_auto({sql_quote(str(dispositions_path))})"
+        if dispositions_path.exists()
+        else "(SELECT NULL::VARCHAR AS id, NULL::VARCHAR AS sourceFileId, NULL::VARCHAR AS status, NULL::BOOLEAN AS requiresIndividualSemanticApproval WHERE false)"
+    )
+    runner.write_text(
+        f"""
+CREATE OR REPLACE TABLE source_files AS SELECT * FROM read_json_auto({sql_quote(str(required_files["source_files"]))});
+CREATE OR REPLACE TABLE source_spans AS SELECT * FROM read_json_auto({sql_quote(str(required_files["source_spans"]))});
+CREATE OR REPLACE TABLE semantic_nodes AS SELECT * FROM read_json_auto({sql_quote(str(required_files["semantic_nodes"]))});
+CREATE OR REPLACE TABLE semantic_edges AS SELECT * FROM read_json_auto({sql_quote(str(required_files["semantic_edges"]))});
+CREATE OR REPLACE TABLE coverage_proofs AS SELECT * FROM read_json_auto({sql_quote(str(required_files["coverage_proofs"]))});
+CREATE OR REPLACE TABLE dispositions AS SELECT * FROM {dispositions_source};
+
+CREATE OR REPLACE TABLE endpoint_ids AS
+SELECT id FROM source_files
+UNION SELECT id FROM source_spans
+UNION SELECT id FROM semantic_nodes;
+
+CREATE OR REPLACE TABLE non_normative_span_ids AS
+SELECT ss.id
+FROM source_spans ss
+JOIN dispositions d ON d.sourceFileId = ss.sourceFileId
+WHERE d.status = 'accepted' AND d.requiresIndividualSemanticApproval = false;
+
+CREATE OR REPLACE TABLE review_required_spans AS
+SELECT id FROM source_spans
+EXCEPT SELECT id FROM non_normative_span_ids;
+
+CREATE OR REPLACE TABLE accepted_coverage_proofs AS
+SELECT *
+FROM coverage_proofs
+WHERE kind = 'policy.acceptedCoverageProof.v1'
+  AND accepted = true
+  AND status = 'accepted'
+  AND generatedIsAuthority = false
+  AND policyDeletionApproved = false
+  AND policyRev = {sql_quote(expected_rev)};
+
+CREATE OR REPLACE TABLE covered_span_ids AS
+SELECT DISTINCT unnest(coveredSourceSpanIds) AS id FROM accepted_coverage_proofs;
+
+CREATE OR REPLACE TABLE node_span_ids AS
+SELECT DISTINCT unnest(sourceSpanIds) AS id FROM semantic_nodes;
+
+CREATE OR REPLACE TABLE edge_span_ids AS
+SELECT DISTINCT unnest(sourceSpanIds) AS id FROM semantic_edges;
+
+CREATE OR REPLACE TABLE gate_results AS
+SELECT 'adrs-projection-duckdb-executed' AS gate_id, 'pass' AS status, NULL AS blocker, 0 AS count
+UNION ALL
+SELECT 'adrs-required-record-files-present', 'pass', NULL, 0
+UNION ALL
+SELECT 'policy-ref-current',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'ADRS projection row has stale or missing policy rev' END,
+       count(*)
+FROM (
+  SELECT id FROM source_spans WHERE sourceTrace.rev IS NULL OR sourceTrace.rev <> {sql_quote(expected_rev)}
+  UNION ALL SELECT id FROM semantic_nodes WHERE sourceTrace.rev IS NULL OR sourceTrace.rev <> {sql_quote(expected_rev)}
+  UNION ALL SELECT id FROM semantic_edges WHERE sourceTrace.rev IS NULL OR sourceTrace.rev <> {sql_quote(expected_rev)}
+) stale
+UNION ALL
+SELECT 'orphan-span-source-file',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'sourceSpan.sourceFileId does not resolve' END,
+       count(*)
+FROM source_spans ss LEFT JOIN source_files sf ON sf.id = ss.sourceFileId
+WHERE sf.id IS NULL
+UNION ALL
+SELECT 'orphan-node-source-span',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'semanticNode.sourceSpanIds contains missing sourceSpan' END,
+       count(*)
+FROM (SELECT id AS node_id, unnest(sourceSpanIds) AS span_id FROM semantic_nodes) ns
+LEFT JOIN source_spans ss ON ss.id = ns.span_id
+WHERE ss.id IS NULL
+UNION ALL
+SELECT 'orphan-edge-endpoint',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'semanticEdge endpoint does not resolve' END,
+       count(*)
+FROM (
+  SELECT id AS edge_id, "from" AS endpoint FROM semantic_edges
+  UNION ALL SELECT id AS edge_id, "to" AS endpoint FROM semantic_edges
+) ee
+LEFT JOIN endpoint_ids ep ON ep.id = ee.endpoint
+WHERE ep.id IS NULL
+UNION ALL
+SELECT 'orphan-edge-source-span',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'semanticEdge.sourceSpanIds contains missing sourceSpan' END,
+       count(*)
+FROM (SELECT id AS edge_id, unnest(sourceSpanIds) AS span_id FROM semantic_edges) es
+LEFT JOIN source_spans ss ON ss.id = es.span_id
+WHERE ss.id IS NULL
+UNION ALL
+SELECT 'orphan-span-without-node',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'review-required sourceSpan has no semanticNode coverage' END,
+       count(*)
+FROM review_required_spans r
+LEFT JOIN node_span_ids n ON n.id = r.id
+WHERE n.id IS NULL
+UNION ALL
+SELECT 'accepted-coverage-proof-present',
+       CASE WHEN count(*) > 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) > 0 THEN NULL ELSE 'accepted coverage proof is missing' END,
+       count(*)
+FROM accepted_coverage_proofs
+UNION ALL
+SELECT 'accepted-coverage-missing',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'review-required sourceSpan is not covered by accepted coverage proof' END,
+       count(*)
+FROM review_required_spans r
+LEFT JOIN covered_span_ids c ON c.id = r.id
+WHERE c.id IS NULL
+UNION ALL
+SELECT 'candidate-only-disposition',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'candidate disposition cannot satisfy accepted coverage' END,
+       count(*)
+FROM dispositions
+WHERE status IS NOT NULL AND status <> 'accepted'
+UNION ALL
+SELECT 'contradictory-disposition',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'multiple dispositions for one source file conflict' END,
+       count(*)
+FROM (
+  SELECT sourceFileId
+  FROM dispositions
+  WHERE sourceFileId IS NOT NULL
+  GROUP BY sourceFileId
+  HAVING count(DISTINCT coalesce(status, '') || ':' || coalesce(CAST(requiresIndividualSemanticApproval AS VARCHAR), '')) > 1
+) conflicts
+UNION ALL
+SELECT 'generated-rows-not-authority',
+       CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
+       CASE WHEN count(*) = 0 THEN NULL ELSE 'projection/generated row claimed authority' END,
+       count(*)
+FROM coverage_proofs
+WHERE generatedIsAuthority <> false OR policyDeletionApproved <> false;
+
+COPY (SELECT gate_id, status, blocker, count FROM gate_results ORDER BY gate_id)
+TO {sql_quote(str(csv_path))} (HEADER, DELIMITER ',');
+""".lstrip(),
+        encoding="utf-8",
+    )
+    proc = subprocess.run([duckdb, str(out_dir / "adrs-projection.duckdb"), "-c", f".read {runner}"], text=True)
+    if proc.returncode != 0:
+        gates = [
+            {
+                "gate_id": "adrs-projection-duckdb-executed",
+                "status": "blocked",
+                "blocker": f"DuckDB projection review failed with exit code {proc.returncode}",
+            }
+        ]
+        jsonl_write(out_dir / "adrs-projection-duckdb-gates.jsonl", gates)
+        manifest = {
+            "kind": "policySemantic.adrsProjectionDuckdbReview.v1",
+            "ok": False,
+            "status": "blocked",
+            "cutoverReady": False,
+            "policyDeletionApproved": False,
+            "generatedIsAuthority": False,
+            "duckdbExecuted": False,
+            "blockers": [gates[0]["blocker"]],
+            "outputs": {"gates": "adrs-projection-duckdb-gates.jsonl", "sql": "adrs-projection-duckdb.sql"},
+        }
+        (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(manifest, sort_keys=True))
+        return 1
+
+    with csv_path.open("r", encoding="utf-8", newline="") as handle:
+        gates = [
+            {
+                "gate_id": row["gate_id"],
+                "status": row["status"],
+                "blocker": row["blocker"] or None,
+                "count": int(row["count"]),
+            }
+            for row in csv.DictReader(handle)
+        ]
+    ok = bool(gates) and all(row["status"] == "pass" for row in gates)
+    blockers = [row["blocker"] for row in gates if row["status"] != "pass" and row["blocker"]]
+    jsonl_write(out_dir / "adrs-projection-duckdb-gates.jsonl", gates)
+    manifest = {
+        "kind": "policySemantic.adrsProjectionDuckdbReview.v1",
+        "ok": ok,
+        "status": "accepted" if ok else "blocked",
+        "cutoverReady": ok,
+        "policyDeletionApproved": False,
+        "generatedIsAuthority": False,
+        "duckdbExecuted": True,
+        "policyRev": expected_rev,
+        "blockers": blockers,
+        "outputs": {
+            "gates": "adrs-projection-duckdb-gates.jsonl",
+            "gatesCsv": "adrs-projection-duckdb-gates.csv",
+            "sql": "adrs-projection-duckdb.sql",
+        },
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
 
 
 def write_counterexample_dataset(out_dir: Path, dataset: dict) -> None:
@@ -1753,6 +2037,12 @@ def main(argv: list[str] | None = None) -> int:
     review_parser.add_argument("--equivalence-proofs")
     review_parser.add_argument("--out-dir", required=True)
     review_parser.set_defaults(func=command_review_semantic_coverage)
+    adrs_projection_parser = sub.add_parser("review-adrs-projection-duckdb")
+    adrs_projection_parser.add_argument("--adrs-records-dir", required=True)
+    adrs_projection_parser.add_argument("--policy-rev", required=True)
+    adrs_projection_parser.add_argument("--out-dir", required=True)
+    adrs_projection_parser.add_argument("--duckdb-bin", default="duckdb")
+    adrs_projection_parser.set_defaults(func=command_review_adrs_projection_duckdb)
     args = parser.parse_args(argv)
     return args.func(args)
 
