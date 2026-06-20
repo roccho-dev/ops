@@ -1,0 +1,45 @@
+{
+  "type": "policy.typedCompilerCandidate.gen2Review.v1",
+  "reviewer": "ChatGPT remove-policy project",
+  "reviewConversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a36a690-fc54-83e8-9aa1-a47961ad1270",
+  "opsCommit": "6484344d638916fcbc0a85c642cf5849dc2259e9",
+  "adrsCommit": "493026d9c8da209e7f0a0cbd4f3e0bbd21f8990f",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "verdict": "PASS",
+  "compilerCandidateGate": "PASS",
+  "deletionReadiness": "BLOCK",
+  "proposalQuality": "PASS for this bounded typed semantic compiler candidate lane. Based on the pasted evidence only, the lane deterministically compiles previously reviewed bridge, consumer cutover, and source13 evidence into candidate outputs while keeping semantic equivalence, owner/adoption, and end-to-end retirement gates BLOCK.",
+  "determinismReview": "PASS for candidate evidence. The compiler version is fixed as typed-semantic-compiler-candidate-jq-v1, policyRef is fixed, outputs are enumerated, and controls include manifest-hashes-validate plus compiled-edge-count-matches. This is enough for a bounded compiler-candidate lane, but not enough to make the compiler accepted final semantic authority.",
+  "authorityBoundaryReview": "PASS. The evidence uses decision=PASS_FOR_COMPILER_CANDIDATE rather than final PASS, keeps deletionReadiness=BLOCK, marks compilerGate as PASS_FOR_CANDIDATE, and preserves remainingRetirementGates as machine-readable BLOCK rows. SourceGate and consumerGate PASS are not promoted into semantic equivalence, owner approval, or cutover readiness.",
+  "controlReview": "PASS. The 9 controls cover the bounded lane core risks: candidate decision, deletion readiness remaining blocked, source and consumer gates passing, candidate-only compiler gate, semantic equivalence staying blocked, compiled edge count matching, candidate trace on compiled edges, non-authority trace on disposition records, and manifest hash validation. They are sufficient for compiler-candidate evidence, not for retirement approval.",
+  "falseClaimReview": "PASS. No improper policy.git retirement, deletion, cutover approval, semantic approval, completion approval, merge approval, canonical write, or SSOT write claim is visible in the pasted evidence. compiledEdges=7 is presented as candidate compiled output, not as full policy semantic coverage.",
+  "blockers": [],
+  "minimalFixesBeforeThisLaneCanBeAccepted": [],
+  "remainingGatesForActualRetirement": [
+    {
+      "name": "semantic-equivalence-proof",
+      "status": "BLOCK",
+      "reason": "compiler candidate does not prove accepted equivalence against the natural-language policy corpus"
+    },
+    {
+      "name": "accepted-typed-semantic-compiler-authority",
+      "status": "BLOCK",
+      "reason": "typed-semantic-compiler-candidate-jq-v1 is candidate evidence, not accepted final compiler authority"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK",
+      "reason": "owner approval and adoption/cutover records are not granted by this review"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK",
+      "reason": "this lane does not prove policy.git can be absent or retired while all consumers pass"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK",
+      "reason": "no merge, canonical write, SSOT write, deletion, retirement, or cutover approval is granted here"
+    }
+  ]
+}
