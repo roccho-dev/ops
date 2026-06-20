@@ -1,0 +1,52 @@
+{
+  "decision": "BLOCK",
+  "files": [
+    {
+      "bytes": 14223,
+      "path": "counterexamples.md",
+      "sha256": "79eefd57f2202f1c9c69cec6e844a9cdad4d454128fa22cc7374ce08c55779d4"
+    },
+    {
+      "bytes": 40948,
+      "path": "policy_consumer_refs.jsonl",
+      "sha256": "de41e391ffbd11c851c9bd3be8fe04244bc24cfbe1a2d4dde1c0aea40951d2ce"
+    },
+    {
+      "bytes": 896,
+      "path": "policy_deletion_readiness_gates.json",
+      "sha256": "1c2c068bbd3dfffab6bf58145ca2b57111b09aa8dd4c267d7641363970cb03a4"
+    },
+    {
+      "bytes": 460,
+      "path": "policy_graph_coverage.json",
+      "sha256": "eea060fbe72c13e73d7528c25c0a44a13eda5a340e444f5cba8f5e294f7e6fe0"
+    },
+    {
+      "bytes": 392,
+      "path": "policy_graph_coverage.md",
+      "sha256": "58ce30f0716d972049a60aa60579cbc5500e3d3fa66c49c6290daa071773bb62"
+    },
+    {
+      "bytes": 0,
+      "path": "policy_low_density_prose.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "bytes": 18475360,
+      "path": "policy_semantic_edges.jsonl",
+      "sha256": "e5f9906fcf75409c776391b1ab6b3d2b00f86f2bb89206cf32058248525acdde"
+    },
+    {
+      "bytes": 200558,
+      "path": "policy_source_nodes.jsonl",
+      "sha256": "ea9a31c952987d3cfd241d6133509459ba370bcf7f62c4d2b67cf71cf71246f6"
+    },
+    {
+      "bytes": 9094,
+      "path": "policy_untyped_sources.jsonl",
+      "sha256": "14efbb3355bcb753f787c2a6fbb9af1b395b4d0d89cc0c849e2ec32aeff07268"
+    }
+  ],
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "type": "policy.semanticGraphBaselineManifest.v1"
+}

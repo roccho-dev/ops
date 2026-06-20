@@ -1,0 +1,21 @@
+{
+  "consumerRefCount": 89,
+  "coverageRatio": 0.9017,
+  "edgeKindsMissing": [],
+  "edgeKindsObserved": [
+    "activation",
+    "authority",
+    "consumer",
+    "deny",
+    "evidence",
+    "obligation",
+    "replacement"
+  ],
+  "filesWithEdges": 587,
+  "filesWithoutEdges": 64,
+  "lowDensityProseFiles": 0,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "semanticEdgeCount": 24109,
+  "sourceNodeCount": 651,
+  "type": "policy.graphCoverage.v1"
+}

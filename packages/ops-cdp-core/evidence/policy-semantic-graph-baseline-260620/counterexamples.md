@@ -1,0 +1,117 @@
+# Policy semantic graph counterexamples
+
+- policyRef: `334997669f1889a8e2658730c616d2d4510d4536`
+- decision: `BLOCK`
+
+## Counterexample classes
+
+- Untyped source files: 64
+- Low-density prose files: 0
+- Active policy repo consumer references: 89
+- Extractor class: heuristic baseline, not accepted typed compiler
+
+## First untyped files
+
+- `examples/repo-boundary-guard-as-policy/example/repo/packages/app/package.json`: no heuristic semantic edge extracted
+- `examples/repo-boundary-guard-as-policy/example/repo/packages/domain/package.json`: no heuristic semantic edge extracted
+- `examples/repo-boundary-guard-as-policy/example/repo/packages/feature/package.json`: no heuristic semantic edge extracted
+- `examples/repo-boundary-guard-as-policy/example/repo/packages/infra/package.json`: no heuristic semantic edge extracted
+- `examples/repo-boundary-guard-as-policy/example/repo/packages/shared/package.json`: no heuristic semantic edge extracted
+- `examples/repo-boundary-guard-as-policy/example/repo/packages/ui/package.json`: no heuristic semantic edge extracted
+- `issues/canonical-branch-guard-worktree-handoff/evidence/base-head.txt`: no heuristic semantic edge extracted
+- `issues/canonical-branch-guard-worktree-handoff/evidence/candidate-head.txt`: no heuristic semantic edge extracted
+- `issues/canonical-branch-guard-worktree-handoff/localizer-evidence/current-canonical-head.txt`: no heuristic semantic edge extracted
+- `issues/canonical-branch-guard-worktree-handoff/localizer-evidence/localizer-merged-head.txt`: no heuristic semantic edge extracted
+- `issues/canonical-branch-guard-worktree-handoff/localizer-evidence/source-candidate-head.txt`: no heuristic semantic edge extracted
+- `issues/policy.project-source-traceability-flow/evidence/base-head.txt`: no heuristic semantic edge extracted
+- `packages/app-browser-sim/README.md`: no heuristic semantic edge extracted
+- `packages/app-browser-sim/package.json`: no heuristic semantic edge extracted
+- `packages/authz/package.json`: no heuristic semantic edge extracted
+- `packages/cli/bin/policy-interpreter.mjs`: no heuristic semantic edge extracted
+- `packages/cli/package.json`: no heuristic semantic edge extracted
+- `packages/core/package.json`: no heuristic semantic edge extracted
+- `packages/core/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/eval-adapters/package.json`: no heuristic semantic edge extracted
+- `packages/eval-adapters/src/eval-integrity.mjs`: no heuristic semantic edge extracted
+- `packages/eval-adapters/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/eval-core/package.json`: no heuristic semantic edge extracted
+- `packages/eval-core/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/harness-evolution/package.json`: no heuristic semantic edge extracted
+- `packages/interpreter/package.json`: no heuristic semantic edge extracted
+- `packages/interpreter/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/mmdflux-policy/examples/governance-envelope/README.md`: no heuristic semantic edge extracted
+- `packages/mmdflux-policy/examples/monster-envelope/README.md`: no heuristic semantic edge extracted
+- `packages/mmdflux-policy/package.json`: no heuristic semantic edge extracted
+- `packages/mmdflux-policy/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/mmdflux-policy/src/protocol-envelope.mjs`: no heuristic semantic edge extracted
+- `packages/node-jsonl/package.json`: no heuristic semantic edge extracted
+- `packages/node-jsonl/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/optimizer/README.md`: no heuristic semantic edge extracted
+- `packages/optimizer/package.json`: no heuristic semantic edge extracted
+- `packages/optimizer/src/default-adapters.mjs`: no heuristic semantic edge extracted
+- `packages/policy-gateway/README.md`: no heuristic semantic edge extracted
+- `packages/policy-plus/package.json`: no heuristic semantic edge extracted
+- `packages/policy-plus/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/protocol-board-core/package.json`: no heuristic semantic edge extracted
+- `packages/protocol-board-core/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/protocol-board-core/src/protocol.mjs`: no heuristic semantic edge extracted
+- `packages/relation-jsonl/package.json`: no heuristic semantic edge extracted
+- `packages/runtime-browser/README.md`: no heuristic semantic edge extracted
+- `packages/runtime-browser/package.json`: no heuristic semantic edge extracted
+- `packages/runtime-browser/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/waza-adapter/package.json`: no heuristic semantic edge extracted
+- `packages/waza-adapter/src/index.mjs`: no heuristic semantic edge extracted
+- `packages/workflow-topology/README.md`: no heuristic semantic edge extracted
+
+## First active consumer refs
+
+- `LOCALIZATION_REPORT.md:50`: - It must stay under the owning `packages/mmdflux-policy/` package path. A root
+- `LOCALIZATION_REPORT.md:107`: packages/mmdflux-policy/scripts/dual-mmd-pool-proof.mjs
+- `README.md:173`: target board/protocol/projection/guard/eval/policy/schema -> governance protocol -> improvement evidence only
+- `boards/project-4thread-artifact-gen1-claim-019e0f17.a2ui.jsonl:3`: {"version":"v0.9","updateDataModel":{"surfaceId":"project-4thread-artifact-019e0f17","path":"/records/20260512-project-4thread-claim-0003","value":{"kind":"comm
+- `boards/project-4thread-artifact-projection-019e0f17.a2ui.jsonl:39`: {"version":"v0.9","updateDataModel":{"surfaceId":"project-4thread-artifact-019e0f17","path":"/records/20260512-project-4thread-claim-0003","value":{"kind":"comm
+- `boards/update-gen0-command-board.a2ui.jsonl:8`: {"schema":"command-board.result.v1","boardId":"update-gen0","createdAt":"2026-05-13T00:20:00+09:00","issuer":{"id":"runner","generation":"gen0","role":"gen0"},"
+- `docs/proposals/raw-canonical-projection-nix-evidence-core-port-260618/PROPOSAL.md:22`: - **meta^3:** keep `policy.git` as SSOT. `.agents` can record management
+- `docs/proposals/raw-canonical-projection-nix-evidence-core-port-260618/PROPOSAL.md:32`: - **meta^7:** make future agents recover from policy/output and canonical
+- `examples/harness-evolution/evolution-report.json:74`: "protocol/guard/eval/policy/schema changes require replay/shadow and human review",
+- `examples/policy-gate-core/proposal-falsification-proof.valid.json:385`: "canonicalChangeScope": "policy/protocol/eval/schema/security"
+- `flake.nix:2`: description = "policy repo: visible policy source, compiled role profiles, and layered Nix outputs";
+- `issues/260523-policy-governance-md-issues.jsonl:1`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue:policy.canonical-branch-attach-only-policy:closed:2026-05-23T01:00:00+09:00","issueId":"policy.
+- `issues/260523-policy-governance-md-issues.jsonl:4`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue:policy.direct-canonical-commit-quarantine-policy:opened:2026-05-23T01:03:00+09:00","issueId":"p
+- `issues/260523-policy-md-issue-jsonl-migration.jsonl:1`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue:policy.legacy-md-issues-to-jsonl:opened:2026-05-23T00:00:00+09:00","issueId":"policy.legacy-md-
+- `issues/260527-issue-design-localize.jsonl:2`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"policy-tool-doc-boundary-and-handoff-routing-opened-20260527T043701+0900","issueId":"policy.tool-doc-
+- `issues/260531-purpose-lineage-final.jsonl:1`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue-record.policy.project-source-traceability-flow.purpose-lineage-handoff.20260531T050101+0900","i
+- `issues/260531-purpose-lineage.jsonl:1`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue-record.policy.project-source-traceability-flow.localized-handoff.20260531T045239+0900","issueId
+- `issues/260531.jsonl:2`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue-record.policy.project-source-traceability-flow.localized-handoff.20260531T042114+0900","issueId
+- `issues/260531.jsonl:3`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue-record.policy.project-source-traceability-flow.reconciliation-handoff.20260531T044300+0900","is
+- `issues/260531.jsonl:4`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue-record.policy.project-source-traceability-flow.localized-handoff.20260531T044530+0900","issueId
+- `issues/260531.jsonl:5`: {"kind":"issue.record.v1","schemaVersion":"v1","recordId":"issue-record.policy.project-source-traceability-flow.final-reconciliation-handoff.20260531T045500+090
+- `issues/260604-transport-profile-port-ranking-before-blocker.jsonl:1`: {"allowedPaths":["policy-master/.agents/transport.md","policy-master/issues/260604-transport-profile-port-ranking-before-blocker.jsonl","adr-main/records/promot
+- `issues/canonical-branch-attach-only-policy/262205-210027.md:32`: | policy schema gate | `issues/canonical-branch-attach-only-policy/evidence/policy-schema-gate.log` |
+- `issues/canonical-branch-attach-only-policy/262205-210027.md:33`: | attach-only text proof | `issues/canonical-branch-attach-only-policy/evidence/attach-only-text-proof.tsv` |
+- `issues/canonical-branch-attach-only-policy/262205-210027.md:34`: | git diff whitespace check | `issues/canonical-branch-attach-only-policy/evidence/git-diff-check.log` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZER_RUN_REPORT.md:27`: | localizer worktree | `/home/nixos/repos/policy/.worktrees/policy-canonical-branch-guard-localizer-20260522-205111` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZER_RUN_REPORT.md:36`: - Detected that `policy/master` advanced while localizing, then merged the latest `policy/master` into this localizer worktree.
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZER_RUN_REPORT.md:37`: - Rechecked canonical drift before acceptance and merged the newer `policy/master` head `84b99672c3bbf8a2810dd13b42e2639dd60ef3d2`.
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:5`: この worktree の localize までのゴールは、policy canonical branch guard issue 群を `policy/master` に取り込める判断材料として固定することです。
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:30`: | `/home/nixos/repos/policy/AGENTS.md` | `3d65e1c2b4bd9997a29f2f5ef4112fe2f5b52d6a78fe1d4c04488faf07ad0281` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:31`: | `/home/nixos/repos/policy/.agents/review-merge.md` | `b9d804ad906d1c5c7d61de5737c9a921e79171e042f2bfc8833378a357191a04` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:32`: | `/home/nixos/repos/policy/.agents/authority-write-gate.md` | `56a97f2a22c6bf63510fdd98691956a93668f0dad030134f31af2d563e0faec1` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:33`: | `/home/nixos/repos/policy/.agents/claim-stream.md` | `4b473a0038efbc48ff048c483116b19cbbebcbe4b7ed1563e9708b1289409839` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:34`: | `/home/nixos/repos/policy/.agents/specs-package-work.md` | `f1ed39c51ccd4a43cdfcd8f8821c691fa4ccefd1155accacfb6ff49334ca6553` |
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:61`: - Verify `policy/master` has not drifted or decide rebase/merge policy explicitly.
+- `issues/canonical-branch-guard-worktree-handoff/LOCALIZE_READY.md:65`: - Require explicit canonical merge approval before updating `policy/master`.
+- `issues/policy-gate-core-runner-agnostic-worktree-20260607/IMPLEMENTATION_PROPOSAL.md:61`: | G9 | cause-split | classify policy/env/tool/eval/agent/policy-overload causes |
+- `issues/policy-gate-core-runner-agnostic-worktree-20260607/IMPLEMENTATION_PROPOSAL.md:94`: - human gate for canonical policy/protocol/eval/schema/security/gate promotion.
+- `issues/policy.project-source-traceability-flow/evidence/purpose_lineage.json:16`: "sourceRef": "/home/nixos/repos/policy/AGENTS.md",
+- `issues/policy.project-source-traceability-flow/evidence/purpose_lineage.json:17`: "evidenceRef": "/home/nixos/repos/policy/.worktrees/policy-project-source-traceability-flow-20260531/AGENTS.md"
+- `issues/policy.project-source-traceability-flow/evidence/purpose_lineage.json:29`: "evidenceRef": "/home/nixos/repos/policy/.worktrees/policy-project-source-traceability-flow-20260531/.agents/project-workspace.md"
+- `issues/policy.project-source-traceability-flow/evidence/purpose_lineage.json:35`: "evidenceRef": "/home/nixos/repos/policy/.worktrees/policy-project-source-traceability-flow-20260531/.agents/reports/project-source-traceability-flow-proposal-2
+- `kernel/protocol-fsm.md:147`: `policy-gate-promotion-approved` is a human promotion approval for canonical policy/protocol/eval/schema/gate changes. Runner output, judge output, subagent out
+- `modules/domain-prove-feat-router/POLICY.md:31`: This policy repo must not duplicate the entry gate contract, manifest shape, required outputs, required checks, tool order, or package acceptance detail.
+- `modules/domain-software-review-merge/POLICY.md:134`: この gate は「品質が上がる気がする」という感想ではありません。candidate diff、issue record、gate log、RUN_REPORT、handoff、policy/specs pointer から説明できる範囲だけを evidence にします。
+- `modules/index.v1.json:194`: "manifest": "modules/test-assertion-policy/module.v1.json",
+- `modules/surface-chatgpt-first/POLICY.md:350`: worktreePath: /home/nixos/repos/policy/.worktrees/pcl-chatgpt-canonical-facilitation-20260604
+- `modules/surface-chatgpt-first/POLICY.md:413`: | parent prompt teaches expected answer | fresh context trial passes only because prompt explains route outside policy | trial fail; fix policy/template |
+- `modules/surface-chatgpt-first/POLICY.md:428`: The parent must also apply `modules/test-assertion-policy/POLICY.md` before saying `試験完了`, `断言できる`, `facilitation できる`, or `ready`.
+- `modules/surface-chatgpt-first/POLICY.md:516`: If the actor uses another value, or returns `verdict=pass` while any required field violates this file or `modules/test-assertion-policy/POLICY.md`, the parent

@@ -1,0 +1,38 @@
+{
+  "decision": "BLOCK",
+  "gates": [
+    {
+      "actual": 64,
+      "expected": 0,
+      "name": "all-source-files-have-semantic-edges",
+      "status": "BLOCK"
+    },
+    {
+      "actual": [],
+      "expected": [],
+      "name": "all-required-edge-kinds-observed",
+      "status": "PASS"
+    },
+    {
+      "actual": 0,
+      "expected": 0,
+      "name": "low-density-prose-reviewed",
+      "status": "PASS"
+    },
+    {
+      "actual": 89,
+      "expected": 0,
+      "name": "active-policy-repo-consumer-refs-eliminated",
+      "status": "BLOCK"
+    },
+    {
+      "actual": "heuristic-keyword-baseline",
+      "expected": "accepted typed semantic graph compiler",
+      "name": "heuristic-extraction-not-final-authority",
+      "status": "BLOCK"
+    }
+  ],
+  "notDeletionReady": true,
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "type": "policy.deletionReadinessGates.v1"
+}
