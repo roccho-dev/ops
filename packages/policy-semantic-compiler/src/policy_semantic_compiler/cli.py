@@ -972,8 +972,14 @@ SELECT 'candidate-only-disposition',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
        CASE WHEN count(*) = 0 THEN NULL ELSE 'candidate disposition cannot satisfy accepted coverage' END,
        count(*)
-FROM dispositions
-WHERE status IS NOT NULL AND status <> 'accepted'
+FROM dispositions d
+WHERE d.status IS NOT NULL AND d.status <> 'accepted'
+  AND EXISTS (
+    SELECT 1
+    FROM source_spans ss
+    LEFT JOIN accepted_span_disposition_ids a ON a.id = ss.id
+    WHERE ss.sourceFileId = d.sourceFileId AND a.id IS NULL
+  )
 UNION ALL
 SELECT 'candidate-only-span-disposition',
        CASE WHEN count(*) = 0 THEN 'pass' ELSE 'blocked' END,
@@ -1058,8 +1064,14 @@ COPY (
          sourceFileId,
          status,
          requiresIndividualSemanticApproval
-  FROM dispositions
-  WHERE status IS NOT NULL AND status <> 'accepted'
+  FROM dispositions d
+  WHERE d.status IS NOT NULL AND d.status <> 'accepted'
+    AND EXISTS (
+      SELECT 1
+      FROM source_spans ss
+      LEFT JOIN accepted_span_disposition_ids a ON a.id = ss.id
+      WHERE ss.sourceFileId = d.sourceFileId AND a.id IS NULL
+    )
   ORDER BY sourceFileId, dispositionId
 ) TO {sql_quote(str(candidate_file_dispositions_csv_path))} (HEADER, DELIMITER ',');
 """.lstrip(),
@@ -1408,7 +1420,7 @@ COPY (
         else:
             invalid_discussion_result_ids.append(str(row.get("id") or batch_id))
     missing_batch_span_ids = sorted(missing_span_ids - batch_span_ids)
-    invalid_batch_span_ids = sorted(batch_span_ids - missing_span_ids)
+    invalid_batch_span_ids = sorted(batch_span_ids - missing_span_ids) if missing_span_ids else []
     batches_missing_two_reviewers = sorted(batch_id for batch_id in batch_ids if len(batch_assignment_reviewers.get(batch_id, set())) < 2)
     batches_missing_review_packets = sorted(batch_ids - valid_packet_batch_ids)
     assignments_missing_work_orders = sorted(assignment_ids - valid_work_order_assignment_ids)
