@@ -127,6 +127,12 @@ projection fields such as `sourceTrace`, `sha256`, detection metadata, and
 `excerpt`; they are reviewer input records, not approval records, and instruct
 reviewers not to read the `policy.git` body.
 
+`materialize-source-span-review-work-orders` joins reviewer assignments to
+review packets and emits `policy.sourceSpanDispositionReviewerWorkOrder.v1`.
+Each work order is scoped to one reviewer assignment, embeds only the ADRS
+projection packet fields, and lists the required review-result fields. Work
+orders are not approval records.
+
 `check-source-span-review-completion` verifies that each assignment has an
 accepted `policy.sourceSpanDispositionReviewResult.v1` and each batch has an
 accepted same-revision `policy.sourceSpanDispositionDirectCrossDiscussion.v1`

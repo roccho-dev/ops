@@ -1651,6 +1651,130 @@ def command_materialize_source_span_review_packets(args: argparse.Namespace) -> 
     return 0 if ok else 1
 
 
+def command_materialize_source_span_review_work_orders(args: argparse.Namespace) -> int:
+    assignments = read_jsonl(Path(args.assignments))
+    review_packets = read_jsonl(Path(args.review_packets))
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    policy_rev = str(args.policy_rev)
+    packet_by_batch = {
+        str(row.get("batchId")): row
+        for row in review_packets
+        if row.get("kind") == "policy.sourceSpanDispositionReviewPacket.v1"
+        and row.get("policyRev") == policy_rev
+        and row.get("accepted") is False
+        and row.get("generatedIsAuthority") is False
+        and row.get("policyDeletionApproved") is False
+        and row.get("status") == "review-required"
+    }
+    work_orders: list[dict] = []
+    missing_packets: list[dict] = []
+    span_mismatches: list[dict] = []
+    for assignment in assignments:
+        if not (
+            assignment.get("kind") == "policy.sourceSpanDispositionReviewAssignment.v1"
+            and assignment.get("policyRev") == policy_rev
+            and assignment.get("accepted") is False
+            and assignment.get("generatedIsAuthority") is False
+            and assignment.get("policyDeletionApproved") is False
+            and assignment.get("status") == "assigned-review-required"
+        ):
+            continue
+        batch_id = str(assignment.get("batchId"))
+        packet = packet_by_batch.get(batch_id)
+        if not packet:
+            missing_packets.append(
+                {
+                    "kind": "policySemantic.reviewWorkOrderMissingPacket.v1",
+                    "assignmentId": assignment.get("id"),
+                    "batchId": batch_id,
+                }
+            )
+            continue
+        assignment_span_ids = {str(span_id) for span_id in as_list(assignment.get("sourceSpanIds")) if span_id}
+        packet_span_ids = {str(span.get("sourceSpanId")) for span in as_list(packet.get("sourceSpans")) if isinstance(span, dict) and span.get("sourceSpanId")}
+        if assignment_span_ids != packet_span_ids:
+            span_mismatches.append(
+                {
+                    "kind": "policySemantic.reviewWorkOrderSpanMismatch.v1",
+                    "assignmentId": assignment.get("id"),
+                    "packetId": packet.get("id"),
+                    "batchId": batch_id,
+                }
+            )
+            continue
+        reviewer_id = str(assignment.get("reviewerId"))
+        work_orders.append(
+            {
+                "kind": "policy.sourceSpanDispositionReviewerWorkOrder.v1",
+                "id": "policy-source-span-review-work-order-" + sha256_bytes(f"{assignment.get('id')}:{packet.get('id')}".encode("utf-8"))[:20],
+                "policyRev": policy_rev,
+                "assignmentId": assignment.get("id"),
+                "batchId": batch_id,
+                "batchNumber": assignment.get("batchNumber"),
+                "reviewerId": reviewer_id,
+                "packetId": packet.get("id"),
+                "sourceSpanCount": len(assignment_span_ids),
+                "sourceSpanIds": sorted(assignment_span_ids),
+                "sourcePaths": packet.get("sourcePaths", []),
+                "reviewInput": {
+                    "packetKind": packet.get("kind"),
+                    "packetId": packet.get("id"),
+                    "sourceSpans": packet.get("sourceSpans", []),
+                },
+                "requiredOutputRecord": "policy.sourceSpanDispositionReviewResult.v1",
+                "requiredOutputFields": [
+                    "id",
+                    "batchId",
+                    "reviewerId",
+                    "packetId",
+                    "packetRead",
+                    "sourceSpanIds",
+                    "disposition",
+                    "rationale",
+                    "noRemainingObjections",
+                    "accepted",
+                    "status",
+                    "fixtureOnly",
+                    "generatedIsAuthority",
+                    "policyDeletionApproved",
+                ],
+                "instruction": "Use only this ADRS projection reviewInput. Do not read policy.git body. Emit one policy.sourceSpanDispositionReviewResult.v1 for this assignment.",
+                "accepted": False,
+                "claimAllowed": False,
+                "generatedIsAuthority": False,
+                "policyDeletionApproved": False,
+                "status": "assigned-review-required",
+            }
+        )
+    jsonl_write(out_dir / "policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl", work_orders)
+    jsonl_write(out_dir / "review-work-orders-missing-packets.jsonl", missing_packets)
+    jsonl_write(out_dir / "review-work-orders-span-mismatch.jsonl", span_mismatches)
+    ok = bool(work_orders) and not missing_packets and not span_mismatches
+    manifest = {
+        "kind": "policy.sourceSpanDispositionReviewerWorkOrderRun.v1",
+        "ok": ok,
+        "policyRev": policy_rev,
+        "assignmentCount": len(assignments),
+        "workOrderCount": len(work_orders),
+        "missingPacketCount": len(missing_packets),
+        "spanMismatchCount": len(span_mismatches),
+        "accepted": False,
+        "claimAllowed": False,
+        "generatedIsAuthority": False,
+        "policyDeletionApproved": False,
+        "outputs": {
+            "workOrders": "policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl",
+            "missingPackets": "review-work-orders-missing-packets.jsonl",
+            "spanMismatches": "review-work-orders-span-mismatch.jsonl",
+        },
+        "status": "review-work-orders-materialized" if ok else "blocked",
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(manifest, sort_keys=True))
+    return 0 if ok else 1
+
+
 def command_check_source_span_review_completion(args: argparse.Namespace) -> int:
     assignments = read_jsonl(Path(args.assignments))
     required_discussions = read_jsonl(Path(args.required_discussions))
@@ -2822,6 +2946,12 @@ POLICY_DELETION_REF_TOKENS = (
 )
 POLICY_DELETION_SKIP_DIRS = {".git", "result", "node_modules", "__pycache__"}
 POLICY_DELETION_SKIP_SUFFIXES = {".pyc", ".duckdb"}
+POLICY_DELETION_SKIP_FILENAMES = {
+    "absent-simulation.json",
+    "consumer-proof-results.jsonl",
+    "consumer-references.jsonl",
+    "deletion-readiness-gates.jsonl",
+}
 
 
 def deletion_rel_path(path: Path, root: Path) -> str:
@@ -2834,6 +2964,11 @@ def deletion_rel_path(path: Path, root: Path) -> str:
 def deletion_classify_reference(path: str, line: str) -> str:
     low_path = path.lower()
     low_line = line.lower()
+    stripped = line.strip()
+    if path.startswith("records/policy/") and path.endswith(".jsonl"):
+        return "generated-policy-record"
+    if low_path.endswith("policy_semantic_compiler/cli.py") and stripped.startswith(chr(34)) and stripped.endswith(chr(34) + ","):
+        return "scanner-token-definition"
     if "tests/" in low_path or low_path.endswith("run.sh") or "fixture" in low_path or "counterexample" in low_path:
         return "test-or-negative-control"
     if "readme" in low_path or low_path.endswith(".md"):
@@ -2852,6 +2987,8 @@ def deletion_iter_files(root: Path):
         dirnames[:] = [d for d in dirnames if d not in POLICY_DELETION_SKIP_DIRS and not d.startswith(".worktrees")]
         for filename in filenames:
             path = Path(dirpath) / filename
+            if filename in POLICY_DELETION_SKIP_FILENAMES:
+                continue
             if path.suffix in POLICY_DELETION_SKIP_SUFFIXES:
                 continue
             yield path
@@ -3214,6 +3351,12 @@ def main(argv: list[str] | None = None) -> int:
     packet_parser.add_argument("--policy-rev", required=True)
     packet_parser.add_argument("--out-dir", required=True)
     packet_parser.set_defaults(func=command_materialize_source_span_review_packets)
+    work_order_parser = sub.add_parser("materialize-source-span-review-work-orders")
+    work_order_parser.add_argument("--assignments", required=True)
+    work_order_parser.add_argument("--review-packets", required=True)
+    work_order_parser.add_argument("--policy-rev", required=True)
+    work_order_parser.add_argument("--out-dir", required=True)
+    work_order_parser.set_defaults(func=command_materialize_source_span_review_work_orders)
     completion_parser = sub.add_parser("check-source-span-review-completion")
     completion_parser.add_argument("--assignments", required=True)
     completion_parser.add_argument("--required-discussions", required=True)
