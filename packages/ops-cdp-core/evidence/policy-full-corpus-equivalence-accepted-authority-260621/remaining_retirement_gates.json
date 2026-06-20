@@ -1,0 +1,25 @@
+{
+  "type": "policy.fullCorpusEquivalenceAuthority.remainingRetirementGates.v1",
+  "gates": [
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    },
+    {
+      "name": "policy.git deletion/retirement approval",
+      "status": "BLOCK"
+    },
+    {
+      "name": "cutover readiness",
+      "status": "BLOCK"
+    }
+  ]
+}

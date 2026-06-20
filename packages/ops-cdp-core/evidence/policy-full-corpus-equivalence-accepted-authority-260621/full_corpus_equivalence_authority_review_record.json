@@ -1,0 +1,8 @@
+{
+  "type": "policy.fullCorpusEquivalenceAuthority.reviewRecord.v1",
+  "reviewer": "gen2-chatgpt-remove-policy",
+  "reviewSource": "prior residual lane review plus required current authority-lane review",
+  "preReviewStatus": "candidate-ready-for-review",
+  "acceptedAuthorityStatus": "PENDING_GEN2_REVIEW",
+  "claimAllowed": false
+}

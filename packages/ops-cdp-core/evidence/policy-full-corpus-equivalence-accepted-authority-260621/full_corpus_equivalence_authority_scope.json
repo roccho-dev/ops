@@ -1,0 +1,15 @@
+{
+  "type": "policy.fullCorpusEquivalenceAuthority.scope.v1",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "opsResidualRef": "b40b40702da0e90d7f8329e37c185c0e157ba61b",
+  "adrsResidualRef": "b0c8a85028995f68828c920eab62b4de571f906d",
+  "acceptedScope": "full natural-language policy corpus represented by policy input ref",
+  "scopeLimits": [
+    "semantic equivalence only",
+    "does not approve policy.git deletion",
+    "does not approve cutover",
+    "does not approve owner/adoption",
+    "does not approve canonical write or SSOT adoption"
+  ],
+  "authorityStatus": "candidate-for-gen2-accepted-authority-review"
+}

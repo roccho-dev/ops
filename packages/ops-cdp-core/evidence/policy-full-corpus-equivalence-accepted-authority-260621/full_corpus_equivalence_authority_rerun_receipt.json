@@ -1,0 +1,11 @@
+{
+  "type": "policy.fullCorpusEquivalenceAuthority.rerunReceipt.v1",
+  "deterministicRerunMatch": "PASS",
+  "hashes": {
+    "summary": "93b66a5e176fe85acf86dad8720c93847d046d1a50f0c45cbc3a035765b0024d",
+    "scope": "444dcdaae57f7240658c4f82bac7165b803c265c9c90494bb32be1e10689ec3c",
+    "diff": "ce919cc2adc5d61c0233b73a24eec0e367b8732784b4de795ccf4d593ee50002",
+    "controls": "c5795f557234c59095649b0b44047c4447197f6e0f99d3e7bb8b02b047b22e75",
+    "review": "58ee0868b07e29d28851c03204a8c48b5d3366192010d431aef2151c66a4faef"
+  }
+}

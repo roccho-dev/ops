@@ -1,0 +1,1 @@
+{"type":"policy.fullCorpusEquivalenceAuthority.diff.v1","diffKind":"candidate-to-accepted-authority","unresolvedSemanticDiffs":0,"status":"PASS","notes":"Residual recheck reports coverageGapCount=0 and semanticDeltaUnresolved=0; accepted authority scope is identical to candidate scope and narrower than retirement/cutover approval."}

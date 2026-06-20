@@ -1,0 +1,22 @@
+{
+  "type": "policy.fullCorpusEquivalenceAuthority.summary.v1",
+  "decision": "PASS_AS_ACCEPTED_AUTHORITY_CANDIDATE",
+  "fullCorpusEquivalenceAuthorityGate": "PASS_AS_ACCEPTED_AUTHORITY_CANDIDATE",
+  "deletionReadiness": "BLOCK",
+  "policyRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "acceptedScope": "full natural-language policy corpus represented by policy input ref",
+  "unresolvedSemanticDiffs": 0,
+  "coverageGapCount": 0,
+  "semanticDeltaUnresolved": 0,
+  "controls": "PASS",
+  "mustNotClaim": [
+    "policy.git retirement",
+    "policy.git deletion",
+    "cutover approval",
+    "merge approval",
+    "completion approval",
+    "owner approval",
+    "canonical write",
+    "SSOT adoption"
+  ]
+}

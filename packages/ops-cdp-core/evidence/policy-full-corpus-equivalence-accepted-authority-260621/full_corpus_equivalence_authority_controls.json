@@ -1,0 +1,11 @@
+{
+  "type": "policy.fullCorpusEquivalenceAuthority.controls.v1",
+  "decision": "PASS",
+  "coverageGapCount": 0,
+  "semanticDeltaUnresolved": 0,
+  "typedCoverageGate": "PASS",
+  "semanticDeltaGate": "PASS",
+  "fullCorpusEquivalenceCandidateGate": "PASS_AS_CANDIDATE",
+  "residualControls": "PASS",
+  "claimAllowed": false
+}
