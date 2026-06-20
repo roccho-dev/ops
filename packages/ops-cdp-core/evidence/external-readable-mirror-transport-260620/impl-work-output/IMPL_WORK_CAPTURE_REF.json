@@ -5,6 +5,8 @@
   "capturePath": "GEN2_IMPL_WORK_CHATGPT_OUTPUT.txt",
   "captureSha256": "26175858733aebd514c8590598d98fed60b43da9f0828d5a8659fd780d37857d",
   "captureBytes": 20328,
+  "normalizedCaptureSha256": "f54b11e848aac75dec66fa688910ec5ee144245cba746c4fec5f62b610611609",
+  "normalization": "trim trailing whitespace after materializing ChatGPT output for git diff hygiene",
   "extractedFiles": [
     "IMPL_WORK_REPORT.md",
     "GEN2_IMPL_WORK_OUTPUT/README.md",
