@@ -1,0 +1,8 @@
+{
+  "type": "policy.typedCoverageGapSourceclass002.selection.v1",
+  "selectedClass": "markdown-policy-or-handoff",
+  "selectionRule": "largest remaining sourceClass by count; tie-break lexicographically",
+  "inputGapCount": 416,
+  "selectedGapCount": 176,
+  "deferredGapCount": 240
+}

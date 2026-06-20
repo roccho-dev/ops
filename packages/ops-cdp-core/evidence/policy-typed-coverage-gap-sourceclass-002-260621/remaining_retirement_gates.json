@@ -1,0 +1,38 @@
+{
+  "type": "policy.typedCoverageGapSourceclass002.remainingRetirementGates.v1",
+  "sourceclassLane": "sourceclass-002",
+  "gates": [
+    {
+      "name": "typedCoverageGate",
+      "status": "BLOCK"
+    },
+    {
+      "name": "semanticDeltaGate",
+      "status": "BLOCK"
+    },
+    {
+      "name": "full-natural-language-policy-semantic-equivalence",
+      "status": "BLOCK"
+    },
+    {
+      "name": "deletionReadiness",
+      "status": "BLOCK"
+    },
+    {
+      "name": "remaining-sourceclass-batches",
+      "status": "BLOCK"
+    },
+    {
+      "name": "owner/adoption-gates",
+      "status": "BLOCK"
+    },
+    {
+      "name": "end-to-end-retirement-proof",
+      "status": "BLOCK"
+    },
+    {
+      "name": "canonical-write-and-ssot-adoption",
+      "status": "BLOCK"
+    }
+  ]
+}

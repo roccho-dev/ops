@@ -1,0 +1,44 @@
+{
+  "type": "policy.typedCoverageGapSourceclass002.negativeControls.v1",
+  "sourceclassLane": "sourceclass-002",
+  "decision": "PASS",
+  "selectedClass": "markdown-policy-or-handoff",
+  "controls": [
+    {
+      "name": "sourceclass-002-inputs-fixed",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-002-selection-deterministic",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-002-inventory-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-002-typed-coverage-complete",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-002-source-trace-valid",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-002-recompute-counts",
+      "status": "PASS"
+    },
+    {
+      "name": "sourceclass-002-does-not-clear-retirement",
+      "status": "PASS"
+    },
+    {
+      "name": "generated-evidence-not-authority",
+      "status": "PASS"
+    },
+    {
+      "name": "deterministic-rerun-match",
+      "status": "PASS"
+    }
+  ]
+}
