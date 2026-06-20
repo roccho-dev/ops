@@ -1,0 +1,22 @@
+{
+  "kind": "gen2.implWork.captureRef.v1",
+  "source": "ChatGPT Project remove-policy",
+  "conversation": "https://chatgpt.com/g/g-p-6a3484c5583881918758f110063340d9-remove-policy/c/6a3689f5-7074-83ee-9858-f63739ca709f",
+  "capturePath": "GEN2_IMPL_WORK_CHATGPT_OUTPUT.txt",
+  "captureSha256": "26175858733aebd514c8590598d98fed60b43da9f0828d5a8659fd780d37857d",
+  "captureBytes": 20328,
+  "extractedFiles": [
+    "IMPL_WORK_REPORT.md",
+    "GEN2_IMPL_WORK_OUTPUT/README.md",
+    "GEN2_IMPL_WORK_OUTPUT/MANIFEST.json",
+    "GEN2_IMPL_WORK_OUTPUT/handoff_shape_evidence.json",
+    "GEN2_IMPL_WORK_OUTPUT/authority_boundary.json",
+    "GEN2_IMPL_WORK_OUTPUT/evidence_index.jsonl",
+    "GEN2_IMPL_WORK_OUTPUT/RUN_REPORT.md",
+    "GEN2_IMPL_WORK_OUTPUT/residual_risks.md",
+    "GEN2_IMPL_WORK_OUTPUT/reviewer_input.md"
+  ],
+  "transportLane": "external-readable-public-mirror-degraded",
+  "projectSourceProof": false,
+  "canonicalSsot": false
+}

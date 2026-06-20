@@ -1,0 +1,98 @@
+{
+  "kind": "gen2.implWork.handoffShapeEvidence.v1",
+  "evidenceId": "evidence.gen2.impl-work.handoff-shape.260620",
+  "packageId": "gen2-chatgpt-handoff-260620",
+  "producedBy": {
+    "actorId": "actor.gen2.chatgpt.impl-work.260620",
+    "roleId": "role.chatgpt.thread",
+    "threadFunction": "impl-work"
+  },
+  "mirrorIdentity": {
+    "repo": "roccho-dev/public",
+    "commit": "7d79c3fdfaf49ffb91877d7c521ffb710bf90276",
+    "path": "gen2-chatgpt-handoff-transport-260620"
+  },
+  "observedHandoffShape": {
+    "parentActor": {
+      "actorId": "actor.gen1.codex.bohr",
+      "roleId": "role.rootCoordinator"
+    },
+    "implWorkActor": {
+      "actorId": "actor.gen2.chatgpt.impl-work.260620",
+      "actorRole": "childActor",
+      "roleId": "role.chatgpt.thread",
+      "threadFunction": "impl-work",
+      "request": "REQUEST.impl-work.md",
+      "contextPacket": "context-packet.impl-work.json",
+      "expectedOutputContract": "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-work.md"
+    },
+    "implReviewActor": {
+      "actorId": "actor.gen2.chatgpt.impl-review.260620",
+      "actorRole": "childActor",
+      "roleId": "role.chatgpt.thread",
+      "threadFunction": "impl-review",
+      "request": "REQUEST.impl-review.md",
+      "contextPacket": "context-packet.impl-review.json",
+      "expectedOutputContract": "output-contract/EXPECTED_OUTPUT_CONTRACT.impl-review.md",
+      "requiresInput": "GEN2_IMPL_WORK_OUTPUT/"
+    }
+  },
+  "shapeAssertionsProducedForReviewer": [
+    {
+      "assertionId": "distinct-actor-ids",
+      "statement": "impl-work and impl-review use different actorId values.",
+      "implWorkActorId": "actor.gen2.chatgpt.impl-work.260620",
+      "implReviewActorId": "actor.gen2.chatgpt.impl-review.260620",
+      "evidenceSource": "HANDOFF_BUNDLE.md / HANDOFF_MANIFEST.json embedded content"
+    },
+    {
+      "assertionId": "same-role-id",
+      "statement": "both thread actors use roleId role.chatgpt.thread.",
+      "roleId": "role.chatgpt.thread",
+      "evidenceSource": "HANDOFF_BUNDLE.md / threadBindings and context packets"
+    },
+    {
+      "assertionId": "canonical-thread-functions",
+      "statement": "threadFunction values are canonical impl-work and impl-review.",
+      "implWorkThreadFunction": "impl-work",
+      "implReviewThreadFunction": "impl-review",
+      "evidenceSource": "HANDOFF_BUNDLE.md / context packets and threadBindings"
+    },
+    {
+      "assertionId": "review-requires-work-output",
+      "statement": "impl-review has explicit input dependency on GEN2_IMPL_WORK_OUTPUT/.",
+      "reviewInput": "GEN2_IMPL_WORK_OUTPUT/",
+      "evidenceSource": "HANDOFF_BUNDLE.md / threadBindings requiresInput and impl-review prompt"
+    },
+    {
+      "assertionId": "self-review-excluded",
+      "statement": "same actor may not perform both impl-work and impl-review.",
+      "sameActorMayDoImplWorkAndImplReview": false,
+      "evidenceSource": "HANDOFF_BUNDLE.md / separationOfDuty"
+    }
+  ],
+  "purposeLineageObserved": {
+    "kind": "purpose.lineage.v1",
+    "immediate": "Prove Gen1 can hand work and review to distinct Gen2 ChatGPT threads",
+    "parent": "Make delegation reproducible without private chat memory",
+    "top": "Preserve operation when prior context is unavailable",
+    "meta10": "Under corporate-sale assumption, delegation and review evidence are auditable from SSOT proposals"
+  },
+  "reviewNextStep": {
+    "required": true,
+    "actorId": "actor.gen2.chatgpt.impl-review.260620",
+    "threadFunction": "impl-review",
+    "inputPath": "GEN2_IMPL_WORK_OUTPUT/"
+  },
+  "nonClaims": [
+    "semantic approval",
+    "completion approval",
+    "acceptance",
+    "merge approval",
+    "cutover approval",
+    "deletion approval",
+    "canonical write approval",
+    "SSOT write",
+    "Project Source proof"
+  ]
+}

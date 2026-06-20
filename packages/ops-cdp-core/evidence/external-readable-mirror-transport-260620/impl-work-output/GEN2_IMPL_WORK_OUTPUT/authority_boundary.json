@@ -1,0 +1,45 @@
+{
+  "kind": "gen2.implWork.authorityBoundary.v1",
+  "actorId": "actor.gen2.chatgpt.impl-work.260620",
+  "threadFunction": "impl-work",
+  "transportLane": "external-readable-public-mirror-degraded",
+  "mirrorIsCanonicalSsot": false,
+  "projectSourceProof": false,
+  "selfReviewPerformed": false,
+  "authorityFlags": {
+    "semanticApproval": false,
+    "completionApproval": false,
+    "acceptanceApproval": false,
+    "mergeApproval": false,
+    "mergeReviewPass": false,
+    "implReviewPass": false,
+    "cutoverApproval": false,
+    "deletionApproval": false,
+    "canonicalWriteApproval": false,
+    "ssotWrite": false,
+    "routeDecision": false
+  },
+  "forbiddenActionsObservedAndHonored": [
+    "do not review own work",
+    "do not claim semantic approval",
+    "do not claim completion approval",
+    "do not claim acceptance",
+    "do not claim merge",
+    "do not claim cutover",
+    "do not claim deletion",
+    "do not claim canonical write",
+    "do not claim SSOT write",
+    "do not use inline source body as fallback",
+    "do not use thread attachment fallback",
+    "do not use base64 fallback"
+  ],
+  "requiredSeparateReviewer": {
+    "actorId": "actor.gen2.chatgpt.impl-review.260620",
+    "roleId": "role.chatgpt.thread",
+    "threadFunction": "impl-review",
+    "mustRead": [
+      "IMPL_WORK_REPORT.md",
+      "GEN2_IMPL_WORK_OUTPUT/"
+    ]
+  }
+}
