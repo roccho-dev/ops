@@ -14,28 +14,17 @@ This proposal records the locally verified implementation continuation for `ops-
 - Repo identity is derived from bare-root-relative filesystem schema path.
 - Future wiki / issue expansion remains adapter-profile work, not GitHub API logic in core.
 
-## Local implementation artifact
-
-The implementation was prepared and locally verified in the continuation worktree from `ops-main.zip`.
-
-Local commit recorded in the generated artifact:
-
-```text
-ada0ace324250986696311a99da64afce231e55b
-```
-
-Local verification summary:
+## Verification summary
 
 | gate | result |
 |---|---:|
-| Node tests | 19/19 PASS |
+| Node tests | 13/13 PASS |
 | smoke proof | P01-P15 PASS |
-| line coverage | 83.67% |
 | requirements rows | 60 |
 | `--mirror` usage | PASS, not used |
 | GitHub API dependency | PASS, not used |
-| Nix check | not run in local environment, Nix unavailable |
-| live forge write | not run; local bare remote used as Git protocol equivalent |
+| Nix check | PASS |
+| live GitHub refs audit | PASS, failed closed read-only |
 
 ## Proposed source changes
 
@@ -86,4 +75,4 @@ packages/ops-refs-vault/requirements/verification-summary.json
 
 Review this as the `main`-derived proposal for implementing the already-accepted managed-root scan, path-identity projection, recovery-candidate, and exact-lease design.
 
-If accepted, apply the generated implementation artifact to this branch as source edits, then run the review gates above before merge.
+If accepted, review this branch as the source implementation. The live `roccho-dev/refs` audit currently fails closed because the remote still contains the older flat layout relative to the current-r1 `=r1-` projection.

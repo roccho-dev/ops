@@ -9,6 +9,19 @@ import path from "node:path";
 import process from "node:process";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
+import {
+  MANAGED_REMOTE_PATTERN,
+  REF_PROFILE,
+  REPO_KEY_PREFIX,
+  encodeRepoPath,
+  identityFromRepo,
+  logicalHeadId,
+  normalizeRepoPath,
+  parseManagedRemoteRef,
+  projectHeadRef,
+  repoPathFromBare,
+} from "../lib/ref-projection.mjs";
+import { SAFE_BACKUP_CLASSIFICATIONS, reconcileRefSets } from "../lib/ref-reconcile.mjs";
 
 process.on("unhandledRejection", (e) => {
   console.error(e);
@@ -17,6 +30,8 @@ process.on("unhandledRejection", (e) => {
 
 const REMOTE_ENV = "OPS_REFS_VAULT_REMOTE";
 const REPO_ID_RE = /^(?!\.)(?!.*\.\.)(?!.*\.lock$)(?!.*@\{)[A-Za-z0-9._-]+$/;
+const ZERO_OID = "0".repeat(40);
+const OBJECT_ID_RE = /^[0-9a-f]{40}$/i;
 
 class VaultError extends Error {}
 
@@ -151,18 +166,16 @@ function vaultRemote(manifest, override = null) {
 function manifestRepos(manifest) {
   const result = [];
   for (const repo of manifest.repos || []) {
-    const repoId = repo.repoId;
-    if (!repoId) continue;
-    validateRepoId(repoId);
-    result.push([repoId, repo]);
+    const identity = identityFromRepo(repo);
+    result.push([identity.repoPath, { ...repo, repoId: repo.repoId || identity.repoPath, ...identity }]);
   }
   return result;
 }
 
 function manifestRepo(manifest, repoId) {
-  validateRepoId(repoId);
+  const wanted = normalizeRepoPath(repoId);
   for (const [currentId, repo] of manifestRepos(manifest)) {
-    if (currentId === repoId) return repo;
+    if (currentId === wanted) return repo;
   }
   throw new VaultError(`repoId not found in manifest: ${repoId}`);
 }
@@ -181,17 +194,9 @@ function readExcludeFile(p) {
   for (const raw of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
     const line = raw.replace(/#.*/, "").trim();
     if (!line) continue;
-    validateRepoId(line);
-    ids.add(line);
+    ids.add(normalizeRepoPath(line));
   }
   return ids;
-}
-
-function repoIdFromBareName(name) {
-  if (!name.endsWith(".git")) return null;
-  const repoId = name.slice(0, -4);
-  validateRepoId(repoId);
-  return repoId;
 }
 
 function discoverBareRepos(bareRoot, excludeFile = null) {
@@ -199,20 +204,31 @@ function discoverBareRepos(bareRoot, excludeFile = null) {
   const excludes = readExcludeFile(excludeFile);
   const repos = [];
   const seen = new Set();
-  for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
-    const repoId = repoIdFromBareName(ent.name);
-    if (!repoId) continue;
-    const sourceBarePath = path.join(root, ent.name);
-    if (!isLocalBare(sourceBarePath)) continue;
-    seen.add(repoId);
-    if (excludes.has(repoId)) continue;
-    repos.push({ repoId, sourceBarePath });
+
+  function walk(dir) {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name);
+      if (ent.isSymbolicLink()) continue;
+      if (!ent.isDirectory()) continue;
+      if (ent.name.endsWith(".git") && isLocalBare(p)) {
+        const repoPath = repoPathFromBare(root, p);
+        const repoKey = encodeRepoPath(repoPath);
+        seen.add(repoPath);
+        if (!excludes.has(repoPath)) {
+          repos.push({ repoId: repoPath, repoPath, repoKey, sourceBarePath: p });
+        }
+        continue;
+      }
+      walk(p);
+    }
   }
+
+  walk(root);
   const unknownExcludes = [...excludes].filter((repoId) => !seen.has(repoId)).sort();
   if (unknownExcludes.length) {
     throw new VaultError(`exclude file contains repoIds not present under bare root: ${unknownExcludes.join(", ")}`);
   }
-  repos.sort((a, b) => a.repoId.localeCompare(b.repoId));
+  repos.sort((a, b) => a.repoPath.localeCompare(b.repoPath));
   return { bareRoot: root, repos, excludedRepoIds: [...excludes].sort() };
 }
 
@@ -227,8 +243,11 @@ function cmdGenerateManifest(args) {
       excludeFile: args.exclude_file || null,
       excludedRepoIds: discovered.excludedRepoIds,
     },
-    targetForgeRepo: {
-      sshUrl: remote,
+    targetForgeRepo: remote ? { sshUrl: remote } : {},
+    refProjection: {
+      profile: REF_PROFILE,
+      managedRemotePattern: MANAGED_REMOTE_PATTERN,
+      repoKeyPrefix: REPO_KEY_PREFIX,
     },
     repos: discovered.repos,
   };
@@ -244,9 +263,22 @@ function cmdGenerateManifest(args) {
 }
 
 function namespacedHead(repoId, branch) {
-  validateRepoId(repoId);
+  const repoKey = encodeRepoPath(repoId);
   validateBranch(branch);
-  return `refs/heads/${repoId}/${branch}`;
+  return projectHeadRef(repoKey, branch);
+}
+
+function normalizeExpectedOid(value, name) {
+  if (value === "absent" || value === "none" || value === "null" || value === ZERO_OID) return null;
+  if (!OBJECT_ID_RE.test(value || "")) throw new VaultError(`invalid ${name}: ${value}`);
+  return value.toLowerCase();
+}
+
+function assertOidEquals(actual, expected, label) {
+  const normalizedActual = actual ? actual.toLowerCase() : null;
+  if (normalizedActual !== expected) {
+    throw new VaultError(`${label} lease mismatch: expected ${expected || "absent"}, observed ${normalizedActual || "absent"}`);
+  }
 }
 
 function lsRemote(remote, pattern) {
@@ -299,6 +331,30 @@ function pushRefToVault(source, vault, srcRef, dstRef, force = false) {
   }
 }
 
+function pushRefsToVaultAtomic(source, vault, refs) {
+  const refspecs = refs.map((ref) => `${ref.sourceRef}:${ref.vaultRef}`);
+  if (isLocalBare(source)) {
+    run(["git", "--git-dir", source, "push", "--atomic", vault, ...refspecs], { capture: true });
+    return refspecs;
+  }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ops-refs-vault-source-"));
+  try {
+    run(["git", "init", "-q", "--bare", tmp]);
+    for (const ref of refs) {
+      run(["git", "--git-dir", tmp, "fetch", "--no-tags", source, `+${ref.sourceRef}:${ref.sourceRef}`], { capture: true });
+    }
+    run(["git", "--git-dir", tmp, "push", "--atomic", vault, ...refspecs], { capture: true });
+    return refspecs;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function pushSourceOidToVaultWithLease(source, vault, sourceOid, dstRef, expectedRemoteOid) {
+  const lease = `--force-with-lease=${dstRef}:${expectedRemoteOid}`;
+  run(["git", "--git-dir", source, "push", lease, vault, `${sourceOid}:${dstRef}`], { capture: true });
+}
+
 function listSourceHeads(source) {
   const rows = lsRemote(source, "refs/heads/*");
   const result = [];
@@ -311,6 +367,137 @@ function listSourceHeads(source) {
     }
   }
   return result;
+}
+
+function expectedRowsForManifest(manifest, branchFilter = null) {
+  const rows = [];
+  const sourceFailures = [];
+  for (const [repoPath, repo] of manifestRepos(manifest)) {
+    const source = sourceBare(repo);
+    const { repoKey } = identityFromRepo(repo);
+    try {
+      const heads = branchFilter ? [[null, branchFilter, `refs/heads/${branchFilter}`]] : listSourceHeads(source);
+      for (const [shaMaybe, branch, sourceRef] of heads) {
+        validateBranch(branch);
+        const sourceOid = shaMaybe || oneRemoteHash(source, sourceRef);
+        if (!sourceOid) throw new VaultError(`source branch missing: ${source} ${sourceRef}`);
+        rows.push({
+          logicalId: logicalHeadId(repoPath, branch),
+          repoId: repoPath,
+          repoPath,
+          repoKey,
+          sourceBarePath: source,
+          branch,
+          sourceRef,
+          sourceOid,
+          remoteRef: projectHeadRef(repoKey, branch),
+        });
+      }
+    } catch (exc) {
+      sourceFailures.push({ repoId: repoPath, repoPath, sourceBarePath: source, error: errStr(exc) });
+    }
+  }
+  return { rows, sourceFailures };
+}
+
+function observedRowsForManagedRoot(vault) {
+  return lsRemote(vault, "refs/heads/*").map(([remoteOid, remoteRef]) => ({
+    remoteRef,
+    remoteOid,
+    parsed: parseManagedRemoteRef(remoteRef),
+  }));
+}
+
+function classifyCommitRelation(source, sourceRef, sourceOid, vault, remoteRef, remoteOid) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ops-refs-vault-relation-"));
+  try {
+    run(["git", "init", "-q", "--bare", tmp]);
+    const srcFetch = run(["git", "--git-dir", tmp, "fetch", "--no-tags", source, `+${sourceRef}:refs/heads/source`], {
+      capture: true,
+      check: false,
+    });
+    const remoteFetch = run(["git", "--git-dir", tmp, "fetch", "--no-tags", vault, `+${remoteRef}:refs/heads/remote`], {
+      capture: true,
+      check: false,
+    });
+    if (srcFetch.returncode !== 0 || remoteFetch.returncode !== 0) {
+      return { classification: "unclassified", reason: "relation-fetch-failed" };
+    }
+    const gotSource = oneRemoteHash(tmp, "refs/heads/source");
+    const gotRemote = oneRemoteHash(tmp, "refs/heads/remote");
+    if (gotSource !== sourceOid || gotRemote !== remoteOid) {
+      return { classification: "observation-raced", reason: "observed-oid-changed" };
+    }
+    const remoteAncestorOfSource = run(["git", "--git-dir", tmp, "merge-base", "--is-ancestor", gotRemote, gotSource], {
+      capture: true,
+      check: false,
+    }).returncode === 0;
+    if (remoteAncestorOfSource) return { classification: "source-ahead" };
+    const sourceAncestorOfRemote = run(["git", "--git-dir", tmp, "merge-base", "--is-ancestor", gotSource, gotRemote], {
+      capture: true,
+      check: false,
+    }).returncode === 0;
+    if (sourceAncestorOfRemote) return { classification: "remote-ahead-candidate" };
+    return { classification: "diverged-candidate" };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function relationMapForRows(expectedRows, observedRows, vault) {
+  const observedByRef = new Map(observedRows.map((row) => [row.remoteRef, row]));
+  const relations = new Map();
+  for (const exp of expectedRows) {
+    const obs = observedByRef.get(exp.remoteRef);
+    if (!obs || obs.remoteOid === exp.sourceOid) continue;
+    relations.set(exp.remoteRef, classifyCommitRelation(exp.sourceBarePath, exp.sourceRef, exp.sourceOid, vault, exp.remoteRef, obs.remoteOid));
+  }
+  return relations;
+}
+
+function reconcileManifestWithRemote(manifest, vault, branchFilter = null) {
+  const expected = expectedRowsForManifest(manifest, branchFilter);
+  const observedRows = observedRowsForManagedRoot(vault);
+  const relationByRemoteRef = relationMapForRows(expected.rows, observedRows, vault);
+  const reconciled = reconcileRefSets(expected.rows, observedRows, relationByRemoteRef);
+  return { ...reconciled, sourceFailures: expected.sourceFailures };
+}
+
+function findReconciledRow(reconciled, remoteRef) {
+  const row = reconciled.rows.find((item) => item.remoteRef === remoteRef);
+  if (!row) throw new VaultError(`remote ref not found in reconciled rows: ${remoteRef}`);
+  return row;
+}
+
+function restoreRemoteRefToStaging(vault, remoteRef, branch, stagingBare, expectedRemoteOid = null) {
+  const staging = ensureEmptyOrNewBare(stagingBare);
+  const dstRef = `refs/heads/${branch}`;
+  const fetch = run(["git", "--git-dir", staging, "fetch", "--no-tags", vault, `+${remoteRef}:${dstRef}`], {
+    capture: true,
+    check: false,
+  });
+  if (fetch.returncode !== 0) {
+    throw new VaultError(`missing vault branch: ${remoteRef}`);
+  }
+  const restoredHash = oneRemoteHash(staging, dstRef);
+  if (expectedRemoteOid && restoredHash !== expectedRemoteOid) {
+    throw new VaultError(`staged candidate oid mismatch: expected ${expectedRemoteOid}, restored ${restoredHash}`);
+  }
+  run(["git", "--git-dir", staging, "symbolic-ref", "HEAD", dstRef], { capture: true });
+  const headTarget = run(["git", "--git-dir", staging, "symbolic-ref", "HEAD"], { capture: true }).stdout.trim();
+  if (headTarget !== dstRef) throw new VaultError(`staging HEAD target mismatch: ${headTarget}`);
+  run(["git", "--git-dir", staging, "fsck", "--full"], { capture: true });
+  const cloneDir = fs.mkdtempSync(path.join(os.tmpdir(), "ops-refs-vault-clone-proof-"));
+  try {
+    run(["git", "clone", "-q", staging, cloneDir], { capture: true });
+    const cloneHash = run(["git", "rev-parse", "HEAD"], { cwd: cloneDir, capture: true }).stdout.trim();
+    if (cloneHash !== restoredHash) {
+      throw new VaultError("restored staging bare clone usability proof failed");
+    }
+  } finally {
+    fs.rmSync(cloneDir, { recursive: true, force: true });
+  }
+  return { staging, dstRef, restoredHash, headTarget };
 }
 
 function ensureEmptyOrNewBare(p) {
@@ -351,8 +538,9 @@ function initBareIfMissing(p) {
 }
 
 function pushSourceRefToVault(source, vault, repoId, branch, force = false, dryRun = false) {
+  const { repoKey } = typeof repoId === "string" ? { repoKey: encodeRepoPath(repoId) } : identityFromRepo(repoId);
   const srcRef = `refs/heads/${branch}`;
-  const dstRef = namespacedHead(repoId, branch);
+  const dstRef = projectHeadRef(repoKey, branch);
   const sourceSha = oneRemoteHash(source, srcRef);
   if (!sourceSha) {
     throw new VaultError(`source branch missing: ${source} ${srcRef}`);
@@ -364,12 +552,38 @@ function pushSourceRefToVault(source, vault, repoId, branch, force = false, dryR
   return { sourceRef: srcRef, sourceHash: sourceSha, vaultRef: dstRef, refspec };
 }
 
+function plannedSourceRefs(source, repo, branches) {
+  const { repoKey } = identityFromRepo(repo);
+  const refs = [];
+  for (const branch of branches) {
+    const sourceRef = `refs/heads/${branch}`;
+    const vaultRef = projectHeadRef(repoKey, branch);
+    const sourceHash = oneRemoteHash(source, sourceRef);
+    if (!sourceHash) throw new VaultError(`source branch missing: ${source} ${sourceRef}`);
+    refs.push({ sourceRef, sourceHash, vaultRef, branch, refspec: `${sourceRef}:${vaultRef}` });
+  }
+  return refs;
+}
+
+function pushSourceRefsToVault(source, vault, repo, branches, dryRun = false) {
+  const refs = plannedSourceRefs(source, repo, branches);
+  if (!dryRun && refs.length) pushRefsToVaultAtomic(source, vault, refs);
+  return refs;
+}
+
 function cmdBackupOne(args) {
   const manifest = loadManifest(args.manifest);
   const repo = manifestRepo(manifest, args.repo_id);
   const source = sourceBare(repo);
   const vault = vaultRemote(manifest, args.remote);
-  const result = pushSourceRefToVault(source, vault, args.repo_id, args.branch, args.force, args.dry_run);
+  if (args.force) throw new VaultError("generic --force is not allowed for normal backup; use candidate adopt/discard flow");
+  const preflight = reconcileManifestWithRemote(manifest, vault);
+  const unsafe = preflight.rows.filter((row) => !SAFE_BACKUP_CLASSIFICATIONS.has(row.classification));
+  if (preflight.sourceFailures.length || unsafe.length) {
+    printJson({ ok: false, mode: "backup-one-preflight", counts: preflight.counts, unsafe, sourceFailures: preflight.sourceFailures });
+    throw new VaultError("managed remote root is not safe for normal backup");
+  }
+  const result = pushSourceRefsToVault(source, vault, repo, [args.branch], args.dry_run)[0];
   const remoteHash = args.dry_run ? null : oneRemoteHash(vault, result.vaultRef);
   const ok = args.dry_run || result.sourceHash === remoteHash;
   printJson({
@@ -390,23 +604,40 @@ function cmdBackupOne(args) {
 function cmdBackupAll(args) {
   const manifest = loadManifest(args.manifest);
   const vault = vaultRemote(manifest, args.remote);
+  if (args.force) throw new VaultError("generic --force is not allowed for normal backup; use candidate adopt/discard flow");
+  const preflight = reconcileManifestWithRemote(manifest, vault);
+  const unsafe = preflight.rows.filter((row) => !SAFE_BACKUP_CLASSIFICATIONS.has(row.classification));
+  if (preflight.sourceFailures.length || unsafe.length) {
+    const report = {
+      ok: false,
+      mode: "backup-all-preflight",
+      manifestPath: path.resolve(args.manifest),
+      manifestDigest: sha256File(args.manifest),
+      vaultRemote: vault,
+      counts: preflight.counts,
+      unsafe,
+      sourceFailures: preflight.sourceFailures,
+    };
+    if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+    printJson(report);
+    throw new VaultError("managed remote root is not safe for normal backup");
+  }
   const results = [];
   for (const [repoId, repo] of manifestRepos(manifest)) {
     const source = sourceBare(repo);
-    const branches = args.branch ? [[null, args.branch, `refs/heads/${args.branch}`]] : listSourceHeads(source);
-    for (const [, branch] of branches) {
-      const item = { repoId, sourceBarePath: source, branch };
-      try {
-        Object.assign(item, pushSourceRefToVault(source, vault, repoId, branch, args.force, args.dry_run));
+    const branches = args.branch ? [args.branch] : listSourceHeads(source).map(([, branch]) => branch);
+    try {
+      const pushed = pushSourceRefsToVault(source, vault, repo, branches, args.dry_run);
+      for (const ref of pushed) {
+        const item = { repoId, sourceBarePath: source, branch: ref.branch };
+        Object.assign(item, ref);
         item.remoteHash = args.dry_run ? null : oneRemoteHash(vault, item.vaultRef);
         item.ok = args.dry_run || item.sourceHash === item.remoteHash;
         item.status = args.dry_run ? "dry-run" : "backed-up";
-      } catch (exc) {
-        item.ok = false;
-        item.status = "failed";
-        item.error = errStr(exc);
+        results.push(item);
       }
-      results.push(item);
+    } catch (exc) {
+      results.push({ ok: false, repoId, sourceBarePath: source, status: "failed", error: errStr(exc) });
     }
   }
   const allOk = results.every((item) => item.ok);
@@ -428,21 +659,13 @@ function cmdBackupAll(args) {
 
 function cmdRestoreBareOne(args) {
   const manifest = loadManifest(args.manifest);
-  manifestRepo(manifest, args.repo_id);
+  const repo = manifestRepo(manifest, args.repo_id);
   const vault = vaultRemote(manifest, args.remote);
-  const staging = ensureEmptyOrNewBare(args.staging_bare);
-  const srcRef = namespacedHead(args.repo_id, args.branch);
-  const dstRef = `refs/heads/${args.branch}`;
-  const fetch = run(["git", "--git-dir", staging, "fetch", "--no-tags", vault, `+${srcRef}:${dstRef}`], {
-    capture: true,
-    check: false,
-  });
-  if (fetch.returncode !== 0) {
-    throw new VaultError(`missing vault branch: ${srcRef}`);
-  }
-  const restoredHash = oneRemoteHash(staging, dstRef);
+  const srcRef = projectHeadRef(identityFromRepo(repo).repoKey, args.branch);
   const vaultHash = oneRemoteHash(vault, srcRef);
-  const ok = restoredHash === vaultHash && Boolean(restoredHash);
+  if (!vaultHash) throw new VaultError(`missing vault branch: ${srcRef}`);
+  const restored = restoreRemoteRefToStaging(vault, srcRef, args.branch, args.staging_bare, vaultHash);
+  const ok = restored.restoredHash === vaultHash && Boolean(restored.restoredHash);
   printJson({
     ok,
     mode: "restore-bare-one",
@@ -450,9 +673,10 @@ function cmdRestoreBareOne(args) {
     branch: args.branch,
     vaultRemote: vault,
     vaultRef: srcRef,
-    stagingBare: staging,
-    restoredRef: dstRef,
-    restoredHash,
+    stagingBare: restored.staging,
+    restoredRef: restored.dstRef,
+    restoredHash: restored.restoredHash,
+    headTarget: restored.headTarget,
     vaultHash,
   });
   if (!ok) {
@@ -481,9 +705,15 @@ function cmdPromoteStagingBare(args) {
   if (heads.length === 0) {
     throw new VaultError("staging bare has no heads to promote");
   }
+  const refspecs = heads.map((ref) => `${ref}:${ref}`);
+  run(["git", "--git-dir", staging, "push", "--atomic", target, ...refspecs], { capture: true });
+  const stagingHead = run(["git", "--git-dir", staging, "symbolic-ref", "HEAD"], { capture: true, check: false });
+  if (stagingHead.returncode === 0 && stagingHead.stdout.trim()) {
+    run(["git", "--git-dir", target, "symbolic-ref", "HEAD", stagingHead.stdout.trim()], { capture: true });
+  }
+  run(["git", "--git-dir", target, "fsck", "--full"], { capture: true });
   const promoted = [];
   for (const ref of heads) {
-    run(["git", "--git-dir", staging, "push", target, `${ref}:${ref}`], { capture: true });
     promoted.push({ ref, hash: oneRemoteHash(target, ref) });
   }
   printJson({
@@ -492,7 +722,114 @@ function cmdPromoteStagingBare(args) {
     repoId: args.repo_id,
     stagingBare: staging,
     targetBare: target,
+    headTarget: stagingHead.returncode === 0 ? stagingHead.stdout.trim() : null,
     promoted,
+  });
+}
+
+function cmdCandidatePlan(args) {
+  const manifest = loadManifest(args.manifest);
+  const repo = manifestRepo(manifest, args.repo_id);
+  const vault = vaultRemote(manifest, args.remote);
+  const remoteRef = projectHeadRef(identityFromRepo(repo).repoKey, args.branch);
+  const reconciled = reconcileManifestWithRemote(manifest, vault);
+  const row = findReconciledRow(reconciled, remoteRef);
+  printJson({
+    ok: true,
+    mode: "candidate-plan",
+    repoId: args.repo_id,
+    repoPath: row.repoPath || row.parsed?.repoPath || null,
+    branch: args.branch,
+    sourceBarePath: row.sourceBarePath || sourceBare(repo),
+    vaultRemote: vault,
+    remoteRef,
+    classification: row.classification,
+    sourceOid: row.sourceOid || null,
+    remoteOid: row.remoteOid || null,
+    parsed: row.parsed || null,
+    actionRequired: !SAFE_BACKUP_CLASSIFICATIONS.has(row.classification),
+  });
+}
+
+function cmdCandidateAdopt(args) {
+  if (!args.confirm) throw new VaultError("candidate-adopt requires --confirm");
+  const manifest = loadManifest(args.manifest);
+  const repo = manifestRepo(manifest, args.repo_id);
+  const source = sourceBare(repo);
+  if (!isLocalBare(source)) throw new VaultError("candidate-adopt requires a local source bare for exact source CAS");
+  const vault = vaultRemote(manifest, args.remote);
+  const branchRef = `refs/heads/${args.branch}`;
+  const remoteRef = projectHeadRef(identityFromRepo(repo).repoKey, args.branch);
+  const expectedSourceOid = normalizeExpectedOid(args.expected_source_oid, "expected source oid");
+  const expectedRemoteOid = normalizeExpectedOid(args.expected_remote_oid, "expected remote oid");
+  if (!expectedRemoteOid) throw new VaultError("candidate-adopt requires an expected remote oid");
+
+  assertOidEquals(oneRemoteHash(source, branchRef), expectedSourceOid, "source");
+  assertOidEquals(oneRemoteHash(vault, remoteRef), expectedRemoteOid, "remote");
+  const relation =
+    expectedSourceOid === null
+      ? { classification: "remote-ahead-candidate" }
+      : classifyCommitRelation(source, branchRef, expectedSourceOid, vault, remoteRef, expectedRemoteOid);
+  if (relation.classification !== "remote-ahead-candidate") {
+    throw new VaultError(`candidate-adopt requires remote-ahead-candidate, observed ${relation.classification}`);
+  }
+
+  const restored = restoreRemoteRefToStaging(vault, remoteRef, args.branch, args.staging_bare, expectedRemoteOid);
+  const tempRef = `refs/ops-refs-vault/candidates/${args.branch}`;
+  run(["git", "--git-dir", source, "fetch", "--no-tags", restored.staging, `+${restored.dstRef}:${tempRef}`], { capture: true });
+  assertOidEquals(oneRemoteHash(source, branchRef), expectedSourceOid, "source");
+  assertOidEquals(oneRemoteHash(vault, remoteRef), expectedRemoteOid, "remote");
+  run(["git", "--git-dir", source, "update-ref", branchRef, expectedRemoteOid, expectedSourceOid || ZERO_OID], { capture: true });
+  run(["git", "--git-dir", source, "update-ref", "-d", tempRef, expectedRemoteOid], { capture: true, check: false });
+  const sourceAfter = oneRemoteHash(source, branchRef);
+  if (sourceAfter !== expectedRemoteOid) throw new VaultError("candidate-adopt postcondition failed");
+  printJson({
+    ok: true,
+    mode: "candidate-adopt",
+    repoId: args.repo_id,
+    branch: args.branch,
+    sourceBarePath: source,
+    vaultRemote: vault,
+    remoteRef,
+    expectedSourceOid: expectedSourceOid || "absent",
+    expectedRemoteOid,
+    sourceAfter,
+    stagingBare: restored.staging,
+    headTarget: restored.headTarget,
+  });
+}
+
+function cmdCandidateDiscard(args) {
+  if (!args.confirm) throw new VaultError("candidate-discard requires --confirm");
+  const manifest = loadManifest(args.manifest);
+  const repo = manifestRepo(manifest, args.repo_id);
+  const source = sourceBare(repo);
+  if (!isLocalBare(source)) throw new VaultError("candidate-discard requires a local source bare for exact source observation");
+  const vault = vaultRemote(manifest, args.remote);
+  const branchRef = `refs/heads/${args.branch}`;
+  const remoteRef = projectHeadRef(identityFromRepo(repo).repoKey, args.branch);
+  const expectedSourceOid = normalizeExpectedOid(args.expected_source_oid, "expected source oid");
+  const expectedRemoteOid = normalizeExpectedOid(args.expected_remote_oid, "expected remote oid");
+  if (!expectedSourceOid) throw new VaultError("candidate-discard requires an existing expected source oid");
+  if (!expectedRemoteOid) throw new VaultError("candidate-discard requires an expected remote oid");
+
+  assertOidEquals(oneRemoteHash(source, branchRef), expectedSourceOid, "source");
+  assertOidEquals(oneRemoteHash(vault, remoteRef), expectedRemoteOid, "remote");
+  pushSourceOidToVaultWithLease(source, vault, expectedSourceOid, remoteRef, expectedRemoteOid);
+  assertOidEquals(oneRemoteHash(source, branchRef), expectedSourceOid, "source");
+  const remoteAfter = oneRemoteHash(vault, remoteRef);
+  if (remoteAfter !== expectedSourceOid) throw new VaultError("candidate-discard postcondition failed");
+  printJson({
+    ok: true,
+    mode: "candidate-discard",
+    repoId: args.repo_id,
+    branch: args.branch,
+    sourceBarePath: source,
+    vaultRemote: vault,
+    remoteRef,
+    expectedSourceOid,
+    expectedRemoteOid,
+    remoteAfter,
   });
 }
 
@@ -502,7 +839,7 @@ function cmdVerifyOne(args) {
   const source = sourceBare(repo);
   const vault = vaultRemote(manifest, args.remote);
   const sourceRef = `refs/heads/${args.branch}`;
-  const vaultRef = namespacedHead(args.repo_id, args.branch);
+  const vaultRef = projectHeadRef(identityFromRepo(repo).repoKey, args.branch);
   const sourceHash = oneRemoteHash(source, sourceRef);
   const vaultHash = oneRemoteHash(vault, vaultRef);
   const ok = Boolean(sourceHash) && sourceHash === vaultHash;
@@ -526,39 +863,29 @@ function cmdVerifyOne(args) {
 function cmdVerifyAll(args) {
   const manifest = loadManifest(args.manifest);
   const vault = vaultRemote(manifest, args.remote);
-  const results = [];
-  for (const [repoId, repo] of manifestRepos(manifest)) {
-    const source = sourceBare(repo);
-    try {
-      for (const [, branch] of listSourceHeads(source)) {
-        const sourceRef = `refs/heads/${branch}`;
-        const vaultRef = namespacedHead(repoId, branch);
-        const sourceHash = oneRemoteHash(source, sourceRef);
-        const vaultHash = oneRemoteHash(vault, vaultRef);
-        const ok = Boolean(sourceHash) && sourceHash === vaultHash;
-        results.push({
-          ok,
-          repoId,
-          branch,
-          sourceBarePath: source,
-          sourceRef,
-          vaultRef,
-          sourceHash,
-          vaultHash,
-          status: ok ? "verified" : "mismatch",
-        });
-      }
-    } catch (exc) {
-      results.push({ ok: false, repoId, sourceBarePath: source, status: "failed", error: errStr(exc) });
-    }
-  }
-  const allOk = results.every((item) => item.ok);
+  const reconciled = reconcileManifestWithRemote(manifest, vault);
+  const results = reconciled.rows.map((row) => ({
+    ok: row.classification === "equal",
+    repoId: row.repoId || row.parsed?.repoPath || null,
+    repoPath: row.repoPath || row.parsed?.repoPath || null,
+    branch: row.branch || row.parsed?.branch || null,
+    sourceBarePath: row.sourceBarePath || null,
+    sourceRef: row.sourceRef || null,
+    vaultRef: row.remoteRef,
+    sourceHash: row.sourceOid || null,
+    vaultHash: row.remoteOid || null,
+    status: row.classification,
+    parsed: row.parsed || null,
+  }));
+  const allOk = reconciled.sourceFailures.length === 0 && results.every((item) => item.ok);
   printJson({
     ok: allOk,
     mode: "verify-all",
     manifestPath: path.resolve(args.manifest),
     manifestDigest: sha256File(args.manifest),
     vaultRemote: vault,
+    counts: reconciled.counts,
+    sourceFailures: reconciled.sourceFailures,
     results,
   });
   if (!allOk) {
@@ -569,54 +896,32 @@ function cmdVerifyAll(args) {
 function cmdOrphanAudit(args) {
   const manifest = loadManifest(args.manifest);
   const vault = vaultRemote(manifest, args.remote);
-  const expectedRefs = new Set();
-  const expectedRepoIds = new Set();
-  const sourceFailures = [];
-  for (const [repoId, repo] of manifestRepos(manifest)) {
-    expectedRepoIds.add(repoId);
-    const source = sourceBare(repo);
-    try {
-      for (const [, branch] of listSourceHeads(source)) {
-        expectedRefs.add(namespacedHead(repoId, branch));
-      }
-    } catch (exc) {
-      sourceFailures.push({ repoId, sourceBarePath: source, error: errStr(exc) });
-    }
-  }
-  const vaultRefs = [];
-  for (const [repoId] of manifestRepos(manifest)) {
-    for (const [sha, ref] of lsRemote(vault, `refs/heads/${repoId}/*`)) {
-      vaultRefs.push({ hash: sha, ref });
-    }
-  }
-  const vaultRefSet = new Set(vaultRefs.map((row) => row.ref));
-  const missingRefs = [...expectedRefs].filter((ref) => !vaultRefSet.has(ref)).sort();
-  const orphanRefs = vaultRefs
-    .filter((row) => !expectedRefs.has(row.ref))
-    .map((row) => row.ref)
+  const reconciled = reconcileManifestWithRemote(manifest, vault);
+  const missingRefs = reconciled.rows.filter((row) => row.classification === "missing-remote").map((row) => row.remoteRef).sort();
+  const orphanRefs = reconciled.rows
+    .filter((row) => row.classification.startsWith("extra-") || row.classification === "unknown-managed-extra")
+    .map((row) => row.remoteRef)
     .sort();
-  const extraRepoIds = [
-    ...new Set(
-      orphanRefs
-        .map((ref) => ref.match(/^refs\/heads\/([^/]+)\//))
-        .filter(Boolean)
-        .map((m) => m[1])
-        .filter((repoId) => !expectedRepoIds.has(repoId)),
-    ),
-  ].sort();
-  const ok = sourceFailures.length === 0 && missingRefs.length === 0 && orphanRefs.length === 0;
+  const mismatchRefs = reconciled.rows
+    .filter((row) => !["equal", "missing-remote"].includes(row.classification) && !orphanRefs.includes(row.remoteRef))
+    .map((row) => row.remoteRef)
+    .sort();
+  const extraRepoIds = [...new Set(orphanRefs.map((ref) => parseManagedRemoteRef(ref).repoPath).filter(Boolean))].sort();
+  const ok = reconciled.sourceFailures.length === 0 && missingRefs.length === 0 && orphanRefs.length === 0 && mismatchRefs.length === 0;
   printJson({
     ok,
     mode: "orphan-audit",
     manifestPath: path.resolve(args.manifest),
     manifestDigest: sha256File(args.manifest),
     vaultRemote: vault,
-    expectedRefs: expectedRefs.size,
-    vaultRefs: vaultRefs.length,
+    counts: reconciled.counts,
+    expectedRefs: reconciled.rows.filter((row) => row.sourceOid).length,
+    vaultRefs: reconciled.rows.filter((row) => row.remoteOid).length,
     missingRefs,
     orphanRefs,
+    mismatchRefs,
     extraRepoIds,
-    sourceFailures,
+    sourceFailures: reconciled.sourceFailures,
   });
   if (!ok) {
     throw new VaultError("vault refs differ from generated manifest snapshot");
@@ -626,34 +931,33 @@ function cmdOrphanAudit(args) {
 function cmdAudit(args) {
   const manifest = loadManifest(args.manifest);
   const vault = vaultRemote(manifest, args.remote);
-  const seen = {};
-  for (const [repoId] of manifestRepos(manifest)) {
-    for (const [sha, ref] of lsRemote(vault, `refs/heads/${repoId}/*`)) {
-      const mo = ref.match(/^refs\/heads\/([^/]+)\/(.+)$/);
-      if (mo) {
-        if (!(mo[1] in seen)) seen[mo[1]] = [];
-        seen[mo[1]].push({ branch: mo[2], hash: sha });
-      }
-    }
-  }
-  const expected = manifestRepos(manifest).map(([repoId]) => repoId);
-  const seenKeys = Object.keys(seen);
-  const missing = expected.filter((repoId) => !(repoId in seen));
-  const extra = seenKeys.filter((k) => !expected.includes(k)).sort();
-  // Python builds `seen` dict; key order is insertion order. To match
-  // json.dumps without sort_keys, preserve insertion order of seen.
+  const reconciled = reconcileManifestWithRemote(manifest, vault);
+  const expected = manifestRepos(manifest).map(([repoPath]) => repoPath);
+  const seenKeys = [
+    ...new Set(reconciled.rows.filter((row) => row.remoteOid).map((row) => row.parsed?.repoPath).filter(Boolean)),
+  ].sort();
+  const missing = expected.filter((repoPath) => !reconciled.rows.some((row) => row.repoPath === repoPath && row.remoteOid));
+  const extra = reconciled.rows
+    .filter((row) => row.classification.startsWith("extra-") || row.classification === "unknown-managed-extra")
+    .map((row) => row.remoteRef)
+    .sort();
+  const ok = reconciled.ok && reconciled.sourceFailures.length === 0;
   printJson({
-    ok: missing.length === 0,
+    ok,
     mode: "audit",
     vaultRemote: vault,
+    counts: reconciled.counts,
     expectedRepoIds: expected,
     seenRepoIds: seenKeys.slice().sort(),
     missing,
     extra,
-    seen,
+    mismatched: reconciled.rows
+      .filter((row) => !["equal", "missing-remote"].includes(row.classification) && !extra.includes(row.remoteRef))
+      .map((row) => ({ ref: row.remoteRef, classification: row.classification })),
+    sourceFailures: reconciled.sourceFailures,
   });
-  if (missing.length) {
-    throw new VaultError("vault missing expected repo namespaces");
+  if (!ok) {
+    throw new VaultError("vault refs differ from generated manifest snapshot");
   }
 }
 
@@ -768,7 +1072,7 @@ function cmdSmokeLocal() {
     if (!oneRemoteHash(vault, vaultAlphaRef) || !oneRemoteHash(vault, vaultBetaRef)) {
       throw new VaultError("namespaced vault refs missing after backup-all");
     }
-    proof("P03", "repoId and branch map to refs/heads/<repoId>/<branch>", [vaultAlphaRef, vaultBetaRef]);
+    proof("P03", "repoPath and branch map to refs/heads/<repoKey>/<branch>", [vaultAlphaRef, vaultBetaRef]);
 
     const audit = { manifest, remote: null };
     withRedirectStdout(() => cmdAudit(audit));
@@ -880,7 +1184,7 @@ const PROG = "ops-refs-vault";
 // Byte-reproduced from argparse with prog="ops-refs-vault".
 const TOP_USAGE =
   `usage: ${PROG} [-h]\n` +
-  `                      {generate-manifest,backup-one,backup-all,restore-bare-one,promote-staging-bare,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
+  `                      {generate-manifest,backup-one,backup-all,restore-bare-one,promote-staging-bare,candidate-plan,candidate-adopt,candidate-discard,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
 
 // Per-subcommand usage blocks, byte-reproduced from argparse (prog="ops-refs-vault <cmd>").
 const SUB_USAGE = {
@@ -906,6 +1210,20 @@ const SUB_USAGE = {
     `                                           --staging-bare STAGING_BARE\n` +
     `                                           --target-bare TARGET_BARE\n` +
     `                                           [--confirm]\n`,
+  "candidate-plan":
+    `usage: ${PROG} candidate-plan [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                      --branch BRANCH [--remote REMOTE]\n`,
+  "candidate-adopt":
+    `usage: ${PROG} candidate-adopt [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                       --branch BRANCH --expected-source-oid EXPECTED_SOURCE_OID\n` +
+    `                                       --expected-remote-oid EXPECTED_REMOTE_OID\n` +
+    `                                       --staging-bare STAGING_BARE [--remote REMOTE]\n` +
+    `                                       [--confirm]\n`,
+  "candidate-discard":
+    `usage: ${PROG} candidate-discard [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                         --branch BRANCH --expected-source-oid EXPECTED_SOURCE_OID\n` +
+    `                                         --expected-remote-oid EXPECTED_REMOTE_OID\n` +
+    `                                         [--remote REMOTE] [--confirm]\n`,
   audit: `usage: ${PROG} audit [-h] --manifest MANIFEST [--remote REMOTE]\n`,
   "verify-one":
     `usage: ${PROG} verify-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
@@ -938,6 +1256,17 @@ const SUB_SPEC = {
   "backup-all": { flags: ["--remote", "--branch", "--receipt-out"], bools: ["--force", "--dry-run"], required: ["--manifest"] },
   "restore-bare-one": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch", "--staging-bare"] },
   "promote-staging-bare": { flags: [], bools: ["--confirm"], required: ["--repo-id", "--staging-bare", "--target-bare"] },
+  "candidate-plan": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch"] },
+  "candidate-adopt": {
+    flags: ["--remote"],
+    bools: ["--confirm"],
+    required: ["--manifest", "--repo-id", "--branch", "--expected-source-oid", "--expected-remote-oid", "--staging-bare"],
+  },
+  "candidate-discard": {
+    flags: ["--remote"],
+    bools: ["--confirm"],
+    required: ["--manifest", "--repo-id", "--branch", "--expected-source-oid", "--expected-remote-oid"],
+  },
   audit: { flags: ["--remote"], bools: [], required: ["--manifest"] },
   "verify-one": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch"] },
   "verify-all": { flags: ["--remote"], bools: [], required: ["--manifest"] },
@@ -960,6 +1289,8 @@ function parseSub(command, rest) {
     "--out",
     "--exclude-file",
     "--receipt-out",
+    "--expected-source-oid",
+    "--expected-remote-oid",
   ];
   const key = (flag) => flag.replace(/^--/, "").replace(/-/g, "_");
   const out = {
@@ -974,6 +1305,8 @@ function parseSub(command, rest) {
     out: undefined,
     exclude_file: null,
     receipt_out: null,
+    expected_source_oid: undefined,
+    expected_remote_oid: undefined,
     force: false,
     dry_run: false,
     confirm: false,
@@ -1007,6 +1340,9 @@ const DISPATCH = {
   "backup-all": cmdBackupAll,
   "restore-bare-one": cmdRestoreBareOne,
   "promote-staging-bare": cmdPromoteStagingBare,
+  "candidate-plan": cmdCandidatePlan,
+  "candidate-adopt": cmdCandidateAdopt,
+  "candidate-discard": cmdCandidateDiscard,
   audit: cmdAudit,
   "verify-one": cmdVerifyOne,
   "verify-all": cmdVerifyAll,
@@ -1023,7 +1359,7 @@ function main(argv) {
   const command = args[0];
   if (!(command in DISPATCH)) {
     topUsageError(
-      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, restore-bare-one, promote-staging-bare, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
+      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, restore-bare-one, promote-staging-bare, candidate-plan, candidate-adopt, candidate-discard, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
     );
   }
   const parsed = command === "smoke-local" ? {} : parseSub(command, args.slice(1));

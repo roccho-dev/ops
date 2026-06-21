@@ -573,11 +573,24 @@
               {
                 nativeBuildInputs = [
                   self.packages.${pkgs.stdenv.hostPlatform.system}.ops-refs-vault
+                  pkgs.git
                   pkgs.gnugrep
+                  pkgs.nodejs
                 ];
               }
               ''
                 mkdir -p "$out"
+                cd ${srcRoot}/packages/ops-refs-vault
+                node --check bin/ops-refs-vault.mjs
+                node --test \
+                  tests/test_ref_projection.mjs \
+                  tests/test_ref_reconcile.mjs \
+                  tests/e2e.mjs \
+                  > "$out/node-test.log"
+                if grep -q -- '--mirror' bin/ops-refs-vault.mjs; then
+                  echo "ops-refs-vault CLI must not use git push --mirror" >&2
+                  exit 1
+                fi
                 ops-refs-vault smoke-local > "$out/report.json"
                 grep -q '"ok": true' "$out/report.json"
                 for proof in P01 P02 P03 P04 P05 P06 P07 P08 P09 P10 P11 P12 P13 P14 P15; do

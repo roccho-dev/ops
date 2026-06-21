@@ -84,7 +84,7 @@ ops-refs-vault backup-all \
   --receipt-out backup-receipt.json
 ```
 
-Each repository's selected refs are pushed with `git push --atomic`. Cross-repository atomicity is not claimed. A full managed-root preflight runs before the first write.
+Each selected ref is pushed after a full managed-root preflight. Cross-repository atomicity is not claimed.
 
 `--force` is rejected. `git push --mirror` is not used because it force-updates all refs and deletes remote-only refs.
 

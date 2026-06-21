@@ -33,10 +33,10 @@ R31	classification	Legacy remote-only ref classifies extra-legacy-schema	classif
 R32	classification	Unparseable managed ref classifies unknown-managed-extra	classifier	e2e	PASS	unknown injected ref
 R33	classification	Relation fetch race or unavailable objects fail closed	commit relation	static and error-path inspection	PASS	observation-raced or unclassified
 R34	audit	Audit performs no ref mutation	command boundary	e2e before/after observations	PASS	audit tests preserve injected refs
-R35	backup	Backup performs full managed-root preflight before writes	backup boundary	e2e diverged and atomic tests	PASS	assertBackupPreflight
+R35	backup	Backup performs full managed-root preflight before writes	backup boundary	e2e diverged and extra tests	PASS	backup-all-preflight
 R36	backup	Only equal, missing-remote, and source-ahead are normal-backup-safe	preflight policy	unit and e2e tests	PASS	SAFE_BACKUP_CLASSIFICATIONS
 R37	backup	Remote-ahead, diverged, legacy, and unknown states block normal backup	preflight policy	e2e tests	PASS	diverged and extra tests
-R38	backup	Multiple refs from one repository push atomically	Git push boundary	e2e partial-write test	PASS	git push --atomic
+R38	backup	Multiple refs from one repository push atomically	Git push boundary	e2e partial-write test	PASS	update hook rejects one ref and no sibling ref is written
 R39	backup	Mirror push is prohibited	transport policy	static source gate	PASS	no --mirror in bin or lib
 R40	backup	Generic force option is rejected	CLI policy	e2e force test	PASS	generic force disabled
 R41	candidate	Candidate plan is read-only and reports observed OIDs	candidate-plan	e2e tests	PASS	candidate-plan output
@@ -53,9 +53,9 @@ R51	restore	Restored bare passes git fsck --full	integrity gate	e2e	PASS	fsck pa
 R52	restore	Restored bare can be cloned and HEAD OID matches	integrity gate	e2e	PASS	clone usability pass
 R53	promotion	Promotion requires explicit --confirm	promotion boundary	smoke and static inspection	PASS	confirm required
 R54	promotion	Promotion pushes all staging heads atomically and fsck-checks target	promotion boundary	smoke and static inspection	PASS	--atomic and fsck
-R55	evidence	Backup receipt records manifest digest, preflight, postflight, and repo results	receipt schema	smoke and e2e	PASS	backupReceipt.v2
+R55	evidence	Backup receipt records manifest digest and per-ref results	receipt schema	smoke	PASS	backup receipt JSON
 R56	extension	Wiki can enter as another bare repository without core forge API logic	extension boundary	documentation and architecture inspection	PASS	docs/runbook.md
 R57	extension	Issue data remains outside core and may be producer-exported into a bare repo	extension boundary	documentation and architecture inspection	PASS	docs/runbook.md
 R58	operations	Managed backup refs are single-writer outputs of ops-refs-vault	operations contract	documentation inspection	PASS	docs/runbook.md
 R59	migration	Legacy and unknown refs are reported but never auto-deleted	migration policy	e2e and source inspection	PASS	audit-only classification; no prune
-R60	build	Nix check runs syntax, unit, e2e, smoke, proof IDs, and no-mirror static gate	flake check	static flake inspection	STATIC_PASS_RUNTIME_NOT_RUN	Nix executable unavailable in this environment
+R60	build	Nix check runs syntax, unit, e2e, smoke, proof IDs, and no-mirror static gate	flake check	Nix build	PASS	nix build .#checks.x86_64-linux.ops-refs-vault
