@@ -28,6 +28,7 @@
       "project every accepted reviewRequired candidate through decision JSONL into law/policy artifacts",
       "run refreshed Codex as Gen2 against the unified obligation table after reviewRequired count reaches zero"
    ],
+   "reviewBatchCount" : 118,
    "reviewRequiredCandidateCount" : 792,
    "semanticCandidateCount" : 3782,
    "sourceClassCounts" : {

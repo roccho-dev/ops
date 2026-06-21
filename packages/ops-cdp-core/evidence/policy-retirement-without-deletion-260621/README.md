@@ -21,6 +21,7 @@ exhaustive coverage-first replacement for every semantic candidate.
 - coverage-first candidate reconciliation: `CLASSIFIED_REVIEW_REQUIRED`
 - coverage-first unclassified candidates: `0`
 - coverage-first review-required candidates: `792`
+- coverage-first review batches: `118`
 
 ## Key files
 
@@ -40,6 +41,8 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `coverage_first_candidate_review_queue.jsonl` | Coverage-first candidates that still require accepted/rejected law review |
 | `legacy_policy_unified_obligation_table.jsonl` | Combined compiler-projected plus review-required candidate law table |
 | `legacy_policy_unified_obligation_table.md` | Human-readable combined table for audit review |
+| `coverage_first_review_batches.jsonl` | 118 source-path batches for reviewing the 792 accepted-law candidates |
+| `coverage_first_review_batches.md` | Human-readable review batch index |
 | `gen2_coverage_first_reconciliation_verification.jsonl` | Fresh Codex as Gen2 verification of the reconciliation counts and claim boundary |
 
 ## Boundary
@@ -75,6 +78,7 @@ coverage-first has `3782` semantic candidates. This pack now classifies all
   before they can be treated as projected law.
 
 Therefore the remaining non-deletion work is no longer an unbounded
-coverage-first gap. It is a bounded `792` row review queue that must be
-accepted or rejected through decision JSONL, then replayed by refreshed Codex as
-Gen2 before claiming exhaustive legacy-policy law replacement.
+coverage-first gap. It is a bounded `792` row review queue, grouped into `118`
+source-path review batches. Each row must be accepted or rejected through
+decision JSONL, then replayed by refreshed Codex as Gen2 before claiming
+exhaustive legacy-policy law replacement.

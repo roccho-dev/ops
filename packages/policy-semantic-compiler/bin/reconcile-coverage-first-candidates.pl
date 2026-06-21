@@ -156,6 +156,7 @@ for my $row (@$unresolved_rows) {
 
 my (@reconciled, @review_queue, @unified_table);
 my (%counts, %source_class_counts, %disposition_counts, %match_counts);
+my %review_batches_by_key;
 
 my $index = 0;
 for my $candidate (@$semantic_candidates) {
@@ -220,7 +221,11 @@ for my $candidate (@$semantic_candidates) {
     rationale => $rationale,
   };
   push @reconciled, $row;
-  push @review_queue, $row if $review_required;
+  if ($review_required) {
+    push @review_queue, $row;
+    my $batch_key = join("\0", $source_class, $source_path);
+    push @{ $review_batches_by_key{$batch_key} }, $row;
+  }
   push @unified_table, $row if $projection_status ne 'not_projected_non_authority_or_generated_source';
   $counts{$projection_status}++;
   $source_class_counts{$source_class}++;
@@ -231,6 +236,40 @@ for my $candidate (@$semantic_candidates) {
 write_jsonl("$out_dir/coverage_first_candidate_reconciliation.jsonl", \@reconciled);
 write_jsonl("$out_dir/coverage_first_candidate_review_queue.jsonl", \@review_queue);
 write_jsonl("$out_dir/legacy_policy_unified_obligation_table.jsonl", \@unified_table);
+
+my @review_batches;
+my $batch_index = 0;
+for my $batch_key (sort keys %review_batches_by_key) {
+  $batch_index++;
+  my ($source_class, $source_path) = split /\0/, $batch_key, 2;
+  my @rows = @{ $review_batches_by_key{$batch_key} };
+  my %kind_counts;
+  $kind_counts{$_->{candidateKind} // 'unknown'}++ for @rows;
+  push @review_batches, {
+    type => 'policy.retirement.coverageFirstReviewBatch.v1',
+    batchId => sprintf('coverage-first-review-batch-%03d', $batch_index),
+    sourceClass => $source_class,
+    sourcePath => $source_path,
+    candidateCount => scalar(@rows),
+    candidateKindCounts => \%kind_counts,
+    requiredDecision => 'accept-or-reject-each-candidate',
+    projectionPrerequisite => 'accepted candidates must be represented by decision JSONL before projected law can be authoritative',
+    candidateRefs => [
+      map {
+        {
+          candidateId => $_->{candidateId},
+          signalId => $_->{signalId},
+          lineStart => $_->{lineStart},
+          lineEnd => $_->{lineEnd},
+          candidateKind => $_->{candidateKind},
+          textHash => $_->{textHash},
+          projectedRule => $_->{projectedRule},
+        }
+      } @rows
+    ],
+  };
+}
+write_jsonl("$out_dir/coverage_first_review_batches.jsonl", \@review_batches);
 
 open my $md, '>:encoding(UTF-8)', "$out_dir/legacy_policy_unified_obligation_table.md"
   or die "write $out_dir/legacy_policy_unified_obligation_table.md: $!";
@@ -251,6 +290,23 @@ for my $row (@unified_table) {
 }
 close $md;
 
+open my $batch_md, '>:encoding(UTF-8)', "$out_dir/coverage_first_review_batches.md"
+  or die "write $out_dir/coverage_first_review_batches.md: $!";
+print {$batch_md} "| # | batch | count | source class | source path | required decision |\n";
+print {$batch_md} "|---:|---|---:|---|---|---|\n";
+my $batch_table_index = 0;
+for my $batch (@review_batches) {
+  $batch_table_index++;
+  print {$batch_md} '| ', $batch_table_index,
+    ' | `', md_escape($batch->{batchId}), '`',
+    ' | ', md_escape($batch->{candidateCount}),
+    ' | `', md_escape($batch->{sourceClass}), '`',
+    ' | `', md_escape($batch->{sourcePath}), '`',
+    ' | ', md_escape($batch->{requiredDecision}),
+    " |\n";
+}
+close $batch_md;
+
 my $summary_row = {
   type => 'policy.retirement.coverageFirstCandidateReconciliationSummary.v1',
   policyInputRef => $policy_input_ref,
@@ -261,6 +317,7 @@ my $summary_row = {
   candidateReconciliationRows => scalar(@reconciled),
   unclassifiedCandidateCount => ($disposition_counts{requires_review_unclassified_source_surface} // 0),
   reviewRequiredCandidateCount => scalar(@review_queue),
+  reviewBatchCount => scalar(@review_batches),
   unifiedObligationTableRows => scalar(@unified_table),
   projectionStatusCounts => \%counts,
   matchMethodCounts => \%match_counts,
