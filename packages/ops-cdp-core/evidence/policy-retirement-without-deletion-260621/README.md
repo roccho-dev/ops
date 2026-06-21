@@ -18,7 +18,9 @@ exhaustive coverage-first replacement for every semantic candidate.
 - explicit projected-consumer proof: `PASS`
 - deletion approval gate: `BLOCKED`
 - refreshed Codex as Gen2 verification: `PASS`
-- coverage-first exhaustive reconciliation: `INCOMPLETE`
+- coverage-first candidate reconciliation: `CLASSIFIED_REVIEW_REQUIRED`
+- coverage-first unclassified candidates: `0`
+- coverage-first review-required candidates: `792`
 
 ## Key files
 
@@ -33,6 +35,12 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `without_deletion_proof_summary.json` | Compact summary for downstream ADRS packaging |
 | `gen2_refreshed_codex_verification.jsonl` | Fresh Gen2 verification result for the legacy obligation table, projection, and gates |
 | `coverage_first_reconciliation_gap.json` | Gap record showing compiler-lane completion is not full coverage-first exhaustiveness |
+| `coverage_first_candidate_reconciliation.jsonl` | One reconciliation row for each coverage-first semantic candidate |
+| `coverage_first_candidate_reconciliation_summary.json` | Summary of compiler matches, non-authority classifications, and review-required candidates |
+| `coverage_first_candidate_review_queue.jsonl` | Coverage-first candidates that still require accepted/rejected law review |
+| `legacy_policy_unified_obligation_table.jsonl` | Combined compiler-projected plus review-required candidate law table |
+| `legacy_policy_unified_obligation_table.md` | Human-readable combined table for audit review |
+| `gen2_coverage_first_reconciliation_verification.jsonl` | Fresh Codex as Gen2 verification of the reconciliation counts and claim boundary |
 
 ## Boundary
 
@@ -56,8 +64,17 @@ It proves that the compiler lane can be replayed from repo evidence:
 
 ## Remaining Non-Deletion Gap
 
-coverage-first has `3782` semantic candidates. The compiler lane projects
-`1896` extracted legacy obligations and only `669` coverage-first candidates
-match compiler signal IDs. Therefore the full exhaustive law replacement still
-requires classification or projection of the unmatched coverage-first
-candidate set before claiming every legacy policy semantic candidate is law.
+coverage-first has `3782` semantic candidates. This pack now classifies all
+`3782` candidates:
+
+- `682` are covered by the compiler lane (`669` signal-id matches plus `13`
+  text-hash-only matches),
+- `2308` are classified as non-authority, historical, generated, fixture,
+  board, proposal, report, or metadata sources,
+- `792` remain accepted-law candidates requiring explicit review and adoption
+  before they can be treated as projected law.
+
+Therefore the remaining non-deletion work is no longer an unbounded
+coverage-first gap. It is a bounded `792` row review queue that must be
+accepted or rejected through decision JSONL, then replayed by refreshed Codex as
+Gen2 before claiming exhaustive legacy-policy law replacement.

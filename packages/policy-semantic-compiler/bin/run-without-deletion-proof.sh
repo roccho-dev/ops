@@ -2,13 +2,14 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 --policy-root PATH --out-dir PATH [--adrs-head SHA]" >&2
+  echo "usage: $0 --policy-root PATH --out-dir PATH [--adrs-head SHA] [--coverage-first-dir PATH]" >&2
 }
 
 policy_root=
 out_dir=
 adrs_head=656e6550aead11afc5767535cf90146ba418e8e4
 policy_input_ref=334997669f1889a8e2658730c616d2d4510d4536
+coverage_first_dir=
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -22,6 +23,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --adrs-head)
       adrs_head=$2
+      shift 2
+      ;;
+    --coverage-first-dir)
+      coverage_first_dir=$2
       shift 2
       ;;
     *)
@@ -98,3 +103,11 @@ cp "$out_dir/deletion-readiness/consumer-proof-results.jsonl" "$out_dir/consumer
 python3 "$script_dir/materialize-without-deletion-proof-summary.py" \
   --evidence-dir "$out_dir" \
   --policy-input-ref "$policy_input_ref"
+
+if [ -n "$coverage_first_dir" ]; then
+  perl "$script_dir/reconcile-coverage-first-candidates.pl" \
+    --coverage-dir "$coverage_first_dir" \
+    --evidence-dir "$out_dir" \
+    --out-dir "$out_dir" \
+    --policy-input-ref "$policy_input_ref"
+fi
