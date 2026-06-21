@@ -1,0 +1,59 @@
+{
+   "allCompilerLegacyObligationsProjected" : true,
+   "candidateDispositionCounts" : {
+      "accepted_law_candidate_requires_review" : 792,
+      "covered_by_compiler_projection" : 682,
+      "non_authority_historical_generated_or_mirror" : 2284,
+      "non_policy_build_or_snapshot_metadata" : 24
+   },
+   "candidateReconciliationRows" : 3782,
+   "compilerLegacyObligationCount" : 1896,
+   "compilerProjectedRuleCount" : 1896,
+   "cutoverReady" : false,
+   "decision" : "COVERAGE_FIRST_RECONCILIATION_CLASSIFIED_REVIEW_REQUIRED",
+   "deletionApproval" : false,
+   "matchMethodCounts" : {
+      "none" : 3100,
+      "signal_id" : 669,
+      "text_hash_only" : 13
+   },
+   "policyInputRef" : "334997669f1889a8e2658730c616d2d4510d4536",
+   "projectionStatusCounts" : {
+      "candidate_rule_materialized_for_review" : 792,
+      "not_projected_non_authority_or_generated_source" : 2308,
+      "projected_by_compiler_lane" : 682
+   },
+   "requiredNextProof" : [
+      "review and accept or reject every reviewRequired candidate",
+      "project every accepted reviewRequired candidate through decision JSONL into law/policy artifacts",
+      "run refreshed Codex as Gen2 against the unified obligation table after reviewRequired count reaches zero"
+   ],
+   "reviewBatchCount" : 118,
+   "reviewRequiredCandidateCount" : 792,
+   "semanticCandidateCount" : 3782,
+   "sourceClassCounts" : {
+      "agent_local_surface" : 4,
+      "board_or_runtime_projection_record" : 241,
+      "build_or_snapshot_metadata" : 26,
+      "example_fixture_or_test_asset" : 59,
+      "generated_policy_projection_report" : 175,
+      "historical_or_generated_policy_event_log" : 1592,
+      "historical_report_or_audit_output" : 304,
+      "policy_module_or_kernel_surface" : 377,
+      "policy_runtime_package_surface" : 141,
+      "proposal_or_issue_discussion" : 288,
+      "root_policy_surface" : 30,
+      "schema_or_template_contract" : 545
+   },
+   "type" : "policy.retirement.coverageFirstCandidateReconciliationSummary.v1",
+   "unclassifiedCandidateCount" : 0,
+   "unifiedObligationTableRows" : 1474,
+   "unresolvedDispositionCounts" : {
+      "example_or_fixture" : 410,
+      "generated_evidence" : 66,
+      "generated_or_example_code" : 1065,
+      "historical_or_superseded" : 766,
+      "quoted_or_imported_text" : 1
+   },
+   "unresolvedRows" : 2308
+}

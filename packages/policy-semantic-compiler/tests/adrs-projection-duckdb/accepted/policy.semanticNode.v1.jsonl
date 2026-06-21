@@ -1,0 +1,1 @@
+{"id":"node:one","kind":"policy.semanticNode.v1","nodeKind":"policy.requirement","sourceSpanIds":["span:one","span:two"],"sourceTrace":{"repo":"policy","rev":"rev-good","path":"POLICY.md","startLine":1,"endLine":2},"status":"candidate"}

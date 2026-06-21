@@ -1,0 +1,2 @@
+{"id":"node:one","kind":"policy.semanticNode.v1","nodeKind":"obligation","sourceSpanIds":["span:one"],"status":"candidate"}
+{"id":"node:two","kind":"policy.semanticNode.v1","nodeKind":"policy.definition","sourceSpanIds":["span:two"],"status":"candidate"}

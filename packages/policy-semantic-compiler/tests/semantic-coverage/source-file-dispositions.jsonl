@@ -1,0 +1,1 @@
+{"id":"disposition:file-a","kind":"policy.sourceFileDisposition.v1","sourceFileId":"source:file-a","sourceFilePath":"policy.md","sourceSpanCount":2,"disposition":"template-or-example","requiresIndividualSemanticApproval":false,"reviewTreatment":"file-class-non-normative-eligible","status":"candidate-disposition"}

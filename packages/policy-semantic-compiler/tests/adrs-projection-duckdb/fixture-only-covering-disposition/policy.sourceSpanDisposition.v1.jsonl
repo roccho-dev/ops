@@ -1,0 +1,2 @@
+{"id":"span-disposition:accepted","kind":"policy.sourceSpanDisposition.v1","accepted":true,"status":"accepted","policyRev":"rev-good","sourceSpanIds":["span:one","span:two"],"disposition":"represented","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+{"id":"span-disposition:fixture-candidate","kind":"policy.sourceSpanDisposition.v1","accepted":false,"status":"candidate","policyRev":"rev-good","sourceSpanIds":["span:one"],"disposition":"represented","fixtureOnly":true,"generatedIsAuthority":false,"policyDeletionApproved":false}

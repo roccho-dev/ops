@@ -1,0 +1,1 @@
+{"id":"proof:accepted","kind":"policy.acceptedCoverageProof.v1","accepted":true,"status":"accepted","policyRev":"rev-good","coveredSourceSpanIds":["span:one"],"freshGenXEvidenceIds":["genx:accepted"],"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}

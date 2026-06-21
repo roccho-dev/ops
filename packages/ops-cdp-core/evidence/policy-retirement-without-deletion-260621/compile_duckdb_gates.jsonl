@@ -1,0 +1,14 @@
+{"gate_id":"consumer-migrated-has-diff","status":"pass","blocker":null}
+{"gate_id":"duckdb-executed","status":"pass","blocker":null}
+{"gate_id":"graph-records-present","status":"pass","blocker":null}
+{"gate_id":"mandatory-signals-have-activation-edge","status":"pass","blocker":null}
+{"gate_id":"native-rows-have-projection-edge","status":"pass","blocker":null}
+{"gate_id":"no-stale-policy-git-migration-claim","status":"pass","blocker":null}
+{"gate_id":"no-wildcard-role-scope","status":"pass","blocker":null}
+{"gate_id":"review-signals-have-review-edge","status":"pass","blocker":null}
+{"gate_id":"semantic-cutover-blocked","status":"blocked","blocker":"candidate artifact validity is not semantic equivalence, cutover approval, deletion approval, or proof of active policy.git dependency 0"}
+{"gate_id":"semantic-diff-deny-to-allow","status":"pass","blocker":null}
+{"gate_id":"semantic-diff-must-weakened","status":"pass","blocker":null}
+{"gate_id":"signals-present","status":"pass","blocker":null}
+{"gate_id":"source-spans-present","status":"pass","blocker":null}
+{"gate_id":"sources-present","status":"pass","blocker":null}

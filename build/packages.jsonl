@@ -19,3 +19,4 @@
 {"kind":"package","name":"ops-build-receipt-check","runtime":"node","entry":"packages/ops-build-receipt-check/bin/ops-build-receipt-check.mjs","bin":"ops-build-receipt-check","deps":["node"],"env":[]}
 {"kind":"package","name":"find-packages","runtime":"node","entry":"packages/find-packages/bin/find-packages.mjs","bin":"find-packages","deps":["node"],"env":[]}
 {"kind":"package","name":"ui-raw-loop-runtime","runtime":"node","entry":"packages/ui-raw-loop-runtime/bin/ui-raw-loop-runtime.mjs","bin":"ui-raw-loop-runtime","deps":["node"],"env":[]}
+{"kind":"package","name":"policy-semantic-compiler","runtime":"python","entry":"packages/policy-semantic-compiler/bin/policy-semantic-compiler.py","pythonModule":"policy_semantic_compiler.cli","pythonPath":"src","bin":"policy-semantic-compiler","deps":["duckdb","git","python"],"env":[]}

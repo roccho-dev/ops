@@ -1,0 +1,1 @@
+{"id":"proof:fixture","kind":"policy.acceptedCoverageProof.v1","accepted":true,"status":"accepted","policyRev":"rev-good","coveredSourceSpanIds":["span:one"],"freshGenXEvidenceIds":["genx:fixture"],"noRemainingObjections":true,"fixtureOnly":true,"generatedIsAuthority":false,"policyDeletionApproved":false}

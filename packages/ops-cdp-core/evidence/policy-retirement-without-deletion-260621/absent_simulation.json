@@ -1,0 +1,11 @@
+{
+  "capturedOutput": "",
+  "claimAllowed": false,
+  "command": "test -f /tmp/policy-retirement-proof-run/projected-accepted/policy-entry.accepted.env && grep -q POLICY_ENTRY_ACCEPTED=true /tmp/policy-retirement-proof-run/projected-accepted/policy-entry.accepted.env",
+  "consumerPassedWithoutPolicyGit": true,
+  "exitCode": 0,
+  "kind": "policyDeletion.absentSimulation.v1",
+  "observedDecision": "passed",
+  "policyRoot": "/tmp/policy-retirement-proof-run/deletion-readiness/missing-policy-root",
+  "status": "candidate-pass"
+}

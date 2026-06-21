@@ -1,0 +1,4 @@
+{"edgeKind":"source-covers-span","from":"source:file-a","id":"edge:file-span-one","kind":"policy.semanticEdge.v1","sourceSpanIds":["span:one"],"status":"candidate","to":"span:one"}
+{"edgeKind":"span-supports-semantic-node","from":"span:one","id":"edge:span-node-one","kind":"policy.semanticEdge.v1","sourceSpanIds":["span:one"],"status":"candidate","to":"node:one"}
+{"edgeKind":"source-covers-span","from":"source:file-a","id":"edge:file-span-two","kind":"policy.semanticEdge.v1","sourceSpanIds":["span:two"],"status":"candidate","to":"span:two"}
+{"edgeKind":"span-supports-semantic-node","from":"span:two","id":"edge:span-node-two","kind":"policy.semanticEdge.v1","sourceSpanIds":["span:two"],"status":"candidate","to":"node:two"}

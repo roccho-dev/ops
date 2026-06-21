@@ -1,0 +1,33 @@
+{
+  "type": "policy.retirement.coverageFirstReconciliationGap.v1",
+  "decision": "COMPILER_LANE_COMPLETE_COVERAGE_FIRST_EXHAUSTIVE_PROOF_INCOMPLETE",
+  "policyInputRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "compilerLane": {
+    "legacyObligationCount": 1896,
+    "projectedRuleCount": 1896,
+    "legacyObligationProjectionCheckCount": 1896,
+    "legacyObligationProjectionFailureCount": 0,
+    "allLegacyObligationsProjected": true
+  },
+  "coverageFirstLane": {
+    "semanticCandidateCount": 3782,
+    "matchedCompilerSignalCount": 669,
+    "unmatchedSemanticCandidateCount": 3113,
+    "unresolvedRows": 2308,
+    "unresolvedDispositionCounts": {
+      "example_or_fixture": 410,
+      "generated_evidence": 66,
+      "generated_or_example_code": 1065,
+      "historical_or_superseded": 766,
+      "quoted_or_imported_text": 1
+    }
+  },
+  "finding": "The executable compiler lane proves its 1896 extracted legacy obligations project one-to-one, but coverage-first contains a broader 3782 candidate set. Until those candidates are accepted, rejected, or mapped to projected law, the exhaustive legacy-policy law proof is incomplete.",
+  "requiredNextProof": [
+    "classify each unmatched coverage-first semantic candidate as accepted law, non-authority, duplicate, superseded, fixture/example, or generated evidence",
+    "project every accepted candidate into law/policy/runtime artifacts",
+    "run refreshed Codex as Gen2 against the accepted/rejected candidate table",
+    "require zero unclassified coverage-first candidates before claiming exhaustive legacy-policy law replacement"
+  ],
+  "deletionApproval": false
+}

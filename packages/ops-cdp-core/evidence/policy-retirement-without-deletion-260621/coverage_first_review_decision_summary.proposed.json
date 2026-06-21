@@ -1,0 +1,39 @@
+{
+   "acceptedProjectionRows" : 752,
+   "authorityState" : "proposal-decision-not-canonical-approval",
+   "cutoverReady" : false,
+   "decision" : "REVIEW_REQUIRED_QUEUE_PROPOSED_DECISIONS_COMPLETE",
+   "decisionCounts" : {
+      "accept" : 752,
+      "reject" : 40
+   },
+   "decisionRows" : 792,
+   "deletionApproval" : false,
+   "exhaustiveObligationRows" : 2648,
+   "legacyCompilerObligationRows" : 1896,
+   "manualReviewRows" : 0,
+   "policyInputRef" : "334997669f1889a8e2658730c616d2d4510d4536",
+   "priorReconciliationDecision" : "COVERAGE_FIRST_RECONCILIATION_CLASSIFIED_REVIEW_REQUIRED",
+   "priorReviewBatchCount" : 118,
+   "reasonCounts" : {
+      "agent_local_note" : 2,
+      "historical_iteration_log" : 24,
+      "kernel_or_module_policy" : 120,
+      "package_build_metadata" : 8,
+      "package_policy" : 33,
+      "package_readme_documentation" : 6,
+      "protocol_contract" : 29,
+      "role_contract" : 8,
+      "root_policy_surface" : 24,
+      "schema_structural_contract" : 325,
+      "template_structural_contract" : 213
+   },
+   "rejectedRows" : 40,
+   "requiredNextProof" : [
+      "run refreshed Codex as Gen2 against proposed accept/reject decisions",
+      "promote accepted decisions through ADRS decision JSONL before claiming authority",
+      "project accepted rows into law/policy/runtime artifacts"
+   ],
+   "reviewRequiredCandidateCount" : 792,
+   "type" : "policy.retirement.coverageFirstReviewDecisionSummary.proposed.v1"
+}

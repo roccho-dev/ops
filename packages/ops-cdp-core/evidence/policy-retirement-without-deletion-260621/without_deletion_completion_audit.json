@@ -1,0 +1,90 @@
+{
+   "adrsHead" : "bf59d7d817850ed0c37fa9a1995922659ee1ade8",
+   "auditMaterializationNote" : "inputEvidenceOpsHead is the proof evidence head consumed by this audit. The audit file itself is stored in a later proposal commit.",
+   "completionScope" : {
+      "actualDeletionExcluded" : true,
+      "canonicalApprovalGranted" : false,
+      "cutoverApprovalGranted" : false,
+      "mergeApprovalGranted" : false,
+      "policyGitRetirementApprovalGranted" : false,
+      "ssotAdoptionApprovalGranted" : false
+   },
+   "decision" : "WITHOUT_DELETION_PROOF_COMPLETE_NOT_DELETION_OR_CANONICAL_APPROVAL",
+   "goalStatusMap" : [
+      {
+         "evidence" : "fresh Gen2 verifications for reconciliation, decisions, exhaustive table, and law behavior packets",
+         "goal" : "G24",
+         "status" : "achieved-for-proposal-evidence"
+      },
+      {
+         "evidence" : "coverage-first classified, reviewed, tabled, packetized, and Gen2 verified",
+         "goal" : "G25",
+         "status" : "achieved-for-proposal-evidence"
+      },
+      {
+         "evidence" : "g26 typed-semantic absorption judgment remains coverage-first evidence lane",
+         "goal" : "G26",
+         "status" : "achieved-by-absorption-record"
+      },
+      {
+         "evidence" : "deletion_readiness_gates.jsonl",
+         "goal" : "G27",
+         "status" : "non-deletion-gates-pass-deletion-approval-blocked"
+      },
+      {
+         "evidence" : "policy.git deletion/retirement approval false",
+         "goal" : "G28",
+         "status" : "not-achieved"
+      },
+      {
+         "evidence" : "OPS evidence pack plus ADRS g32-g36 audit records",
+         "goal" : "G29",
+         "status" : "achieved-for-proposal-evidence"
+      },
+      {
+         "evidence" : "decision ledger refs can reconstruct proof without conversation memory",
+         "goal" : "G30",
+         "status" : "achieved-for-proposal-evidence"
+      }
+   ],
+   "inputEvidenceOpsHead" : "2fa2a32244ea36d2866335b651219ea9561d5d8d",
+   "policyInputRef" : "334997669f1889a8e2658730c616d2d4510d4536",
+   "proofState" : {
+      "compilerLaneComplete" : true,
+      "compilerProjectedRules" : 1896,
+      "compilerProjectionFailures" : 0,
+      "coverageFirstCandidatesClassified" : true,
+      "coverageFirstReviewRequiredRows" : 792,
+      "coverageFirstSemanticCandidates" : 3782,
+      "coverageFirstUnclassifiedCandidates" : 0,
+      "exhaustiveObligationRows" : 2648,
+      "gen2LawBehaviorExpectationRows" : 2648,
+      "gen2LawBehaviorPackets" : 27,
+      "gen2PacketVerificationPass" : true,
+      "gen2TableVerificationPass" : true,
+      "legacyCompilerObligationRows" : 1896,
+      "reviewAcceptedProjectionRows" : 752,
+      "reviewDecisionRows" : 792,
+      "reviewManualRows" : 0,
+      "reviewRejectedRows" : 40
+   },
+   "readinessState" : {
+      "activeRuntimeReferenceCount" : 0,
+      "consumerProofsPass" : true,
+      "cutoverReady" : false,
+      "deletionApprovalGate" : "blocked",
+      "nonDeletionGatesPass" : true,
+      "policyAbsentConsumersPass" : true,
+      "policyDeletionApproved" : false
+   },
+   "remainingApprovals" : [
+      "policy.git deletion approval",
+      "policy.git retirement approval",
+      "cutover approval",
+      "canonical write approval",
+      "SSOT adoption approval",
+      "merge approval"
+   ],
+   "statement" : "All requested non-deletion proof artifacts are present as proposal evidence: exhaustive table, per-row Gen2 law behavior expectations, packet coverage, fresh Gen2 verification, and non-deletion readiness gates. This does not grant deletion, retirement, cutover, canonical write, SSOT adoption, or merge approval.",
+   "type" : "policy.retirement.withoutDeletionCompletionAudit.v1"
+}

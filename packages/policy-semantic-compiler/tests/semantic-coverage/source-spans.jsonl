@@ -1,0 +1,2 @@
+{"detection":{"acceptedSemanticApproval":false},"id":"span:one","kind":"policy.sourceSpan.v1","sourceFileId":"source:file-a","sourceTrace":{"path":"policy.md","startLine":1,"endLine":1},"status":"candidate"}
+{"detection":{"acceptedSemanticApproval":false},"id":"span:two","kind":"policy.sourceSpan.v1","sourceFileId":"source:file-a","sourceTrace":{"path":"policy.md","startLine":2,"endLine":2},"status":"candidate"}

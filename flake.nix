@@ -392,6 +392,164 @@
                   --stdout > "$out/stdout.mmd"
                 cmp "$out/stdout.mmd" "$out/dist/latest.mmd"
               '';
+          policy-semantic-compiler =
+            pkgs.runCommand "policy-semantic-compiler-check"
+              {
+                nativeBuildInputs = [
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.policy-semantic-compiler
+                  pkgs.gnugrep
+                ];
+              }
+              ''
+                mkdir -p "$out"
+                policy-semantic-compiler check-fixtures \
+                  --fixtures ${./packages/policy-semantic-compiler/tests/edge-counterexamples.jsonl} \
+                  > "$out/fixtures.json"
+                grep -q '"ok": true' "$out/fixtures.json"
+                policy-semantic-compiler check-counterexamples \
+                  --fixtures ${./packages/policy-semantic-compiler/tests/edge-counterexamples.jsonl} \
+                  --datasets ${./packages/policy-semantic-compiler/tests/counterexample-datasets.jsonl} \
+                  > "$out/counterexamples.json"
+                grep -q '"ok": true' "$out/counterexamples.json"
+                policy-semantic-compiler check-fresh-agent-cases \
+                  --fixtures ${./packages/policy-semantic-compiler/tests/fresh-agent-cases.jsonl} \
+                  > "$out/fresh-agent-cases.json"
+                grep -q '"ok": true' "$out/fresh-agent-cases.json"
+                mkdir -p "$out/deletion-readiness" "$out/deletion-missing-root"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root ${./packages/policy-semantic-compiler} \
+                  --out-dir "$out/deletion-readiness" \
+                  > "$out/deletion-readiness.stdout.json"
+                grep -q '"ok": false' "$out/deletion-readiness.stdout.json"
+                grep -q '"cutoverReady": false' "$out/deletion-readiness.stdout.json"
+                grep -q '"policyDeletionApproved": false' "$out/deletion-readiness.stdout.json"
+                grep -q '"gate_id":"active-policy-consumers-zero","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                grep -q '"gate_id":"policy-absent-consumers-pass","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$out/deletion-readiness/deletion-readiness-gates.jsonl"
+                grep -q '"consumerProofsPass": false' "$out/deletion-readiness.stdout.json"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root ${./packages/policy-semantic-compiler} \
+                  --consumer-proof-command 'printf consumer-proof-pass' \
+                  --out-dir "$out/deletion-readiness-consumer-proof-pass" \
+                  > "$out/deletion-readiness-consumer-proof-pass.stdout.json"
+                grep -q '"consumerProofsPass": true' "$out/deletion-readiness-consumer-proof-pass.stdout.json"
+                grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"pass"' "$out/deletion-readiness-consumer-proof-pass/deletion-readiness-gates.jsonl"
+                grep -q '"status":"pass"' "$out/deletion-readiness-consumer-proof-pass/consumer-proof-results.jsonl"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root ${./packages/policy-semantic-compiler} \
+                  --consumer-proof-command 'printf consumer-proof-fail >&2; exit 7' \
+                  --out-dir "$out/deletion-readiness-consumer-proof-fail" \
+                  > "$out/deletion-readiness-consumer-proof-fail.stdout.json"
+                grep -q '"consumerProofsPass": false' "$out/deletion-readiness-consumer-proof-fail.stdout.json"
+                grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$out/deletion-readiness-consumer-proof-fail/deletion-readiness-gates.jsonl"
+                grep -q '"exitCode":7' "$out/deletion-readiness-consumer-proof-fail/consumer-proof-results.jsonl"
+                ! policy-semantic-compiler review-deletion-readiness \
+                  --policy-root "$out/missing-policy-root" \
+                  --repo-root "$out/does-not-exist" \
+                  --out-dir "$out/deletion-missing-root" \
+                  > "$out/deletion-missing-root.stdout.json"
+                grep -q '"gate_id":"scan-roots-present","status":"blocked"' "$out/deletion-missing-root/deletion-readiness-gates.jsonl"
+                grep -q '"referenceClass":"missing-scan-root"' "$out/deletion-missing-root/consumer-references.jsonl"
+                grep -q '"activeRuntimeCandidate":true' "$out/deletion-missing-root/consumer-references.jsonl"
+                mkdir -p "$out/semantic-review-blocked" "$out/semantic-review-accepted"
+                ! policy-semantic-compiler review-semantic-coverage \
+                  --source-files ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-files.jsonl} \
+                  --source-spans ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-spans.jsonl} \
+                  --semantic-nodes ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-nodes.jsonl} \
+                  --semantic-edges ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-edges.jsonl} \
+                  --out-dir "$out/semantic-review-blocked" \
+                  > "$out/semantic-review-blocked.stdout.json"
+                grep -q '"acceptedSemanticApprovalCount": 0' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"totalSourceSpanCount": 2' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"equivalenceProofPresent": false' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"cutoverReady": false' "$out/semantic-review-blocked.stdout.json"
+                grep -q '"reviewPacketCount": 2' "$out/semantic-review-blocked.stdout.json"
+                policy-semantic-compiler review-semantic-coverage \
+                  --source-files ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-files.jsonl} \
+                  --source-spans ${./packages/policy-semantic-compiler/tests/semantic-coverage/source-spans.jsonl} \
+                  --semantic-nodes ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-nodes.jsonl} \
+                  --semantic-edges ${./packages/policy-semantic-compiler/tests/semantic-coverage/semantic-edges.jsonl} \
+                  --approvals ${./packages/policy-semantic-compiler/tests/semantic-coverage/approvals.jsonl} \
+                  --equivalence-proofs ${./packages/policy-semantic-compiler/tests/semantic-coverage/equivalence-proofs.jsonl} \
+                  --out-dir "$out/semantic-review-accepted" \
+                  > "$out/semantic-review-accepted.stdout.json"
+                grep -q '"acceptedSemanticApprovalCount": 2' "$out/semantic-review-accepted.stdout.json"
+                grep -q '"totalSourceSpanCount": 2' "$out/semantic-review-accepted.stdout.json"
+                grep -q '"equivalenceProofPresent": true' "$out/semantic-review-accepted.stdout.json"
+                grep -q '"cutoverReady": true' "$out/semantic-review-accepted.stdout.json"
+                policy-semantic-compiler cutover-blocked --out "$out/cutover-blocked.json" \
+                  > "$out/cutover-blocked.stdout.json"
+                grep -q '"status": "cutover-blocked"' "$out/cutover-blocked.json"
+                grep -q '"cutoverReady": false' "$out/cutover-blocked.json"
+                grep -q '"policyDeletionApproved": false' "$out/cutover-blocked.json"
+                mkdir -p "$out/projected-real" "$out/projected-fixture"
+                policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-real" \
+                  > "$out/projected-real.stdout.json"
+                grep -q '"accepted": false' "$out/projected-real.stdout.json"
+                grep -q 'POLICY_ENTRY_ACCEPTED=false' "$out/projected-real/policy-entry.accepted.env"
+                policy-semantic-compiler check-projected-policy-entry \
+                  --dir "$out/projected-real" \
+                  > "$out/projected-real.check.json"
+                grep -q '"ok": true' "$out/projected-real.check.json"
+                policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-fixture" \
+                  --fixture-accepted \
+                  --fixture-reason "bootstrap projected-mode contract test" \
+                  > "$out/projected-fixture.stdout.json"
+                grep -q '"accepted": true' "$out/projected-fixture.stdout.json"
+                grep -q 'POLICY_ENTRY_ACCEPTED=true' "$out/projected-fixture/policy-entry.accepted.env"
+                policy-semantic-compiler check-projected-policy-entry \
+                  --dir "$out/projected-fixture" \
+                  --expect-accepted \
+                  > "$out/projected-fixture.check.json"
+                grep -q '"ok": true' "$out/projected-fixture.check.json"
+                mkdir -p "$out/projected-accepted-source-base" "$out/projected-accepted-source" "$out/projected-accepted-source-invalid"
+                policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-accepted-source-base" \
+                  > "$out/projected-accepted-source-base.stdout.json"
+                LOCK="$(grep '^POLICY_ENTRY_LOCK=' "$out/projected-accepted-source-base/policy-entry.accepted.env" | cut -d= -f2-)"
+                cat > "$out/accepted-source.json" <<EOF
+{"kind":"policy.projectedPolicyEntryAcceptedSource.v1","accepted":true,"policyEntryLock":"$LOCK","sourceAuthority":{"repo":"adrs","path":"records/policy/policy.projectedPolicyEntryAcceptedSource.v1.jsonl","commit":"fixture","id":"source-authority-fixture","status":"accepted"},"ownerApprovalRef":{"repo":"adrs","path":"records/policy/policy.ownerApproval.v1.jsonl","commit":"fixture","id":"owner-approval-fixture","status":"accepted"},"semanticEquivalenceProofRef":{"repo":"adrs","path":"records/policy/policy.semanticEquivalenceProof.v1.jsonl","commit":"fixture","id":"semantic-equivalence-fixture","status":"accepted"},"consumerZeroProofRef":{"repo":"adrs","path":"records/policy/policy.consumerZeroProof.v1.jsonl","commit":"fixture","id":"consumer-zero-fixture","status":"accepted"},"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+                policy-semantic-compiler check-accepted-policy-entry-source \
+                  --source "$out/accepted-source.json" \
+                  --expected-lock "$LOCK" \
+                  > "$out/accepted-source.check.json"
+                grep -q '"ok": true' "$out/accepted-source.check.json"
+                ! policy-semantic-compiler check-accepted-policy-entry-source \
+                  --source "$out/accepted-source.json" \
+                  --expected-lock "sha256:wrong" \
+                  > "$out/accepted-source-wrong-lock.check.json"
+                grep -q 'policy-entry-lock-mismatch' "$out/accepted-source-wrong-lock.check.json"
+                policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-accepted-source" \
+                  --accepted-source "$out/accepted-source.json" \
+                  > "$out/projected-accepted-source.stdout.json"
+                grep -q '"accepted": true' "$out/projected-accepted-source.stdout.json"
+                grep -q '"fixtureOnly": false' "$out/projected-accepted-source/manifest.json"
+                grep -q 'POLICY_ENTRY_STATUS=accepted-source' "$out/projected-accepted-source/policy-entry.accepted.env"
+                ! grep -q 'POLICY_ENTRY_STATUS=fixture-accepted' "$out/projected-accepted-source/policy-entry.accepted.env"
+                ! grep -q 'POLICY_ENTRY_FIXTURE_ONLY=' "$out/projected-accepted-source/policy-entry.accepted.env"
+                policy-semantic-compiler check-projected-policy-entry \
+                  --dir "$out/projected-accepted-source" \
+                  --expect-accepted \
+                  > "$out/projected-accepted-source.check.json"
+                grep -q '"ok": true' "$out/projected-accepted-source.check.json"
+                cat > "$out/accepted-source-invalid.json" <<EOF
+{"kind":"policy.projectedPolicyEntryAcceptedSource.v1","accepted":true,"policyEntryLock":"$LOCK","sourceAuthority":{"repo":"adrs","path":"records/policy/policy.projectedPolicyEntryAcceptedSource.v1.jsonl","commit":"fixture","id":"source-authority-fixture","status":"accepted"},"semanticEquivalenceProofRef":{"repo":"adrs","path":"records/policy/policy.semanticEquivalenceProof.v1.jsonl","commit":"fixture","id":"semantic-equivalence-fixture","status":"accepted"},"consumerZeroProofRef":{"repo":"adrs","path":"records/policy/policy.consumerZeroProof.v1.jsonl","commit":"fixture","id":"consumer-zero-fixture","status":"accepted"},"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+                ! policy-semantic-compiler project-policy-entry \
+                  --out-dir "$out/projected-accepted-source-invalid" \
+                  --accepted-source "$out/accepted-source-invalid.json" \
+                  > "$out/projected-accepted-source-invalid.stdout.json" \
+                  2> "$out/projected-accepted-source-invalid.stderr.json"
+                grep -q 'missing-required-field' "$out/projected-accepted-source-invalid.stderr.json"
+                touch "$out/ok"
+              '';
           ops-runbook-checks =
             pkgs.runCommand "ops-runbook-checks-check"
               {

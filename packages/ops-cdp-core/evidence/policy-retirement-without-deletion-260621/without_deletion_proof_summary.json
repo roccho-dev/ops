@@ -1,0 +1,41 @@
+{
+  "activeRuntimeReferenceCount": 0,
+  "allLegacyObligationsProjected": true,
+  "consumerProofsPass": true,
+  "cutoverReady": false,
+  "deletionApprovalGate": {
+    "details": {
+      "policyDeletionApproved": false,
+      "reason": "owner deletion approval is not accepted in this review"
+    },
+    "gate_id": "deletion-approved",
+    "status": "blocked"
+  },
+  "legacyObligationCount": 1896,
+  "legacyObligationCounts": {
+    "candidate:allow": 49,
+    "candidate:deny": 78,
+    "candidate:require": 577,
+    "mandatory:allow": 3,
+    "mandatory:deny": 109,
+    "mandatory:require": 369,
+    "review:allow": 7,
+    "review:deny": 8,
+    "review:require": 696
+  },
+  "legacyObligationProjectionCheckCount": 1896,
+  "legacyObligationProjectionFailures": [],
+  "nonDeletionGatesPass": true,
+  "policyAbsentConsumersPass": true,
+  "policyDeletionApproved": false,
+  "policyInputRef": "334997669f1889a8e2658730c616d2d4510d4536",
+  "projectedRuleCount": 1896,
+  "projectedRulesCoverLegacyObligations": true,
+  "projectionAcceptedSource": true,
+  "projectionCutoverReady": false,
+  "projectionFixtureOnly": false,
+  "projectionGeneratedIsAuthority": false,
+  "projectionPolicyDeletionApproved": false,
+  "type": "policy.retirement.withoutDeletionProofSummary.v1",
+  "uniqueProjectedRuleCount": 1896
+}

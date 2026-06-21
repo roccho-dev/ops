@@ -1,0 +1,1 @@
+{"id":"span:one","kind":"policy.sourceSpan.v1","sourceFileId":"file:one","sourceTrace":{"repo":"policy","rev":"rev-good","path":"POLICY.md","startLine":1,"endLine":1},"status":"candidate"}

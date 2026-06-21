@@ -1,0 +1,18 @@
+{
+  "activeRuntimeReferenceCount": 0,
+  "claim": "policy-deletion-readiness-reviewed",
+  "consumerProofCount": 1,
+  "consumerProofsPass": true,
+  "cutoverReady": false,
+  "kind": "policyDeletion.readinessReview.v1",
+  "ok": false,
+  "outputs": {
+    "absentSimulation": "absent-simulation.json",
+    "consumerProofResults": "consumer-proof-results.jsonl",
+    "consumerReferences": "consumer-references.jsonl",
+    "gates": "deletion-readiness-gates.jsonl"
+  },
+  "policyAbsentConsumersPass": true,
+  "policyDeletionApproved": false,
+  "referenceMode": "projected"
+}

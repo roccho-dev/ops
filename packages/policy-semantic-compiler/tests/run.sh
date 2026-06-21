@@ -1,0 +1,566 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pkg_root="$(cd "$(dirname "$0")/.." && pwd)"
+policy_root="${POLICY_SEMANTIC_POLICY_ROOT:-/home/nixos/repos/policy}"
+work="${1:-$(mktemp -d)}"
+
+mkdir -p "$work/run-a" "$work/run-b" "$work/python-only"
+mkdir -p "$work/projected-real" "$work/projected-fixture"
+mkdir -p "$work/semantic-review-blocked" "$work/semantic-review-disposition" "$work/semantic-review-accepted"
+mkdir -p "$work/adrs-projection-accepted" "$work/adrs-projection-missing-proof" "$work/adrs-projection-fake-proof"
+mkdir -p "$work/adrs-projection-stale-ref" "$work/adrs-projection-candidate-disposition"
+mkdir -p "$work/adrs-projection-fixture-only"
+mkdir -p "$work/source-span-review-batches"
+mkdir -p "$work/source-span-review-assignments"
+mkdir -p "$work/source-span-review-packets"
+mkdir -p "$work/source-span-review-work-orders"
+mkdir -p "$work/source-span-review-result-templates"
+mkdir -p "$work/source-span-review-completion-blocked" "$work/source-span-review-completion-accepted"
+mkdir -p "$work/source-span-dispositions-blocked" "$work/source-span-dispositions-accepted"
+mkdir -p "$work/accepted-coverage-proof-blocked" "$work/accepted-coverage-proof-fake-authority" "$work/accepted-coverage-proof-invalid-reference" "$work/accepted-coverage-proof-stale-span" "$work/accepted-coverage-proof-fixture-only-covering" "$work/accepted-coverage-proof-fixture-only-accepted" "$work/accepted-coverage-proof-accepted"
+
+policy-semantic-compiler check-fixtures \
+  --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" > "$work/fixtures.json"
+grep -q '"ok": true' "$work/fixtures.json"
+
+policy-semantic-compiler check-counterexamples \
+  --fixtures "$pkg_root/tests/edge-counterexamples.jsonl" \
+  --datasets "$pkg_root/tests/counterexample-datasets.jsonl" > "$work/counterexamples.json"
+grep -q '"ok": true' "$work/counterexamples.json"
+
+policy-semantic-compiler check-fresh-agent-cases \
+  --fixtures "$pkg_root/tests/fresh-agent-cases.jsonl" > "$work/fresh-agent-cases.json"
+grep -q '"ok": true' "$work/fresh-agent-cases.json"
+
+python3 "$pkg_root/tests/typed-json-fixture.py" "$work" > "$work/typed-json-fixture.json"
+grep -q '"ok": true' "$work/typed-json-fixture.json"
+
+policy-semantic-compiler extract-typed-json   --policy-root "$policy_root"   --out-dir "$work/typed-json-current" > "$work/typed-json-current.stdout.json"
+grep -q '"ok": true' "$work/typed-json-current.stdout.json"
+grep -q '"cutoverReady": false' "$work/typed-json-current.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/typed-json-current.stdout.json"
+grep -q '"gate_id":"role-index-sha256-lock-verified","status":"pass"' "$work/typed-json-current/typed-gates.jsonl"
+grep -q '"gate_id":"protocol-command-completeness","status":"pass"' "$work/typed-json-current/typed-gates.jsonl"
+
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --repo-root /home/nixos/repos/bootstrap \
+  --repo-root /home/nixos/repos/ops/.worktrees/policy-git-boundary-deletion-gates-260619 \
+  --repo-root /home/nixos/repos/adrs \
+  --out-dir "$work/deletion-readiness" > "$work/deletion-readiness.stdout.json"; then
+  echo "deletion readiness unexpectedly passed while policy.git consumers remain" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/deletion-readiness.stdout.json"
+grep -q '"cutoverReady": false' "$work/deletion-readiness.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/deletion-readiness.stdout.json"
+grep -q '"gate_id":"scan-roots-present","status":"pass"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"active-policy-consumers-zero","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"policy-absent-consumers-pass","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"deletion-approved","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"consumerPassedWithoutPolicyGit": false' "$work/deletion-readiness/absent-simulation.json"
+
+grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$work/deletion-readiness/deletion-readiness-gates.jsonl"
+grep -q '"consumerProofsPass": false' "$work/deletion-readiness.stdout.json"
+
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --repo-root /home/nixos/repos/bootstrap \
+  --consumer-proof-command 'printf consumer-proof-pass' \
+  --out-dir "$work/deletion-readiness-consumer-proof-pass" > "$work/deletion-readiness-consumer-proof-pass.stdout.json"; then
+  echo "deletion readiness unexpectedly passed with only consumer proof command" >&2
+  exit 1
+fi
+grep -q '"consumerProofsPass": true' "$work/deletion-readiness-consumer-proof-pass.stdout.json"
+grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"pass"' "$work/deletion-readiness-consumer-proof-pass/deletion-readiness-gates.jsonl"
+grep -q '"status":"pass"' "$work/deletion-readiness-consumer-proof-pass/consumer-proof-results.jsonl"
+grep -q '"cutoverReady": false' "$work/deletion-readiness-consumer-proof-pass.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/deletion-readiness-consumer-proof-pass.stdout.json"
+
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --repo-root /home/nixos/repos/bootstrap \
+  --consumer-proof-command 'printf consumer-proof-fail >&2; exit 7' \
+  --out-dir "$work/deletion-readiness-consumer-proof-fail" > "$work/deletion-readiness-consumer-proof-fail.stdout.json"; then
+  echo "deletion readiness unexpectedly passed with failing consumer proof command" >&2
+  exit 1
+fi
+grep -q '"consumerProofsPass": false' "$work/deletion-readiness-consumer-proof-fail.stdout.json"
+grep -q '"gate_id":"explicit-consumer-proofs-pass","status":"blocked"' "$work/deletion-readiness-consumer-proof-fail/deletion-readiness-gates.jsonl"
+grep -q '"exitCode":7' "$work/deletion-readiness-consumer-proof-fail/consumer-proof-results.jsonl"
+
+if policy-semantic-compiler review-deletion-readiness \
+  --policy-root "$policy_root" \
+  --reference-mode projected \
+  --repo-root /home/nixos/repos/bootstrap \
+  --policy-absent-proof-command 'printf absent-proof-pass' \
+  --consumer-proof-command 'printf consumer-proof-pass' \
+  --out-dir "$work/deletion-readiness-projected-mode" > "$work/deletion-readiness-projected-mode.stdout.json"; then
+  echo "deletion readiness unexpectedly passed in projected mode without owner approval" >&2
+  exit 1
+fi
+grep -q '"referenceMode": "projected"' "$work/deletion-readiness-projected-mode.stdout.json"
+grep -q '"activeRuntimeReferenceCount": 0' "$work/deletion-readiness-projected-mode.stdout.json"
+grep -q '"policyAbsentConsumersPass": true' "$work/deletion-readiness-projected-mode.stdout.json"
+grep -q '"gate_id":"active-policy-consumers-zero","status":"pass"' "$work/deletion-readiness-projected-mode/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"policy-absent-consumers-pass","status":"pass"' "$work/deletion-readiness-projected-mode/deletion-readiness-gates.jsonl"
+grep -q '"gate_id":"deletion-approved","status":"blocked"' "$work/deletion-readiness-projected-mode/deletion-readiness-gates.jsonl"
+grep -q '"referenceClass":"legacy-policy-git-mode-reference"' "$work/deletion-readiness-projected-mode/consumer-references.jsonl"
+
+if policy-semantic-compiler review-semantic-coverage \
+  --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
+  --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \
+  --semantic-nodes "$pkg_root/tests/semantic-coverage/semantic-nodes.jsonl" \
+  --semantic-edges "$pkg_root/tests/semantic-coverage/semantic-edges.jsonl" \
+  --out-dir "$work/semantic-review-blocked" > "$work/semantic-review-blocked.stdout.json"; then
+  echo "semantic coverage review unexpectedly passed without approvals" >&2
+  exit 1
+fi
+grep -q '"acceptedSemanticApprovalCount": 0' "$work/semantic-review-blocked.stdout.json"
+grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-blocked.stdout.json"
+grep -q '"equivalenceProofPresent": false' "$work/semantic-review-blocked.stdout.json"
+grep -q '"cutoverReady": false' "$work/semantic-review-blocked.stdout.json"
+grep -q '"reviewPacketCount": 2' "$work/semantic-review-blocked.stdout.json"
+
+if policy-semantic-compiler review-semantic-coverage \
+  --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
+  --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \
+  --source-file-dispositions "$pkg_root/tests/semantic-coverage/source-file-dispositions.jsonl" \
+  --semantic-nodes "$pkg_root/tests/semantic-coverage/semantic-nodes.jsonl" \
+  --semantic-edges "$pkg_root/tests/semantic-coverage/semantic-edges.jsonl" \
+  --out-dir "$work/semantic-review-disposition" > "$work/semantic-review-disposition.stdout.json"; then
+  echo "semantic coverage review unexpectedly passed with disposition but without equivalence proof" >&2
+  exit 1
+fi
+grep -q '"acceptedSemanticApprovalCount": 0' "$work/semantic-review-disposition.stdout.json"
+grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-disposition.stdout.json"
+grep -q '"reviewRequiredSourceSpanCount": 0' "$work/semantic-review-disposition.stdout.json"
+grep -q '"fileClassNonNormativeSourceSpanCount": 2' "$work/semantic-review-disposition.stdout.json"
+grep -q '"candidateSourceFileDispositionRows": 1' "$work/semantic-review-disposition.stdout.json"
+grep -q '"source file dispositions are not accepted authority"' "$work/semantic-review-disposition.stdout.json"
+grep -q '"equivalenceProofPresent": false' "$work/semantic-review-disposition.stdout.json"
+grep -q '"cutoverReady": false' "$work/semantic-review-disposition.stdout.json"
+grep -q '"reviewRequiredSpanCount":0' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl"
+test "$(grep -c '"fileClassNonNormativeSpanCount":1' "$work/semantic-review-disposition/semantic-coverage-review-packets.jsonl")" -eq 2
+
+policy-semantic-compiler review-semantic-coverage \
+  --source-files "$pkg_root/tests/semantic-coverage/source-files.jsonl" \
+  --source-spans "$pkg_root/tests/semantic-coverage/source-spans.jsonl" \
+  --semantic-nodes "$pkg_root/tests/semantic-coverage/semantic-nodes.jsonl" \
+  --semantic-edges "$pkg_root/tests/semantic-coverage/semantic-edges.jsonl" \
+  --approvals "$pkg_root/tests/semantic-coverage/approvals.jsonl" \
+  --equivalence-proofs "$pkg_root/tests/semantic-coverage/equivalence-proofs.jsonl" \
+  --out-dir "$work/semantic-review-accepted" > "$work/semantic-review-accepted.stdout.json"
+grep -q '"acceptedSemanticApprovalCount": 2' "$work/semantic-review-accepted.stdout.json"
+grep -q '"totalSourceSpanCount": 2' "$work/semantic-review-accepted.stdout.json"
+grep -q '"equivalenceProofPresent": true' "$work/semantic-review-accepted.stdout.json"
+grep -q '"cutoverReady": true' "$work/semantic-review-accepted.stdout.json"
+
+policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/accepted" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-accepted" > "$work/adrs-projection-accepted.stdout.json"
+grep -q '"ok": true' "$work/adrs-projection-accepted.stdout.json"
+grep -q '"semanticCoverageReady": true' "$work/adrs-projection-accepted.stdout.json"
+grep -q '"cutoverReady": false' "$work/adrs-projection-accepted.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/adrs-projection-accepted.stdout.json"
+grep '"gate_id":"accepted-span-disposition-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"fresh-genx-evidence-accepted"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"fixture-only-proof-rejected"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"generated-rows-not-authority"' "$work/adrs-projection-accepted/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+test -f "$work/adrs-projection-accepted/missing-accepted-span-dispositions.jsonl"
+test -f "$work/adrs-projection-accepted/missing-accepted-coverage.jsonl"
+test -f "$work/adrs-projection-accepted/candidate-only-span-dispositions.jsonl"
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/missing-proof" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-missing-proof" > "$work/adrs-projection-missing-proof.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed without accepted proof" >&2
+  exit 1
+fi
+grep '"gate_id":"accepted-coverage-proof-present"' "$work/adrs-projection-missing-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"accepted-coverage-missing"' "$work/adrs-projection-missing-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fake-proof" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-fake-proof" > "$work/adrs-projection-fake-proof.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with fake generated authority proof" >&2
+  exit 1
+fi
+grep '"gate_id":"generated-rows-not-authority"' "$work/adrs-projection-fake-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"generated-rows-not-authority"' "$work/adrs-projection-fake-proof/adrs-projection-duckdb-gates.jsonl" | grep -q '"count":2'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/stale-ref" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-stale-ref" > "$work/adrs-projection-stale-ref.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with stale policy ref" >&2
+  exit 1
+fi
+grep '"gate_id":"policy-ref-current"' "$work/adrs-projection-stale-ref/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-candidate-disposition" > "$work/adrs-projection-candidate-disposition.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with candidate-only disposition" >&2
+  exit 1
+fi
+grep '"gate_id":"candidate-only-disposition"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"candidate-only-span-disposition"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"accepted-span-disposition-missing"' "$work/adrs-projection-candidate-disposition/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep -q '"kind":"policySemantic.candidateOnlySpanDisposition.v1"' "$work/adrs-projection-candidate-disposition/candidate-only-span-dispositions.jsonl"
+grep -q '"kind":"policySemantic.missingAcceptedSpanDisposition.v1"' "$work/adrs-projection-candidate-disposition/missing-accepted-span-dispositions.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-batches \
+  --missing-span-dispositions "$work/adrs-projection-candidate-disposition/missing-accepted-span-dispositions.jsonl" \
+  --policy-rev rev-good \
+  --batch-size 1 \
+  --out-dir "$work/source-span-review-batches" > "$work/source-span-review-batches.stdout.json"
+grep -q '"batchCount": 1' "$work/source-span-review-batches.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewBatch.v1"' "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl"
+grep -q '"accepted":false' "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl"
+grep -q '"kind":"policy.sourceSpanDispositionReviewBatch.v1"' "$work/source-span-review-batches/policy.sourceSpanDispositionReviewBatch.v1.jsonl"
+
+policy-semantic-compiler assign-source-span-review-batches \
+  --batches "$work/source-span-review-batches/source-span-disposition-review-batches.jsonl" \
+  --reviewers reviewer-a,reviewer-b \
+  --out-dir "$work/source-span-review-assignments" > "$work/source-span-review-assignments.stdout.json"
+grep -q '"assignmentCount": 2' "$work/source-span-review-assignments.stdout.json"
+grep -q '"directCrossDiscussionRequiredCount": 1' "$work/source-span-review-assignments.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl"
+grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl"
+grep -q '"kind":"policy.sourceSpanDispositionReviewAssignment.v1"' "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssignment.v1.jsonl"
+grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1"' "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-packets \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/policy.sourceSpan.v1.jsonl" \
+  --batches "$work/source-span-review-batches/policy.sourceSpanDispositionReviewBatch.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-packets" > "$work/source-span-review-packets.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-packets.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewPacket.v1"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+grep -q '"status":"review-required"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+grep -q '"accepted":false' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+grep -q '"excerpt"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-work-orders \
+  --assignments "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssignment.v1.jsonl" \
+  --review-packets "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-work-orders" > "$work/source-span-review-work-orders.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-work-orders.stdout.json"
+grep -q '"workOrderCount": 2' "$work/source-span-review-work-orders.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewerWorkOrder.v1"' "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl"
+grep -q '"accepted":false' "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl"
+
+policy-semantic-compiler materialize-source-span-review-result-templates \
+  --work-orders "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-result-templates" > "$work/source-span-review-result-templates.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-result-templates.stdout.json"
+grep -q '"templateCount": 2' "$work/source-span-review-result-templates.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionReviewResultTemplate.v1"' "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl"
+grep -q '"packetRead":false' "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl"
+
+policy-semantic-compiler materialize-source-span-direct-cross-discussion-templates \
+  --required-discussions "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl" \
+  --review-result-templates "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-direct-cross-discussion-templates" > "$work/source-span-direct-cross-discussion-templates.stdout.json"
+grep -q '"ok": true' "$work/source-span-direct-cross-discussion-templates.stdout.json"
+grep -q '"templateCount": 1' "$work/source-span-direct-cross-discussion-templates.stdout.json"
+grep -q '"kind":"policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1"' "$work/source-span-direct-cross-discussion-templates/policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl"
+grep -q '"accepted":false' "$work/source-span-direct-cross-discussion-templates/policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl"
+grep -q '"noRemainingObjections":false' "$work/source-span-direct-cross-discussion-templates/policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl"
+
+mkdir -p "$work/adrs-projection-review-provider-records" "$work/adrs-projection-review-provider-gated"
+cp "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/"*.jsonl "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-batches/policy.sourceSpanDispositionReviewBatch.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-assignments/policy.sourceSpanDispositionReviewAssignment.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-assignments/policy.sourceSpanDispositionDirectCrossDiscussionRequired.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-work-orders/policy.sourceSpanDispositionReviewerWorkOrder.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-review-result-templates/policy.sourceSpanDispositionReviewResultTemplate.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+cp "$work/source-span-direct-cross-discussion-templates/policy.sourceSpanDispositionDirectCrossDiscussionTemplate.v1.jsonl" "$work/adrs-projection-review-provider-records/"
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$work/adrs-projection-review-provider-records" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-review-provider-gated" > "$work/adrs-projection-review-provider-gated.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed without accepted review results" >&2
+  exit 1
+fi
+grep '"gate_id":"review-batches-cover-missing-accepted-spans"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-batches-have-two-reviewer-assignments"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-batches-have-review-packets"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-packets-match-batch-spans"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-packets-have-projection-fields"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-assignments-have-work-orders"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-work-orders-match-assignments-and-packets"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-work-orders-have-result-templates"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-result-templates-match-work-orders"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-batches-have-direct-cross-discussion-required"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-batches-have-direct-cross-discussion-templates"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"direct-cross-discussion-templates-match-required-discussions"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"pass"'
+grep '"gate_id":"review-assignments-have-accepted-results"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"review-assignments-have-accepted-results"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"count":2'
+grep '"gate_id":"review-batches-have-accepted-direct-cross-discussions"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"review-batches-have-accepted-direct-cross-discussions"' "$work/adrs-projection-review-provider-gated/adrs-projection-duckdb-gates.jsonl" | grep -q '"count":1'
+
+if policy-semantic-compiler check-source-span-review-completion \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-packets "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-completion-blocked" > "$work/source-span-review-completion-blocked.stdout.json"; then
+  echo "source span review completion unexpectedly passed without results" >&2
+  exit 1
+fi
+grep -q '"missingAssignmentCount": 2' "$work/source-span-review-completion-blocked.stdout.json"
+grep -q '"missingDirectCrossDiscussionCount": 1' "$work/source-span-review-completion-blocked.stdout.json"
+batch_id="$(grep -m1 -o '"batchId":"[^"]*"' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" | cut -d'"' -f4)"
+packet_id="$(grep -m1 -o '"id":"[^"]*"' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" | cut -d'"' -f4)"
+source_span_ids="$(grep -m1 -o '"sourceSpanIds":\[[^]]*\]' "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl")"
+cat > "$work/source-span-review-results.jsonl" <<EOF
+{"id":"review-result-a","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-a","policyRev":"rev-good","packetId":"$packet_id","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer accepted projection-only packet coverage","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+{"id":"review-result-b","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-b","policyRev":"rev-good","packetId":"$packet_id","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer accepted projection-only packet coverage","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+cat > "$work/source-span-discussion-results.jsonl" <<EOF
+{"id":"direct-cross-discussion-accepted","kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$batch_id","policyRev":"rev-good","reviewResultIds":["review-result-a","review-result-b"],"peerRepliesReadByReviewerIds":["reviewer-a","reviewer-b"],"rationale":"fixture reviewers read peer replies and have no remaining objections","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+cp "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" "$work/source-span-review-packets-with-invalid-extra.jsonl"
+sed 's/"id":"[^"]*"/"id":"invalid-stale-packet"/; s/"policyRev":"rev-good"/"policyRev":"stale-rev"/' "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" >> "$work/source-span-review-packets-with-invalid-extra.jsonl"
+cat > "$work/source-span-review-results-invalid-packet.jsonl" <<EOF
+{"id":"review-result-a-invalid-packet","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-a","policyRev":"rev-good","packetId":"invalid-stale-packet","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer incorrectly referenced stale packet","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+{"id":"review-result-b-invalid-packet","kind":"policy.sourceSpanDispositionReviewResult.v1","batchId":"$batch_id","reviewerId":"reviewer-b","policyRev":"rev-good","packetId":"invalid-stale-packet","packetRead":true,$source_span_ids,"disposition":"represented","rationale":"fixture reviewer incorrectly referenced stale packet","noRemainingObjections":true,"accepted":true,"status":"accepted","fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+cat > "$work/source-span-discussion-results-invalid-packet.jsonl" <<EOF
+{"id":"direct-cross-discussion-invalid-packet","kind":"policy.sourceSpanDispositionDirectCrossDiscussion.v1","batchId":"$batch_id","policyRev":"rev-good","reviewResultIds":["review-result-a-invalid-packet","review-result-b-invalid-packet"],"peerRepliesReadByReviewerIds":["reviewer-a","reviewer-b"],"rationale":"fixture reviewers read peer replies but source review results used invalid packet ids","accepted":true,"status":"accepted","sameRevision":true,"peerRepliesRead":true,"noRemainingObjections":true,"fixtureOnly":false,"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+if policy-semantic-compiler check-source-span-review-completion \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-packets "$work/source-span-review-packets-with-invalid-extra.jsonl" \
+  --review-results "$work/source-span-review-results-invalid-packet.jsonl" \
+  --discussion-results "$work/source-span-discussion-results-invalid-packet.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-completion-invalid-packet" > "$work/source-span-review-completion-invalid-packet.stdout.json"; then
+  echo "source span review completion unexpectedly accepted invalid packet id" >&2
+  exit 1
+fi
+grep '"gate_id":"source-span-review-results-match-packets"' "$work/source-span-review-completion-invalid-packet/source-span-review-completion-gates.jsonl" | grep -q '"status":"blocked"'
+policy-semantic-compiler check-source-span-review-completion \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-packets "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" \
+  --review-results "$work/source-span-review-results.jsonl" \
+  --discussion-results "$work/source-span-discussion-results.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-review-completion-accepted" > "$work/source-span-review-completion-accepted.stdout.json"
+grep -q '"ok": true' "$work/source-span-review-completion-accepted.stdout.json"
+
+if policy-semantic-compiler materialize-accepted-source-span-dispositions \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-packets "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" \
+  --review-results "$work/source-span-review-results.jsonl" \
+  --discussion-results "$work/source-span-discussion-results.jsonl" \
+  --policy-rev wrong-rev \
+  --out-dir "$work/source-span-dispositions-blocked" > "$work/source-span-dispositions-blocked.stdout.json"; then
+  echo "source span disposition materialization unexpectedly passed for wrong policy rev" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/source-span-dispositions-blocked.stdout.json"
+policy-semantic-compiler materialize-accepted-source-span-dispositions \
+  --assignments "$work/source-span-review-assignments/source-span-disposition-review-assignments.jsonl" \
+  --required-discussions "$work/source-span-review-assignments/source-span-disposition-direct-cross-discussion-required.jsonl" \
+  --review-packets "$work/source-span-review-packets/policy.sourceSpanDispositionReviewPacket.v1.jsonl" \
+  --review-results "$work/source-span-review-results.jsonl" \
+  --discussion-results "$work/source-span-discussion-results.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/source-span-dispositions-accepted" > "$work/source-span-dispositions-accepted.stdout.json"
+grep -q '"ok": true' "$work/source-span-dispositions-accepted.stdout.json"
+grep -q '"kind":"policy.sourceSpanDisposition.v1"' "$work/source-span-dispositions-accepted/policy.sourceSpanDisposition.v1.jsonl"
+grep -q '"accepted":true' "$work/source-span-dispositions-accepted/policy.sourceSpanDisposition.v1.jsonl"
+
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/candidate-disposition/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-blocked" > "$work/accepted-coverage-proof-blocked.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with candidate span disposition" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-blocked.stdout.json"
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/fake-proof/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-fake-authority" > "$work/accepted-coverage-proof-fake-authority.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with generated-authority span disposition" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-fake-authority.stdout.json"
+grep '"gate_id":"span-dispositions-not-generated-authority"' "$work/accepted-coverage-proof-fake-authority/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/invalid-span-reference/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-invalid-reference" > "$work/accepted-coverage-proof-invalid-reference.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with invalid source span reference" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-invalid-reference.stdout.json"
+grep '"gate_id":"accepted-span-dispositions-reference-source-spans"' "$work/accepted-coverage-proof-invalid-reference/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/stale-span-materializer/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/stale-span-materializer/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-stale-span" > "$work/accepted-coverage-proof-stale-span.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with stale source span" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-stale-span.stdout.json"
+grep '"gate_id":"source-spans-policy-rev-current"' "$work/accepted-coverage-proof-stale-span/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/fixture-only-covering-disposition/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-fixture-only-covering" > "$work/accepted-coverage-proof-fixture-only-covering.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with fixture-only covering disposition" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-fixture-only-covering.stdout.json"
+grep '"gate_id":"no-candidate-span-dispositions-for-covered-spans"' "$work/accepted-coverage-proof-fixture-only-covering/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
+if policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/fixture-only-accepted-covering-disposition/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-fixture-only-accepted" > "$work/accepted-coverage-proof-fixture-only-accepted.stdout.json"; then
+  echo "accepted coverage proof unexpectedly materialized with fixture-only accepted disposition" >&2
+  exit 1
+fi
+grep -q '"ok": false' "$work/accepted-coverage-proof-fixture-only-accepted.stdout.json"
+grep '"gate_id":"no-candidate-span-dispositions-for-covered-spans"' "$work/accepted-coverage-proof-fixture-only-accepted/accepted-coverage-materialization-gates.jsonl" | grep -q '"status":"blocked"'
+policy-semantic-compiler materialize-accepted-coverage-proof \
+  --source-spans "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpan.v1.jsonl" \
+  --source-span-dispositions "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.sourceSpanDisposition.v1.jsonl" \
+  --fresh-genx-reviews "$pkg_root/tests/adrs-projection-duckdb/accepted/policy.freshGenXReconstructionReview.v1.jsonl" \
+  --policy-rev rev-good \
+  --out-dir "$work/accepted-coverage-proof-accepted" > "$work/accepted-coverage-proof-accepted.stdout.json"
+grep -q '"ok": true' "$work/accepted-coverage-proof-accepted.stdout.json"
+grep -q '"kind":"policy.acceptedCoverageProof.v1"' "$work/accepted-coverage-proof-accepted/policy.acceptedCoverageProof.v1.jsonl"
+grep -q '"accepted":true' "$work/accepted-coverage-proof-accepted/policy.acceptedCoverageProof.v1.jsonl"
+
+if policy-semantic-compiler review-adrs-projection-duckdb \
+  --adrs-records-dir "$pkg_root/tests/adrs-projection-duckdb/fixture-only" \
+  --policy-rev rev-good \
+  --out-dir "$work/adrs-projection-fixture-only" > "$work/adrs-projection-fixture-only.stdout.json"; then
+  echo "ADRS projection review unexpectedly passed with fixture-only proof" >&2
+  exit 1
+fi
+grep '"gate_id":"fresh-genx-evidence-accepted"' "$work/adrs-projection-fixture-only/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+grep '"gate_id":"fixture-only-proof-rejected"' "$work/adrs-projection-fixture-only/adrs-projection-duckdb-gates.jsonl" | grep -q '"status":"blocked"'
+
+policy-semantic-compiler compile \
+  --policy-root "$policy_root" \
+  --out-dir "$work/run-a" > "$work/run-a.stdout.json"
+
+policy-semantic-compiler compile \
+  --policy-root "$policy_root" \
+  --out-dir "$work/run-b" > "$work/run-b.stdout.json"
+
+rm -f "$work/run-a/semantic.duckdb" "$work/run-a/duckdb-runner.sql"
+rm -f "$work/run-b/semantic.duckdb" "$work/run-b/duckdb-runner.sql"
+diff -ru "$work/run-a" "$work/run-b" > "$work/reproducible.diff"
+
+if policy-semantic-compiler compile \
+  --policy-root "$policy_root" \
+  --out-dir "$work/python-only" \
+  --python-only > "$work/python-only.stdout.json"; then
+  echo "python-only compiler unexpectedly passed" >&2
+  exit 1
+fi
+grep -q 'DuckDB gate not executed' "$work/python-only.stdout.json"
+
+grep -q '"gate_id":"duckdb-executed","status":"pass"' "$work/run-a/duckdb-gates.jsonl"
+grep -q '"gate_id":"semantic-cutover-blocked","status":"blocked"' "$work/run-a/duckdb-gates.jsonl"
+grep -q '"candidateArtifactValid": true' "$work/run-a.stdout.json"
+grep -q '"cutoverReady": false' "$work/run-a.stdout.json"
+grep -q '"policyDeletionApproved": false' "$work/run-a.stdout.json"
+grep -q '"cutoverReady": false' "$work/run-a/manifest.json"
+grep -q '"policyDeletionApproved": false' "$work/run-a/manifest.json"
+
+policy-semantic-compiler project-policy-entry \
+  --native-rows "$work/run-a/native_rows.jsonl" \
+  --out-dir "$work/projected-real" > "$work/projected-real.stdout.json"
+grep -q '"accepted": false' "$work/projected-real.stdout.json"
+grep -q 'POLICY_ENTRY_ACCEPTED=false' "$work/projected-real/policy-entry.accepted.env"
+policy-semantic-compiler check-projected-policy-entry \
+  --dir "$work/projected-real" > "$work/projected-real.check.json"
+grep -q '"ok": true' "$work/projected-real.check.json"
+
+policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-fixture" \
+  --fixture-accepted \
+  --fixture-reason "bootstrap projected-mode contract test" > "$work/projected-fixture.stdout.json"
+grep -q '"accepted": true' "$work/projected-fixture.stdout.json"
+grep -q 'POLICY_ENTRY_ACCEPTED=true' "$work/projected-fixture/policy-entry.accepted.env"
+policy-semantic-compiler check-projected-policy-entry \
+  --dir "$work/projected-fixture" \
+  --expect-accepted > "$work/projected-fixture.check.json"
+grep -q '"ok": true' "$work/projected-fixture.check.json"
+
+mkdir -p "$work/projected-accepted-source" "$work/projected-accepted-source-invalid"
+policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-accepted-source-base" > "$work/projected-accepted-source-base.stdout.json"
+LOCK="$(grep '^POLICY_ENTRY_LOCK=' "$work/projected-accepted-source-base/policy-entry.accepted.env" | cut -d= -f2-)"
+cat > "$work/accepted-source.json" <<EOF
+{"kind":"policy.projectedPolicyEntryAcceptedSource.v1","accepted":true,"policyEntryLock":"$LOCK","sourceAuthority":{"repo":"adrs","path":"records/policy/policy.projectedPolicyEntryAcceptedSource.v1.jsonl","commit":"fixture","id":"source-authority-fixture","status":"accepted"},"ownerApprovalRef":{"repo":"adrs","path":"records/policy/policy.ownerApproval.v1.jsonl","commit":"fixture","id":"owner-approval-fixture","status":"accepted"},"semanticEquivalenceProofRef":{"repo":"adrs","path":"records/policy/policy.semanticEquivalenceProof.v1.jsonl","commit":"fixture","id":"semantic-equivalence-fixture","status":"accepted"},"consumerZeroProofRef":{"repo":"adrs","path":"records/policy/policy.consumerZeroProof.v1.jsonl","commit":"fixture","id":"consumer-zero-fixture","status":"accepted"},"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+policy-semantic-compiler check-accepted-policy-entry-source \
+  --source "$work/accepted-source.json" \
+  --expected-lock "$LOCK" > "$work/accepted-source.check.json"
+grep -q '"ok": true' "$work/accepted-source.check.json"
+if policy-semantic-compiler check-accepted-policy-entry-source \
+  --source "$work/accepted-source.json" \
+  --expected-lock "sha256:wrong" > "$work/accepted-source-wrong-lock.check.json"; then
+  echo "accepted source wrong lock unexpectedly passed" >&2
+  exit 1
+fi
+grep -q 'policy-entry-lock-mismatch' "$work/accepted-source-wrong-lock.check.json"
+policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-accepted-source" \
+  --accepted-source "$work/accepted-source.json" > "$work/projected-accepted-source.stdout.json"
+grep -q '"accepted": true' "$work/projected-accepted-source.stdout.json"
+grep -q '"fixtureOnly": false' "$work/projected-accepted-source/manifest.json"
+grep -q 'POLICY_ENTRY_STATUS=accepted-source' "$work/projected-accepted-source/policy-entry.accepted.env"
+! grep -q 'POLICY_ENTRY_STATUS=fixture-accepted' "$work/projected-accepted-source/policy-entry.accepted.env"
+! grep -q 'POLICY_ENTRY_FIXTURE_ONLY=' "$work/projected-accepted-source/policy-entry.accepted.env"
+policy-semantic-compiler check-projected-policy-entry \
+  --dir "$work/projected-accepted-source" \
+  --expect-accepted > "$work/projected-accepted-source.check.json"
+grep -q '"ok": true' "$work/projected-accepted-source.check.json"
+cat > "$work/accepted-source-invalid.json" <<EOF
+{"kind":"policy.projectedPolicyEntryAcceptedSource.v1","accepted":true,"policyEntryLock":"$LOCK","sourceAuthority":{"repo":"adrs","path":"records/policy/policy.projectedPolicyEntryAcceptedSource.v1.jsonl","commit":"fixture","id":"source-authority-fixture","status":"accepted"},"semanticEquivalenceProofRef":{"repo":"adrs","path":"records/policy/policy.semanticEquivalenceProof.v1.jsonl","commit":"fixture","id":"semantic-equivalence-fixture","status":"accepted"},"consumerZeroProofRef":{"repo":"adrs","path":"records/policy/policy.consumerZeroProof.v1.jsonl","commit":"fixture","id":"consumer-zero-fixture","status":"accepted"},"generatedIsAuthority":false,"policyDeletionApproved":false}
+EOF
+if policy-semantic-compiler project-policy-entry \
+  --out-dir "$work/projected-accepted-source-invalid" \
+  --accepted-source "$work/accepted-source-invalid.json" > "$work/projected-accepted-source-invalid.stdout.json" 2> "$work/projected-accepted-source-invalid.stderr.json"; then
+  echo "accepted source without owner approval unexpectedly passed" >&2
+  exit 1
+fi
+grep -q 'missing-required-field' "$work/projected-accepted-source-invalid.stderr.json"
+
+printf '{"ok":true,"workDir":"%s"}\n' "$work"

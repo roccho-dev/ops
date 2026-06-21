@@ -1,0 +1,1 @@
+{"id":"genx:fixture","kind":"policy.freshGenXReconstructionReview.v1","status":"accepted","policyRev":"rev-good","memoryUsed":false,"policyBodyUsedAsSource":false,"fixtureOnly":true,"noRemainingObjections":true,"reviewerIds":["genx:A","genx:B"],"inputs":["adrs-projection","ops-duckdb-output"]}

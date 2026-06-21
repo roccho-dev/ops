@@ -1,0 +1,18 @@
+{
+  "claim": "semantic-authority-closure-ready-for-review",
+  "cutoverReady": false,
+  "kind": "policySemantic.compilerRun.v1",
+  "outputs": {
+    "duckdbGates": "duckdb-gates.jsonl",
+    "edges": "edges.jsonl",
+    "nativeRows": "native_rows.jsonl",
+    "signals": "signals.jsonl",
+    "sources": "sources.jsonl"
+  },
+  "policyDeletionApproved": false,
+  "source": {
+    "gitDirty": false,
+    "gitHead": "334997669f1889a8e2658730c616d2d4510d4536",
+    "path": "/tmp/policy-retirement-exec/policy"
+  }
+}
