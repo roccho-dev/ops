@@ -1,0 +1,10 @@
+{
+  "type": "ops.chatgptReviewerModeRouting.validationReport.v1",
+  "status": "PASS",
+  "operationIds": [
+    "op-gh-1"
+  ],
+  "operationCount": 1,
+  "failures": [],
+  "approvalGranted": false
+}

@@ -1,0 +1,15 @@
+{
+  "type": "ops.chatgptReviewerModeRouting.validationSummary.v1",
+  "status": "PASS",
+  "positivePasses": [
+    "PASS",
+    "PASS"
+  ],
+  "negativeStatus": "FAIL",
+  "negativeFailures": [
+    "mode-does-not-match-required:op-bad-1",
+    "prompt-actual-mode-mismatch:op-bad-1",
+    "missing-github-source-read:op-bad-1"
+  ],
+  "noApprovalGranted": true
+}

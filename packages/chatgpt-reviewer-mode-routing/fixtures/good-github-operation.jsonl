@@ -1,0 +1,7 @@
+{"type":"chatgpt.operation_classification.v1","operationId":"op-gh-1","class":"github_operation","reason":"reviewer must inspect GitHub refs branch files","mixedOperation":false}
+{"type":"chatgpt.ui_mode_readback.v1","operationId":"op-gh-1","rawLabel":"最高","canonicalMode":"extra_high","source":"dom","observedAt":"2026-06-21T00:00:00Z"}
+{"type":"chatgpt.github_source_read.v1","operationId":"op-gh-1","repo":"roccho-dev/refs","ref":"refs/heads/repos/ops/proposal/example","sourceUrl":"https://github.com/roccho-dev/refs/tree/repos/ops/proposal/example","readAt":"2026-06-21T00:00:01Z","contentDigest":"sha256:example"}
+{"type":"chatgpt.prompt_send.v1","operationId":"op-gh-1","promptDigest":"sha256:prompt-gh","requiredCanonicalMode":"extra_high","actualCanonicalMode":"extra_high","sentAt":"2026-06-21T00:00:02Z"}
+{"type":"chatgpt.prompt_reflection.v1","operationId":"op-gh-1","promptDigest":"sha256:prompt-gh","reflected":true,"readbackDigest":"sha256:readback-gh","observedAt":"2026-06-21T00:00:03Z"}
+{"type":"chatgpt.output_capture.v1","operationId":"op-gh-1","outputDigest":"sha256:output-gh","capturedAt":"2026-06-21T00:00:04Z","authority":false}
+{"type":"chatgpt.ssot_evidence_persist.v1","operationId":"op-gh-1","ssot":"ops/adrs","proposalEvidencePath":"records/evidence/example.jsonl","outputDigest":"sha256:output-gh","persistedAt":"2026-06-21T00:00:05Z"}

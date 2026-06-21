@@ -1,0 +1,6 @@
+{"type":"chatgpt.operation_classification.v1","operationId":"op-discuss-1","class":"non_github_review_operation","reason":"counterexample discussion from context without GitHub source inspection","mixedOperation":false}
+{"type":"chatgpt.ui_mode_readback.v1","operationId":"op-discuss-1","rawLabel":"pro拡張","canonicalMode":"pro_extended","source":"dom","observedAt":"2026-06-21T00:01:00Z"}
+{"type":"chatgpt.prompt_send.v1","operationId":"op-discuss-1","promptDigest":"sha256:prompt-discuss","requiredCanonicalMode":"pro_extended","actualCanonicalMode":"pro_extended","sentAt":"2026-06-21T00:01:01Z"}
+{"type":"chatgpt.prompt_reflection.v1","operationId":"op-discuss-1","promptDigest":"sha256:prompt-discuss","reflected":true,"readbackDigest":"sha256:readback-discuss","observedAt":"2026-06-21T00:01:02Z"}
+{"type":"chatgpt.output_capture.v1","operationId":"op-discuss-1","outputDigest":"sha256:output-discuss","capturedAt":"2026-06-21T00:01:03Z","authority":false}
+{"type":"chatgpt.ssot_evidence_persist.v1","operationId":"op-discuss-1","ssot":"adrs","proposalEvidencePath":"records/evidence/discussion.jsonl","outputDigest":"sha256:output-discuss","persistedAt":"2026-06-21T00:01:04Z"}
