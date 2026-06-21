@@ -22,6 +22,10 @@ exhaustive coverage-first replacement for every semantic candidate.
 - coverage-first unclassified candidates: `0`
 - coverage-first review-required candidates: `792`
 - coverage-first review batches: `118`
+- proposed review decisions: `792`
+- proposed accepted law/projection candidates: `752`
+- proposed rejected non-law candidates: `40`
+- proposed manual review leftovers: `0`
 
 ## Key files
 
@@ -43,7 +47,13 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `legacy_policy_unified_obligation_table.md` | Human-readable combined table for audit review |
 | `coverage_first_review_batches.jsonl` | 118 source-path batches for reviewing the 792 accepted-law candidates |
 | `coverage_first_review_batches.md` | Human-readable review batch index |
+| `coverage_first_review_decision_summary.proposed.json` | Proposed accept/reject summary for the 792 review-required candidates |
+| `coverage_first_review_decisions.proposed.jsonl` | One proposed decision row for each review-required candidate |
+| `coverage_first_review_accepted_projection.proposed.jsonl` | Proposed accepted rows to project as law/policy/runtime |
+| `coverage_first_review_rejections.proposed.jsonl` | Proposed rejected rows such as iteration logs, package metadata, README docs, and local notes |
+| `coverage_first_review_manual_queue.jsonl` | Manual remainder queue; currently empty |
 | `gen2_coverage_first_reconciliation_verification.jsonl` | Fresh Codex as Gen2 verification of the reconciliation counts and claim boundary |
+| `gen2_coverage_first_review_decision_verification.jsonl` | Fresh Codex as Gen2 verification of proposed accept/reject decision evidence |
 
 ## Boundary
 
@@ -82,3 +92,13 @@ coverage-first gap. It is a bounded `792` row review queue, grouped into `118`
 source-path review batches. Each row must be accepted or rejected through
 decision JSONL, then replayed by refreshed Codex as Gen2 before claiming
 exhaustive legacy-policy law replacement.
+
+This proposal now materializes proposed decisions for that queue: `752`
+accepted projection candidates, `40` rejected non-law candidates, and `0`
+manual remainders. These proposed decisions are not canonical approval; they
+still require refreshed Gen2 verification and ADRS decision authority before
+they can be treated as accepted law.
+
+Fresh Codex as Gen2 verified the proposed decision evidence integrity, while
+explicitly rejecting any interpretation that it is canonical approval, deletion
+approval, or cutover approval.
