@@ -44,8 +44,8 @@
     },
     {
       "id": "projection-not-policy-git-hardcoded",
-      "status": "PASS",
-      "message": "projection is not policy.git hardcoding"
+      "status": "FAIL",
+      "message": "projection must not hardcode policy.git law"
     },
     {
       "id": "chatgpt-github-mode",
@@ -84,8 +84,8 @@
     },
     {
       "id": "no-approval-granted",
-      "status": "FAIL",
-      "message": "approval flags must remain false"
+      "status": "PASS",
+      "message": "no deletion/cutover/canonical approval granted"
     }
   ],
   "completion": {

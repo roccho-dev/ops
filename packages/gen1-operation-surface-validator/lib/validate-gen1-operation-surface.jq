@@ -35,6 +35,21 @@ def validate_record($r):
     else fail("surface-known"; "operation surface must be chatgpt, codex, browser, or repo-validation")
     end,
 
+    if ($r.projection.sourceKind == "decision-jsonl")
+    then pass("projection-source-decision-jsonl"; "projection source is decision JSONL")
+    else fail("projection-source-decision-jsonl"; "projection sourceKind must be decision-jsonl")
+    end,
+
+    if ((($r.projection.target // []) | index("law")) and (($r.projection.target // []) | index("policy")))
+    then pass("projection-target-law-policy"; "projection targets law and policy")
+    else fail("projection-target-law-policy"; "projection target must include law and policy")
+    end,
+
+    if bool_false($r.projection.policyGitHardcoded)
+    then pass("projection-not-policy-git-hardcoded"; "projection is not policy.git hardcoding")
+    else fail("projection-not-policy-git-hardcoded"; "projection must not hardcode policy.git law")
+    end,
+
     if ($r.operation.surface == "chatgpt" and $r.operation.kind == "github-operation")
     then
       if ($r.operation.mode == "extra_high")

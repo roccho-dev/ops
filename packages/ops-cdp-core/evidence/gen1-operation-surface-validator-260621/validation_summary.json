@@ -3,8 +3,16 @@
   "adrsLawSeedHead": "b1394e4fd6af9c2305fc27deabc554d6c391b8e2",
   "opsProposalBranch": "proposal/gen1-operation-surface-validator-260621",
   "passFixtures": 3,
-  "failFixtures": 7,
+  "failFixtures": 9,
   "result": "PASS",
+  "projectionContract": {
+    "sourceKind": "decision-jsonl",
+    "requiredTargets": [
+      "law",
+      "policy"
+    ],
+    "policyGitHardcoded": false
+  },
   "approvalGranted": false,
   "policyGitDeletionGranted": false,
   "cutoverGranted": false,

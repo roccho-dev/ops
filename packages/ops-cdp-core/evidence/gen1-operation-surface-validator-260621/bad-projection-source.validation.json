@@ -34,8 +34,8 @@
     },
     {
       "id": "projection-source-decision-jsonl",
-      "status": "PASS",
-      "message": "projection source is decision JSONL"
+      "status": "FAIL",
+      "message": "projection sourceKind must be decision-jsonl"
     },
     {
       "id": "projection-target-law-policy",
@@ -84,8 +84,8 @@
     },
     {
       "id": "no-approval-granted",
-      "status": "FAIL",
-      "message": "approval flags must remain false"
+      "status": "PASS",
+      "message": "no deletion/cutover/canonical approval granted"
     }
   ],
   "completion": {

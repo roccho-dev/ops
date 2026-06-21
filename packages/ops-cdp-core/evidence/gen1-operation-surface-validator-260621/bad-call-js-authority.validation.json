@@ -3,7 +3,7 @@
   "ok": false,
   "sourceHead": "b1394e4fd6af9c2305fc27deabc554d6c391b8e2",
   "summary": {
-    "pass": 12,
+    "pass": 15,
     "fail": 1
   },
   "checks": [
@@ -31,6 +31,21 @@
       "id": "surface-known",
       "status": "PASS",
       "message": "operation surface is known"
+    },
+    {
+      "id": "projection-source-decision-jsonl",
+      "status": "PASS",
+      "message": "projection source is decision JSONL"
+    },
+    {
+      "id": "projection-target-law-policy",
+      "status": "PASS",
+      "message": "projection targets law and policy"
+    },
+    {
+      "id": "projection-not-policy-git-hardcoded",
+      "status": "PASS",
+      "message": "projection is not policy.git hardcoding"
     },
     {
       "id": "chatgpt-github-mode",
