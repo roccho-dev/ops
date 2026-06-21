@@ -1,163 +1,194 @@
 # ops-refs-vault runbook
 
-`ops-refs-vault` backs up repo-specific bare SSOT repositories into one
-replaceable forge repository by namespaced refs.
+`ops-refs-vault` copies selected refs from repo-specific bare SSOT repositories to one replaceable Git remote forge.
 
-## Canonical route
+## Authority and route
 
 ```text
-local working clone
-  -> git push or rsync
-  -> nixos-vm:$HOME/repos/.bare/<repoId>.git
-  -> ops-refs-vault backup-one / backup-all
-  -> $OPS_REFS_VAULT_REMOTE refs/heads/<repoId>/<branch>
+working clone
+  -> normal Git push
+  -> <bareRoot>/<repoPath>.git            data SSOT
+  -> ops-refs-vault                       single writer for managed backup refs
+  -> any Git remote forge                 generated backup artifact
 ```
 
-Roles:
+The default source profile is `refs/heads/*`. The package does not claim to back up every Git ref, working-tree state, Git LFS payloads, issue data, secrets, hooks, or build caches.
 
-| role | location |
+| data | role |
 |---|---|
-| SSOT | `nixos-vm:$HOME/repos/.bare/<repoId>.git` repo-specific bare repo |
-| backup | single forge repo selected by `--remote`, manifest `targetForgeRepo`, or `OPS_REFS_VAULT_REMOTE` |
-| local | temporary workspace or working clone |
-| local -> SSOT | `git push` or `rsync`, outside this package's approval boundary |
-| SSOT -> backup | namespaced refs via this package |
+| repo-specific bare under `bareRoot` | data SSOT |
+| generated manifest | non-authoritative run snapshot |
+| backup receipt | evidence only |
+| local `refs.git` | local forge stand-in / generated backup |
+| GitHub or another forge | replaceable remote backup artifact |
 
-GitHub is backup, not SSOT. Dirty files, untracked files, ignored files,
-secrets, and build caches are not protected by this Git backup route.
+## Filesystem-schema identity
 
-## Manifest
+Repo identity comes from the bare path relative to `bareRoot` with the final `.git` removed.
 
-The manifest used for a production backup run is a generated receipt
-snapshot, not the authority for which repositories should exist. Authority
-remains the repo-specific bare SSOT registry/root. Until a root-owned registry
-exists, generate the manifest from the current bare root immediately before the
-backup run and preserve it with the backup receipt.
-
-```json
-{
-  "kind": "ops.refsVault.generatedManifest.v1",
-  "authority": "filesystem-snapshot-not-ssot-authority",
-  "targetForgeRepo": {},
-  "source": {
-    "bareRoot": "/home/nixos/repos/.bare",
-    "excludeFile": null,
-    "excludedRepoIds": []
-  },
-  "repos": [
-    {
-      "repoId": "specs",
-      "sourceBarePath": "/home/nixos/repos/.bare/specs.git"
-    }
-  ]
-}
+```text
+/home/nixos/repos/.bare/team/api.git
+                         └─ repoPath = team/api
 ```
 
-When running on `nixos-vm`, `sourceBarePath` is normally
-`$HOME/repos/.bare/<repoId>.git`. A remote source URL is allowed, but the
-normal operator route is to run on the host where the bare SSOT paths are local.
+The path is encoded into one reversible Git ref component.
 
-Generate a snapshot manifest from the bare root:
+```text
+repoPath  team/api
+repoKey   =r1-team%2Fapi
+branch    proposal/x
+remoteRef refs/heads/=r1-team%2Fapi/proposal/x
+```
+
+The `=r1-` prefix versions the codec. It separates current refs from older unversioned layouts and prevents path/branch boundary collisions.
+
+## Generate a manifest
 
 ```bash
 export OPS_REFS_VAULT_REMOTE=git@github.com:OWNER/refs.git
 
 ops-refs-vault generate-manifest \
   --bare-root /home/nixos/repos/.bare \
-  --out /var/lib/ssot/refs-vault/runs/20260619/manifest.json
+  --out /var/lib/ssot/refs-vault/runs/20260621/manifest.json
 ```
 
-Use `--exclude-file` only for intentional opt-out repository IDs. The exclude
-file is one repo ID per line and is validated against the discovered bare root.
+Discovery is recursive. An exclude file contains `repoPath` values, one per line. Unknown exclusions fail closed.
 
-## Back up
+## Audit before writing
 
 ```bash
-export OPS_REFS_VAULT_REMOTE=git@github.com:OWNER/refs.git
+ops-refs-vault audit --manifest manifest.json
+```
 
-ops-refs-vault backup-one \
-  --manifest refs-vault.manifest.json \
-  --repo-id specs \
-  --branch main
+Audit scans the complete managed remote root `refs/heads/*`; the manifest does not restrict observation. It performs a full outer comparison between source-derived expected rows and remote-observed rows.
 
+| classification | normal backup action |
+|---|---|
+| `equal` | no change |
+| `missing-remote` | create remote backup ref |
+| `source-ahead` | fast-forward remote backup ref |
+| `remote-ahead-candidate` | stop; plan adoption, discard, or defer |
+| `diverged-candidate` | stop; reconcile in isolated staging/worktree |
+| `extra-current-schema` | stop; remote-only candidate |
+| `extra-legacy-schema` | stop; migration decision required |
+| `unknown-managed-extra` | stop; operator classification required |
+| `observation-raced` / `unclassified` | stop and re-observe |
+
+Audit is read-only. It never deletes or rewrites refs.
+
+## Normal backup
+
+```bash
 ops-refs-vault backup-all \
-  --manifest /var/lib/ssot/refs-vault/runs/20260619/manifest.json \
-  --receipt-out /var/lib/ssot/refs-vault/runs/20260619/backup-receipt.json
+  --manifest manifest.json \
+  --receipt-out backup-receipt.json
 ```
 
-The destination branch is:
+Each repository's selected refs are pushed with `git push --atomic`. Cross-repository atomicity is not claimed. A full managed-root preflight runs before the first write.
 
-```text
-refs/heads/<repoId>/<branch>
-```
+`--force` is rejected. `git push --mirror` is not used because it force-updates all refs and deletes remote-only refs.
 
-Default backup is no-force. Use `--force` only after an operator decision.
-Do not combine backup with restore promotion in the same run.
+## Remote candidate flow
 
-Do not publish the refs backup with `git push --mirror`. The refs repository
-may contain remote-only historical refs that are outside the generated current
-snapshot, and mirror push would delete them. Use this package's `backup-all`
-route, or explicit non-delete refspecs, so backup publication never removes
-unrelated remote refs.
+Candidate planning may observe any Git source URL. Candidate adoption and discard must run on the SSOT host with a local source bare because source compare-and-swap uses `git update-ref` and local object staging.
 
-## Verify and audit
+Read the exact observed state:
 
 ```bash
-ops-refs-vault verify-all \
-  --manifest /var/lib/ssot/refs-vault/runs/20260619/manifest.json
-
-ops-refs-vault orphan-audit \
-  --manifest /var/lib/ssot/refs-vault/runs/20260619/manifest.json
-
-ops-refs-vault verify-one \
-  --manifest refs-vault.manifest.json \
-  --repo-id specs \
+ops-refs-vault candidate-plan \
+  --manifest manifest.json \
+  --repo-id team/api \
   --branch main
-
-ops-refs-vault audit \
-  --manifest refs-vault.manifest.json
-
-ops-refs-vault inventory \
-  --manifest refs-vault.manifest.json \
-  --out-dir /tmp/refs-vault-inventory
 ```
 
-`verify-one` compares the bare SSOT branch hash with the forge backup hash.
-`verify-all` applies that comparison to every branch in the generated
-manifest. `orphan-audit` fails if the forge has missing or extra
-`refs/heads/<repoId>/<branch>` refs relative to the generated snapshot.
-
-## Restore
-
-Restore always writes to a staging bare repo first.
+### Adopt a remote-ahead candidate
 
 ```bash
-ops-refs-vault restore-bare-one \
-  --manifest refs-vault.manifest.json \
-  --repo-id specs \
+ops-refs-vault candidate-adopt \
+  --manifest manifest.json \
+  --repo-id team/api \
   --branch main \
-  --staging-bare /tmp/restored/specs.git
-```
-
-Promotion into the SSOT location is a separate approved step:
-
-```bash
-ops-refs-vault promote-staging-bare \
-  --repo-id specs \
-  --staging-bare /tmp/restored/specs.git \
-  --target-bare "$HOME/repos/.bare/specs.git" \
+  --expected-source-oid <observed-source-oid-or-absent> \
+  --expected-remote-oid <observed-remote-oid> \
+  --staging-bare /tmp/refs-vault-candidate/team-api.git \
   --confirm
 ```
 
-Missing branch restore fails. It does not fall back to `main` or the first
-available branch.
+Adoption:
 
-## Smoke
+1. rechecks both observed OIDs;
+2. restores the remote candidate into an empty staging bare;
+3. checks requested OID, `HEAD`, `git fsck --full`, and normal clone usability;
+4. transfers the candidate object to the source bare;
+5. updates the source branch with `git update-ref <new> <expected-old>` compare-and-swap.
+
+A diverged candidate cannot be adopted directly.
+
+### Discard a remote-ahead candidate
 
 ```bash
+ops-refs-vault candidate-discard \
+  --manifest manifest.json \
+  --repo-id team/api \
+  --branch main \
+  --expected-source-oid <observed-source-oid-or-absent> \
+  --expected-remote-oid <observed-remote-oid> \
+  --confirm
+```
+
+Discard pushes the immutable observed source OID and uses `--force-with-lease=<remoteRef>:<observedRemoteOid>`. A changed remote candidate is not overwritten. The source ref is checked before and after the operation.
+
+## Restore
+
+```bash
+ops-refs-vault restore-bare-one \
+  --manifest manifest.json \
+  --repo-id team/api \
+  --branch main \
+  --staging-bare /tmp/restored/team-api.git
+```
+
+Restore never writes directly to SSOT. It must pass:
+
+- exact remote/restored OID equality;
+- `HEAD` target equality;
+- `git fsck --full`;
+- a normal clone whose `HEAD` matches the restored OID.
+
+Promotion remains separate:
+
+```bash
+ops-refs-vault promote-staging-bare \
+  --repo-id team/api \
+  --staging-bare /tmp/restored/team-api.git \
+  --target-bare /home/nixos/repos/.bare/team/api.git \
+  --confirm
+```
+
+Promotion checks the staging repo, atomically pushes all staging heads to the target bare, sets target `HEAD`, and checks the target with `fsck`.
+
+## Optional future sources
+
+The core remains Git-transport-only.
+
+| future data | extension path |
+|---|---|
+| tags or custom refs | add a new explicit ref profile/projector; keep heads default |
+| wiki | expose the wiki as another bare repository and use the same pipeline |
+| issues/discussions | external producer exports data into a dedicated bare repository; this package transports its refs |
+| LFS payloads | separate payload adapter, not a hidden core responsibility |
+
+No GitHub API client belongs in `ops-refs-vault` core.
+
+## Local proof
+
+```bash
+node --test \
+  packages/ops-refs-vault/tests/test_ref_projection.mjs \
+  packages/ops-refs-vault/tests/test_ref_reconcile.mjs \
+  packages/ops-refs-vault/tests/e2e.mjs
+
 ops-refs-vault smoke-local
 ```
 
-The smoke test creates local bare SSOT repos, backs them up to a local bare
-forge repo, restores one branch to staging, promotes it into a target bare repo,
-and checks hash equality.
+The local bare remote is the transport-equivalent stand-in for a Git remote forge. Live forge mutation is a separate integration gate.
