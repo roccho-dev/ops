@@ -61,6 +61,7 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `gen2_law_behavior_packets.proposed.jsonl` | 27 Gen2 verification packets covering all 2648 expectation rows |
 | `gen2_law_behavior_packet_summary.proposed.json` | Summary of packet counts, behavior classes, and approval boundary |
 | `gen2_law_behavior_packet_index.proposed.md` | Human-readable packet index |
+| `without_deletion_completion_audit.json` | Final proposal audit showing non-deletion proof complete while deletion/cutover/canonical approvals remain false |
 | `gen2_coverage_first_reconciliation_verification.jsonl` | Fresh Codex as Gen2 verification of the reconciliation counts and claim boundary |
 | `gen2_coverage_first_review_decision_verification.jsonl` | Fresh Codex as Gen2 verification of proposed accept/reject decision evidence |
 | `gen2_legacy_policy_exhaustive_obligation_table_verification.jsonl` | Fresh Codex as Gen2 verification that the proposed exhaustive table is exactly 1896 compiler rows plus 752 accepted additions |
@@ -119,6 +120,11 @@ Each proposed exhaustive row now has one Gen2 law behavior expectation, grouped
 into `27` packets. Fresh Codex as Gen2 verified that every row has exactly one
 expectation, every packet reference resolves, polarity-to-behavior mapping is
 consistent, and deletion/cutover/canonical approval remain false.
+
+`without_deletion_completion_audit.json` summarizes the proof boundary: all
+requested non-deletion proof artifacts are present as proposal evidence, while
+policy.git deletion, retirement, cutover, canonical write, SSOT adoption, and
+merge approvals remain false.
 
 Fresh Codex as Gen2 verified the proposed decision evidence integrity, while
 explicitly rejecting any interpretation that it is canonical approval, deletion

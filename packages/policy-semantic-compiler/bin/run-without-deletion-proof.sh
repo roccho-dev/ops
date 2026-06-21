@@ -120,4 +120,11 @@ if [ -n "$coverage_first_dir" ]; then
     --evidence-dir "$out_dir" \
     --out-dir "$out_dir" \
     --policy-input-ref "$policy_input_ref"
+
+  perl "$script_dir/materialize-without-deletion-completion-audit.pl" \
+    --evidence-dir "$out_dir" \
+    --out-dir "$out_dir" \
+    --policy-input-ref "$policy_input_ref" \
+    --ops-head "$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || printf unknown)" \
+    --adrs-head "$adrs_head"
 fi
