@@ -22,6 +22,8 @@ The default source profile is `refs/heads/*`. The package does not claim to back
 | local `refs.git` | local forge stand-in / generated backup |
 | GitHub or another forge | replaceable remote backup artifact |
 
+For the current hosted backup, `roccho-dev/refs` is this generated remote artifact. Do not create proposal branches, implementation branches, or hand-authored recovery edits in `roccho-dev/refs`; implementation proposals belong in `roccho-dev/ops`, then `ops-refs-vault` regenerates the backup artifact.
+
 ## Filesystem-schema identity
 
 Repo identity comes from the bare path relative to `bareRoot` with the final `.git` removed.
@@ -75,6 +77,8 @@ Audit scans the complete managed remote root `refs/heads/*`; the manifest does n
 | `observation-raced` / `unclassified` | stop and re-observe |
 
 Audit is read-only. It never deletes or rewrites refs.
+
+Candidate state is a reconciliation classification over an observed ref and OID, not a canonical backup success state. A ref is canonical backup only after audit classifies it `equal`; `remote-ahead-candidate`, `diverged-candidate`, `extra-current-schema`, `extra-legacy-schema`, and `unknown-managed-extra` remain candidate/operator-decision states until an explicit adopt, discard, defer, or migration decision completes under exact leases.
 
 ## Normal backup
 
