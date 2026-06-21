@@ -66,6 +66,7 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `gen2_coverage_first_review_decision_verification.jsonl` | Fresh Codex as Gen2 verification of proposed accept/reject decision evidence |
 | `gen2_legacy_policy_exhaustive_obligation_table_verification.jsonl` | Fresh Codex as Gen2 verification that the proposed exhaustive table is exactly 1896 compiler rows plus 752 accepted additions |
 | `gen2_law_behavior_packet_verification.jsonl` | Fresh Codex as Gen2 verification that all 2648 law rows have matching expected behavior packet coverage |
+| `gen2_without_deletion_completion_audit_verification.jsonl` | Fresh Codex as Gen2 verification of the final without-deletion completion audit |
 
 ## Boundary
 
@@ -125,6 +126,9 @@ consistent, and deletion/cutover/canonical approval remain false.
 requested non-deletion proof artifacts are present as proposal evidence, while
 policy.git deletion, retirement, cutover, canonical write, SSOT adoption, and
 merge approvals remain false.
+Fresh Codex as Gen2 verified this final audit as proposal evidence complete and
+explicitly not approval for deletion/retirement/cutover/canonical write/SSOT
+adoption/merge.
 
 Fresh Codex as Gen2 verified the proposed decision evidence integrity, while
 explicitly rejecting any interpretation that it is canonical approval, deletion
