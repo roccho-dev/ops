@@ -1,24 +1,24 @@
 # restore UX
 
-Restore is intentionally two-step.
+Restore is intentionally separated from SSOT promotion.
 
-1. Restore from the single forge backup into a staging bare repo.
-2. Verify the staging bare repo.
-3. Promote the staging bare repo into the repo-specific bare SSOT only after
-   explicit approval.
+1. Fetch one selected remote ref into an empty staging bare.
+2. Verify OID, `HEAD`, `git fsck --full`, and normal clone usability.
+3. Review the staging result.
+4. Promote only with explicit confirmation.
 
 ```bash
 ops-refs-vault restore-bare-one \
-  --manifest refs-vault.manifest.json \
-  --repo-id specs \
+  --manifest manifest.json \
+  --repo-id team/api \
   --branch main \
-  --staging-bare /tmp/staging/specs.git
+  --staging-bare /tmp/staging/team-api.git
 
 ops-refs-vault promote-staging-bare \
-  --repo-id specs \
-  --staging-bare /tmp/staging/specs.git \
-  --target-bare "$HOME/repos/specs.git" \
+  --repo-id team/api \
+  --staging-bare /tmp/staging/team-api.git \
+  --target-bare /home/nixos/repos/.bare/team/api.git \
   --confirm
 ```
 
-Use a normal working clone only after the SSOT bare repo is restored.
+`--repo-id` accepts the human `repoPath` or encoded `repoKey` from the generated manifest.

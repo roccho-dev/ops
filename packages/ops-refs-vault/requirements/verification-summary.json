@@ -1,0 +1,58 @@
+{
+  "kind": "ops.refsVault.localVerification.v3",
+  "syntax": {
+    "status": "pass",
+    "command": "node --check packages/ops-refs-vault/bin/ops-refs-vault.mjs"
+  },
+  "tests": {
+    "status": "pass",
+    "pass": 13,
+    "fail": 0,
+    "command": "node --test packages/ops-refs-vault/tests/test_ref_projection.mjs packages/ops-refs-vault/tests/test_ref_reconcile.mjs packages/ops-refs-vault/tests/e2e.mjs"
+  },
+  "smoke": {
+    "status": "pass",
+    "proofCount": 15,
+    "proofIds": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10",
+      "P11",
+      "P12",
+      "P13",
+      "P14",
+      "P15"
+    ]
+  },
+  "nixCheck": {
+    "status": "pass",
+    "command": "nix build .#checks.x86_64-linux.ops-refs-vault --no-link --no-write-lock-file"
+  },
+  "static": {
+    "noMirrorInCli": "pass",
+    "noGitHubApiInCore": "pass"
+  },
+  "liveReadOnlyAudit": {
+    "status": "pass-failed-closed",
+    "source": "/home/nixos/repos/.bare",
+    "remote": "git@github.com:roccho-dev/refs.git",
+    "exitCode": 1,
+    "expectedRefs": 274,
+    "vaultRefs": 301,
+    "missingRemote": 274,
+    "extraLegacySchema": 301,
+    "sourceFailures": 0,
+    "interpretation": "remote refs still use the older flat layout relative to current-r1 projection; audit stops without mutation"
+  },
+  "requirements": {
+    "count": 60,
+    "pass": 60
+  }
+}

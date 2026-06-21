@@ -1,26 +1,36 @@
 # ops-refs-vault troubleshooting
 
-## `sourceBarePath` is missing
+## `extra-legacy-schema`
 
-The manifest is using the old working-clone layout. Add
-`sourceBarePath` for each repo:
+The remote contains an older layout such as:
 
-```json
-{ "repoId": "specs", "sourceBarePath": "/home/nixos/repos/specs.git" }
+```text
+refs/heads/repos/<repoId>/<branch>
+refs/heads/<unversionedRepoId>/<branch>
 ```
 
-## restore writes nowhere useful
+The audit reports it but never deletes it. Decide whether to retain, migrate, or delete it through a separately reviewed operation.
 
-`restore-bare-one` writes to a staging bare repo. It does not update a working
-clone and does not overwrite the SSOT location. Use `promote-staging-bare`
-after verification and approval.
+## `unknown-managed-extra`
 
-## missing branch
+A ref exists under `refs/heads/*` but cannot be parsed by a current or legacy schema. Stop normal backup. Do not guess its owner from a prefix.
 
-Missing branch restore fails. This is intentional. Do not fall back to `main`
-unless a separate operator-approved recovery command says so.
+## `remote-ahead-candidate`
 
-## GitHub is not SSOT
+The source tip is an ancestor of the remote tip. Use `candidate-plan`; then explicitly adopt, discard, or defer. Normal backup will not overwrite it.
 
-`roccho-dev/refs` is a single forge backup. If it differs from the source bare
-SSOT, `verify-one` fails and the operator must decide which side is correct.
+## `diverged-candidate`
+
+Both sides contain unique commits. Direct adoption and normal backup are blocked. Fetch both into an isolated worktree or staging repository, reconcile, and promote the reviewed result through the normal SSOT path.
+
+## exact lease failed
+
+The source or remote changed after observation. Generate a new candidate plan. Never reuse stale OIDs.
+
+## restore fsck or clone test failed
+
+The candidate is not proven restorable. Keep SSOT unchanged and investigate missing objects, partial clones, alternates, or remote transport errors.
+
+## backup preflight blocked
+
+Run `audit` and inspect `counts` and `rows`. Backup never automatically deletes remote-only, legacy, or unknown refs.

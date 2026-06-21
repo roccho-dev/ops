@@ -1,35 +1,40 @@
-# bare SSOT vault FSM
-
-This is the operational state model for `ops-refs-vault`.
+# bare SSOT backup FSM
 
 ```text
-local-working-clone
-  -> ssot-update-requested
-  -> ssot-bare-updated
-  -> forge-backup-requested
-  -> forge-backup-verified
-  -> restore-requested
-  -> staging-bare-restored
-  -> staging-bare-verified
-  -> ssot-promotion-approved
-  -> ssot-bare-promoted
+source-bares-observed
+  -> managed-remote-observed
+  -> reconciled
+       equal | missing-remote | source-ahead
+         -> backup-preflight-pass
+         -> repo-atomic-push
+         -> postflight-equal
+       remote-ahead-candidate | remote-only-candidate
+         -> candidate-staged
+         -> adopt | discard | defer
+       diverged-candidate
+         -> isolated-reconcile-required
+       legacy-extra | unknown-extra | observation-raced | unclassified
+         -> operator-decision-required
 ```
 
-Terminal success for backup is `forge-backup-verified`, not `pushed`.
-Terminal success for restore is `ssot-bare-promoted`, not `staging-bare-restored`.
+## Invariants
 
-Stop conditions:
+- Source bare repositories are SSOT.
+- The remote forge is a generated artifact and candidate store, never automatic authority.
+- Audit is read-only.
+- Normal backup accepts only `equal`, `missing-remote`, and `source-ahead`.
+- A candidate is never adopted without staging integrity proof and source compare-and-swap.
+- A remote candidate is never discarded without an exact remote lease.
+- Diverged refs require isolated reconciliation.
+- Restore targets staging first; promotion is a separate confirmed state.
 
-| state | stop reason |
+## Success states
+
+| operation | success |
 |---|---|
-| `ssot-update-requested` | local working clone has uncommitted/unpushed state that the operator expects Git backup to protect |
-| `ssot-bare-updated` | source bare branch is missing |
-| `forge-backup-requested` | forge remote is missing, inaccessible, or has a diverged ref and no explicit force approval |
-| `forge-backup-verified` | source bare hash and forge hash differ |
-| `restore-requested` | requested `refs/heads/repos/<repoId>/<branch>` is missing |
-| `staging-bare-restored` | staging hash and forge hash differ |
-| `ssot-promotion-approved` | approval is missing or target bare has conflicting refs |
-
-The package never treats the single forge backup as SSOT. It only preserves
-Git refs that were already committed and present in repo-specific bare SSOT
-repositories.
+| audit | all managed rows classify `equal` |
+| backup | selected source refs equal remote refs after push |
+| candidate adopt | source branch equals the staged candidate OID after exact source CAS |
+| candidate discard | remote ref equals observed source OID after exact remote lease |
+| restore | OID, HEAD, full fsck, and clone usability pass |
+| promotion | confirmed atomic head push and target fsck pass |

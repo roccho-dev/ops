@@ -1,4 +1,6 @@
 id	type	status	owner	summary	doneWhen
-K36	hardening	task	ops-refs-vault	Add remote sourceBarePath integration proof for ssh:// or scp-like source bare URLs.	backup-one and backup-all have a live or simulated remote-source proof
-K37	hardening	task	ops-refs-vault	Add explicit divergence report before --force backup.	force backup requires a machine-readable divergence report
-K38	hardening	task	ops-refs-vault	Add signed release manifest handoff for cold backup.	release manifest records source bare hashes and forge backup hashes
+K36	integration	open	ops-refs-vault	Add live or simulated ssh:// and scp-like source bare proof.	Remote source runs the same selected-ref and atomic-push gates.
+K37	candidate	superseded	ops-refs-vault	Replace generic force with candidate classification and exact leases.	Implemented by candidate-plan, candidate-adopt, and candidate-discard.
+K38	release-evidence	open	ops-refs-vault	Add optional signed cold-backup handoff manifest.	Signature binds manifest digest, source OIDs, and remote OIDs without becoming authority.
+K39	forge-integration	open	ops-refs-vault	Run non-destructive live forge round-trip on a dedicated integration namespace.	Push, full scan, staged restore, fsck, and cleanup are recorded.
+K40	profiles	open	ops-refs-vault	Define optional tags/custom-ref profiles without changing heads default.	Profile-specific projector/parser tests pass and managed roots remain disjoint.

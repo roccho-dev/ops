@@ -1,27 +1,32 @@
 # ops-refs-vault knowledge map
 
-`ops-refs-vault` owns refs layout, bare SSOT backup, restore-to-staging,
-promotion, audit, and inventory.
+`ops-refs-vault` owns selected-ref backup from repo-specific bare SSOT repositories to any Git remote forge.
 
-Resolved knowledge:
+| knowledge | implemented location |
+|---|---|
+| recursive bare discovery | `discoverBareRepos` |
+| filesystem-schema `repoPath` | `lib/ref-projection.mjs` |
+| reversible versioned `repoKey` | `encodeRepoPath` / `decodeRepoKey` |
+| heads-first projection | `projectHeadRef` |
+| current, legacy, unknown parsing | `parseManagedRemoteRef` |
+| managed-root full scan | `observedRows` |
+| full outer reconciliation | `lib/ref-reconcile.mjs` |
+| source/remote/diverged classification | `classifyRelation` |
+| preflight and repo-atomic backup | `assertBackupPreflight` / `pushRepoAtomically` |
+| candidate staging and source CAS | `candidate-adopt` |
+| exact remote lease discard | `candidate-discard` |
+| HEAD/fsck/clone restore proof | `verifyBareIntegrity` |
+| separate confirmed promotion | `promote-staging-bare` |
+| fine-grained acceptance contract | `requirements/final-requirements.tsv` |
 
-| id | status | canonical place |
-|---|---|---|
-| K09 | implemented | `backup-one`, `backup-all` |
-| K11 | implemented | `restore-bare-one` |
-| K12 | implemented | manifest `sourceBarePath` controls SSOT source |
-| K13 | implemented | `smoke-local` proves bare SSOT -> forge -> staging -> target |
-| K16 | implemented | missing branch restore fails |
-| K27 | implemented | `inventory` emits `bare-inventory.tsv` |
-| K28 | implemented | `verify-one` compares source bare hash and forge hash |
-
-Out of scope:
+## Boundaries
 
 | topic | owner |
 |---|---|
-| GitHub App Connector route gating | `ops-tailnet-github-egress`, only when explicitly required |
-| local working clone dirty/untracked protection | filesystem shelter or separate bundle backup |
-| package selection and repo binding | `repos/specs` package contracts |
+| GitHub API issue/discussion export | external producer, optionally outputting a bare repo |
+| wiki | separate wiki bare passed through the same Git transport pipeline |
+| Git LFS payloads | separate payload adapter |
+| dirty/untracked working-tree shelter | separate filesystem or bundle workflow |
+| forge routing and credentials | environment/operator transport configuration |
 
-The old local-working-repo refs-vault route is no longer the canonical route.
-The canonical source for backup is a repo-specific bare SSOT repository.
+The remote forge and generated manifest are never authority.
