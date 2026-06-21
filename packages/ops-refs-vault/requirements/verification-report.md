@@ -55,3 +55,20 @@ Result:
 | source failures | 0 |
 
 Interpretation: current GitHub `refs` content is still the older flat layout relative to this proposal's `=r1-` projection. The repaired audit fails closed and does not mutate SSOT or the remote.
+
+## Merge judgment
+
+| requirement area | before this continuation | after this continuation | evidence |
+|---|---|---|---|
+| CLI integration | projection/reconcile libs existed but CLI still used prefix scans | CLI uses the shared projection/reconcile path for audit, verify, backup, restore, and candidate flows | `bin/ops-refs-vault.mjs` |
+| managed-root scan | `orphan-audit` scanned manifest repo prefixes only | audit observes full `refs/heads/*` and classifies legacy/unknown extras | e2e managed-root extra test; live read-only audit |
+| candidate states | remote-ahead/diverged handling was documented but not executable | candidate-plan/adopt/discard enforce classification and leases | e2e candidate tests |
+| exact leases | generic force path remained exposed | normal backup rejects `--force`; adopt/discard require source and remote observed OIDs | e2e race tests |
+| restore integrity | restore checked OID only | restore proves OID, HEAD, `git fsck --full`, and clone usability | e2e restore test |
+| build gate | flake check only ran smoke-local | flake check runs syntax, unit, e2e, smoke, proof IDs, and no-mirror gate | `nix build .#checks.x86_64-linux.ops-refs-vault` |
+| refs boundary | `refs` role was present but easy to confuse with proposal target | runbook says `roccho-dev/refs` is generated artifact and proposals belong in `roccho-dev/ops` | `docs/runbook.md` |
+
+| residual risk | merge impact | required follow-up |
+|---|---|---|
+| GitHub `roccho-dev/refs` still contains older flat refs | normal backup will fail closed instead of publishing current-r1 refs | make an explicit migration/adopt/discard decision; do not auto-delete |
+| SSOT main and GitHub main currently differ | merge target must be chosen explicitly | merge the proposal against the intended canonical main, then re-run check |
