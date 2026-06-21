@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import re
 from pathlib import Path
 
 
@@ -19,6 +20,12 @@ def md_escape(value) -> str:
     return str(value if value is not None else "").replace("|", "\\|").replace("\n", " ")
 
 
+def rule_path_for(row: dict, index: int) -> str:
+    stem = row.get("nativeId") or row.get("signalId") or f"rule-{index}"
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", str(stem)).strip("-").lower() or f"rule-{index}"
+    return f"rules/{safe}.md"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence-dir", required=True)
@@ -30,6 +37,8 @@ def main() -> int:
     gates = read_jsonl(root / "deletion_readiness_gates.jsonl")
     projected = read_json(root / "projected_policy_entry_manifest.json")
     readiness = read_json(root / "deletion_readiness_manifest.json")
+    projected_rules = projected.get("outputs", {}).get("rules", [])
+    projected_rule_set = set(projected_rules)
 
     table = [
         "| # | id | scope | modal | polarity | text |",
@@ -47,6 +56,27 @@ def main() -> int:
             )
         )
     (root / "legacy_policy_obligation_table.md").write_text("\n".join(table) + "\n", encoding="utf-8")
+
+    projection_checks = []
+    for index, row in enumerate(rows, start=1):
+        expected_path = rule_path_for(row, index)
+        projection_checks.append(
+            {
+                "type": "policy.retirement.legacyObligationProjectionCheck.v1",
+                "index": index,
+                "nativeId": row.get("nativeId"),
+                "scope": row.get("scope"),
+                "modal": row.get("modal"),
+                "polarity": row.get("polarity"),
+                "expectedProjectedRule": expected_path,
+                "projectedRulePresent": expected_path in projected_rule_set,
+                "status": "pass" if expected_path in projected_rule_set else "fail",
+            }
+        )
+    (root / "legacy_policy_obligation_projection_verification.jsonl").write_text(
+        "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in projection_checks),
+        encoding="utf-8",
+    )
 
     counts = collections.Counter((row.get("modal"), row.get("polarity")) for row in rows)
     deletion_gate = next((gate for gate in gates if gate.get("gate_id") == "deletion-approved"), None)
@@ -66,8 +96,14 @@ def main() -> int:
         "activeRuntimeReferenceCount": readiness.get("activeRuntimeReferenceCount"),
         "policyAbsentConsumersPass": readiness.get("policyAbsentConsumersPass"),
         "consumerProofsPass": readiness.get("consumerProofsPass"),
-        "projectedRuleCount": len(projected.get("outputs", {}).get("rules", [])),
-        "projectedRulesCoverLegacyObligations": len(projected.get("outputs", {}).get("rules", [])) == len(rows),
+        "projectedRuleCount": len(projected_rules),
+        "uniqueProjectedRuleCount": len(projected_rule_set),
+        "projectedRulesCoverLegacyObligations": len(projected_rules) == len(rows),
+        "legacyObligationProjectionCheckCount": len(projection_checks),
+        "legacyObligationProjectionFailures": [
+            row for row in projection_checks if row.get("status") != "pass"
+        ],
+        "allLegacyObligationsProjected": all(row.get("status") == "pass" for row in projection_checks),
         "nonDeletionGatesPass": all(gate.get("status") == "pass" for gate in non_deletion_gates),
         "deletionApprovalGate": deletion_gate,
         "policyDeletionApproved": False,

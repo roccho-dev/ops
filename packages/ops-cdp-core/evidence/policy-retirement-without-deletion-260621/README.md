@@ -10,6 +10,8 @@ except actual deletion approval.
 - legacy policy obligation rows: `1896`
 - projected policy rules: `1896`
 - projected rules cover legacy obligations: `true`
+- per-obligation projection checks: `1896`
+- per-obligation projection failures: `0`
 - active runtime policy.git references in projected consumer root: `0`
 - absent-policy consumer proof: `PASS`
 - explicit projected-consumer proof: `PASS`
@@ -22,6 +24,7 @@ except actual deletion approval.
 |---|---|
 | `legacy_policy_obligation_table.jsonl` | Full machine-readable table of legacy policy obligations extracted from policy.git |
 | `legacy_policy_obligation_table.md` | Human-readable table for audit review |
+| `legacy_policy_obligation_projection_verification.jsonl` | One PASS row for each legacy obligation confirming the projected rule exists |
 | `projected_policy_entry_manifest.json` | Accepted-source projected policy/law/runtime entry manifest |
 | `accepted_projected_policy_entry_source.json` | Accepted-source record used to authorize the projection, without deletion approval |
 | `deletion_readiness_gates.jsonl` | Gate results showing non-deletion gates pass and deletion approval remains blocked |

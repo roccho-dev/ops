@@ -1,5 +1,6 @@
 {
   "activeRuntimeReferenceCount": 0,
+  "allLegacyObligationsProjected": true,
   "consumerProofsPass": true,
   "cutoverReady": false,
   "deletionApprovalGate": {
@@ -22,6 +23,8 @@
     "review:deny": 8,
     "review:require": 696
   },
+  "legacyObligationProjectionCheckCount": 1896,
+  "legacyObligationProjectionFailures": [],
   "nonDeletionGatesPass": true,
   "policyAbsentConsumersPass": true,
   "policyDeletionApproved": false,
@@ -33,5 +36,6 @@
   "projectionFixtureOnly": false,
   "projectionGeneratedIsAuthority": false,
   "projectionPolicyDeletionApproved": false,
-  "type": "policy.retirement.withoutDeletionProofSummary.v1"
+  "type": "policy.retirement.withoutDeletionProofSummary.v1",
+  "uniqueProjectedRuleCount": 1896
 }
