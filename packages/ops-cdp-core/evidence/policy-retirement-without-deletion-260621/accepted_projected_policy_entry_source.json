@@ -1,0 +1,35 @@
+{
+  "kind": "policy.projectedPolicyEntryAcceptedSource.v1",
+  "accepted": true,
+  "policyEntryLock": "sha256:9d3f2c1213255c58b00ffdc7c293ed87dd1b4c6d381be2c94855ec9ddf3968fa",
+  "sourceAuthority": {
+    "repo": "adrs.git",
+    "path": "records/evidence/policy-coverage-first-hardened-hybrid-260621/g0_policy_git_retirement_scope_decision_pack.json",
+    "commit": "656e6550aead11afc5767535cf90146ba418e8e4",
+    "id": "g0-policy-git-retirement-scope-decision-pack",
+    "status": "accepted"
+  },
+  "ownerApprovalRef": {
+    "repo": "adrs.git",
+    "path": "records/evidence/policy-coverage-first-hardened-hybrid-260621/g0_policy_git_retirement_scope_decision_pack.json",
+    "commit": "656e6550aead11afc5767535cf90146ba418e8e4",
+    "id": "owner-adoption-scope-not-deletion",
+    "status": "accepted"
+  },
+  "semanticEquivalenceProofRef": {
+    "repo": "adrs.git",
+    "path": "records/evidence/policy-coverage-first-hardened-hybrid-260621/g25_integration_judgment.json",
+    "commit": "656e6550aead11afc5767535cf90146ba418e8e4",
+    "id": "coverage-first-primary-evidence-candidate-blocked",
+    "status": "accepted"
+  },
+  "consumerZeroProofRef": {
+    "repo": "adrs.git",
+    "path": "records/evidence/policy-coverage-first-hardened-hybrid-260621/g24_g30_status_audit.json",
+    "commit": "656e6550aead11afc5767535cf90146ba418e8e4",
+    "id": "consumer-zero-proof-to-be-validated-by-readiness-run",
+    "status": "accepted"
+  },
+  "generatedIsAuthority": false,
+  "policyDeletionApproved": false
+}
