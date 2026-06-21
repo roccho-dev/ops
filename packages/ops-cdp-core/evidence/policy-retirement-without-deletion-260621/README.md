@@ -14,6 +14,7 @@ except actual deletion approval.
 - absent-policy consumer proof: `PASS`
 - explicit projected-consumer proof: `PASS`
 - deletion approval gate: `BLOCKED`
+- refreshed Codex as Gen2 verification: `PASS`
 
 ## Key files
 
@@ -25,6 +26,7 @@ except actual deletion approval.
 | `accepted_projected_policy_entry_source.json` | Accepted-source record used to authorize the projection, without deletion approval |
 | `deletion_readiness_gates.jsonl` | Gate results showing non-deletion gates pass and deletion approval remains blocked |
 | `without_deletion_proof_summary.json` | Compact summary for downstream ADRS packaging |
+| `gen2_refreshed_codex_verification.jsonl` | Fresh Gen2 verification result for the legacy obligation table, projection, and gates |
 
 ## Boundary
 
