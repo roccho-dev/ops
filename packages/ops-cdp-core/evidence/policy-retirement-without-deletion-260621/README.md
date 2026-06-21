@@ -26,6 +26,7 @@ exhaustive coverage-first replacement for every semantic candidate.
 - proposed accepted law/projection candidates: `752`
 - proposed rejected non-law candidates: `40`
 - proposed manual review leftovers: `0`
+- proposed exhaustive obligation table rows: `2648`
 
 ## Key files
 
@@ -52,8 +53,11 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `coverage_first_review_accepted_projection.proposed.jsonl` | Proposed accepted rows to project as law/policy/runtime |
 | `coverage_first_review_rejections.proposed.jsonl` | Proposed rejected rows such as iteration logs, package metadata, README docs, and local notes |
 | `coverage_first_review_manual_queue.jsonl` | Manual remainder queue; currently empty |
+| `legacy_policy_exhaustive_obligation_table.proposed.jsonl` | Proposed exhaustive table: 1896 compiler obligations plus 752 accepted coverage-first additions |
+| `legacy_policy_exhaustive_obligation_table.proposed.md` | Human-readable proposed exhaustive obligation table |
 | `gen2_coverage_first_reconciliation_verification.jsonl` | Fresh Codex as Gen2 verification of the reconciliation counts and claim boundary |
 | `gen2_coverage_first_review_decision_verification.jsonl` | Fresh Codex as Gen2 verification of proposed accept/reject decision evidence |
+| `gen2_legacy_policy_exhaustive_obligation_table_verification.jsonl` | Fresh Codex as Gen2 verification that the proposed exhaustive table is exactly 1896 compiler rows plus 752 accepted additions |
 
 ## Boundary
 
@@ -98,6 +102,11 @@ accepted projection candidates, `40` rejected non-law candidates, and `0`
 manual remainders. These proposed decisions are not canonical approval; they
 still require refreshed Gen2 verification and ADRS decision authority before
 they can be treated as accepted law.
+
+The proposed exhaustive obligation table has `2648` rows: `1896` compiler-lane
+legacy obligations plus the `752` proposed accepted coverage-first additions.
+Fresh Codex as Gen2 verified that rejected rows are not included and approval
+flags remain false.
 
 Fresh Codex as Gen2 verified the proposed decision evidence integrity, while
 explicitly rejecting any interpretation that it is canonical approval, deletion

@@ -9,6 +9,8 @@
    },
    "decisionRows" : 792,
    "deletionApproval" : false,
+   "exhaustiveObligationRows" : 2648,
+   "legacyCompilerObligationRows" : 1896,
    "manualReviewRows" : 0,
    "policyInputRef" : "334997669f1889a8e2658730c616d2d4510d4536",
    "priorReconciliationDecision" : "COVERAGE_FIRST_RECONCILIATION_CLASSIFIED_REVIEW_REQUIRED",

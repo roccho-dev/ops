@@ -61,6 +61,15 @@ sub md_escape {
   return $value;
 }
 
+sub rule_slug {
+  my ($prefix, $id, $index) = @_;
+  my $slug = defined $id && length $id ? $id : "$prefix-$index";
+  $slug =~ s/[^A-Za-z0-9._-]+/-/g;
+  $slug =~ s/^-+|-+$//g;
+  $slug = "$prefix-$index" unless length $slug;
+  return lc($slug);
+}
+
 sub decide {
   my ($row) = @_;
   my $path = $row->{sourcePath} // '';
@@ -94,6 +103,7 @@ sub decide {
 }
 
 my $review_queue = read_jsonl("$evidence_dir/coverage_first_candidate_review_queue.jsonl");
+my $legacy_rows = read_jsonl("$evidence_dir/legacy_policy_obligation_table.jsonl");
 my $reconciliation_summary = read_json("$evidence_dir/coverage_first_candidate_reconciliation_summary.json");
 
 my (@decisions, @accepted_projection, @rejected, @manual);
@@ -137,6 +147,49 @@ write_jsonl("$out_dir/coverage_first_review_accepted_projection.proposed.jsonl",
 write_jsonl("$out_dir/coverage_first_review_rejections.proposed.jsonl", \@rejected);
 write_jsonl("$out_dir/coverage_first_review_manual_queue.jsonl", \@manual);
 
+my @exhaustive_obligations;
+my $obligation_index = 0;
+for my $legacy (@$legacy_rows) {
+  $obligation_index++;
+  push @exhaustive_obligations, {
+    type => 'policy.retirement.exhaustiveLegacyPolicyObligation.proposed.v1',
+    index => $obligation_index,
+    sourceLane => 'compiler',
+    sourcePath => $legacy->{scope},
+    sourceId => $legacy->{nativeId},
+    signalId => $legacy->{signalId},
+    modal => $legacy->{modal},
+    polarity => $legacy->{polarity},
+    text => $legacy->{text},
+    projectedRule => 'rules/' . rule_slug('native', $legacy->{nativeId} // $legacy->{signalId}, $obligation_index) . '.md',
+    reviewDecision => 'accept',
+    authorityState => 'compiler-projected-proposal-evidence',
+    deletionApproval => JSON::PP::false,
+    cutoverReady => JSON::PP::false,
+  };
+}
+for my $accepted (@accepted_projection) {
+  $obligation_index++;
+  push @exhaustive_obligations, {
+    type => 'policy.retirement.exhaustiveLegacyPolicyObligation.proposed.v1',
+    index => $obligation_index,
+    sourceLane => 'coverage-first-review',
+    sourcePath => $accepted->{sourcePath},
+    sourceId => $accepted->{candidateId},
+    signalId => $accepted->{signalId},
+    modal => 'reviewed',
+    polarity => 'require',
+    text => $accepted->{text},
+    projectedRule => $accepted->{proposedProjectedRule},
+    reviewDecision => $accepted->{reviewDecision},
+    reasonCode => $accepted->{reasonCode},
+    authorityState => 'proposal-decision-not-canonical-approval',
+    deletionApproval => JSON::PP::false,
+    cutoverReady => JSON::PP::false,
+  };
+}
+write_jsonl("$out_dir/legacy_policy_exhaustive_obligation_table.proposed.jsonl", \@exhaustive_obligations);
+
 open my $md, '>:encoding(UTF-8)', "$out_dir/coverage_first_review_decisions.proposed.md"
   or die "write $out_dir/coverage_first_review_decisions.proposed.md: $!";
 print {$md} "| # | decision | reason | source | line | kind | projected rule | text |\n";
@@ -154,6 +207,23 @@ for my $row (@decisions) {
 }
 close $md;
 
+open my $full_md, '>:encoding(UTF-8)', "$out_dir/legacy_policy_exhaustive_obligation_table.proposed.md"
+  or die "write $out_dir/legacy_policy_exhaustive_obligation_table.proposed.md: $!";
+print {$full_md} "| # | lane | decision | source | modal | polarity | projected rule | text |\n";
+print {$full_md} "|---:|---|---|---|---|---|---|---|\n";
+for my $row (@exhaustive_obligations) {
+  print {$full_md} '| ', $row->{index},
+    ' | `', md_escape($row->{sourceLane}), '`',
+    ' | `', md_escape($row->{reviewDecision}), '`',
+    ' | `', md_escape($row->{sourcePath}), '`',
+    ' | `', md_escape($row->{modal}), '`',
+    ' | `', md_escape($row->{polarity}), '`',
+    ' | `', md_escape($row->{projectedRule}), '`',
+    ' | ', md_escape($row->{text}),
+    " |\n";
+}
+close $full_md;
+
 my $summary = {
   type => 'policy.retirement.coverageFirstReviewDecisionSummary.proposed.v1',
   policyInputRef => $policy_input_ref,
@@ -162,6 +232,8 @@ my $summary = {
   decisionCounts => \%decision_counts,
   reasonCounts => \%reason_counts,
   acceptedProjectionRows => scalar(@accepted_projection),
+  legacyCompilerObligationRows => scalar(@$legacy_rows),
+  exhaustiveObligationRows => scalar(@exhaustive_obligations),
   rejectedRows => scalar(@rejected),
   manualReviewRows => scalar(@manual),
   priorReconciliationDecision => $reconciliation_summary->{decision},
