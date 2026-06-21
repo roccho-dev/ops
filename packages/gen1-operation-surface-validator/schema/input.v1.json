@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gen1.operationSurface.input.v1",
+  "type": "object",
+  "required": ["schema", "id", "source", "operation", "authority", "approvalState"],
+  "properties": {
+    "schema": { "const": "gen1.operationSurface.input.v1" },
+    "id": { "type": "string" },
+    "source": { "type": "object" },
+    "operation": { "type": "object" },
+    "transport": { "type": "object" },
+    "authority": { "type": "object" },
+    "approvalState": { "type": "object" }
+  }
+}

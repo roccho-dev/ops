@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gen1.operationSurface.report.v1",
+  "type": "object",
+  "required": ["schema", "ok", "sourceHead", "summary", "checks", "completion"],
+  "properties": {
+    "schema": { "const": "gen1.operationSurface.report.v1" },
+    "ok": { "type": "boolean" },
+    "sourceHead": { "type": "string" },
+    "summary": { "type": "object" },
+    "checks": { "type": "array" },
+    "completion": { "type": "object" }
+  }
+}

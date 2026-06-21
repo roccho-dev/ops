@@ -1,0 +1,82 @@
+{
+  "schema": "gen1.operationSurface.report.v1",
+  "ok": false,
+  "sourceHead": "b1394e4fd6af9c2305fc27deabc554d6c391b8e2",
+  "summary": {
+    "pass": 12,
+    "fail": 1
+  },
+  "checks": [
+    {
+      "id": "schema",
+      "status": "PASS",
+      "message": "expected schema"
+    },
+    {
+      "id": "law-seed-head",
+      "status": "PASS",
+      "message": "ADRS law seed head is pinned"
+    },
+    {
+      "id": "orchestrated-by-gen1-codex",
+      "status": "PASS",
+      "message": "operation is orchestrated by Gen1 Codex"
+    },
+    {
+      "id": "no-surface-as-actor",
+      "status": "PASS",
+      "message": "operation surface is not assigned as Gen2 actor"
+    },
+    {
+      "id": "surface-known",
+      "status": "PASS",
+      "message": "operation surface is known"
+    },
+    {
+      "id": "chatgpt-github-mode",
+      "status": "PASS",
+      "message": "not a ChatGPT GitHub operation"
+    },
+    {
+      "id": "chatgpt-non-github-mode",
+      "status": "PASS",
+      "message": "ChatGPT non-GitHub review uses pro_extended"
+    },
+    {
+      "id": "call-js-transport-only",
+      "status": "FAIL",
+      "message": "call-js must be transport only and non-authority"
+    },
+    {
+      "id": "github-mirror-transport",
+      "status": "PASS",
+      "message": "GitHub refs mirror is transport only"
+    },
+    {
+      "id": "ssot-whitelist",
+      "status": "PASS",
+      "message": "SSOT is limited to adrs.git and ops.git"
+    },
+    {
+      "id": "no-policy-git-hardcoded-law",
+      "status": "PASS",
+      "message": "no policy.git law authority write detected"
+    },
+    {
+      "id": "validation-not-approval",
+      "status": "PASS",
+      "message": "validation PASS is not approval"
+    },
+    {
+      "id": "no-approval-granted",
+      "status": "PASS",
+      "message": "no deletion/cutover/canonical approval granted"
+    }
+  ],
+  "completion": {
+    "gen1ScopeComplete": false,
+    "approvalGranted": false,
+    "deletionApproved": false,
+    "canonicalMergeApproved": false
+  }
+}

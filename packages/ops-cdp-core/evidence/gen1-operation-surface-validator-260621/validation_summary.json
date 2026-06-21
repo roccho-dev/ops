@@ -1,0 +1,13 @@
+{
+  "schema": "gen1.operationSurface.validationSummary.v1",
+  "adrsLawSeedHead": "b1394e4fd6af9c2305fc27deabc554d6c391b8e2",
+  "opsProposalBranch": "proposal/gen1-operation-surface-validator-260621",
+  "passFixtures": 3,
+  "failFixtures": 7,
+  "result": "PASS",
+  "approvalGranted": false,
+  "policyGitDeletionGranted": false,
+  "cutoverGranted": false,
+  "canonicalWriteGranted": false,
+  "ssotAdoptionGranted": false
+}
