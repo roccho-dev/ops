@@ -1,0 +1,37 @@
+{
+   "authorityState" : "proposal-verification-packets-not-canonical-approval",
+   "cutoverReady" : false,
+   "decision" : "GEN2_LAW_BEHAVIOR_PACKETS_MATERIALIZED",
+   "deletionApproval" : false,
+   "exhaustiveObligationRows" : 2648,
+   "expectationRows" : 2648,
+   "expectedBehaviorCounts" : {
+      "may-allow-with-boundary" : 59,
+      "must-reject-or-avoid" : 195,
+      "must-uphold-or-check" : 2394
+   },
+   "expectedStrengthCounts" : {
+      "candidate-preserved" : 704,
+      "enforced" : 481,
+      "review-required" : 711,
+      "reviewed-accepted-proposal" : 752
+   },
+   "packetRows" : 27,
+   "packetSize" : 100,
+   "polarityCounts" : {
+      "allow" : 59,
+      "deny" : 195,
+      "require" : 2394
+   },
+   "policyInputRef" : "334997669f1889a8e2658730c616d2d4510d4536",
+   "requiredNextProof" : [
+      "run refreshed Codex as Gen2 against all packets",
+      "persist Gen2 pass/fail/readback evidence",
+      "do not treat packet verification as canonical law approval"
+   ],
+   "sourceLaneCounts" : {
+      "compiler" : 1896,
+      "coverage-first-review" : 752
+   },
+   "type" : "policy.retirement.gen2LawBehaviorPacketSummary.proposed.v1"
+}

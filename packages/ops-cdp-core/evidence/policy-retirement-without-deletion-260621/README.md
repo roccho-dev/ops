@@ -27,6 +27,8 @@ exhaustive coverage-first replacement for every semantic candidate.
 - proposed rejected non-law candidates: `40`
 - proposed manual review leftovers: `0`
 - proposed exhaustive obligation table rows: `2648`
+- Gen2 law behavior expectation rows: `2648`
+- Gen2 law behavior packets: `27`
 
 ## Key files
 
@@ -55,9 +57,14 @@ exhaustive coverage-first replacement for every semantic candidate.
 | `coverage_first_review_manual_queue.jsonl` | Manual remainder queue; currently empty |
 | `legacy_policy_exhaustive_obligation_table.proposed.jsonl` | Proposed exhaustive table: 1896 compiler obligations plus 752 accepted coverage-first additions |
 | `legacy_policy_exhaustive_obligation_table.proposed.md` | Human-readable proposed exhaustive obligation table |
+| `gen2_law_behavior_expectations.proposed.jsonl` | One expected law behavior row for each proposed exhaustive obligation |
+| `gen2_law_behavior_packets.proposed.jsonl` | 27 Gen2 verification packets covering all 2648 expectation rows |
+| `gen2_law_behavior_packet_summary.proposed.json` | Summary of packet counts, behavior classes, and approval boundary |
+| `gen2_law_behavior_packet_index.proposed.md` | Human-readable packet index |
 | `gen2_coverage_first_reconciliation_verification.jsonl` | Fresh Codex as Gen2 verification of the reconciliation counts and claim boundary |
 | `gen2_coverage_first_review_decision_verification.jsonl` | Fresh Codex as Gen2 verification of proposed accept/reject decision evidence |
 | `gen2_legacy_policy_exhaustive_obligation_table_verification.jsonl` | Fresh Codex as Gen2 verification that the proposed exhaustive table is exactly 1896 compiler rows plus 752 accepted additions |
+| `gen2_law_behavior_packet_verification.jsonl` | Fresh Codex as Gen2 verification that all 2648 law rows have matching expected behavior packet coverage |
 
 ## Boundary
 
@@ -107,6 +114,11 @@ The proposed exhaustive obligation table has `2648` rows: `1896` compiler-lane
 legacy obligations plus the `752` proposed accepted coverage-first additions.
 Fresh Codex as Gen2 verified that rejected rows are not included and approval
 flags remain false.
+
+Each proposed exhaustive row now has one Gen2 law behavior expectation, grouped
+into `27` packets. Fresh Codex as Gen2 verified that every row has exactly one
+expectation, every packet reference resolves, polarity-to-behavior mapping is
+consistent, and deletion/cutover/canonical approval remain false.
 
 Fresh Codex as Gen2 verified the proposed decision evidence integrity, while
 explicitly rejecting any interpretation that it is canonical approval, deletion

@@ -115,4 +115,9 @@ if [ -n "$coverage_first_dir" ]; then
     --evidence-dir "$out_dir" \
     --out-dir "$out_dir" \
     --policy-input-ref "$policy_input_ref"
+
+  perl "$script_dir/materialize-gen2-law-behavior-packets.pl" \
+    --evidence-dir "$out_dir" \
+    --out-dir "$out_dir" \
+    --policy-input-ref "$policy_input_ref"
 fi
