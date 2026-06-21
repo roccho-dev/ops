@@ -1,0 +1,131 @@
+{
+  "schema": "gen1.operationSurface.freshReplaySummary.v1",
+  "generatedAtUtc": "2026-06-21T05:16:55Z",
+  "adrsLawSeedHead": "b1394e4fd6af9c2305fc27deabc554d6c391b8e2",
+  "opsProposalHeadAtAuthoring": "3be20ab904ffd5aa93590c793a48e1d05903eb69",
+  "opsProposalHeadAtReplay": "3be20ab904ffd5aa93590c793a48e1d05903eb69",
+  "replayScope": "G24 fresh Gen1/Gen2 operation-surface replay from repo evidence only",
+  "environment": {
+    "jqVersion": "jq-1.8.1",
+    "nixFallbackUsed": true
+  },
+  "results": [
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/pass/good-chatgpt-github.jsonl",
+      "name": "good-chatgpt-github",
+      "expected": "pass",
+      "exitCode": 0,
+      "reportOk": true,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/good-chatgpt-github.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/pass/good-chatgpt-non-github.jsonl",
+      "name": "good-chatgpt-non-github",
+      "expected": "pass",
+      "exitCode": 0,
+      "reportOk": true,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/good-chatgpt-non-github.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/pass/good-codex-repo-validation.jsonl",
+      "name": "good-codex-repo-validation",
+      "expected": "pass",
+      "exitCode": 0,
+      "reportOk": true,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/good-codex-repo-validation.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-call-js-authority.jsonl",
+      "name": "bad-call-js-authority",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-call-js-authority.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-chatgpt-github-mode.jsonl",
+      "name": "bad-chatgpt-github-mode",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-chatgpt-github-mode.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-deletion-approval.jsonl",
+      "name": "bad-deletion-approval",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-deletion-approval.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-gen2-chatgpt-actor.jsonl",
+      "name": "bad-gen2-chatgpt-actor",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-gen2-chatgpt-actor.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-github-ssot.jsonl",
+      "name": "bad-github-ssot",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-github-ssot.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-policy-git-hardcoded-law.jsonl",
+      "name": "bad-policy-git-hardcoded-law",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-policy-git-hardcoded-law.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-projection-policy-git-hardcoded.jsonl",
+      "name": "bad-projection-policy-git-hardcoded",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-projection-policy-git-hardcoded.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-projection-source.jsonl",
+      "name": "bad-projection-source",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-projection-source.validation.json"
+    },
+    {
+      "fixture": "packages/gen1-operation-surface-validator/fixtures/fail/bad-validation-approval.jsonl",
+      "name": "bad-validation-approval",
+      "expected": "fail",
+      "exitCode": 1,
+      "reportOk": false,
+      "expectationMet": true,
+      "report": "packages/ops-cdp-core/evidence/gen1-operation-surface-validator-260621/fresh-replay/bad-validation-approval.validation.json"
+    }
+  ],
+  "passFixtures": 3,
+  "failFixtures": 9,
+  "expectationFailures": [],
+  "result": "PASS",
+  "approvalGranted": false,
+  "policyGitDeletionGranted": false,
+  "cutoverGranted": false,
+  "canonicalWriteGranted": false,
+  "ssotAdoptionGranted": false
+}

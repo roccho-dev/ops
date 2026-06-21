@@ -28,3 +28,13 @@ packages/gen1-operation-surface-validator/bin/validate-gen1-operation-surface.sh
   packages/gen1-operation-surface-validator/fixtures/pass/good-chatgpt-github.jsonl \
   /tmp/report.json
 ```
+
+To replay all positive and negative fixtures from a clean checkout:
+
+```bash
+packages/gen1-operation-surface-validator/bin/validate-all-fixtures.sh \
+  /tmp/gen1-operation-surface-fresh-replay
+```
+
+The replay script uses `jq` when available. If `jq` is not on `PATH` and `nix`
+is available, it re-executes itself with `nix shell nixpkgs#jq`.
