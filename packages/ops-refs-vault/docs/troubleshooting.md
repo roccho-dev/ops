@@ -1,52 +1,36 @@
 # ops-refs-vault troubleshooting
 
-## `sourceBarePath` is missing
+## `extra-legacy-schema`
 
-The manifest is using the old working-clone layout. Add
-`sourceBarePath` for each repo:
+The remote contains an older layout such as:
 
-```json
-{ "repoId": "specs", "sourceBarePath": "/home/nixos/repos/specs.git" }
+```text
+refs/heads/repos/<repoId>/<branch>
+refs/heads/<unversionedRepoId>/<branch>
 ```
 
-For a full bare-root run, prefer generating the manifest instead of editing it:
+The audit reports it but never deletes it. Decide whether to retain, migrate, or delete it through a separately reviewed operation.
 
-```bash
-ops-refs-vault generate-manifest \
-  --bare-root /home/nixos/repos/.bare \
-  --out /var/lib/ssot/refs-vault/runs/<runId>/manifest.json
-```
+## `unknown-managed-extra`
 
-That generated manifest is a backup receipt snapshot. It is not the authority
-for which repositories should exist.
+A ref exists under `refs/heads/*` but cannot be parsed by a current or legacy schema. Stop normal backup. Do not guess its owner from a prefix.
 
-## restore writes nowhere useful
+## `remote-ahead-candidate`
 
-`restore-bare-one` writes to a staging bare repo. It does not update a working
-clone and does not overwrite the SSOT location. Use `promote-staging-bare`
-after verification and approval.
+The source tip is an ancestor of the remote tip. Use `candidate-plan`; then explicitly adopt, discard, or defer. Normal backup will not overwrite it.
 
-## missing branch
+## `diverged-candidate`
 
-Missing branch restore fails. This is intentional. Do not fall back to `main`
-unless a separate operator-approved recovery command says so.
+Both sides contain unique commits. Direct adoption and normal backup are blocked. Fetch both into an isolated worktree or staging repository, reconcile, and promote the reviewed result through the normal SSOT path.
 
-## GitHub is not SSOT
+## exact lease failed
 
-The configured refs backup remote is a single forge backup. If it differs from the source bare
-SSOT, `verify-one` fails and the operator must decide which side is correct.
+The source or remote changed after observation. Generate a new candidate plan. Never reuse stale OIDs.
 
-## orphan audit fails
+## restore fsck or clone test failed
 
-`orphan-audit` compares the generated manifest snapshot with
-`refs/heads/<repoId>/*` in the forge backup. A failure means either:
+The candidate is not proven restorable. Keep SSOT unchanged and investigate missing objects, partial clones, alternates, or remote transport errors.
 
-- a source ref from the manifest is missing in the forge backup;
-- the forge has an extra namespace/ref that no longer exists in the generated
-  snapshot; or
-- the manifest was generated from the wrong bare root or with the wrong
-  exclusion file.
+## backup preflight blocked
 
-Do not use `--force` to mask this. Generate a fresh manifest from the intended
-bare root, re-run `backup-all` without force, and then re-run `verify-all` plus
-`orphan-audit`.
+Run `audit` and inspect `counts` and `rows`. Backup never automatically deletes remote-only, legacy, or unknown refs.
