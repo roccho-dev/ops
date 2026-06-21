@@ -1,13 +1,23 @@
 # Future review task
 
-Review only the remaining hardening backlog for `ops-refs-vault`.
+Review only remaining hardening and live-integration backlog for `ops-refs-vault`.
 
-Do not re-open the settled route:
+Do not reopen these settled boundaries:
 
 ```text
-repo-specific bare SSOT -> single forge backup -> staging bare -> approved SSOT promotion
+repo-specific bare SSOT
+  -> selected refs
+  -> versioned filesystem-schema projection
+  -> any Git remote forge artifact
+  -> staging restore
+  -> confirmed SSOT promotion
 ```
 
-The current implementation proof is `ops-refs-vault smoke-local`. It emits
-proof ids `P01` through `P11`. Any future proposal must preserve those proof
-obligations or replace them with stricter ones.
+Current local proof consists of:
+
+- `requirements/final-requirements.tsv`;
+- Node unit and end-to-end tests;
+- `ops-refs-vault smoke-local` proof IDs P01 through P15;
+- the Nix check definition that runs those gates when Nix is available.
+
+Future proposals must preserve these obligations or replace them with stricter, demonstrated gates.
