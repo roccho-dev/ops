@@ -214,7 +214,11 @@
               ''
                 set -euo pipefail
                 export HOME="$TMPDIR"
-                cd ${governance}
+                work="$TMPDIR/governance-records"
+                cp -R ${governance} "$work"
+                chmod -R u+w "$work"
+                cp -R ${./fixtures/governance-records/records} "$work/"
+                cd "$work"
                 python3 -c 'import json,os; e=json.load(open("policy/interface.json")); m=[x["file"] for x in e if x.get("required") and not os.path.exists(x["file"])]; assert not m, "missing required record files: %s" % m; print("\n".join(x["file"]+" "+x["def"] for x in e if x.get("def") and os.path.exists(x["file"])))' > "$TMPDIR/per-file-defs"
                 while read -r file def; do
                   cue vet policy/cue/*.cue "$file" -d "$def"
@@ -222,7 +226,7 @@
                 python3 -c 'import json,os; e=json.load(open("policy/interface.json")); g=sorted({x["group"] for x in e if x.get("group")}); print(json.dumps({k: [json.loads(l) for x in e if x.get("group")==k and os.path.exists(x["file"]) for l in open(x["file"], encoding="utf-8") if l.strip()] for k in g}))' > "$TMPDIR/relational-all.json"
                 cue vet policy/cue/*.cue "$TMPDIR/relational-all.json" -d '#All'
                 echo "spec-catalog gate: cue vet PASS (per-file + relational)"
-                python3 ${governance}/tools/make-spec-catalog.py ${governance} --out-dir $out/share/spec
+                python3 "$work/tools/make-spec-catalog.py" "$work" --out-dir $out/share/spec
               '';
         in
         generated
