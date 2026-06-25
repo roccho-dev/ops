@@ -163,7 +163,10 @@
               pkgs.runCommand "${decl.name}-check" { nativeBuildInputs = map resolveCheckDep decl.deps; }
                 ''
                   mkdir -p "$out"
-                  node ${srcRoot + "/${decl.script}"}
+                  cp -R ${srcRoot} source
+                  chmod -R u+w source
+                  cd source
+                  node ${decl.script}
                   touch "$out/ok"
                 '';
           }) checkDecls
