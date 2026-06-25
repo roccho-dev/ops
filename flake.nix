@@ -301,6 +301,7 @@
               ''
                 mkdir -p "$out"
                 prove-feat --root ${self} --system ${system} --gate ${gate} --json > "$out/report.json"
+                cat "$out/report.json"
                 grep -q '"ok": true' "$out/report.json"
               '';
           proveFeatStructure = proveFeatGate "structure";
@@ -347,6 +348,7 @@
                 test -e ${proveFeatDeadnix}
                 test -e ${proveFeatContractLint}
                 prove-feat --root ${self} --system ${system} --json > "$out/report.json"
+                cat "$out/report.json"
                 grep -q '"ok": true' "$out/report.json"
               '';
           ops-artifact-materialize =
