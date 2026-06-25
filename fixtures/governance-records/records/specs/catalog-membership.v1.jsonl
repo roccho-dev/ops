@@ -1,0 +1,7 @@
+{"kind":"specs.catalogMembership.v1","packageId":"prove-feat","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}
+{"kind":"specs.catalogMembership.v1","packageId":"ops-artifact-materialize","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}
+{"kind":"specs.catalogMembership.v1","packageId":"ops-knowledge-intake","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}
+{"kind":"specs.catalogMembership.v1","packageId":"ops-runbook-checks","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}
+{"kind":"specs.catalogMembership.v1","packageId":"ops-thread-fsm","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}
+{"kind":"specs.catalogMembership.v1","packageId":"ops-refs-vault","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}
+{"kind":"specs.catalogMembership.v1","packageId":"ops-cdp-core","inSpecPackages":true,"sourceAuthority":"fixture.non-authority","migratedAt":"2026-06-26T00:00:00Z"}

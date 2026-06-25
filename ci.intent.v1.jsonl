@@ -1,0 +1,1 @@
+{"kind":"ci.intent.v1","path":".github/workflows/nix-check.yml","provider":"github-actions","role":"primary_nix_check","entrypoint":"nix flake check","authority":false,"dispatch":["pull_request","push"],"generation_mode":"checked_in"}

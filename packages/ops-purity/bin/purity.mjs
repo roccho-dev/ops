@@ -88,6 +88,7 @@ function scanMjs(p, relPath) {
   const txt = fs.readFileSync(p, "utf8");
   const lines = txt.split("\n");
   lines.forEach((line, i) => {
+    if (line.trimStart().startsWith("//")) return;
     const noComment = line.replace(/\/\/.*$/, "");
     // 実 qjs: import(コメント/usage 文字列は除外済)
     if (/\bfrom\s+['"]qjs:(std|os)['"]/.test(noComment)) {
@@ -108,7 +109,7 @@ function scanSh(p, relPath) {
   lines.forEach((line, i) => {
     const noComment = line.replace(/#.*$/, "");
     // 行頭/代入後のコマンドとして python3 / qjs を起動している
-    if (/(^|[;&|=`(]|\$\()\s*"?python3\b/.test(noComment)) {
+    if (!underPythonPackage(relPath) && /(^|[;&|=`(]|\$\()\s*"?python3\b/.test(noComment)) {
       offenders.push(`shell python3 invocation at ${relPath}:${i + 1}`);
     }
     if (/(^|[;&|=`(]|\$\()\s*"?qjs\b/.test(noComment)) {
