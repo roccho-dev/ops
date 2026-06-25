@@ -4,8 +4,16 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     governance = {
-      url = "git+file:///home/nixos/repos/governance?ref=refs/heads/main&rev=573b32b4320df3ea065e84d0b664da718d2d378c";
+      url = "github:roccho-dev/governance/proposals";
       flake = false;
+    };
+    adrsRecords = {
+      url = "path:./fixtures/adrsRecords";
+      flake = false;
+    };
+    conventionGovernance = {
+      url = "github:roccho-dev/governance/proposals";
+      inputs.adrsRecords.follows = "adrsRecords";
     };
     # 分離可能な build 定義 package(append-only jsonl -> nix snapshot/module)。
     # flake.lock が snapshot。defs.jsonl 追記後 `nix flake update ops-build-defs` で再 snapshot。
@@ -28,8 +36,10 @@
       self,
       nixpkgs,
       governance,
+      conventionGovernance,
       ops-build-defs,
       nodejs-src,
+      ...
     }:
     let
       systems = [
@@ -292,9 +302,13 @@
           # ★goal ②: build/checks.jsonl の fold で生成する simple node-script check。
           # deps は ops package 名 -> self.packages の該当 package(PATH 投入)/ それ以外 -> nixpkgs attr。
           generatedChecks = mkGeneratedChecks pkgs self.packages.${system};
+          repoConventionChecks = conventionGovernance.lib.${system}.repoConventionChecks {
+            src = self;
+          };
         in
         generatedChecks
         // {
+          repo-convention = repoConventionChecks.repo-convention;
           # ops 本体 flake が jsonl 由来 package を consume = ops 自己完結の閉路(外部 input なし)
           poc-consumes = pkgs.runCommand "poc-consumes" { nativeBuildInputs = [ pkgs.jq ]; } ''
             got=$(jq -r '.count' ${self.packages.${system}.poc-from-jsonl}/result.json)

@@ -1,0 +1,15 @@
+{
+  "kind": "repo-convention.intent.v1",
+  "repo": "ops",
+  "repo_class": "normal",
+  "severity": "blocking",
+  "readme_mode": "checked_handwritten",
+  "governance_mode": "flake_lib",
+  "governance_ref": {
+    "kind": "branch",
+    "value": "proposals"
+  },
+  "ci_intent_path": "ci.intent.v1.jsonl",
+  "readme_path": "README.md",
+  "exceptions": []
+}
