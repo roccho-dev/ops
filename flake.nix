@@ -217,7 +217,8 @@
                 work="$TMPDIR/governance-records"
                 cp -R ${governance} "$work"
                 chmod -R u+w "$work"
-                cp -R ${./fixtures/governance-records/records} "$work/"
+                mkdir -p "$work/records"
+                cp -R ${./fixtures/governance-records/records}/* "$work/records/"
                 cd "$work"
                 python3 -c 'import json,os; e=json.load(open("policy/interface.json")); m=[x["file"] for x in e if x.get("required") and not os.path.exists(x["file"])]; assert not m, "missing required record files: %s" % m; print("\n".join(x["file"]+" "+x["def"] for x in e if x.get("def") and os.path.exists(x["file"])))' > "$TMPDIR/per-file-defs"
                 while read -r file def; do
