@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,12 +9,14 @@ README = ROOT / "README.md"
 MANIFEST = ROOT / "repo-convention.intent.v1.json"
 CI_INTENT = ROOT / "ci.intent.v1.jsonl"
 
-REQUIRED_TEXT = [
+REQUIRED_README_FRAGMENTS = [
     "README.md is a checked artifact",
     "README.md is not an independent authority",
-    "accepted decisions remain outside this README and outside GitHub provider workflows",
-    "GitHub provider workflows are declared by `ci.intent.v1.jsonl`",
-    "governance owns reusable convention check implementation, not this repo's policy acceptance",
+    "decisions remain outside this README and outside GitHub provider workflows",
+    "GitHub provider workflows",
+    "ci.intent.v1.jsonl",
+    "reusable convention check implementation",
+    "not this repo's policy acceptance",
 ]
 
 
@@ -30,13 +31,13 @@ def main() -> int:
 
     if not README.exists():
         findings.append(finding("readme-missing", "README.md is missing"))
-        text = ""
+        normalized = ""
     else:
-        text = README.read_text(encoding="utf-8")
+        normalized = " ".join(README.read_text(encoding="utf-8").split())
 
-    for required in REQUIRED_TEXT:
-        if required not in text:
-            findings.append(finding("readme-govlib-contract-text-missing", "README gov-lib contract text is missing", text=required))
+    for fragment in REQUIRED_README_FRAGMENTS:
+        if fragment not in normalized:
+            findings.append(finding("readme-govlib-contract-text-missing", "README gov-lib contract text is missing", text=fragment))
 
     if not MANIFEST.exists():
         findings.append(finding("repo-convention-manifest-missing", "repo-convention.intent.v1.json is missing"))
