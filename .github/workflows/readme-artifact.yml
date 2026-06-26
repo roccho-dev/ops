@@ -1,0 +1,40 @@
+name: README artifact exporter
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [proposals]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    name: build and upload README artifact packet
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Build README artifact packet
+        run: nix build --show-trace --no-write-lock-file ./packages/ops-readme-artifact
+      - name: Check README artifact packet
+        run: |
+          set -euo pipefail
+          test -s result/README.md
+          test -s result/manifest.json
+          test -s result/sources.jsonl
+          test -s result/receipt.json
+      - name: Upload README artifact packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-readme-artifact
+          path: |
+            result/README.md
+            result/manifest.json
+            result/sources.jsonl
+            result/receipt.json
+          if-no-files-found: error
