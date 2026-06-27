@@ -13,7 +13,7 @@ function writeJson(filePath, value) {
 }
 
 function makeFakeChecker(filePath) {
-  fs.writeFileSync(filePath, `#!/usr/bin/env node
+  fs.writeFileSync(filePath, `#!${process.execPath}
 const fs = require("node:fs");
 function take(flag) {
   const i = process.argv.indexOf(flag);
