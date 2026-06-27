@@ -5,3 +5,4 @@
 {"kind":"check","name":"codex-app-browser-chatgpt-ops","script":"packages/codex-app-browser-chatgpt-ops/tests/static.mjs","deps":["nodejs","codex-app-browser-chatgpt-ops"]}
 {"kind":"check","name":"ci-intent-workflow-branches","script":"tools/check-ci-intent-workflow-branches.mjs","deps":["nodejs"]}
 {"kind":"check","name":"ops-real-claim-admission","script":"tools/check-ops-real-claim-admission.mjs","deps":["nodejs"]}
+{"kind":"check","name":"ops-real-claim-admission-governance-adapter-fixture","script":"tools/check-ops-real-claim-admission-governance-adapter-fixtures.mjs","deps":["nodejs"]}
