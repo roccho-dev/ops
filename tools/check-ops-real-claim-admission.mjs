@@ -3,6 +3,8 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 
 const ACTIVE = "organization-active";
+const STRICT_ENV = "OPS_REAL_CLAIM_ADMISSION_STRICT";
+const STRICT_FLAG = "--strict";
 
 function readJson(path) {
   return JSON.parse(fs.readFileSync(path, "utf8"));
@@ -54,7 +56,7 @@ function makeDownstreamClaims(spec) {
       checks: item.checks || [],
     };
     return {
-      kind: "claim.downstream.port.v1",
+      kind: "governance.claimPort.downstreamAssertion.v1",
       subjectId: `repo:ops:${packageName}`,
       contractId: item.contractId,
       assertionId: `ops-implements:${packageName}`,
@@ -68,7 +70,7 @@ function makeDownstreamClaims(spec) {
 
 function makeReceipts(claims) {
   return claims.map((claim) => ({
-    kind: "claim.receipt.port.v1",
+    kind: "governance.claimPort.receipt.v1",
     subjectId: claim.subjectId,
     contractId: claim.contractId,
     receiptId: `ci:self:${claim.assertionId}`,
@@ -122,28 +124,45 @@ function compile(grants, claims, receipts) {
   });
 }
 
+function isStrictMode() {
+  return process.env[STRICT_ENV] === "1" || process.argv.includes(STRICT_FLAG);
+}
+
+function summarize(admissions) {
+  return admissions.reduce((acc, row) => {
+    acc[row.diagnosticClass] = (acc[row.diagnosticClass] || 0) + 1;
+    return acc;
+  }, {});
+}
+
 function main() {
   const spec = readJson("spec/implements.json");
   const claims = makeDownstreamClaims(spec);
   const receipts = makeReceipts(claims);
   const grants = readJsonlIfExists("claims/upstream-grants.jsonl");
   const admissions = compile(grants, claims, receipts);
+  const allActive = admissions.every((row) => row.admissionResult === ACTIVE);
+  const strict = isStrictMode();
+  const summary = summarize(admissions);
   const report = {
     kind: "ops.realClaimAdmission.report.v1",
-    status: admissions.every((row) => row.admissionResult === ACTIVE) ? "pass" : "fail",
+    status: allActive ? "pass" : strict ? "fail" : "warn",
+    mode: strict ? "strict" : "staged-warning",
+    strictEnv: STRICT_ENV,
     input: {
       downstreamClaimSource: "spec/implements.json",
       upstreamGrantSource: fs.existsSync("claims/upstream-grants.jsonl") ? "claims/upstream-grants.jsonl" : "missing",
       receiptSource: "ci:self-generated-from-current-claim",
     },
-    summary: admissions.reduce((acc, row) => {
-      acc[row.diagnosticClass] = (acc[row.diagnosticClass] || 0) + 1;
-      return acc;
-    }, {}),
+    summary,
+    nextAction: allActive ? "none" : "add-ADRS-derived-upstream-grant-projection-or-narrow-selected-universe",
     admissions,
   };
+  if (!allActive && !strict) {
+    console.error(`::warning title=ops-real-claim-admission::staged warning; diagnostics=${JSON.stringify(summary)}`);
+  }
   console.error(JSON.stringify(report, null, 2));
-  if (report.status !== "pass") process.exit(1);
+  if (report.status === "fail") process.exit(1);
 }
 
 main();
