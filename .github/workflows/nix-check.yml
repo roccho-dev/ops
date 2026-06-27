@@ -3,7 +3,7 @@ name: nix-check
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [proposals]
 
 jobs:
   flake-check:
