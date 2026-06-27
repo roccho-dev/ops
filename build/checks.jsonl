@@ -3,3 +3,4 @@
 {"kind":"check","name":"find-packages-eligibility-gate","script":"packages/find-packages/tests/eligibility-gate.mjs","deps":["nodejs","find-packages"]}
 {"kind":"check","name":"ui-raw-loop-runtime","script":"packages/ui-raw-loop-runtime/tests/e2e.mjs","deps":["nodejs","ui-raw-loop-runtime"]}
 {"kind":"check","name":"codex-app-browser-chatgpt-ops","script":"packages/codex-app-browser-chatgpt-ops/tests/static.mjs","deps":["nodejs","codex-app-browser-chatgpt-ops"]}
+{"kind":"check","name":"ci-intent-workflow-branches","script":"tools/check-ci-intent-workflow-branches.mjs","deps":["nodejs"]}
