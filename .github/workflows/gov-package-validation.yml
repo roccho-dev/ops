@@ -1,0 +1,40 @@
+name: gov package validation
+
+on:
+  pull_request:
+  push:
+    branches: [proposals]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ops-package-response:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Run primary flake checks
+        run: nix flake check --show-trace --no-write-lock-file
+      - name: Emit ops package response packet
+        run: |
+          set -euo pipefail
+          nix shell --no-write-lock-file .#ops-package-responses -c \
+            ops-package-responses emit --out-dir ops-package-response-out --json
+      - name: Validate ops package response packet
+        run: |
+          set -euo pipefail
+          nix shell --no-write-lock-file .#ops-package-responses -c \
+            ops-package-responses validate --out-dir ops-package-response-out --json
+      - name: Run available exported governance checker
+        run: nix run --show-trace --no-write-lock-file github:roccho-dev/governance/proposals#claim-admission-check -- selftest
+      - name: Upload ops package response packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-package-response-packet
+          path: ops-package-response-out
+          if-no-files-found: error
