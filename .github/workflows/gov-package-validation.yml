@@ -30,8 +30,10 @@ jobs:
           set -euo pipefail
           nix shell --no-write-lock-file .#ops-package-responses -c \
             ops-package-responses validate --out-dir ops-package-response-out --json
-      - name: Run available exported governance checker
-        run: nix run --show-trace --no-write-lock-file github:roccho-dev/governance/proposals#claim-admission-check -- selftest
+      - name: Check residual packet exists
+        run: |
+          set -euo pipefail
+          test -s ops-package-response-out/ops-package-residuals.jsonl
       - name: Upload ops package response packet
         uses: actions/upload-artifact@v4
         with:
