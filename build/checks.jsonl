@@ -7,3 +7,4 @@
 {"kind":"check","name":"ops-real-claim-admission","script":"tools/check-ops-real-claim-admission.mjs","deps":["nodejs"]}
 {"kind":"check","name":"ops-real-claim-admission-governance-adapter-fixture","script":"tools/check-ops-real-claim-admission-governance-adapter-fixtures.mjs","deps":["nodejs"]}
 {"kind":"check","name":"ops-real-claim-closure-fixture","script":"tools/check-ops-real-claim-admission-selected-universe-fixture.mjs","deps":["nodejs"]}
+{"kind":"check","name":"ops-package-responses","script":"packages/ops-package-responses/tests/e2e.mjs","deps":["nodejs","ops-package-responses"]}
