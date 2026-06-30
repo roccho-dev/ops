@@ -31,6 +31,8 @@ decisions remain outside this README and outside GitHub provider workflows.
 - operational package outputs.
 - check outputs from `nix flake check`.
 - provider CI adapter receipts from GitHub Actions.
+- package response packet emitted by `ops-package-responses`, including responses,
+  evidence, receipts, residuals, and a non-authority manifest.
 
 ## Checks
 
@@ -39,6 +41,11 @@ The primary verification entrypoint is `nix flake check`.
 `.github/workflows/*.yml` files are checked-in provider adapter artifacts. They
 are executable by GitHub, but they are not authority. GitHub provider workflows
 are declared by `ci.intent.v1.jsonl`.
+
+`gov-package-validation.yml` additionally emits and validates the ops package
+response packet and runs the currently exported governance checker selftest. This
+keeps ops wired to governance diagnostics without making ops a shared meaning
+authority.
 
 ## Ownership / handoff
 
