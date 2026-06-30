@@ -18,6 +18,8 @@ This PR implements:
 - `ci.intent.v1.jsonl` declaration for the workflow
 - README output/check documentation
 
+The current packet emits five ops package response rows and links each row to evidence and receipt records.
+
 ## Required ops outputs
 
 `ops-package-responses emit --out-dir <dir>` produces:
