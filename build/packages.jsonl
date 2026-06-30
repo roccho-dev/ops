@@ -21,3 +21,4 @@
 {"kind":"package","name":"ui-raw-loop-runtime","runtime":"node","entry":"packages/ui-raw-loop-runtime/bin/ui-raw-loop-runtime.mjs","bin":"ui-raw-loop-runtime","deps":["node"],"env":[]}
 {"kind":"package","name":"policy-semantic-compiler","runtime":"python","entry":"packages/policy-semantic-compiler/bin/policy-semantic-compiler.py","pythonModule":"policy_semantic_compiler.cli","pythonPath":"src","bin":"policy-semantic-compiler","deps":["duckdb","git","python"],"env":[]}
 {"kind":"package","name":"codex-app-browser-chatgpt-ops","runtime":"node","entry":"packages/codex-app-browser-chatgpt-ops/bin/codex-app-browser-chatgpt-ops.mjs","bin":"codex-app-browser-chatgpt-ops","deps":["node"],"env":[]}
+{"kind":"package","name":"ops-package-responses","runtime":"node","entry":"packages/ops-package-responses/bin/ops-package-responses.mjs","bin":"ops-package-responses","deps":["node"],"env":[]}
