@@ -254,6 +254,33 @@ function emit(outDir) {
   writeJsonl(path.join(outDir, "ops-package-evidence.jsonl"), evidenceRows);
   writeJsonl(path.join(outDir, "ops-package-receipts.jsonl"), receiptRows);
   writeJsonl(path.join(outDir, "ops-package-residuals.jsonl"), residualRows);
+  writeJsonl(path.join(outDir, "package-responses.jsonl"), responseRows.map((r) => ({
+    kind: "packageResponse.v1",
+    claim_id: r.claim_id,
+    adrs_ref: r.adrs_ref,
+    obligation_id: r.obligation_id,
+    repo_locator: r.repo_locator,
+    package_id: r.package_id,
+    package_path: r.package_path,
+    owner_role: r.owner_role,
+    tests: r.test_refs,
+    test_refs: r.test_refs,
+    receipt: r.receipt_ref,
+    receipt_ref: r.receipt_ref,
+    residuals: r.residuals,
+    state: r.state,
+    authority: false,
+  })));
+  writeJsonl(path.join(outDir, "package-residuals.jsonl"), residualRows.map((r) => ({
+    kind: "packageResidual.v1",
+    residual_id: r.residual_id,
+    response_claim_id: r.response_claim_id,
+    package_id: r.package_id,
+    status: r.status,
+    returned_to: r.returned_to,
+    reason: r.reason,
+    authority: false,
+  })));
   const manifest = {
     kind: "ops.packageResponsePacket.v1",
     repo_locator: "roccho-dev/ops",
@@ -265,12 +292,16 @@ function emit(outDir) {
       "ops-package-evidence.jsonl",
       "ops-package-receipts.jsonl",
       "ops-package-residuals.jsonl",
+      "package-responses.jsonl",
+      "package-residuals.jsonl",
     ],
     row_counts: {
       responses: responseRows.length,
       evidence: evidenceRows.length,
       receipts: receiptRows.length,
       residuals: residualRows.length,
+      canonical_responses: responseRows.length,
+      canonical_residuals: residualRows.length,
     },
     boundary: "ops reports package evidence only; ADRS defines meaning and governance provides reusable checks",
   };
@@ -284,10 +315,12 @@ function validate(outDir) {
   const evidencePath = path.join(outDir, "ops-package-evidence.jsonl");
   const receiptsPath = path.join(outDir, "ops-package-receipts.jsonl");
   const residualsPath = path.join(outDir, "ops-package-residuals.jsonl");
+  const canonicalResponsesPath = path.join(outDir, "package-responses.jsonl");
+  const canonicalResidualsPath = path.join(outDir, "package-residuals.jsonl");
   const manifestPath = path.join(outDir, "manifest.json");
 
   const errors = [];
-  for (const file of [responsesPath, evidencePath, receiptsPath, residualsPath, manifestPath]) {
+  for (const file of [responsesPath, evidencePath, receiptsPath, residualsPath, canonicalResponsesPath, canonicalResidualsPath, manifestPath]) {
     if (!fs.existsSync(file)) errors.push({ code: "missing-file", file });
   }
   if (errors.length) return { ok: false, errors };
@@ -296,11 +329,15 @@ function validate(outDir) {
   const evidence = readJsonl(evidencePath);
   const receipts = readJsonl(receiptsPath);
   const residuals = readJsonl(residualsPath);
+  const canonicalResponses = readJsonl(canonicalResponsesPath);
+  const canonicalResiduals = readJsonl(canonicalResidualsPath);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
 
   const evidenceById = new Map(evidence.map((e) => [e.evidence_id, e]));
   const receiptById = new Map(receipts.map((r) => [r.receipt_id, r]));
   const residualById = new Map(residuals.map((r) => [r.residual_id, r]));
+  const canonicalByClaimId = new Map(canonicalResponses.map((r) => [r.claim_id, r]));
+  const canonicalResidualById = new Map(canonicalResiduals.map((r) => [r.residual_id, r]));
   const claimIds = new Set();
 
   if (manifest.authority !== false || manifest.non_authority_diagnostic !== true) {
@@ -333,6 +370,9 @@ function validate(outDir) {
     if (!receiptById.has(row.receipt_ref)) {
       errors.push({ code: "missing-receipt", claim_id: row.claim_id, receipt_ref: row.receipt_ref });
     }
+    if (!canonicalByClaimId.has(row.claim_id)) {
+      errors.push({ code: "missing-canonical-response", claim_id: row.claim_id });
+    }
     for (const evidenceRef of row.evidence_refs ?? []) {
       if (!evidenceById.has(evidenceRef)) {
         errors.push({ code: "missing-evidence", claim_id: row.claim_id, evidence_ref: evidenceRef });
@@ -341,6 +381,9 @@ function validate(outDir) {
     for (const residualRef of row.residuals ?? []) {
       if (!residualById.has(residualRef)) {
         errors.push({ code: "missing-residual", claim_id: row.claim_id, residual_ref: residualRef });
+      }
+      if (!canonicalResidualById.has(residualRef)) {
+        errors.push({ code: "missing-canonical-residual", claim_id: row.claim_id, residual_ref: residualRef });
       }
     }
   }
@@ -387,6 +430,8 @@ function validate(outDir) {
       evidence: evidence.length,
       receipts: receipts.length,
       residuals: residuals.length,
+      canonical_responses: canonicalResponses.length,
+      canonical_residuals: canonicalResiduals.length,
     },
     errors,
   };
@@ -405,6 +450,8 @@ function runSelftest() {
       "ops-package-evidence.jsonl",
       "ops-package-receipts.jsonl",
       "ops-package-residuals.jsonl",
+      "package-responses.jsonl",
+      "package-residuals.jsonl",
       "manifest.json",
     ]) {
       fs.copyFileSync(path.join(tmp, file), path.join(brokenDir, file));
