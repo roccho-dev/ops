@@ -1,4 +1,4 @@
-# ops package responsibility closure adoption implementation
+# ops package responsibility closure adoption implementation target
 
 ## Purpose
 
@@ -8,11 +8,11 @@ The goal is to make real ops packages visible to ADRS/governance package closure
 
 ## Goal update
 
-This PR is no longer only a work specification. It implements the selected ops-side closure packet in `packages/ops-package-responses`.
+This PR is no longer only a work specification. It must implement the selected ops-side closure packet in `packages/ops-package-responses` before merge.
 
-It still does not implement strict all-repo gating, production deploy checks, deploy approval, or authority changes.
+It still must not implement strict all-repo gating, production deploy checks, deploy approval, or authority changes.
 
-## Implemented outputs
+## Required outputs
 
 | Output | File | Role |
 |---|---|---|
@@ -28,7 +28,7 @@ It still does not implement strict all-repo gating, production deploy checks, de
 
 ## Inventory sources
 
-`ops-package-responses emit` now classifies inventory from:
+`ops-package-responses emit` must classify inventory from:
 
 - `build/packages.jsonl` as `build-packages-jsonl`
 - `build/checks.jsonl` as `build-checks-jsonl`
@@ -37,13 +37,13 @@ It still does not implement strict all-repo gating, production deploy checks, de
 - source package directories under `packages/**` as `source-dir`
 - generated packet files as `evidence-output`
 
-`evidence-output` rows are deliberately not treated as source package reality when drift rows are computed.
+`evidence-output` rows must not be treated as source package reality when drift rows are computed.
 
 ## Response normalization
 
-The selected `ops.packageResponse.v1` rows are emitted unchanged for repo-local compatibility and also normalized into canonical `packageResponse.v1` rows.
+The selected `ops.packageResponse.v1` rows must be emitted unchanged for repo-local compatibility and also normalized into canonical `packageResponse.v1` rows.
 
-Minimum mapping covered:
+Minimum mapping:
 
 | ops field | canonical field |
 |---|---|
@@ -57,15 +57,15 @@ Minimum mapping covered:
 | `receipt_ref` | `receipt` / `receipt_ref` |
 | `residuals` | `residuals` |
 
-## Drift handling implemented
+## Drift handling required
 
-`package-drifts.jsonl` emits `unregistered-package` rows for packages that exist in ops inventory but do not have selected ops package responses in this PR.
+`package-drifts.jsonl` must emit `unregistered-package` rows for packages that exist in ops inventory but do not have selected ops package responses in this PR.
 
 This is a non-authority diagnostic. ADRS still defines obligations and governance still performs reusable joins/gates.
 
 ## Validation
 
-`ops-package-responses validate` verifies:
+`ops-package-responses validate` must verify:
 
 - all packet files exist
 - manifest row counts match emitted files
@@ -76,7 +76,7 @@ This is a non-authority diagnostic. ADRS still defines obligations and governanc
 - drift rows do not target already-covered response packages
 - `evidence-output` inventory is not treated as source package reality
 
-`ops-package-responses selftest` runs a positive packet test and negative fixtures for missing freshness and missing source-dir inventory.
+`ops-package-responses selftest` must run a positive packet test and negative fixtures for missing freshness and missing source-dir inventory.
 
 ## PR work-order rule kept for later PRs
 
@@ -105,7 +105,7 @@ Required PR body sections:
 
 ## Acceptance
 
-This PR is complete when:
+This PR is complete only when:
 
 - `packages/ops-package-responses` emits inventory, canonical responses, canonical residuals, and drift rows.
 - `packages/ops-package-responses` validates those rows.
