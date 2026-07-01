@@ -8,40 +8,59 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(here, "..", "..", "..");
 const siblingBin = path.join(here, "..", "bin", "ops-package-responses.mjs");
 const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ["ops-package-responses"];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ops-package-responses-e2e-"));
 
-function run(argv, opts = {}) {
-  return execFileSync(cmd[0], [...cmd.slice(1), ...argv], {
-    encoding: "utf-8",
-    maxBuffer: 16 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-    ...opts,
-  });
+function run(argv) {
+  return execFileSync(cmd[0], [...cmd.slice(1), ...argv], { encoding: "utf-8", maxBuffer: 16 * 1024 * 1024 });
+}
+function readJsonl(file) {
+  return fs.readFileSync(file, "utf-8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
 try {
   const outDir = path.join(tmp, "packet");
-  const emit = JSON.parse(run(["emit", "--out-dir", outDir, "--json"]));
+  const emit = JSON.parse(run(["emit", "--out-dir", outDir, "--repo-root", repoRoot, "--json"]));
   assert.equal(emit.kind, "ops.packageResponsePacket.v1");
   assert.equal(emit.authority, false);
   assert.equal(emit.non_authority_diagnostic, true);
   assert.equal(emit.row_counts.responses, 5);
+  assert.equal(emit.row_counts.canonical_responses, 5);
+  assert.equal(emit.row_counts.canonical_residuals, 1);
+  assert.ok(emit.row_counts.inventory >= emit.row_counts.responses);
+  assert.ok(emit.row_counts.drifts > 0);
 
-  for (const file of emit.files) {
-    assert.ok(fs.statSync(path.join(outDir, file)).size > 0, `${file} should be non-empty`);
-  }
-  assert.ok(fs.statSync(path.join(outDir, "manifest.json")).size > 0);
+  for (const file of emit.files) assert.ok(fs.statSync(path.join(outDir, file)).size > 0, `${file} should be non-empty`);
+
+  const inventory = readJsonl(path.join(outDir, "package-inventory.jsonl"));
+  const sourceKinds = new Set(inventory.map((row) => row.source_kind));
+  for (const kind of ["build-packages-jsonl", "build-checks-jsonl", "flake-generated", "flake-explicit", "source-dir", "evidence-output"]) assert.ok(sourceKinds.has(kind), `inventory must include ${kind}`);
+
+  const canonicalResponses = readJsonl(path.join(outDir, "package-responses.jsonl"));
+  assert.ok(canonicalResponses.every((row) => row.kind === "packageResponse.v1"));
+  assert.ok(canonicalResponses.every((row) => row.authority === false));
+  assert.ok(canonicalResponses.some((row) => row.package_id === "ops-package-responses" && row.residuals.length === 1));
+
+  const canonicalResiduals = readJsonl(path.join(outDir, "package-residuals.jsonl"));
+  assert.equal(canonicalResiduals.length, 1);
+  assert.equal(canonicalResiduals[0].kind, "packageResidual.v1");
+
+  const drifts = readJsonl(path.join(outDir, "package-drifts.jsonl"));
+  assert.ok(drifts.some((row) => row.package_id === "ops-issue-ledger"));
+  assert.ok(!drifts.some((row) => row.package_id === "ops-package-responses"));
+  assert.ok(drifts.every((row) => row.kind === "packageDrift.v1"));
+  assert.ok(drifts.every((row) => row.authority === false));
 
   const validation = JSON.parse(run(["validate", "--out-dir", outDir, "--json"]));
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
   assert.equal(validation.counts.responses, 5);
-  assert.equal(validation.counts.evidence, 10);
-  assert.equal(validation.counts.receipts, 5);
-  assert.equal(validation.counts.residuals, 1);
+  assert.equal(validation.counts.canonical_responses, 5);
+  assert.equal(validation.counts.inventory, emit.row_counts.inventory);
+  assert.equal(validation.counts.drifts, emit.row_counts.drifts);
 
-  const selftest = JSON.parse(run(["selftest", "--json"]));
+  const selftest = JSON.parse(run(["selftest", "--repo-root", repoRoot, "--json"]));
   assert.equal(selftest.ok, true, JSON.stringify(selftest.errors));
   assert.equal(selftest.negative_fixture, "pass");
 
@@ -49,16 +68,14 @@ try {
   fs.cpSync(outDir, brokenDir, { recursive: true });
   fs.rmSync(path.join(brokenDir, "ops-package-receipts.jsonl"));
   let failed = false;
-  try {
-    run(["validate", "--out-dir", brokenDir, "--json"]);
-  } catch (error) {
+  try { run(["validate", "--out-dir", brokenDir, "--json"]); }
+  catch (error) {
     failed = true;
     const result = JSON.parse(String(error.stdout));
     assert.equal(result.ok, false);
     assert.ok(result.errors.some((e) => e.code === "missing-file"));
   }
   assert.equal(failed, true, "missing receipt file must fail validation");
-
   process.stdout.write("ops-package-responses: all tests passed\n");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
