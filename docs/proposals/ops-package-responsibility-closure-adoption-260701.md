@@ -1,50 +1,49 @@
-# ops package responsibility closure adoption work order
+# ops package responsibility closure adoption implementation
 
 ## Purpose
 
-Adopt the package responsibility closure plane in `roccho-dev/ops`.
+Adopt the package responsibility closure plane in `roccho-dev/ops` with machine-readable ops outputs.
 
-The goal is to make the many real ops packages visible to ADRS/governance package closure without pretending that all of them already have ADRS obligations or package responses.
+The goal is to make real ops packages visible to ADRS/governance package closure without pretending that all packages already have ADRS obligations or covered package responses.
 
-This PR is a work specification. It does not implement strict all-repo gating, production deploy checks, or authority changes.
+## Goal update
 
-## Primary gaps
+This PR is no longer only a work specification. It implements the selected ops-side closure packet in `packages/ops-package-responses`.
 
-| Gap | Current | Expected closure |
+It still does not implement strict all-repo gating, production deploy checks, deploy approval, or authority changes.
+
+## Implemented outputs
+
+| Output | File | Role |
 |---|---|---|
-| ops has many real packages | `build/packages.jsonl` lists many package outputs | emit canonical `packageInventory.v1` rows |
-| ops package responses cover only selected packages | `ops-package-responses` emits a bounded response packet | normalize responses and expose unanswered inventory as drift |
-| ops response shape is repo-local | `ops.packageResponse.v1` differs from governance package response shape | add normalizer or emit canonical companion rows |
-| residuals can be hidden if only in PR prose | residuals exist in response packet, but closure plane needs standard rows | return residuals as machine-readable closure input |
+| repo-local responses | `ops-package-responses.jsonl` | existing selected `ops.packageResponse.v1` package responses |
+| evidence | `ops-package-evidence.jsonl` | non-authority evidence rows linked from responses |
+| receipts | `ops-package-receipts.jsonl` | non-authority receipt rows linked from responses |
+| repo-local residuals | `ops-package-residuals.jsonl` | existing returned residual rows |
+| canonical inventory | `package-inventory.jsonl` | `packageInventory.v1` rows for ops package reality |
+| canonical responses | `package-responses.jsonl` | normalized `packageResponse.v1` rows for governance-readable joins |
+| canonical residuals | `package-residuals.jsonl` | normalized `packageResidual.v1` rows |
+| drift rows | `package-drifts.jsonl` | non-authority `packageDrift.v1` rows for unanswered ops package inventory |
+| manifest | `manifest.json` | packet boundary and row counts |
 
-## Required ops outputs
+## Inventory sources
 
-### `packageInventory.v1`
+`ops-package-responses emit` now classifies inventory from:
 
-Ops should emit inventory rows from:
+- `build/packages.jsonl` as `build-packages-jsonl`
+- `build/checks.jsonl` as `build-checks-jsonl`
+- generated flake package declarations as `flake-generated`
+- explicit flake packages as `flake-explicit`
+- source package directories under `packages/**` as `source-dir`
+- generated packet files as `evidence-output`
 
-- `build/packages.jsonl`
-- `build/checks.jsonl`
-- generated flake packages derived from package declarations
-- explicit flake packages that are not represented by `build/packages.jsonl`
-- source package directories under `packages/**`
+`evidence-output` rows are deliberately not treated as source package reality when drift rows are computed.
 
-Inventory rows must classify source kind:
+## Response normalization
 
-| source_kind | Meaning |
-|---|---|
-| `build-packages-jsonl` | declared package output |
-| `build-checks-jsonl` | declared check output |
-| `flake-generated` | package/check generated from jsonl fold |
-| `flake-explicit` | explicit flake package not in jsonl fold |
-| `source-dir` | source directory with bin/test/lib content |
-| `evidence-output` | generated evidence; must not be treated as source package |
+The selected `ops.packageResponse.v1` rows are emitted unchanged for repo-local compatibility and also normalized into canonical `packageResponse.v1` rows.
 
-### `packageResponse.v1`
-
-Ops should normalize existing response packets into governance-readable rows.
-
-Minimum mapping:
+Minimum mapping covered:
 
 | ops field | canonical field |
 |---|---|
@@ -58,21 +57,30 @@ Minimum mapping:
 | `receipt_ref` | `receipt` / `receipt_ref` |
 | `residuals` | `residuals` |
 
-## Required drift handling
+## Drift handling implemented
 
-| Drift | Meaning in ops |
-|---|---|
-| `unregistered-package` | package exists in ops but ADRS has no obligation |
-| `claim-missing` | ADRS obligation exists but ops does not answer |
-| `extra-response` | ops response exists without ADRS obligation |
-| `required-test-missing` | response lacks required test evidence |
-| `receipt-missing` | closure lacks receipt |
-| `residual-hidden` | incomplete work lacks residual row |
-| `package-path-drift` | stable package id moved path without receipt |
+`package-drifts.jsonl` emits `unregistered-package` rows for packages that exist in ops inventory but do not have selected ops package responses in this PR.
 
-## PR work-order rule
+This is a non-authority diagnostic. ADRS still defines obligations and governance still performs reusable joins/gates.
 
-Each future ops package PR should be tied to one primary drift row or bounded drift batch.
+## Validation
+
+`ops-package-responses validate` verifies:
+
+- all packet files exist
+- manifest row counts match emitted files
+- authority boundary remains false
+- required inventory source kinds are present
+- canonical responses match selected response claims
+- canonical residuals match repo-local residuals
+- drift rows do not target already-covered response packages
+- `evidence-output` inventory is not treated as source package reality
+
+`ops-package-responses selftest` runs a positive packet test and negative fixtures for missing freshness and missing source-dir inventory.
+
+## PR work-order rule kept for later PRs
+
+Each future ops package PR should be tied to one primary `packageDrift.v1` row or bounded drift batch.
 
 Required PR body sections:
 
@@ -86,20 +94,10 @@ Required PR body sections:
 | Residual | returned residual row |
 | Non-scope | no ADRS meaning authority, no deploy approval, no all-repo strict claim |
 
-## Initial PR decomposition
-
-| PR | Purpose |
-|---|---|
-| ops inventory emitter | emit canonical inventory rows from `build/packages.jsonl`, checks, flake, and source dirs |
-| ops response normalizer | map existing `ops.packageResponse.v1` packet to canonical governance shape |
-| ops unregistered package report | expose packages present in ops but absent from ADRS obligations |
-| ops residual standardization | ensure residual rows are returned in canonical form |
-| ops selected strict adoption | only after ADRS explicitly selects scope and governance implements drift join |
-
-## Non-goals
+## Remaining non-goals
 
 - Do not claim all ops packages already have ADRS obligations.
-- Do not claim all ops packages already emit responses.
+- Do not claim all ops packages already emit covered responses.
 - Do not make ops a shared meaning authority.
 - Do not treat generated output as source package reality.
 - Do not make deploy or production promotion decisions in this package closure work.
@@ -107,6 +105,12 @@ Required PR body sections:
 
 ## Acceptance
 
-This PR is complete as a work order when it defines how ops will emit package inventory, normalize package responses, return residuals, and let governance produce non-authority drift rows.
+This PR is complete when:
 
-A later implementation PR is complete only when targeted ops drift rows disappear or are explicitly reduced with machine-readable residuals.
+- `packages/ops-package-responses` emits inventory, canonical responses, canonical residuals, and drift rows.
+- `packages/ops-package-responses` validates those rows.
+- `build/checks.jsonl:ops-package-responses` passes.
+- governance package validation passes.
+- the packet remains a non-authority diagnostic and does not claim ADRS/governance authority.
+
+Later implementation PRs close individual `packageDrift.v1` rows by adding selected obligations, selected responses, receipts, or returned residuals.
