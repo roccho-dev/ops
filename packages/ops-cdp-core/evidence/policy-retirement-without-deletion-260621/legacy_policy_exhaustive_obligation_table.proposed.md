@@ -1433,7 +1433,7 @@
 | 1431 | `compiler` | `accept` | `packages/sdui-policy-gate/README.md` | `candidate` | `require` | `rules/native-b667476f8e84b11eb197.md` | It does **not** render, execute, approve, append canonical events, or own domain truth. |
 | 1432 | `compiler` | `accept` | `packages/sdui-policy-gate/README.md` | `review` | `require` | `rules/native-98231453411621ba8e29.md` | - a dangerous action is missing approval metadata; |
 | 1433 | `compiler` | `accept` | `packages/sdui-policy-gate/README.md` | `review` | `require` | `rules/native-a0c0e0f42c8828829936.md` | - the response claims approval/canonical authority. |
-| 1434 | `compiler` | `accept` | `packages/ssot-package-in-instance-use/policy.md` | `mandatory` | `require` | `rules/native-c72d1772f4e330cf7c6d.md` | `ssh://<ssot-host>/home/nixos/repos/<repo>.git`, e.g. `ops`), it MUST consume |
+| 1434 | `compiler` | `accept` | `packages/ssot-package-in-instance-use/policy.md` | `mandatory` | `require` | `rules/native-c72d1772f4e330cf7c6d.md` | `ssh://<ssot-host>/home/nixos/repos/.bare/<repo>.git`, e.g. `ops`), it MUST consume |
 | 1435 | `compiler` | `accept` | `packages/ssot-package-in-instance-use/policy.md` | `mandatory` | `deny` | `rules/native-75ad384f2abd4682c2c9.md` | flake reference against the SSOT remote. It MUST NOT boot a separate harness |
 | 1436 | `compiler` | `accept` | `packages/ssot-package-in-instance-use/policy.md` | `mandatory` | `deny` | `rules/native-0e05ff44b28e271a123e.md` | instance to use a package, and MUST NOT take implicit side-effects (clone / |
 | 1437 | `compiler` | `accept` | `packages/ssot-package-in-instance-use/policy.md` | `mandatory` | `require` | `rules/native-98a1d07da0037d77cba0.md` | install) to do so. Before concluding the SSOT is unreachable, it MUST resolve |

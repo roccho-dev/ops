@@ -3337,7 +3337,7 @@ def typed_gate(gates: list[dict], gate_id: str, ok: bool, details: dict | None =
 POLICY_DELETION_REF_TOKENS = (
     "policy.git",
     "/home/nixos/repos/policy",
-    "git+ssh://100.124.250.91/home/nixos/repos/policy.git",
+    "git+ssh://100.124.250.91/home/nixos/repos/.bare/policy.git",
     "DEFAULT_POLICY_ROOT",
     "POLICY_SEMANTIC_POLICY_ROOT",
     "POLICY_URL",
