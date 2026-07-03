@@ -13,6 +13,29 @@ const siblingBin = path.join(here, "..", "bin", "ops-package-responses.mjs");
 const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ["ops-package-responses"];
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ops-package-responses-e2e-"));
 
+const canonicalFiles = [
+  "package-inventory.jsonl",
+  "package-responses.jsonl",
+  "package-residuals.jsonl",
+  "package-drifts.jsonl",
+];
+const allPacketFiles = [
+  "ops-package-responses.jsonl",
+  "ops-package-evidence.jsonl",
+  "ops-package-receipts.jsonl",
+  "ops-package-residuals.jsonl",
+  ...canonicalFiles,
+  "manifest.json",
+];
+const requiredInventoryKinds = [
+  "build-packages-jsonl",
+  "build-checks-jsonl",
+  "flake-generated",
+  "flake-explicit",
+  "source-dir",
+  "evidence-output",
+];
+
 function run(argv) {
   return execFileSync(cmd[0], [...cmd.slice(1), ...argv], { encoding: "utf-8", maxBuffer: 16 * 1024 * 1024 });
 }
@@ -32,26 +55,35 @@ try {
   assert.ok(emit.row_counts.inventory >= emit.row_counts.responses);
   assert.ok(emit.row_counts.drifts > 0);
 
-  for (const file of emit.files) assert.ok(fs.statSync(path.join(outDir, file)).size > 0, `${file} should be non-empty`);
+  for (const file of allPacketFiles) assert.ok(fs.statSync(path.join(outDir, file)).size > 0, `${file} should be non-empty`);
+  for (const file of canonicalFiles) assert.ok(emit.files.includes(file), `manifest must list ${file}`);
 
   const inventory = readJsonl(path.join(outDir, "package-inventory.jsonl"));
   const sourceKinds = new Set(inventory.map((row) => row.source_kind));
-  for (const kind of ["build-packages-jsonl", "build-checks-jsonl", "flake-generated", "flake-explicit", "source-dir", "evidence-output"]) assert.ok(sourceKinds.has(kind), `inventory must include ${kind}`);
+  for (const kind of requiredInventoryKinds) assert.ok(sourceKinds.has(kind), `inventory must include ${kind}`);
+  assert.ok(inventory.some((row) => row.package_id === "ops-package-responses" && row.source_kind === "source-dir"));
+  assert.ok(inventory.filter((row) => row.source_kind === "evidence-output").every((row) => row.item_kind === "evidence-output"));
 
   const canonicalResponses = readJsonl(path.join(outDir, "package-responses.jsonl"));
   assert.ok(canonicalResponses.every((row) => row.kind === "packageResponse.v1"));
   assert.ok(canonicalResponses.every((row) => row.authority === false));
+  assert.ok(canonicalResponses.every((row) => row.adrsRef && row.obligationId && row.packageId && row.packagePath));
+  assert.ok(canonicalResponses.every((row) => Array.isArray(row.tests) && Array.isArray(row.residuals)));
   assert.ok(canonicalResponses.some((row) => row.package_id === "ops-package-responses" && row.residuals.length === 1));
 
   const canonicalResiduals = readJsonl(path.join(outDir, "package-residuals.jsonl"));
   assert.equal(canonicalResiduals.length, 1);
   assert.equal(canonicalResiduals[0].kind, "packageResidual.v1");
+  assert.equal(canonicalResiduals[0].authority, false);
+  assert.equal(canonicalResiduals[0].status, "returned");
 
   const drifts = readJsonl(path.join(outDir, "package-drifts.jsonl"));
   assert.ok(drifts.some((row) => row.package_id === "ops-issue-ledger"));
   assert.ok(!drifts.some((row) => row.package_id === "ops-package-responses"));
   assert.ok(drifts.every((row) => row.kind === "packageDrift.v1"));
   assert.ok(drifts.every((row) => row.authority === false));
+  assert.ok(drifts.every((row) => row.drift_type === "unregistered-package"));
+  assert.ok(drifts.every((row) => !row.source_kinds.includes("evidence-output")));
 
   const validation = JSON.parse(run(["validate", "--out-dir", outDir, "--json"]));
   assert.equal(validation.ok, true, JSON.stringify(validation.errors));
@@ -76,7 +108,7 @@ try {
     assert.ok(result.errors.some((e) => e.code === "missing-file"));
   }
   assert.equal(failed, true, "missing receipt file must fail validation");
-  process.stdout.write("ops-package-responses: all tests passed\n");
+  process.stdout.write("ops-package-responses: canonical closure outputs verified\n");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
