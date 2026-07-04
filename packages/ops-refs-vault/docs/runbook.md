@@ -92,6 +92,40 @@ Each selected ref is pushed after a full managed-root preflight. Cross-repositor
 
 `--force` is rejected. `git push --mirror` is not used because it force-updates all refs and deletes remote-only refs.
 
+## Checked SSOT mirror publish
+
+For governed publish paths, use `checked-publish-one` instead of raw `backup-one`.
+
+`checked-publish-one` is the provider path for governance #115 when the selected provider is:
+
+```text
+bare repo SSOT + checked mirror publish gate
+```
+
+It reads the actual source bare `refs/heads/<branch>` target SHA, verifies a final gate receipt for that exact SHA, and refuses to publish unless all of these are true:
+
+- gate name is `gov-final-scope-purpose-join / gate`;
+- gate status is `pass`;
+- gate target SHA equals the actual source bare target SHA;
+- gate output digest is present, and equals `--expected-output-digest` when supplied;
+- an allow or reject audit receipt is emitted.
+
+For current SSOT mirror publish evidence, target `main`:
+
+```bash
+ops-refs-vault checked-publish-one \
+  --manifest manifest.json \
+  --repo-id governance \
+  --branch main \
+  --gate-receipt /var/lib/ssot/final-gate/runs/<run>/receipt.json \
+  --expected-output-digest sha256:<digest> \
+  --receipt-out /var/lib/ssot/refs-vault/runs/<run>/governance-main-publish-receipt.json
+```
+
+`checked-backup-one` is kept as a compatibility alias, but #115 evidence should call this path a checked publish gate.
+
+The wrapper and its selftests do not close governance #115 by themselves. #115 still requires real `refs/heads/main` mirror publish reject/accept/audit/rollback receipts from the active route.
+
 ## Remote candidate flow
 
 Candidate planning may observe any Git source URL. Candidate adoption and discard must run on the SSOT host with a local source bare because source compare-and-swap uses `git update-ref` and local object staging.

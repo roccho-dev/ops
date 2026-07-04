@@ -612,7 +612,7 @@ function evaluateFinalGateForTarget(gate, targetSha, expectedOutputDigest = null
   return reasons;
 }
 
-function cmdCheckedBackupOne(args) {
+function cmdCheckedPublishOne(args) {
   const manifest = loadManifest(args.manifest);
   const repo = manifestRepo(manifest, args.repo_id);
   const source = sourceBare(repo);
@@ -636,7 +636,7 @@ function cmdCheckedBackupOne(args) {
   });
   const report = {
     ok: decision === "allow",
-    mode: "checked-backup-one",
+    mode: "checked-publish-one",
     authority: false,
     provider: SSOT_PUBLISH_PROVIDER,
     finalGateName: FINAL_GATE_NAME,
@@ -651,6 +651,15 @@ function cmdCheckedBackupOne(args) {
     printJson(report);
     throw new VaultError(`SSOT publish gate rejected update: ${reasons.join(", ")}`);
   }
+  const preflight = reconcileManifestWithRemote(manifest, vault);
+  const unsafe = preflight.rows.filter((row) => !SAFE_BACKUP_CLASSIFICATIONS.has(row.classification));
+  if (preflight.sourceFailures.length || unsafe.length) {
+    report.ok = false;
+    report.preflight = { counts: preflight.counts, unsafe, sourceFailures: preflight.sourceFailures };
+    if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+    printJson(report);
+    throw new VaultError("managed remote root is not safe for checked publish");
+  }
   const pushed = pushSourceRefsToVault(source, vault, repo, [args.branch], args.dry_run)[0];
   const remoteHash = args.dry_run ? null : oneRemoteHash(vault, pushed.vaultRef);
   report.remoteHash = remoteHash;
@@ -661,6 +670,10 @@ function cmdCheckedBackupOne(args) {
   if (args.receipt_out) writeJsonFile(args.receipt_out, report);
   printJson(report);
   if (!report.ok) throw new VaultError("post-push vault hash differs from source");
+}
+
+function cmdCheckedBackupOne(args) {
+  cmdCheckedPublishOne(args);
 }
 
 function plannedSourceRefs(source, repo, branches) {
@@ -1295,7 +1308,7 @@ const PROG = "ops-refs-vault";
 // Byte-reproduced from argparse with prog="ops-refs-vault".
 const TOP_USAGE =
   `usage: ${PROG} [-h]\n` +
-  `                      {generate-manifest,backup-one,backup-all,restore-bare-one,promote-staging-bare,candidate-plan,candidate-adopt,candidate-discard,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
+  `                      {generate-manifest,backup-one,backup-all,checked-publish-one,checked-backup-one,restore-bare-one,promote-staging-bare,candidate-plan,candidate-adopt,candidate-discard,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
 
 // Per-subcommand usage blocks, byte-reproduced from argparse (prog="ops-refs-vault <cmd>").
 const SUB_USAGE = {
@@ -1311,6 +1324,20 @@ const SUB_USAGE = {
     `usage: ${PROG} backup-all [-h] --manifest MANIFEST [--remote REMOTE]\n` +
     `                                 [--branch BRANCH] [--receipt-out RECEIPT_OUT]\n` +
     `                                 [--force] [--dry-run]\n`,
+  "checked-publish-one":
+    `usage: ${PROG} checked-publish-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                         --branch BRANCH --gate-receipt GATE_RECEIPT\n` +
+    `                                         [--remote REMOTE] [--receipt-out RECEIPT_OUT]\n` +
+    `                                         [--expected-output-digest EXPECTED_OUTPUT_DIGEST]\n` +
+    `                                         [--actor ACTOR] [--update-path UPDATE_PATH]\n` +
+    `                                         [--dry-run]\n`,
+  "checked-backup-one":
+    `usage: ${PROG} checked-backup-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                        --branch BRANCH --gate-receipt GATE_RECEIPT\n` +
+    `                                        [--remote REMOTE] [--receipt-out RECEIPT_OUT]\n` +
+    `                                        [--expected-output-digest EXPECTED_OUTPUT_DIGEST]\n` +
+    `                                        [--actor ACTOR] [--update-path UPDATE_PATH]\n` +
+    `                                        [--dry-run]\n`,
   "restore-bare-one":
     `usage: ${PROG} restore-bare-one [-h] --manifest MANIFEST\n` +
     `                                       --repo-id REPO_ID --branch BRANCH\n` +
@@ -1365,6 +1392,16 @@ const SUB_SPEC = {
   },
   "backup-one": { flags: ["--remote"], bools: ["--force", "--dry-run"], required: ["--manifest", "--repo-id", "--branch"] },
   "backup-all": { flags: ["--remote", "--branch", "--receipt-out"], bools: ["--force", "--dry-run"], required: ["--manifest"] },
+  "checked-publish-one": {
+    flags: ["--remote", "--receipt-out", "--expected-output-digest", "--actor", "--update-path"],
+    bools: ["--dry-run"],
+    required: ["--manifest", "--repo-id", "--branch", "--gate-receipt"],
+  },
+  "checked-backup-one": {
+    flags: ["--remote", "--receipt-out", "--expected-output-digest", "--actor", "--update-path"],
+    bools: ["--dry-run"],
+    required: ["--manifest", "--repo-id", "--branch", "--gate-receipt"],
+  },
   "restore-bare-one": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch", "--staging-bare"] },
   "promote-staging-bare": { flags: [], bools: ["--confirm"], required: ["--repo-id", "--staging-bare", "--target-bare"] },
   "candidate-plan": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch"] },
@@ -1402,6 +1439,10 @@ function parseSub(command, rest) {
     "--receipt-out",
     "--expected-source-oid",
     "--expected-remote-oid",
+    "--gate-receipt",
+    "--expected-output-digest",
+    "--actor",
+    "--update-path",
   ];
   const key = (flag) => flag.replace(/^--/, "").replace(/-/g, "_");
   const out = {
@@ -1418,6 +1459,10 @@ function parseSub(command, rest) {
     receipt_out: null,
     expected_source_oid: undefined,
     expected_remote_oid: undefined,
+    gate_receipt: undefined,
+    expected_output_digest: null,
+    actor: null,
+    update_path: null,
     force: false,
     dry_run: false,
     confirm: false,
@@ -1449,6 +1494,8 @@ const DISPATCH = {
   "generate-manifest": cmdGenerateManifest,
   "backup-one": cmdBackupOne,
   "backup-all": cmdBackupAll,
+  "checked-publish-one": cmdCheckedPublishOne,
+  "checked-backup-one": cmdCheckedBackupOne,
   "restore-bare-one": cmdRestoreBareOne,
   "promote-staging-bare": cmdPromoteStagingBare,
   "candidate-plan": cmdCandidatePlan,
@@ -1470,7 +1517,7 @@ function main(argv) {
   const command = args[0];
   if (!(command in DISPATCH)) {
     topUsageError(
-      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, restore-bare-one, promote-staging-bare, candidate-plan, candidate-adopt, candidate-discard, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
+      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, checked-publish-one, checked-backup-one, restore-bare-one, promote-staging-bare, candidate-plan, candidate-adopt, candidate-discard, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
     );
   }
   const parsed = command === "smoke-local" ? {} : parseSub(command, args.slice(1));

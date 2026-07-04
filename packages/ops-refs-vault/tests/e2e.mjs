@@ -77,6 +77,15 @@ function makeManifest(root, bareRoot, vault) {
   return manifest;
 }
 
+function writeJson(p, value) {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function validDigest(ch = "a") {
+  return `sha256:${ch.repeat(64)}`;
+}
+
 function setupSource(root, repoPath = "alpha", branch = "main") {
   const bare = path.join(root, "ssot", `${repoPath}.git`);
   const work = path.join(root, "work", repoPath);
@@ -320,4 +329,111 @@ test("restore proves OID, HEAD, fsck, clone usability, and CLI avoids mirror pus
 
   const cliSource = fs.readFileSync(CLI, "utf8");
   assert.equal(cliSource.includes("--mirror"), false);
+});
+
+test("checked publish gate rejects missing, stale, and mismatched gate evidence before mirror update", () => {
+  const root = tmpRoot("checked-publish-reject-");
+  const vault = path.join(root, "refs.git");
+  initBare(vault);
+  const { sourceOid } = setupSource(root, "alpha", "main");
+  const manifest = makeManifest(root, path.join(root, "ssot"), vault);
+  const remoteRef = projectHeadRef(encodeRepoPath("alpha"), "main");
+
+  const missingGate = path.join(root, "gate-missing.json");
+  writeJson(missingGate, {});
+  const missing = cliJson(
+    ["checked-publish-one", "--manifest", manifest, "--repo-id", "alpha", "--branch", "main", "--gate-receipt", missingGate],
+    { check: false },
+  );
+  assert.notEqual(missing.proc.status, 0);
+  assert.equal(missing.json.receipt.decision, "reject");
+  assert(missing.json.receipt.reasons.includes("final-gate-missing"));
+  assert.equal(hash(vault, remoteRef), null);
+
+  const staleGate = path.join(root, "gate-stale.json");
+  writeJson(staleGate, {
+    name: "gov-final-scope-purpose-join / gate",
+    status: "pass",
+    targetSha: "1".repeat(40),
+    outputDigest: validDigest("b"),
+  });
+  const stale = cliJson(
+    ["checked-publish-one", "--manifest", manifest, "--repo-id", "alpha", "--branch", "main", "--gate-receipt", staleGate],
+    { check: false },
+  );
+  assert.notEqual(stale.proc.status, 0);
+  assert(stale.json.receipt.reasons.includes("target-sha-mismatch"));
+  assert.equal(hash(vault, remoteRef), null);
+
+  const digestGate = path.join(root, "gate-digest.json");
+  writeJson(digestGate, {
+    name: "gov-final-scope-purpose-join / gate",
+    status: "pass",
+    targetSha: sourceOid,
+    outputDigest: validDigest("c"),
+  });
+  const mismatch = cliJson(
+    [
+      "checked-publish-one",
+      "--manifest",
+      manifest,
+      "--repo-id",
+      "alpha",
+      "--branch",
+      "main",
+      "--gate-receipt",
+      digestGate,
+      "--expected-output-digest",
+      validDigest("d"),
+    ],
+    { check: false },
+  );
+  assert.notEqual(mismatch.proc.status, 0);
+  assert(mismatch.json.receipt.reasons.includes("digest-mismatch"));
+  assert.equal(hash(vault, remoteRef), null);
+});
+
+test("checked publish gate allows exact final gate target SHA and writes audit receipt", () => {
+  const root = tmpRoot("checked-publish-allow-");
+  const vault = path.join(root, "refs.git");
+  initBare(vault);
+  const { sourceOid } = setupSource(root, "alpha", "main");
+  const manifest = makeManifest(root, path.join(root, "ssot"), vault);
+  const remoteRef = projectHeadRef(encodeRepoPath("alpha"), "main");
+  const digest = validDigest("e");
+  const gate = path.join(root, "gate-pass.json");
+  const receiptOut = path.join(root, "receipt", "allow.json");
+  writeJson(gate, {
+    name: "gov-final-scope-purpose-join / gate",
+    status: "pass",
+    targetSha: sourceOid,
+    outputDigest: digest,
+    runId: "local-e2e-final-gate-pass",
+  });
+
+  const allowed = cliJson([
+    "checked-publish-one",
+    "--manifest",
+    manifest,
+    "--repo-id",
+    "alpha",
+    "--branch",
+    "main",
+    "--gate-receipt",
+    gate,
+    "--expected-output-digest",
+    digest,
+    "--receipt-out",
+    receiptOut,
+    "--actor",
+    "ops-refs-vault-e2e",
+  ]);
+  assert.equal(allowed.json.ok, true);
+  assert.equal(allowed.json.receipt.decision, "allow");
+  assert.equal(allowed.json.receipt.selectedRef, "refs/heads/main");
+  assert.equal(allowed.json.receipt.targetSha, sourceOid);
+  assert.equal(hash(vault, remoteRef), sourceOid);
+  const saved = JSON.parse(fs.readFileSync(receiptOut, "utf8"));
+  assert.equal(saved.receipt.finalGate.name, "gov-final-scope-purpose-join / gate");
+  assert.equal(saved.receipt.finalGate.outputDigest, digest);
 });
