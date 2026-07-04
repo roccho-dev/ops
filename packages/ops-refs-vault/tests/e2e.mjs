@@ -348,6 +348,8 @@ test("checked publish gate rejects missing, stale, and mismatched gate evidence 
   assert.notEqual(missing.proc.status, 0);
   assert.equal(missing.json.receipt.decision, "reject");
   assert(missing.json.receipt.reasons.includes("final-gate-missing"));
+  assert.equal(missing.json.receipt.sourceRef, "refs/heads/main");
+  assert.equal(missing.json.receipt.vaultRef, remoteRef);
   assert.equal(hash(vault, remoteRef), null);
 
   const staleGate = path.join(root, "gate-stale.json");
@@ -431,6 +433,8 @@ test("checked publish gate allows exact final gate target SHA and writes audit r
   assert.equal(allowed.json.ok, true);
   assert.equal(allowed.json.receipt.decision, "allow");
   assert.equal(allowed.json.receipt.selectedRef, "refs/heads/main");
+  assert.equal(allowed.json.receipt.sourceRef, "refs/heads/main");
+  assert.equal(allowed.json.receipt.vaultRef, remoteRef);
   assert.equal(allowed.json.receipt.targetSha, sourceOid);
   assert.equal(hash(vault, remoteRef), sourceOid);
   const saved = JSON.parse(fs.readFileSync(receiptOut, "utf8"));

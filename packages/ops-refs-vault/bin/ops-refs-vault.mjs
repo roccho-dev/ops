@@ -568,7 +568,7 @@ function loadFinalGateReceipt(p) {
   return value.finalGate && typeof value.finalGate === "object" ? value.finalGate : value;
 }
 
-function buildSsotPublishReceipt({ decision, reasons, repoId, source, sourceRef, targetSha, gate, actor, updatePath }) {
+function buildSsotPublishReceipt({ decision, reasons, repoId, source, sourceRef, mirrorRef, targetSha, gate, actor, updatePath }) {
   const timestamp = new Date().toISOString();
   const finalGate = {};
   const gateName = gateValue(gate, "name", "finalGateName");
@@ -589,6 +589,9 @@ function buildSsotPublishReceipt({ decision, reasons, repoId, source, sourceRef,
     repoId,
     sourceBarePath: source,
     selectedRef: sourceRef,
+    sourceRef,
+    mirrorRef,
+    vaultRef: mirrorRef,
     targetSha,
     finalGate,
     actor,
@@ -618,6 +621,8 @@ function cmdCheckedPublishOne(args) {
   const source = sourceBare(repo);
   const vault = vaultRemote(manifest, args.remote);
   const sourceRef = `refs/heads/${args.branch}`;
+  const { repoKey } = identityFromRepo(repo);
+  const mirrorRef = projectHeadRef(repoKey, args.branch);
   const targetSha = oneRemoteHash(source, sourceRef);
   if (!targetSha) throw new VaultError(`source branch missing: ${source} ${sourceRef}`);
   const gate = loadFinalGateReceipt(args.gate_receipt);
@@ -629,6 +634,7 @@ function cmdCheckedPublishOne(args) {
     repoId: args.repo_id,
     source,
     sourceRef,
+    mirrorRef,
     targetSha,
     gate,
     actor: args.actor || "ops-refs-vault",
@@ -642,6 +648,9 @@ function cmdCheckedPublishOne(args) {
     finalGateName: FINAL_GATE_NAME,
     repoId: args.repo_id,
     selectedRef: sourceRef,
+    sourceRef,
+    mirrorRef,
+    vaultRef: mirrorRef,
     targetSha,
     dryRun: args.dry_run,
     receipt,

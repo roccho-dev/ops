@@ -110,6 +110,8 @@ It reads the actual source bare `refs/heads/<branch>` target SHA, verifies a fin
 - gate output digest is present, and equals `--expected-output-digest` when supplied;
 - an allow or reject audit receipt is emitted.
 
+Receipts include both the source selected ref and the mirror/vault ref. Preserve `sourceRef` and `vaultRef` when handing real evidence to governance so the reviewer can see which SSOT ref was checked and which generated mirror ref was, or would have been, updated.
+
 For current SSOT mirror publish evidence, target `main`:
 
 ```bash
