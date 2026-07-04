@@ -32,6 +32,9 @@ const REMOTE_ENV = "OPS_REFS_VAULT_REMOTE";
 const REPO_ID_RE = /^(?!\.)(?!.*\.\.)(?!.*\.lock$)(?!.*@\{)[A-Za-z0-9._-]+$/;
 const ZERO_OID = "0".repeat(40);
 const OBJECT_ID_RE = /^[0-9a-f]{40}$/i;
+const FINAL_GATE_NAME = "gov-final-scope-purpose-join / gate";
+const SSOT_PUBLISH_PROVIDER = "bare-repo-ssot-checked-mirror-publish";
+const DIGEST_RE = /^sha256:[0-9a-f]{64}$/i;
 
 class VaultError extends Error {}
 
@@ -550,6 +553,114 @@ function pushSourceRefToVault(source, vault, repoId, branch, force = false, dryR
     pushRefToVault(source, vault, srcRef, dstRef, force);
   }
   return { sourceRef: srcRef, sourceHash: sourceSha, vaultRef: dstRef, refspec };
+}
+
+function gateValue(gate, ...names) {
+  for (const name of names) {
+    if (gate && gate[name] !== undefined && gate[name] !== null) return gate[name];
+  }
+  return null;
+}
+
+function loadFinalGateReceipt(p) {
+  if (!p) return {};
+  const value = JSON.parse(fs.readFileSync(p, "utf8"));
+  return value.finalGate && typeof value.finalGate === "object" ? value.finalGate : value;
+}
+
+function buildSsotPublishReceipt({ decision, reasons, repoId, source, sourceRef, targetSha, gate, actor, updatePath }) {
+  const timestamp = new Date().toISOString();
+  const finalGate = {};
+  const gateName = gateValue(gate, "name", "finalGateName");
+  const gateStatus = gateValue(gate, "status", "finalGateStatus");
+  const gateTargetSha = gateValue(gate, "targetSha", "finalGateTargetSha");
+  const gateDigest = gateValue(gate, "outputDigest", "finalGateOutputDigest");
+  const gateRunId = gateValue(gate, "runId", "finalGateRunId");
+  if (gateName) finalGate.name = gateName;
+  if (gateStatus) finalGate.status = gateStatus;
+  if (gateTargetSha) finalGate.targetSha = gateTargetSha;
+  if (gateDigest) finalGate.outputDigest = gateDigest;
+  if (gateRunId) finalGate.runId = gateRunId;
+  return {
+    kind: "governance.ssotPublishGate.auditReceipt.v1",
+    provider: SSOT_PUBLISH_PROVIDER,
+    decision,
+    reasons,
+    repoId,
+    sourceBarePath: source,
+    selectedRef: sourceRef,
+    targetSha,
+    finalGate,
+    actor,
+    path: updatePath,
+    timestamp,
+  };
+}
+
+function evaluateFinalGateForTarget(gate, targetSha, expectedOutputDigest = null) {
+  const reasons = [];
+  const name = gateValue(gate, "name", "finalGateName");
+  const status = gateValue(gate, "status", "finalGateStatus");
+  const gateTargetSha = gateValue(gate, "targetSha", "finalGateTargetSha");
+  const outputDigest = gateValue(gate, "outputDigest", "finalGateOutputDigest");
+  if (!name) reasons.push("final-gate-missing");
+  else if (name !== FINAL_GATE_NAME) reasons.push("final-gate-name-mismatch");
+  if (status !== "pass") reasons.push("final-gate-not-pass");
+  if (gateTargetSha !== targetSha) reasons.push("target-sha-mismatch");
+  if (!outputDigest || !DIGEST_RE.test(outputDigest)) reasons.push("final-gate-digest-missing");
+  if (expectedOutputDigest && outputDigest !== expectedOutputDigest) reasons.push("digest-mismatch");
+  return reasons;
+}
+
+function cmdCheckedBackupOne(args) {
+  const manifest = loadManifest(args.manifest);
+  const repo = manifestRepo(manifest, args.repo_id);
+  const source = sourceBare(repo);
+  const vault = vaultRemote(manifest, args.remote);
+  const sourceRef = `refs/heads/${args.branch}`;
+  const targetSha = oneRemoteHash(source, sourceRef);
+  if (!targetSha) throw new VaultError(`source branch missing: ${source} ${sourceRef}`);
+  const gate = loadFinalGateReceipt(args.gate_receipt);
+  const reasons = evaluateFinalGateForTarget(gate, targetSha, args.expected_output_digest);
+  const decision = reasons.length ? "reject" : "allow";
+  const receipt = buildSsotPublishReceipt({
+    decision,
+    reasons,
+    repoId: args.repo_id,
+    source,
+    sourceRef,
+    targetSha,
+    gate,
+    actor: args.actor || "ops-refs-vault",
+    updatePath: args.update_path || "ssot-to-mirror-publish",
+  });
+  const report = {
+    ok: decision === "allow",
+    mode: "checked-backup-one",
+    authority: false,
+    provider: SSOT_PUBLISH_PROVIDER,
+    finalGateName: FINAL_GATE_NAME,
+    repoId: args.repo_id,
+    selectedRef: sourceRef,
+    targetSha,
+    dryRun: args.dry_run,
+    receipt,
+  };
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  if (decision === "reject") {
+    printJson(report);
+    throw new VaultError(`SSOT publish gate rejected update: ${reasons.join(", ")}`);
+  }
+  const pushed = pushSourceRefsToVault(source, vault, repo, [args.branch], args.dry_run)[0];
+  const remoteHash = args.dry_run ? null : oneRemoteHash(vault, pushed.vaultRef);
+  report.remoteHash = remoteHash;
+  report.vaultRemote = vault;
+  report.vaultRef = pushed.vaultRef;
+  report.refspec = pushed.refspec;
+  report.ok = args.dry_run || pushed.sourceHash === remoteHash;
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  printJson(report);
+  if (!report.ok) throw new VaultError("post-push vault hash differs from source");
 }
 
 function plannedSourceRefs(source, repo, branches) {
