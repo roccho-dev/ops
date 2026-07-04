@@ -32,6 +32,10 @@ const REMOTE_ENV = "OPS_REFS_VAULT_REMOTE";
 const REPO_ID_RE = /^(?!\.)(?!.*\.\.)(?!.*\.lock$)(?!.*@\{)[A-Za-z0-9._-]+$/;
 const ZERO_OID = "0".repeat(40);
 const OBJECT_ID_RE = /^[0-9a-f]{40}$/i;
+const FINAL_GATE_NAME = "gov-final-scope-purpose-join / gate";
+const SSOT_PUBLISH_PROVIDER = "bare-repo-ssot-checked-mirror-publish";
+const SSOT_MAIN_UPDATE_PROVIDER = "bare-repo-ssot-checked-main-update";
+const DIGEST_RE = /^sha256:[0-9a-f]{64}$/i;
 
 class VaultError extends Error {}
 
@@ -550,6 +554,232 @@ function pushSourceRefToVault(source, vault, repoId, branch, force = false, dryR
     pushRefToVault(source, vault, srcRef, dstRef, force);
   }
   return { sourceRef: srcRef, sourceHash: sourceSha, vaultRef: dstRef, refspec };
+}
+
+function gateValue(gate, ...names) {
+  for (const name of names) {
+    if (gate && gate[name] !== undefined && gate[name] !== null) return gate[name];
+  }
+  return null;
+}
+
+function loadFinalGateReceipt(p) {
+  if (!p) return {};
+  const value = JSON.parse(fs.readFileSync(p, "utf8"));
+  return value.finalGate && typeof value.finalGate === "object" ? value.finalGate : value;
+}
+
+function buildSsotPublishReceipt({ decision, reasons, repoId, source, sourceRef, mirrorRef, targetSha, gate, actor, updatePath }) {
+  const timestamp = new Date().toISOString();
+  const finalGate = {};
+  const gateName = gateValue(gate, "name", "finalGateName");
+  const gateStatus = gateValue(gate, "status", "finalGateStatus");
+  const gateTargetSha = gateValue(gate, "targetSha", "finalGateTargetSha");
+  const gateDigest = gateValue(gate, "outputDigest", "finalGateOutputDigest");
+  const gateRunId = gateValue(gate, "runId", "finalGateRunId");
+  if (gateName) finalGate.name = gateName;
+  if (gateStatus) finalGate.status = gateStatus;
+  if (gateTargetSha) finalGate.targetSha = gateTargetSha;
+  if (gateDigest) finalGate.outputDigest = gateDigest;
+  if (gateRunId) finalGate.runId = gateRunId;
+  return {
+    kind: "governance.ssotPublishGate.auditReceipt.v1",
+    provider: SSOT_PUBLISH_PROVIDER,
+    decision,
+    reasons,
+    repoId,
+    sourceBarePath: source,
+    selectedRef: sourceRef,
+    sourceRef,
+    mirrorRef,
+    vaultRef: mirrorRef,
+    targetSha,
+    finalGate,
+    actor,
+    path: updatePath,
+    timestamp,
+  };
+}
+
+function evaluateFinalGateForTarget(gate, targetSha, expectedOutputDigest = null) {
+  const reasons = [];
+  const name = gateValue(gate, "name", "finalGateName");
+  const status = gateValue(gate, "status", "finalGateStatus");
+  const gateTargetSha = gateValue(gate, "targetSha", "finalGateTargetSha");
+  const outputDigest = gateValue(gate, "outputDigest", "finalGateOutputDigest");
+  if (!name) reasons.push("final-gate-missing");
+  else if (name !== FINAL_GATE_NAME) reasons.push("final-gate-name-mismatch");
+  if (status !== "pass") reasons.push("final-gate-not-pass");
+  if (gateTargetSha !== targetSha) reasons.push("target-sha-mismatch");
+  if (!outputDigest || !DIGEST_RE.test(outputDigest)) reasons.push("final-gate-digest-missing");
+  if (expectedOutputDigest && outputDigest !== expectedOutputDigest) reasons.push("digest-mismatch");
+  return reasons;
+}
+
+function cmdCheckedPublishOne(args) {
+  const manifest = loadManifest(args.manifest);
+  const repo = manifestRepo(manifest, args.repo_id);
+  const source = sourceBare(repo);
+  const vault = vaultRemote(manifest, args.remote);
+  const sourceRef = `refs/heads/${args.branch}`;
+  const { repoKey } = identityFromRepo(repo);
+  const mirrorRef = projectHeadRef(repoKey, args.branch);
+  const targetSha = oneRemoteHash(source, sourceRef);
+  if (!targetSha) throw new VaultError(`source branch missing: ${source} ${sourceRef}`);
+  const gate = loadFinalGateReceipt(args.gate_receipt);
+  const reasons = evaluateFinalGateForTarget(gate, targetSha, args.expected_output_digest);
+  const decision = reasons.length ? "reject" : "allow";
+  const receipt = buildSsotPublishReceipt({
+    decision,
+    reasons,
+    repoId: args.repo_id,
+    source,
+    sourceRef,
+    mirrorRef,
+    targetSha,
+    gate,
+    actor: args.actor || "ops-refs-vault",
+    updatePath: args.update_path || "ssot-to-mirror-publish",
+  });
+  const report = {
+    ok: decision === "allow",
+    mode: "checked-publish-one",
+    authority: false,
+    provider: SSOT_PUBLISH_PROVIDER,
+    finalGateName: FINAL_GATE_NAME,
+    repoId: args.repo_id,
+    selectedRef: sourceRef,
+    sourceRef,
+    mirrorRef,
+    vaultRef: mirrorRef,
+    targetSha,
+    dryRun: args.dry_run,
+    receipt,
+  };
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  if (decision === "reject") {
+    printJson(report);
+    throw new VaultError(`SSOT publish gate rejected update: ${reasons.join(", ")}`);
+  }
+  const preflight = reconcileManifestWithRemote(manifest, vault);
+  const unsafe = preflight.rows.filter((row) => !SAFE_BACKUP_CLASSIFICATIONS.has(row.classification));
+  if (preflight.sourceFailures.length || unsafe.length) {
+    report.ok = false;
+    report.preflight = { counts: preflight.counts, unsafe, sourceFailures: preflight.sourceFailures };
+    if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+    printJson(report);
+    throw new VaultError("managed remote root is not safe for checked publish");
+  }
+  const pushed = pushSourceRefsToVault(source, vault, repo, [args.branch], args.dry_run)[0];
+  const remoteHash = args.dry_run ? null : oneRemoteHash(vault, pushed.vaultRef);
+  report.remoteHash = remoteHash;
+  report.vaultRemote = vault;
+  report.vaultRef = pushed.vaultRef;
+  report.refspec = pushed.refspec;
+  report.ok = args.dry_run || pushed.sourceHash === remoteHash;
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  printJson(report);
+  if (!report.ok) throw new VaultError("post-push vault hash differs from source");
+}
+
+function buildSsotMainUpdateReceipt({ decision, reasons, targetBare, sourceRef, targetRef, oldTargetSha, newTargetSha, gate, actor, updatePath }) {
+  const timestamp = new Date().toISOString();
+  const finalGate = {};
+  const gateName = gateValue(gate, "name", "finalGateName");
+  const gateStatus = gateValue(gate, "status", "finalGateStatus");
+  const gateTargetSha = gateValue(gate, "targetSha", "finalGateTargetSha");
+  const gateDigest = gateValue(gate, "outputDigest", "finalGateOutputDigest");
+  const gateRunId = gateValue(gate, "runId", "finalGateRunId");
+  if (gateName) finalGate.name = gateName;
+  if (gateStatus) finalGate.status = gateStatus;
+  if (gateTargetSha) finalGate.targetSha = gateTargetSha;
+  if (gateDigest) finalGate.outputDigest = gateDigest;
+  if (gateRunId) finalGate.runId = gateRunId;
+  return {
+    kind: "governance.ssotMainUpdateGate.auditReceipt.v1",
+    provider: SSOT_MAIN_UPDATE_PROVIDER,
+    decision,
+    reasons,
+    targetBarePath: targetBare,
+    selectedRef: targetRef,
+    targetRef,
+    sourceRef,
+    oldTargetSha,
+    targetSha: newTargetSha,
+    newTargetSha,
+    finalGate,
+    actor,
+    path: updatePath,
+    timestamp,
+  };
+}
+
+function cmdCheckedBackupOne(args) {
+  cmdCheckedPublishOne(args);
+}
+
+function expectedOldArg(value) {
+  if (value === "absent") return ZERO_OID;
+  if (!OBJECT_ID_RE.test(value || "")) throw new VaultError(`invalid expected old sha: ${value}`);
+  return value;
+}
+
+function cmdCheckedPromoteMain(args) {
+  const targetBare = initBareIfMissing(args.target_bare);
+  const targetRef = args.target_ref || "refs/heads/main";
+  const sourceRef = args.source_ref;
+  const oldTargetSha = oneRemoteHash(targetBare, targetRef);
+  const newTargetSha = oneRemoteHash(targetBare, sourceRef);
+  if (!newTargetSha) throw new VaultError(`source ref missing: ${targetBare} ${sourceRef}`);
+  const expectedOldSha = expectedOldArg(args.expected_old_sha);
+  const gate = loadFinalGateReceipt(args.gate_receipt);
+  const reasons = evaluateFinalGateForTarget(gate, newTargetSha, args.expected_output_digest);
+  if (oldTargetSha !== null && expectedOldSha !== oldTargetSha) reasons.push("target-ref-lease-mismatch");
+  if (oldTargetSha === null && expectedOldSha !== ZERO_OID) reasons.push("target-ref-lease-mismatch");
+  const decision = reasons.length ? "reject" : "allow";
+  const receipt = buildSsotMainUpdateReceipt({
+    decision,
+    reasons,
+    targetBare,
+    sourceRef,
+    targetRef,
+    oldTargetSha,
+    newTargetSha,
+    gate,
+    actor: args.actor || "ops-refs-vault",
+    updatePath: args.update_path || "ssot-main-update",
+  });
+  const report = {
+    ok: decision === "allow",
+    mode: "checked-promote-main",
+    authority: false,
+    provider: SSOT_MAIN_UPDATE_PROVIDER,
+    finalGateName: FINAL_GATE_NAME,
+    targetBarePath: targetBare,
+    selectedRef: targetRef,
+    targetRef,
+    sourceRef,
+    oldTargetSha,
+    targetSha: newTargetSha,
+    newTargetSha,
+    expectedOldSha,
+    dryRun: args.dry_run,
+    receipt,
+  };
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  if (decision === "reject") {
+    printJson(report);
+    throw new VaultError(`SSOT main update gate rejected update: ${reasons.join(", ")}`);
+  }
+  if (!args.dry_run) {
+    run(["git", "--git-dir", targetBare, "update-ref", targetRef, newTargetSha, expectedOldSha], { capture: true });
+  }
+  const targetAfter = args.dry_run ? oldTargetSha : oneRemoteHash(targetBare, targetRef);
+  report.targetAfter = targetAfter;
+  report.ok = args.dry_run || targetAfter === newTargetSha;
+  if (args.receipt_out) writeJsonFile(args.receipt_out, report);
+  printJson(report);
+  if (!report.ok) throw new VaultError("post-promote target ref differs from source");
 }
 
 function plannedSourceRefs(source, repo, branches) {
@@ -1184,7 +1414,7 @@ const PROG = "ops-refs-vault";
 // Byte-reproduced from argparse with prog="ops-refs-vault".
 const TOP_USAGE =
   `usage: ${PROG} [-h]\n` +
-  `                      {generate-manifest,backup-one,backup-all,restore-bare-one,promote-staging-bare,candidate-plan,candidate-adopt,candidate-discard,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
+  `                      {generate-manifest,backup-one,backup-all,checked-promote-main,checked-publish-one,checked-backup-one,restore-bare-one,promote-staging-bare,candidate-plan,candidate-adopt,candidate-discard,audit,verify-one,verify-all,orphan-audit,inventory,smoke-local} ...\n`;
 
 // Per-subcommand usage blocks, byte-reproduced from argparse (prog="ops-refs-vault <cmd>").
 const SUB_USAGE = {
@@ -1200,6 +1430,30 @@ const SUB_USAGE = {
     `usage: ${PROG} backup-all [-h] --manifest MANIFEST [--remote REMOTE]\n` +
     `                                 [--branch BRANCH] [--receipt-out RECEIPT_OUT]\n` +
     `                                 [--force] [--dry-run]\n`,
+  "checked-promote-main":
+    `usage: ${PROG} checked-promote-main [-h] --target-bare TARGET_BARE\n` +
+    `                                          --source-ref SOURCE_REF\n` +
+    `                                          --expected-old-sha EXPECTED_OLD_SHA\n` +
+    `                                          --gate-receipt GATE_RECEIPT\n` +
+    `                                          [--target-ref TARGET_REF]\n` +
+    `                                          [--receipt-out RECEIPT_OUT]\n` +
+    `                                          [--expected-output-digest EXPECTED_OUTPUT_DIGEST]\n` +
+    `                                          [--actor ACTOR] [--update-path UPDATE_PATH]\n` +
+    `                                          [--dry-run]\n`,
+  "checked-publish-one":
+    `usage: ${PROG} checked-publish-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                         --branch BRANCH --gate-receipt GATE_RECEIPT\n` +
+    `                                         [--remote REMOTE] [--receipt-out RECEIPT_OUT]\n` +
+    `                                         [--expected-output-digest EXPECTED_OUTPUT_DIGEST]\n` +
+    `                                         [--actor ACTOR] [--update-path UPDATE_PATH]\n` +
+    `                                         [--dry-run]\n`,
+  "checked-backup-one":
+    `usage: ${PROG} checked-backup-one [-h] --manifest MANIFEST --repo-id REPO_ID\n` +
+    `                                        --branch BRANCH --gate-receipt GATE_RECEIPT\n` +
+    `                                        [--remote REMOTE] [--receipt-out RECEIPT_OUT]\n` +
+    `                                        [--expected-output-digest EXPECTED_OUTPUT_DIGEST]\n` +
+    `                                        [--actor ACTOR] [--update-path UPDATE_PATH]\n` +
+    `                                        [--dry-run]\n`,
   "restore-bare-one":
     `usage: ${PROG} restore-bare-one [-h] --manifest MANIFEST\n` +
     `                                       --repo-id REPO_ID --branch BRANCH\n` +
@@ -1254,6 +1508,21 @@ const SUB_SPEC = {
   },
   "backup-one": { flags: ["--remote"], bools: ["--force", "--dry-run"], required: ["--manifest", "--repo-id", "--branch"] },
   "backup-all": { flags: ["--remote", "--branch", "--receipt-out"], bools: ["--force", "--dry-run"], required: ["--manifest"] },
+  "checked-promote-main": {
+    flags: ["--target-ref", "--receipt-out", "--expected-output-digest", "--actor", "--update-path"],
+    bools: ["--dry-run"],
+    required: ["--target-bare", "--source-ref", "--expected-old-sha", "--gate-receipt"],
+  },
+  "checked-publish-one": {
+    flags: ["--remote", "--receipt-out", "--expected-output-digest", "--actor", "--update-path"],
+    bools: ["--dry-run"],
+    required: ["--manifest", "--repo-id", "--branch", "--gate-receipt"],
+  },
+  "checked-backup-one": {
+    flags: ["--remote", "--receipt-out", "--expected-output-digest", "--actor", "--update-path"],
+    bools: ["--dry-run"],
+    required: ["--manifest", "--repo-id", "--branch", "--gate-receipt"],
+  },
   "restore-bare-one": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch", "--staging-bare"] },
   "promote-staging-bare": { flags: [], bools: ["--confirm"], required: ["--repo-id", "--staging-bare", "--target-bare"] },
   "candidate-plan": { flags: ["--remote"], bools: [], required: ["--manifest", "--repo-id", "--branch"] },
@@ -1291,6 +1560,13 @@ function parseSub(command, rest) {
     "--receipt-out",
     "--expected-source-oid",
     "--expected-remote-oid",
+    "--gate-receipt",
+    "--target-ref",
+    "--source-ref",
+    "--expected-old-sha",
+    "--expected-output-digest",
+    "--actor",
+    "--update-path",
   ];
   const key = (flag) => flag.replace(/^--/, "").replace(/-/g, "_");
   const out = {
@@ -1307,6 +1583,13 @@ function parseSub(command, rest) {
     receipt_out: null,
     expected_source_oid: undefined,
     expected_remote_oid: undefined,
+    gate_receipt: undefined,
+    target_ref: null,
+    source_ref: undefined,
+    expected_old_sha: undefined,
+    expected_output_digest: null,
+    actor: null,
+    update_path: null,
     force: false,
     dry_run: false,
     confirm: false,
@@ -1338,6 +1621,9 @@ const DISPATCH = {
   "generate-manifest": cmdGenerateManifest,
   "backup-one": cmdBackupOne,
   "backup-all": cmdBackupAll,
+  "checked-promote-main": cmdCheckedPromoteMain,
+  "checked-publish-one": cmdCheckedPublishOne,
+  "checked-backup-one": cmdCheckedBackupOne,
   "restore-bare-one": cmdRestoreBareOne,
   "promote-staging-bare": cmdPromoteStagingBare,
   "candidate-plan": cmdCandidatePlan,
@@ -1359,7 +1645,7 @@ function main(argv) {
   const command = args[0];
   if (!(command in DISPATCH)) {
     topUsageError(
-      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, restore-bare-one, promote-staging-bare, candidate-plan, candidate-adopt, candidate-discard, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
+      `argument command: invalid choice: '${command}' (choose from generate-manifest, backup-one, backup-all, checked-promote-main, checked-publish-one, checked-backup-one, restore-bare-one, promote-staging-bare, candidate-plan, candidate-adopt, candidate-discard, audit, verify-one, verify-all, orphan-audit, inventory, smoke-local)`,
     );
   }
   const parsed = command === "smoke-local" ? {} : parseSub(command, args.slice(1));
