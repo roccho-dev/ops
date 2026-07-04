@@ -1,10 +1,10 @@
 # ops local gov-package-output cutover plan
 
-This plan is intentionally blocked until governance #115 accepts active selected-ref enforcement.
+This plan is intentionally blocked until governance #115 accepts active SSOT publish gate evidence.
 
-Governance #133 has merged the provider-neutral merge/write boundary proof implementation. That is necessary evidence, but it is not enough to unblock ops local cutover by itself. Ops waits for governance #115 to accept the active write-boundary enforcement and publish the final gate evidence path plus receipt format for downstream repos.
+Governance #133 has merged the provider-neutral merge/write boundary proof implementation. That is necessary evidence, but it is not enough to unblock ops local cutover by itself. Ops waits for governance #115 to accept the active bare repo SSOT + checked mirror publish gate evidence and publish the final gate evidence path plus receipt format for downstream repos.
 
-It is not final compliance evidence. It is an ops-local cutover plan that keeps ops as an evidence owner and waits for governance to provide both the final gate authority and the active write-boundary enforcement evidence.
+It is not final compliance evidence. It is an ops-local cutover plan that keeps ops as an evidence owner and waits for governance to provide both the final gate authority and the active SSOT publish gate evidence.
 
 ## Current dependency state
 
@@ -13,7 +13,8 @@ It is not final compliance evidence. It is an ops-local cutover plan that keeps 
 - ops #32 evidence is merged.
 - ops #29 remains open until post-governance-cutover local alignment is possible.
 - governance #133 is merged and supplies proof implementation.
-- governance #115 is still the upstream active selected-ref enforcement blocker.
+- governance #115 selected provider path is bare repo SSOT + checked mirror publish gate.
+- governance #115 is still the upstream active enforcement blocker.
 - governance #125 is still the root parent.
 
 ## Upstream #115 evidence required
@@ -21,16 +22,19 @@ It is not final compliance evidence. It is an ops-local cutover plan that keeps 
 - governance #133 proof implementation remains merged.
 - final gate name: `gov-final-scope-purpose-join / gate`.
 - same-name green evidence for the exact target SHA.
-- active selected-ref enforcement is accepted.
-- negative proof covers missing, stale, or SHA/digest-mismatched final gate output.
-- positive proof covers the exact target SHA after final gate pass.
-- audit receipt records target SHA, gate identity, decision, timestamp, actor, and path.
-- recovery instructions are recorded.
+- active bare repo SSOT + checked mirror publish gate evidence is accepted.
+- reject proof: publish/update without final gate pass is refused.
+- reject proof: stale target SHA is refused.
+- reject proof: digest or SHA mismatch is refused.
+- accept proof: exact target SHA is allowed only after final gate pass.
+- audit receipt records target SHA, selected ref, gate identity, decision, timestamp, actor/path, and digest.
+- rollback receipt or recovery instructions are recorded.
 - old-CI demotion evidence classifies old checks as producer, artifact, selftest, validator, or internal-step surfaces only.
 
 ## Preconditions for ops local cutover
 
 - governance #115 is complete.
+- SSOT publish gate acceptance packet and receipt format are stable.
 - ops local output is aligned to the accepted final evidence path.
 - old local checks are classified as `receipt-producer`, `artifact-producer`, `packet-validator`, `tool-selftest`, or `final-join-internal-step`.
 - local recovery is documented before any required-check or CI-intent change.
@@ -55,11 +59,11 @@ It is not final compliance evidence. It is an ops-local cutover plan that keeps 
 
 ## Unblock rule
 
-This PR can leave draft only after governance #115 accepts active selected-ref enforcement and the final evidence path plus write-boundary receipt format are stable.
+This PR can leave draft only after governance #115 accepts active SSOT publish gate evidence and the final evidence path plus write-boundary receipt format are stable.
 
 ## Recovery
 
-- keep existing `nix-check` and `gov package validation` until final gate is active at the write boundary.
+- keep existing `nix-check` and `gov package validation` until final gate is active at the SSOT publish boundary.
 - revert only local CI-intent changes if cutover fails.
 - keep evidence producers available during recovery.
 
@@ -69,4 +73,4 @@ This PR must remain blocked until governance #115 is complete. It does not claim
 
 ## Purpose path
 
-scope: ops local gov-package-output cutover after active selected-ref enforcement acceptance -> direct purpose: align downstream ops evidence with the enforced final gate -> upper purpose: prevent ops-local green from becoming false final compliance -> meta: prevent false-green, manual write bypass, and authority drift -> highest purpose: support buyer-auditable, transferable operating evidence for a high-value company sale.
+scope: ops local gov-package-output cutover after active SSOT publish gate evidence -> direct purpose: align downstream ops evidence with the enforced final gate -> upper purpose: prevent ops-local green from becoming false final compliance -> meta: prevent false-green, manual write bypass, and authority drift -> highest purpose: support buyer-auditable, transferable operating evidence for a high-value company sale.
