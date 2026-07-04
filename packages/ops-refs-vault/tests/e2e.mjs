@@ -441,3 +441,133 @@ test("checked publish gate allows exact final gate target SHA and writes audit r
   assert.equal(saved.receipt.finalGate.name, "gov-final-scope-purpose-join / gate");
   assert.equal(saved.receipt.finalGate.outputDigest, digest);
 });
+
+test("checked promote main gates SSOT main update before checked mirror publish", () => {
+  const root = tmpRoot("checked-promote-main-");
+  const vault = path.join(root, "refs.git");
+  initBare(vault);
+  const { bare, work, sourceOid: oldMain } = setupSource(root, "alpha", "main");
+  git(["checkout", "-q", "-b", "proposal/alpha"], { cwd: work });
+  const proposalSha = commitChange(work, "alpha-proposal");
+  pushWork(work, bare, "proposal/alpha");
+  assert.equal(hash(bare, "refs/heads/main"), oldMain);
+  assert.equal(hash(bare, "refs/heads/proposal/alpha"), proposalSha);
+
+  const sourceRef = "refs/heads/proposal/alpha";
+  const targetRef = "refs/heads/main";
+  const missingGate = path.join(root, "gate-missing.json");
+  writeJson(missingGate, {});
+  const missing = cliJson(
+    [
+      "checked-promote-main",
+      "--target-bare",
+      bare,
+      "--source-ref",
+      sourceRef,
+      "--expected-old-sha",
+      oldMain,
+      "--gate-receipt",
+      missingGate,
+    ],
+    { check: false },
+  );
+  assert.notEqual(missing.proc.status, 0);
+  assert.equal(missing.json.receipt.decision, "reject");
+  assert.equal(missing.json.receipt.targetRef, targetRef);
+  assert.equal(missing.json.receipt.sourceRef, sourceRef);
+  assert(missing.json.receipt.reasons.includes("final-gate-missing"));
+  assert.equal(hash(bare, targetRef), oldMain);
+
+  const staleGate = path.join(root, "gate-stale.json");
+  writeJson(staleGate, {
+    name: "gov-final-scope-purpose-join / gate",
+    status: "pass",
+    targetSha: "1".repeat(40),
+    outputDigest: validDigest("a"),
+  });
+  const stale = cliJson(
+    [
+      "checked-promote-main",
+      "--target-bare",
+      bare,
+      "--source-ref",
+      sourceRef,
+      "--expected-old-sha",
+      oldMain,
+      "--gate-receipt",
+      staleGate,
+    ],
+    { check: false },
+  );
+  assert.notEqual(stale.proc.status, 0);
+  assert(stale.json.receipt.reasons.includes("target-sha-mismatch"));
+  assert.equal(hash(bare, targetRef), oldMain);
+
+  const digest = validDigest("f");
+  const gate = path.join(root, "gate-pass.json");
+  writeJson(gate, {
+    name: "gov-final-scope-purpose-join / gate",
+    status: "pass",
+    targetSha: proposalSha,
+    outputDigest: digest,
+    runId: "local-e2e-promote-final-gate-pass",
+  });
+  const leaseMismatch = cliJson(
+    [
+      "checked-promote-main",
+      "--target-bare",
+      bare,
+      "--source-ref",
+      sourceRef,
+      "--expected-old-sha",
+      "2".repeat(40),
+      "--gate-receipt",
+      gate,
+      "--expected-output-digest",
+      digest,
+    ],
+    { check: false },
+  );
+  assert.notEqual(leaseMismatch.proc.status, 0);
+  assert(leaseMismatch.json.receipt.reasons.includes("target-ref-lease-mismatch"));
+  assert.equal(hash(bare, targetRef), oldMain);
+
+  const promoted = cliJson([
+    "checked-promote-main",
+    "--target-bare",
+    bare,
+    "--source-ref",
+    sourceRef,
+    "--expected-old-sha",
+    oldMain,
+    "--gate-receipt",
+    gate,
+    "--expected-output-digest",
+    digest,
+    "--actor",
+    "ops-refs-vault-e2e",
+  ]);
+  assert.equal(promoted.json.ok, true);
+  assert.equal(promoted.json.receipt.decision, "allow");
+  assert.equal(promoted.json.receipt.oldTargetSha, oldMain);
+  assert.equal(promoted.json.receipt.newTargetSha, proposalSha);
+  assert.equal(hash(bare, targetRef), proposalSha);
+
+  const manifest = makeManifest(root, path.join(root, "ssot"), vault);
+  const remoteRef = projectHeadRef(encodeRepoPath("alpha"), "main");
+  const published = cliJson([
+    "checked-publish-one",
+    "--manifest",
+    manifest,
+    "--repo-id",
+    "alpha",
+    "--branch",
+    "main",
+    "--gate-receipt",
+    gate,
+    "--expected-output-digest",
+    digest,
+  ]);
+  assert.equal(published.json.ok, true);
+  assert.equal(hash(vault, remoteRef), proposalSha);
+});

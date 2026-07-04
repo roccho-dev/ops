@@ -92,6 +92,44 @@ Each selected ref is pushed after a full managed-root preflight. Cross-repositor
 
 `--force` is rejected. `git push --mirror` is not used because it force-updates all refs and deletes remote-only refs.
 
+## Checked SSOT main update
+
+When a reviewed SSOT branch is promoted into the deployment-bearing SSOT ref, use `checked-promote-main`.
+
+This is the authority-side gate for governance #115:
+
+```text
+reviewed SSOT branch
+  -> checked-promote-main
+  -> <bareRoot>/<repoPath>.git refs/heads/main
+```
+
+The command updates `refs/heads/main` only when all of these are true:
+
+- the source ref exists in the target bare repo;
+- `--expected-old-sha` matches the current `refs/heads/main` value, or is `absent` when the target ref is absent;
+- gate name is `gov-final-scope-purpose-join / gate`;
+- gate status is `pass`;
+- gate target SHA equals the exact source ref SHA that will become `main`;
+- gate output digest is present, and equals `--expected-output-digest` when supplied;
+- an allow or reject audit receipt is emitted.
+
+Example:
+
+```bash
+old=$(git --git-dir /home/nixos/repos/.bare/governance.git rev-parse refs/heads/main)
+
+ops-refs-vault checked-promote-main \
+  --target-bare /home/nixos/repos/.bare/governance.git \
+  --source-ref refs/heads/proposal/example \
+  --expected-old-sha "$old" \
+  --gate-receipt /var/lib/ssot/final-gate/runs/<run>/receipt.json \
+  --expected-output-digest sha256:<digest> \
+  --receipt-out /var/lib/ssot/refs-vault/runs/<run>/governance-main-promote-receipt.json
+```
+
+`checked-promote-main` is separate from mirror publish. It decides whether SSOT `main` may move. `checked-publish-one` decides whether that accepted SSOT `main` may be published to the generated mirror/deploy-adapter ref.
+
 ## Checked SSOT mirror publish
 
 For governed publish paths, use `checked-publish-one` instead of raw `backup-one`.
