@@ -4,22 +4,24 @@
 
 Resolve the ops-specific unknown in governance #144 without adding copied README comparison logic.
 
-## Current target
+## Selected mode
 
-Ops should first declare whether root README is generated, checked handwritten, managed block, or residual. If generated mode is active, ops should import the governance common checker from roccho-dev/governance#145 and expose `checks.readme-materialized`.
+Ops is currently in `checked-handwritten` README mode. Root `README.md` is a checked artifact, but there is not yet a repo-local generated README artifact that can be byte-compared against the committed README.
 
-## Residual path
+## Implemented residual path
 
-If ops is not ready for generated README materialization, the repo must emit a bounded residual with:
+The `gov package validation` workflow imports the governance common README materialization checker from `roccho-dev/governance#145` through the existing `governance` flake input and emits `readmeMaterializationResidual.v1`.
 
-- owner;
-- reason;
-- nextAction;
-- returnCondition;
-- expiry.
+The residual is bounded by:
+
+- owner: `roccho-dev/ops`;
+- reason: root README is checked handwritten, not generated;
+- nextAction: add an ops generated README artifact and switch to `mkReadmeMaterializedCheck`;
+- returnCondition: generated README artifact and committed README can be compared by the governance common checker;
+- expiry: `2026-08-05`.
 
 ## Boundary
 
-This is local materialization evidence only. It does not replace governance #81 / #131 final README projection enforcement and does not mutate branch protection.
+This is local materialization evidence only. It does not replace governance #81 / #131 final README projection enforcement, does not mutate branch protection, and does not claim final README projection compliance.
 
 Refs: roccho-dev/governance#144, roccho-dev/governance#145, roccho-dev/governance#131, roccho-dev/governance#81
