@@ -84,6 +84,10 @@ function isCdpQjsBoundary(relPath) {
   );
 }
 
+function isNonNodePackageBoundary(relPath) {
+  return relPath === "packages/cue-append-contract-core" || relPath.startsWith("packages/cue-append-contract-core/");
+}
+
 function scanMjs(p, relPath) {
   const txt = fs.readFileSync(p, "utf8");
   const lines = txt.split("\n");
@@ -130,6 +134,7 @@ function walk(dir) {
     const relPath = rel(p);
     if (ent.isDirectory()) {
       if (ent.name === "node_modules" || ent.name === ".git") continue;
+      if (isNonNodePackageBoundary(relPath)) continue;
       if (ent.name === "docs") continue;
       if (ent.name === "__pycache__") {
         offenders.push(`__pycache__ directory present: ${relPath}/`);

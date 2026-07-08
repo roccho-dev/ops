@@ -1,0 +1,509 @@
+{
+  "$id": "https://example.invalid/contract-event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contract.schema.v1"
+        },
+        "lifecycle": {
+          "enum": [
+            "active",
+            "deprecated"
+          ]
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "schema_id": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "schema_id",
+        "title",
+        "lifecycle"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "enum_values": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "field_id": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        "field_type": {
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "timestamp",
+            "hash",
+            "id",
+            "enum",
+            "ref",
+            "array\u003cstring\u003e",
+            "array\u003cref\u003e"
+          ]
+        },
+        "kind": {
+          "const": "contract.field.v1"
+        },
+        "pii": {
+          "type": "boolean"
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "ref_schema": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "schema_id": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "schema_id",
+        "field_id",
+        "field_type",
+        "required",
+        "pii",
+        "description"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "field_id": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contract.field.deprecated.v1"
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "replacement_field_ref": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+#[a-z][a-z0-9_.]*$",
+          "type": "string"
+        },
+        "schema_id": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "schema_id",
+        "field_id",
+        "reason"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "acyclic_required": {
+          "type": "boolean"
+        },
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "cardinality": {
+          "enum": [
+            "one_to_one",
+            "one_to_many",
+            "many_to_one",
+            "many_to_many"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "edge_kind": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "from_schema": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contract.edge.v1"
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        },
+        "to_schema": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "edge_kind",
+        "from_schema",
+        "to_schema",
+        "cardinality",
+        "acyclic_required"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "expected_output_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "fixture_ids": {
+          "items": {
+            "pattern": "^fx_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "input_fields": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+#[a-z][a-z0-9_.]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "const": "contract.query.v1"
+        },
+        "output_schema": {
+          "pattern": "^[a-z][a-z0-9_]*\\.v[0-9]+$",
+          "type": "string"
+        },
+        "projection_only": {
+          "const": true
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "query_family": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "query_id": {
+          "pattern": "^q_[a-z0-9_]+\\.v[0-9]+$",
+          "type": "string"
+        },
+        "runner_kind": {
+          "enum": [
+            "generated",
+            "duckdb",
+            "go",
+            "ts",
+            "python",
+            "jq"
+          ]
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        },
+        "side_effects": {
+          "const": false
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "query_id",
+        "query_family",
+        "input_fields",
+        "output_schema",
+        "runner_kind",
+        "projection_only",
+        "side_effects",
+        "fixture_ids",
+        "expected_output_hash"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "fixture_id": {
+          "pattern": "^fx_[a-z0-9_]+$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contract.fixture.v1"
+        },
+        "payload_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "polarity": {
+          "enum": [
+            "positive",
+            "negative"
+          ]
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        },
+        "target_query_id": {
+          "pattern": "^q_[a-z0-9_]+\\.v[0-9]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "fixture_id",
+        "target_query_id",
+        "polarity",
+        "payload_hash"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "enum": [
+            "contract_owner",
+            "governance",
+            "extractor",
+            "projection_runner",
+            "agent",
+            "human"
+          ]
+        },
+        "created_at": {
+          "pattern": "^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+          "type": "string"
+        },
+        "event_id": {
+          "pattern": "^evt_[a-z0-9][a-z0-9_]{6,}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "contract.authority_rule.v1"
+        },
+        "purpose_level": {
+          "pattern": "^(purpose|meta\\^[0-9]+)$",
+          "type": "string"
+        },
+        "rule": {
+          "enum": [
+            "projection_cannot_decide",
+            "decision_requires_owner",
+            "receipt_required",
+            "raw_cannot_decide"
+          ]
+        },
+        "schema_version": {
+          "const": "contract.meta.v1"
+        },
+        "subject_id": {
+          "type": "string"
+        },
+        "subject_kind": {
+          "enum": [
+            "schema",
+            "query",
+            "projection",
+            "decision"
+          ]
+        }
+      },
+      "required": [
+        "event_id",
+        "schema_version",
+        "created_at",
+        "purpose_level",
+        "authority",
+        "kind",
+        "subject_kind",
+        "subject_id",
+        "rule"
+      ],
+      "type": "object"
+    }
+  ]
+}

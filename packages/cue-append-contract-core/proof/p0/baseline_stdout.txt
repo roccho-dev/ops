@@ -1,0 +1,2 @@
+?   	cueappendpoc/cmd/contractcheck	[no test files]
+baseline TDD proof PASS

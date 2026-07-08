@@ -1,0 +1,6 @@
+{
+  "check": "lineage",
+  "closure_rows": 1,
+  "deprecated_fields": 1,
+  "status": "pass"
+}

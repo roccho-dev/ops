@@ -1,0 +1,448 @@
+{
+  "ledger": "ledgers/large_112k.contract.jsonl",
+  "meta": "contracts/meta.cue",
+  "started_at": "2026-07-05T19:25:17Z",
+  "duration_ms": 1844,
+  "lines": 120025,
+  "cue_checked": 1000,
+  "cue_errors": null,
+  "semantic_errors": null,
+  "counts_by_kind": {
+    "contract.edge.v1": 8000,
+    "contract.field.deprecated.v1": 25,
+    "contract.field.v1": 64000,
+    "contract.fixture.v1": 20000,
+    "contract.query.v1": 20000,
+    "contract.schema.v1": 8000
+  },
+  "schemas": 8000,
+  "fields": 64000,
+  "edges": 8000,
+  "queries": 20000,
+  "fixtures": 20000,
+  "deprecated_fields": 25,
+  "affected_queries_by_field": {
+    "model_00000.v1#field_00": [
+      "q_projection_00000.v1",
+      "q_projection_00025.v1",
+      "q_projection_00050.v1",
+      "q_projection_09707.v1",
+      "q_projection_17271.v1"
+    ],
+    "model_00001.v1#field_00": [
+      "q_projection_00001.v1",
+      "q_projection_00026.v1",
+      "q_projection_00051.v1"
+    ],
+    "model_00002.v1#field_00": [
+      "q_projection_00002.v1",
+      "q_projection_00027.v1",
+      "q_projection_00052.v1"
+    ],
+    "model_00003.v1#field_00": [
+      "q_projection_00003.v1",
+      "q_projection_00028.v1",
+      "q_projection_00053.v1",
+      "q_projection_04737.v1"
+    ],
+    "model_00004.v1#field_00": [
+      "q_projection_00004.v1",
+      "q_projection_00029.v1",
+      "q_projection_00054.v1"
+    ],
+    "model_00005.v1#field_00": [
+      "q_projection_00005.v1",
+      "q_projection_00030.v1",
+      "q_projection_00055.v1"
+    ],
+    "model_00006.v1#field_00": [
+      "q_projection_00006.v1",
+      "q_projection_00031.v1",
+      "q_projection_00056.v1",
+      "q_projection_01115.v1"
+    ],
+    "model_00007.v1#field_00": [
+      "q_projection_00007.v1",
+      "q_projection_00032.v1",
+      "q_projection_00057.v1"
+    ],
+    "model_00008.v1#field_00": [
+      "q_projection_00008.v1",
+      "q_projection_00033.v1",
+      "q_projection_00058.v1"
+    ],
+    "model_00009.v1#field_00": [
+      "q_projection_00009.v1",
+      "q_projection_00034.v1",
+      "q_projection_00059.v1"
+    ],
+    "model_00010.v1#field_00": [
+      "q_projection_00010.v1",
+      "q_projection_00035.v1",
+      "q_projection_00060.v1",
+      "q_projection_10350.v1"
+    ],
+    "model_00011.v1#field_00": [
+      "q_projection_00011.v1",
+      "q_projection_00036.v1",
+      "q_projection_00061.v1",
+      "q_projection_11393.v1"
+    ],
+    "model_00012.v1#field_00": [
+      "q_projection_00012.v1",
+      "q_projection_00037.v1",
+      "q_projection_00062.v1"
+    ],
+    "model_00013.v1#field_00": [
+      "q_projection_00013.v1",
+      "q_projection_00038.v1",
+      "q_projection_00063.v1"
+    ],
+    "model_00014.v1#field_00": [
+      "q_projection_00014.v1",
+      "q_projection_00039.v1",
+      "q_projection_00064.v1",
+      "q_projection_05676.v1"
+    ],
+    "model_00015.v1#field_00": [
+      "q_projection_00015.v1",
+      "q_projection_00040.v1",
+      "q_projection_00065.v1"
+    ],
+    "model_00016.v1#field_00": [
+      "q_projection_00016.v1",
+      "q_projection_00041.v1",
+      "q_projection_00066.v1",
+      "q_projection_15163.v1"
+    ],
+    "model_00017.v1#field_00": [
+      "q_projection_00017.v1",
+      "q_projection_00042.v1",
+      "q_projection_00067.v1"
+    ],
+    "model_00018.v1#field_00": [
+      "q_projection_00018.v1",
+      "q_projection_00043.v1",
+      "q_projection_00068.v1"
+    ],
+    "model_00019.v1#field_00": [
+      "q_projection_00019.v1",
+      "q_projection_00044.v1",
+      "q_projection_00069.v1",
+      "q_projection_00533.v1"
+    ],
+    "model_00020.v1#field_00": [
+      "q_projection_00020.v1",
+      "q_projection_00045.v1",
+      "q_projection_00070.v1",
+      "q_projection_19334.v1"
+    ],
+    "model_00021.v1#field_00": [
+      "q_projection_00021.v1",
+      "q_projection_00046.v1",
+      "q_projection_00071.v1"
+    ],
+    "model_00022.v1#field_00": [
+      "q_projection_00022.v1",
+      "q_projection_00047.v1",
+      "q_projection_00072.v1",
+      "q_projection_03127.v1"
+    ],
+    "model_00023.v1#field_00": [
+      "q_projection_00023.v1",
+      "q_projection_00048.v1",
+      "q_projection_00073.v1"
+    ],
+    "model_00024.v1#field_00": [
+      "q_projection_00024.v1",
+      "q_projection_00049.v1",
+      "q_projection_00074.v1"
+    ]
+  },
+  "affected_fixtures_by_field": {
+    "model_00000.v1#field_00": [
+      "fx_projection_00000",
+      "fx_projection_00025",
+      "fx_projection_00050",
+      "fx_projection_09707",
+      "fx_projection_17271"
+    ],
+    "model_00001.v1#field_00": [
+      "fx_projection_00001",
+      "fx_projection_00026",
+      "fx_projection_00051"
+    ],
+    "model_00002.v1#field_00": [
+      "fx_projection_00002",
+      "fx_projection_00027",
+      "fx_projection_00052"
+    ],
+    "model_00003.v1#field_00": [
+      "fx_projection_00003",
+      "fx_projection_00028",
+      "fx_projection_00053",
+      "fx_projection_04737"
+    ],
+    "model_00004.v1#field_00": [
+      "fx_projection_00004",
+      "fx_projection_00029",
+      "fx_projection_00054"
+    ],
+    "model_00005.v1#field_00": [
+      "fx_projection_00005",
+      "fx_projection_00030",
+      "fx_projection_00055"
+    ],
+    "model_00006.v1#field_00": [
+      "fx_projection_00006",
+      "fx_projection_00031",
+      "fx_projection_00056",
+      "fx_projection_01115"
+    ],
+    "model_00007.v1#field_00": [
+      "fx_projection_00007",
+      "fx_projection_00032",
+      "fx_projection_00057"
+    ],
+    "model_00008.v1#field_00": [
+      "fx_projection_00008",
+      "fx_projection_00033",
+      "fx_projection_00058"
+    ],
+    "model_00009.v1#field_00": [
+      "fx_projection_00009",
+      "fx_projection_00034",
+      "fx_projection_00059"
+    ],
+    "model_00010.v1#field_00": [
+      "fx_projection_00010",
+      "fx_projection_00035",
+      "fx_projection_00060",
+      "fx_projection_10350"
+    ],
+    "model_00011.v1#field_00": [
+      "fx_projection_00011",
+      "fx_projection_00036",
+      "fx_projection_00061",
+      "fx_projection_11393"
+    ],
+    "model_00012.v1#field_00": [
+      "fx_projection_00012",
+      "fx_projection_00037",
+      "fx_projection_00062"
+    ],
+    "model_00013.v1#field_00": [
+      "fx_projection_00013",
+      "fx_projection_00038",
+      "fx_projection_00063"
+    ],
+    "model_00014.v1#field_00": [
+      "fx_projection_00014",
+      "fx_projection_00039",
+      "fx_projection_00064",
+      "fx_projection_05676"
+    ],
+    "model_00015.v1#field_00": [
+      "fx_projection_00015",
+      "fx_projection_00040",
+      "fx_projection_00065"
+    ],
+    "model_00016.v1#field_00": [
+      "fx_projection_00016",
+      "fx_projection_00041",
+      "fx_projection_00066",
+      "fx_projection_15163"
+    ],
+    "model_00017.v1#field_00": [
+      "fx_projection_00017",
+      "fx_projection_00042",
+      "fx_projection_00067"
+    ],
+    "model_00018.v1#field_00": [
+      "fx_projection_00018",
+      "fx_projection_00043",
+      "fx_projection_00068"
+    ],
+    "model_00019.v1#field_00": [
+      "fx_projection_00019",
+      "fx_projection_00044",
+      "fx_projection_00069",
+      "fx_projection_00533"
+    ],
+    "model_00020.v1#field_00": [
+      "fx_projection_00020",
+      "fx_projection_00045",
+      "fx_projection_00070",
+      "fx_projection_19334"
+    ],
+    "model_00021.v1#field_00": [
+      "fx_projection_00021",
+      "fx_projection_00046",
+      "fx_projection_00071"
+    ],
+    "model_00022.v1#field_00": [
+      "fx_projection_00022",
+      "fx_projection_00047",
+      "fx_projection_00072",
+      "fx_projection_03127"
+    ],
+    "model_00023.v1#field_00": [
+      "fx_projection_00023",
+      "fx_projection_00048",
+      "fx_projection_00073"
+    ],
+    "model_00024.v1#field_00": [
+      "fx_projection_00024",
+      "fx_projection_00049",
+      "fx_projection_00074"
+    ]
+  },
+  "unresolved_affected_active_query_families": {
+    "model_00000.v1#field_00": [
+      "projection_00000",
+      "projection_00025",
+      "projection_00050",
+      "projection_09707",
+      "projection_17271"
+    ],
+    "model_00001.v1#field_00": [
+      "projection_00001",
+      "projection_00026",
+      "projection_00051"
+    ],
+    "model_00002.v1#field_00": [
+      "projection_00002",
+      "projection_00027",
+      "projection_00052"
+    ],
+    "model_00003.v1#field_00": [
+      "projection_00003",
+      "projection_00028",
+      "projection_00053",
+      "projection_04737"
+    ],
+    "model_00004.v1#field_00": [
+      "projection_00004",
+      "projection_00029",
+      "projection_00054"
+    ],
+    "model_00005.v1#field_00": [
+      "projection_00005",
+      "projection_00030",
+      "projection_00055"
+    ],
+    "model_00006.v1#field_00": [
+      "projection_00006",
+      "projection_00031",
+      "projection_00056",
+      "projection_01115"
+    ],
+    "model_00007.v1#field_00": [
+      "projection_00007",
+      "projection_00032",
+      "projection_00057"
+    ],
+    "model_00008.v1#field_00": [
+      "projection_00008",
+      "projection_00033",
+      "projection_00058"
+    ],
+    "model_00009.v1#field_00": [
+      "projection_00009",
+      "projection_00034",
+      "projection_00059"
+    ],
+    "model_00010.v1#field_00": [
+      "projection_00010",
+      "projection_00035",
+      "projection_00060",
+      "projection_10350"
+    ],
+    "model_00011.v1#field_00": [
+      "projection_00011",
+      "projection_00036",
+      "projection_00061",
+      "projection_11393"
+    ],
+    "model_00012.v1#field_00": [
+      "projection_00012",
+      "projection_00037",
+      "projection_00062"
+    ],
+    "model_00013.v1#field_00": [
+      "projection_00013",
+      "projection_00038",
+      "projection_00063"
+    ],
+    "model_00014.v1#field_00": [
+      "projection_00014",
+      "projection_00039",
+      "projection_00064",
+      "projection_05676"
+    ],
+    "model_00015.v1#field_00": [
+      "projection_00015",
+      "projection_00040",
+      "projection_00065"
+    ],
+    "model_00016.v1#field_00": [
+      "projection_00016",
+      "projection_00041",
+      "projection_00066",
+      "projection_15163"
+    ],
+    "model_00017.v1#field_00": [
+      "projection_00017",
+      "projection_00042",
+      "projection_00067"
+    ],
+    "model_00018.v1#field_00": [
+      "projection_00018",
+      "projection_00043",
+      "projection_00068"
+    ],
+    "model_00019.v1#field_00": [
+      "projection_00019",
+      "projection_00044",
+      "projection_00069",
+      "projection_00533"
+    ],
+    "model_00020.v1#field_00": [
+      "projection_00020",
+      "projection_00045",
+      "projection_00070",
+      "projection_19334"
+    ],
+    "model_00021.v1#field_00": [
+      "projection_00021",
+      "projection_00046",
+      "projection_00071"
+    ],
+    "model_00022.v1#field_00": [
+      "projection_00022",
+      "projection_00047",
+      "projection_00072",
+      "projection_03127"
+    ],
+    "model_00023.v1#field_00": [
+      "projection_00023",
+      "projection_00048",
+      "projection_00073"
+    ],
+    "model_00024.v1#field_00": [
+      "projection_00024",
+      "projection_00049",
+      "projection_00074"
+    ]
+  },
+  "peak_alloc_mb": 58.90454864501953,
+  "input_sha256": "sha256:291a0a120788cc5c8388f7257a9c9e3c84f731a90047c6c41fbbfe533a59fbeb",
+  "report_sha256": "sha256:cb51704495f3c8a18f1d2a6a1d7b8fe005235a1389c8e21595248b26f9457950",
+  "row_validator": "fast",
+  "fast_checked": 120025,
+  "cue_sampled": 1000,
+  "notes": [
+    "CUE validates row shape and local policy; Go indexes cross-row semantics and impact.",
+    "The ledger is append-only: changes are new events, not in-place schema rewrites."
+  ]
+}

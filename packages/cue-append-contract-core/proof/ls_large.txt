@@ -1,0 +1,1 @@
+-rw-r--r-- 1 root root 42M Jul  5 19:23 ledgers/large_112k.contract.jsonl

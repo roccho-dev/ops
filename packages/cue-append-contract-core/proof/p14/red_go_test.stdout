@@ -1,0 +1,11 @@
+--- FAIL: TestP14NoDotImportsInRuntimeCode (0.00s)
+    p14_core_hardening_test.go:23: dot import is forbidden in runtime code: internal/architecture/p14_core_hardening_test.go
+--- FAIL: TestP14CoreImplementationFilesAreSmallEnough (0.00s)
+    p14_core_hardening_test.go:46: internal/core/validate/validate.go has 895 lines; split core responsibilities below 320 lines
+--- FAIL: TestP14AppendOnlyGuardIsWired (0.00s)
+    p14_core_hardening_test.go:60: cmd/contractcheck must expose append-only-check via internal/core/appendonly
+--- FAIL: TestP14P10ScriptIsFullyAutomated (0.00s)
+    p14_core_hardening_test.go:76: P10 script still has manual/timeout workaround marker "gzip -dc"
+FAIL
+FAIL	cueappendpoc/internal/architecture	0.019s
+FAIL

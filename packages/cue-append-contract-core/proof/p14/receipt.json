@@ -1,0 +1,32 @@
+{
+  "append_only": {
+    "base": "tmp/p14/base.contract.jsonl",
+    "base_lines": 8,
+    "candidate": "tmp/p14/candidate_append.contract.jsonl",
+    "check": "append-only",
+    "ledger_hash": "sha256:4acf4eafc7a1c1967c647930f5c89296a974b39c4bdf5ee77841bca473f74336",
+    "ledger_lines": 12,
+    "prefix_lines": 8,
+    "previous_hash": "sha256:52de888e6ff2efd78eff38aaf7cff42cf7445e2ee3483b5ef98b5f4df65fc254",
+    "status": "pass"
+  },
+  "checks": [
+    "go test ./...",
+    "no dot imports",
+    "validate/artifacts package split size limits",
+    "append-only positive and rewrite-negative checks",
+    "P10 fully automated partition/snapshot/scale script"
+  ],
+  "created_at_utc": "2026-07-06T03:41:27Z",
+  "head_commit": "fae5de4ca8518eebed16a9498ce3ac3e3dd11ab5",
+  "kind": "p14.core_hardening_receipt.v1",
+  "note": "Receipt is generated after the code commit so head_commit can match the worktree HEAD without self-referential commit hashing.",
+  "p10": {
+    "manifest_lines": 500025,
+    "partitions": 6,
+    "peak_alloc_mb": 299.53880310058594,
+    "validator_lines": 500025
+  },
+  "phase": "P14",
+  "status": "pass"
+}

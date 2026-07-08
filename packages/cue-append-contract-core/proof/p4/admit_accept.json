@@ -1,0 +1,6 @@
+{
+  "canonical": "runtime/canonical.contract.jsonl",
+  "draft": "ledgers/small_after_fix.contract.jsonl",
+  "draft_hash": "sha256:7b0cb568ccba86f840ec6fa326d0e003d76967c4114f7408d6cc1a9cd5eec0c1",
+  "status": "accepted"
+}

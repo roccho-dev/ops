@@ -1,0 +1,7 @@
+?   	cueappendpoc/cmd/contractcheck	[no test files]
+?   	cueappendpoc/internal/core/contract	[no test files]
+?   	cueappendpoc/internal/core/hash	[no test files]
+?   	cueappendpoc/internal/core/jsonl	[no test files]
+?   	cueappendpoc/internal/ports	[no test files]
+ok  	cueappendpoc/internal/architecture	(cached)
+baseline TDD proof PASS

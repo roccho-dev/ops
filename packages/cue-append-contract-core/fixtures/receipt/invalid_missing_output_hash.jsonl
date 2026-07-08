@@ -1,0 +1,1 @@
+{"kind":"receipt.v1","receipt_id":"rec_bad_001","receipt_type":"projection","status":"pass","target_id":"q_claim_summary.v2","input_hash":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","created_at":"2026-07-05T00:00:01Z"}

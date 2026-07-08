@@ -1,0 +1,2 @@
+null
+ERROR: generated JSON Schema validation failed: line 1: bad event_id; bad created_at; bad authority; bad schema_id; unknown field extra

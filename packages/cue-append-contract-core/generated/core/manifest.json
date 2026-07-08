@@ -1,0 +1,15 @@
+{
+  "generator": "go/internal/core/artifacts",
+  "generator_version": "go/internal/core/validate.v0.1",
+  "contract_ledger": "ledgers/small_after_fix.contract.jsonl",
+  "meta_contract": "contracts/meta.cue",
+  "contract_sha256": "sha256:7b0cb568ccba86f840ec6fa326d0e003d76967c4114f7408d6cc1a9cd5eec0c1",
+  "meta_sha256": "sha256:950a5a30230caf6ed1ce197db9d35c6871a3f03eea6ccd09d06a62c0e41d949d",
+  "artifact_hashes": {
+    "indexes/contract-index.json": "sha256:952db68bc73b6c1a38a15fa15c7f491317584a6071346905f0b1f39db17276ad",
+    "jsonschema/contract-event.schema.json": "sha256:149b6b71b520d50280a5699d5829e073504d14a1e8bbeca0c174bad896e9c115",
+    "jsonschema/schema-catalog.json": "sha256:7a50e10e9385d127b6531b2571951a3e04a258848ad2416315bd5b899c907849",
+    "ts/accessors.ts": "sha256:eba4b9cc457af6b83534efa84048ada5406e049dffad366160b9630219674b3b"
+  },
+  "scope": "generated/core"
+}

@@ -1,0 +1,29 @@
+{
+  "ledger": "ledgers/invalid_unknown.contract.jsonl",
+  "meta": "contracts/meta.cue",
+  "started_at": "2026-07-05T19:23:19Z",
+  "duration_ms": 6,
+  "lines": 1,
+  "cue_checked": 0,
+  "cue_errors": [
+    "line 1: CUE: #ContractEvent: 7 errors in empty disjunction: (and 7 more errors)"
+  ],
+  "semantic_errors": null,
+  "counts_by_kind": {},
+  "schemas": 0,
+  "fields": 0,
+  "edges": 0,
+  "queries": 0,
+  "fixtures": 0,
+  "deprecated_fields": 0,
+  "affected_queries_by_field": {},
+  "affected_fixtures_by_field": {},
+  "unresolved_affected_active_query_families": {},
+  "peak_alloc_mb": 3.0060348510742188,
+  "input_sha256": "sha256:a6dce63a6773253bf1eb625cf699e3c009b02d6cbaaf482f620bd2c673c7d68e",
+  "report_sha256": "sha256:37575b845e86de895cc2c551ef5a1d984ff83aa144877e845872fdbab47b5a0d",
+  "notes": [
+    "CUE validates row shape and local policy; Go indexes cross-row semantics and impact.",
+    "The ledger is append-only: changes are new events, not in-place schema rewrites."
+  ]
+}

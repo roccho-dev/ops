@@ -284,6 +284,13 @@
             cp ${./packages/find-packages/sql/projection.duckdb.sql} "$out/share/find-packages/sql/projection.duckdb.sql"
             cp ${./packages/find-packages/sql/search.duckdb.sql} "$out/share/find-packages/sql/search.duckdb.sql"
           '';
+          cue-append-contract-core = pkgs.buildGoModule {
+            pname = "cue-append-contract-core";
+            version = "0-unstable-2026-07-08";
+            src = ./packages/cue-append-contract-core;
+            vendorHash = "sha256-cUBlpDpd07zOhLZX52jWBM845VE49WSlxwq6qgMrWa0=";
+            subPackages = [ "cmd/contractcheck" ];
+          };
           default = ops-bootstrap;
         }
         // cdp.packages
@@ -391,6 +398,59 @@
                 grep -q 'retry-template-candidate' "$out/knowledge.tsv"
                 grep -q 'gate-candidate' "$out/knowledge.tsv"
                 grep -q '"count": 3' "$out/summary.json"
+              '';
+          cue-append-contract-core =
+            pkgs.runCommand "cue-append-contract-core-check"
+              {
+                nativeBuildInputs = [
+                  pkgs.gzip
+                  self.packages.${pkgs.stdenv.hostPlatform.system}.cue-append-contract-core
+                ];
+              }
+              ''
+                mkdir -p "$out/tmp" "$out/partition"
+                contractcheck validate \
+                  --meta ${./packages/cue-append-contract-core/contracts/meta.cue} \
+                  --ledger ${./packages/cue-append-contract-core/ledgers/small_after_fix.contract.jsonl} \
+                  --row-validator both \
+                  --report "$out/small_after_fix.json"
+                echo "cue-append-contract-core: validate pass"
+                head -n 8 ${./packages/cue-append-contract-core/ledgers/small_after_fix.contract.jsonl} > "$out/tmp/base.contract.jsonl"
+                echo "cue-append-contract-core: base ledger staged"
+                {
+                  cat "$out/tmp/base.contract.jsonl"
+                  sed -n '9,12p' ${./packages/cue-append-contract-core/ledgers/small_after_fix.contract.jsonl}
+                } > "$out/tmp/candidate_append.contract.jsonl"
+                {
+                  sed '1s/contract.schema.v1/contract.schema_rewritten.v1/' "$out/tmp/base.contract.jsonl"
+                  sed -n '9,12p' ${./packages/cue-append-contract-core/ledgers/small_after_fix.contract.jsonl}
+                } > "$out/tmp/candidate_rewrite.contract.jsonl"
+                contractcheck append-only-check \
+                  --base "$out/tmp/base.contract.jsonl" \
+                  --candidate "$out/tmp/candidate_append.contract.jsonl" \
+                  > "$out/append_only_pass.json"
+                echo "cue-append-contract-core: append-only positive pass"
+                if contractcheck append-only-check \
+                  --base "$out/tmp/base.contract.jsonl" \
+                  --candidate "$out/tmp/candidate_rewrite.contract.jsonl" \
+                  > "$out/append_only_unexpected_pass.json" 2> "$out/append_only_expected_fail.stderr"; then
+                  echo "expected append-only rewrite check to fail" >&2
+                  exit 1
+                fi
+                echo "cue-append-contract-core: append-only rewrite rejected"
+                contractcheck partition \
+                  --ledger ${./packages/cue-append-contract-core/ledgers/stress_500k.contract.jsonl.gz} \
+                  --out "$out/partition" \
+                  --chunk-lines 100000 \
+                  > "$out/partition_generate.json"
+                echo "cue-append-contract-core: partition generated"
+                contractcheck verify-partition \
+                  --out "$out/partition" \
+                  > "$out/partition_verify.json"
+                echo "cue-append-contract-core: partition verified"
+                grep -q '"status": "pass"' "$out/append_only_pass.json"
+                grep -q '"status": "pass"' "$out/partition_generate.json"
+                grep -q '"status": "pass"' "$out/partition_verify.json"
               '';
           package-architecture-map =
             pkgs.runCommand "package-architecture-map-check"

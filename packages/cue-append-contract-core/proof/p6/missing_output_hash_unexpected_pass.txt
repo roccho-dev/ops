@@ -1,0 +1,2 @@
+null
+ERROR: receipt check failed: line 1: pass receipt missing output_hash

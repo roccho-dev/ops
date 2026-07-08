@@ -1,0 +1,3 @@
+{"case":"invalid_shape","exit_code":1,"status":"expected_failure"}
+{"case":"invalid_semantic","exit_code":1,"status":"expected_failure"}
+{"case":"invalid_unknown","exit_code":1,"status":"expected_failure"}

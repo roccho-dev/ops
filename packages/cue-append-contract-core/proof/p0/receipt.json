@@ -1,0 +1,7 @@
+{
+  "commit": "d335358b38f36f7478b7b620377c56185114299e",
+  "green": "baseline tdd green",
+  "phase": "P0",
+  "red": "invalid fixtures return nonzero",
+  "status": "pass"
+}

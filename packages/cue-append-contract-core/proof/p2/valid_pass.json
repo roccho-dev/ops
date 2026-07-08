@@ -1,0 +1,7 @@
+{
+  "check": "jsonschema-validation",
+  "engine": "go-fast-generated-parity",
+  "ledger": "ledgers/small_after_fix.contract.jsonl",
+  "schema": "generated/core/jsonschema/contract-event.schema.json",
+  "status": "pass"
+}

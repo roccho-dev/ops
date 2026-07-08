@@ -1,0 +1,18 @@
+?   	cueappendpoc/cmd/contractcheck	[no test files]
+ok  	cueappendpoc/internal/adapters/duckdb	(cached)
+ok  	cueappendpoc/internal/adapters/jsonschema	(cached)
+ok  	cueappendpoc/internal/adapters/typescript	(cached)
+?   	cueappendpoc/internal/core/admission	[no test files]
+?   	cueappendpoc/internal/core/partition	[no test files]
+?   	cueappendpoc/internal/core/authority	[no test files]
+?   	cueappendpoc/internal/core/contract	[no test files]
+?   	cueappendpoc/internal/core/graph	[no test files]
+?   	cueappendpoc/internal/core/hash	[no test files]
+?   	cueappendpoc/internal/core/jsonl	[no test files]
+?   	cueappendpoc/internal/core/lineage	[no test files]
+?   	cueappendpoc/internal/core/artifacts	[no test files]
+?   	cueappendpoc/internal/core/receipt	[no test files]
+?   	cueappendpoc/internal/core/sourcepolicy	[no test files]
+?   	cueappendpoc/internal/core/validate	[no test files]
+?   	cueappendpoc/internal/ports	[no test files]
+ok  	cueappendpoc/internal/architecture	0.036s

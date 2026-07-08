@@ -1,0 +1,11 @@
+{"branch": "feature/p0-baseline-hardening", "commit": "d3fef08d54bc1ba232090e9fd3772613eb054285", "merged_to_main": true, "phase": "P0"}
+{"branch": "feature/p1-generated-integrity", "commit": "917938e2a4c96e9887f4bf67aa8fd29b4f8f9409", "merged_to_main": true, "phase": "P1"}
+{"branch": "feature/p2-jsonschema-validator-generation", "commit": "3968224f8a12536741ebd16f9dce543d095f814b", "merged_to_main": true, "phase": "P2"}
+{"branch": "feature/p3-ts-accessor-static-failure", "commit": "adea4ef3a25cdb482b4b25dbaae1d4eb5698421b", "merged_to_main": true, "phase": "P3"}
+{"branch": "feature/p4-admission-gate", "commit": "289e61001cd10a5534e3b23abe4a2896aeb79389", "merged_to_main": true, "phase": "P4"}
+{"branch": "feature/p5-authority-boundary", "commit": "c318e0b6434d2189c2725cdf2ec98258d583a485", "merged_to_main": true, "phase": "P5"}
+{"branch": "feature/p6-receipt-ledger", "commit": "f3ddb69c2c566bb1b418de49f095285d400b9da3", "merged_to_main": true, "phase": "P6"}
+{"branch": "feature/p7-graph-checker", "commit": "6d22d5132cb67bf6f92c96266c3f8ba4c996e136", "merged_to_main": true, "phase": "P7"}
+{"branch": "feature/p8-source-policy", "commit": "a4e1e8585135b887bb3553638a12f3f63335f2ca", "merged_to_main": true, "phase": "P8"}
+{"branch": "feature/p9-lineage-impact-closure", "commit": "ca1678e302e7380c341f8c9dee2b0dcd8a84c0e7", "merged_to_main": true, "phase": "P9"}
+{"branch": "feature/p10-partition-snapshot-scale", "commit": "3e1469138fadc598116906cba78e7721eff7f59e", "merged_to_main": true, "phase": "P10"}

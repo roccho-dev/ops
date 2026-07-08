@@ -1,0 +1,6 @@
+{
+  "closure_rows": 1,
+  "confidence_impacted_queries": [
+    "q_claim_summary.v1"
+  ]
+}

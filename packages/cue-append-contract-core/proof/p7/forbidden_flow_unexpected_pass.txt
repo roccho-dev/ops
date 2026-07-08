@@ -1,0 +1,2 @@
+null
+ERROR: graph check failed: forbidden flow projection.v1->decision.v1

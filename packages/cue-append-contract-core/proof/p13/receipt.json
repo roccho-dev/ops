@@ -1,0 +1,97 @@
+{
+  "kind": "p13.receipt.v1",
+  "phase": "P13",
+  "branch": "feature/p13-core-package-split",
+  "base_head_before_commit": "1aaefbe",
+  "created_at_utc": "2026-07-06T02:56:49Z",
+  "status": "pass",
+  "scope": "core package split and adapter wiring",
+  "red": {
+    "test": "internal/architecture/p13_package_split_test.go",
+    "stdout": "proof/p13/red_go_test.stdout",
+    "stderr": "proof/p13/red_go_test.stderr",
+    "expected": "P12 shape failed package split tests"
+  },
+  "green": {
+    "go_test": "proof/p13/final_go_test.stdout",
+    "scripts": [
+      {
+        "script": "run_baseline_tdd.sh",
+        "stdout": "proof/p13/rerun_run_baseline_tdd.sh.stdout",
+        "stderr": "proof/p13/rerun_run_baseline_tdd.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p1_generated_integrity.sh",
+        "stdout": "proof/p13/rerun_test_p1_generated_integrity.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p1_generated_integrity.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p2_jsonschema_validator_generation.sh",
+        "stdout": "proof/p13/rerun_test_p2_jsonschema_validator_generation.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p2_jsonschema_validator_generation.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p3_ts_accessor_static_failure.sh",
+        "stdout": "proof/p13/rerun_test_p3_ts_accessor_static_failure.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p3_ts_accessor_static_failure.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p4_admission_gate.sh",
+        "stdout": "proof/p13/rerun_test_p4_admission_gate.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p4_admission_gate.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p5_authority_boundary.sh",
+        "stdout": "proof/p13/rerun_test_p5_authority_boundary.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p5_authority_boundary.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p6_receipt_ledger.sh",
+        "stdout": "proof/p13/rerun_test_p6_receipt_ledger.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p6_receipt_ledger.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p7_graph_checker.sh",
+        "stdout": "proof/p13/rerun_test_p7_graph_checker.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p7_graph_checker.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p8_source_policy.sh",
+        "stdout": "proof/p13/rerun_test_p8_source_policy.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p8_source_policy.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p9_lineage_impact_closure.sh",
+        "stdout": "proof/p13/rerun_test_p9_lineage_impact_closure.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p9_lineage_impact_closure.sh.stderr",
+        "status": "pass"
+      },
+      {
+        "script": "test_p10_partition_snapshot_scale.sh",
+        "stdout": "proof/p13/rerun_test_p10_partition_snapshot_scale.sh.stdout",
+        "stderr": "proof/p13/rerun_test_p10_partition_snapshot_scale.sh.stderr",
+        "status": "pass_with_manual_assertion_after_validation_timeout"
+      }
+    ]
+  },
+  "p10": {
+    "lines": 500025,
+    "partitions": 6,
+    "assertions": "proof/p13/p10_assertions_after_timeout.json",
+    "receipt": "proof/p13/p10_receipt_after_timeout.jsonl"
+  },
+  "remaining_issues_doc": "docs/p13_core_package_split_report.md",
+  "merged_to_main": false,
+  "commit": "5e61a8b",
+  "full_commit": "5e61a8b36b0bbcc9c62c95bdbae891adf57b494e",
+  "finalized_at_utc": "2026-07-06T02:57:48Z"
+}

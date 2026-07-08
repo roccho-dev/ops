@@ -1,0 +1,1 @@
+tmp/removed_field_check.ts(3,20): error TS2339: Property 'confidence' does not exist on type '{ readonly confidence_level: (row: ClaimV1) => "high" | "low" | "medium" | undefined; readonly text: (row: ClaimV1) => string; }'.
