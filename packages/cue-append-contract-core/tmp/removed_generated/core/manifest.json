@@ -1,0 +1,15 @@
+{
+  "generator": "go/internal/core/artifacts",
+  "generator_version": "go/internal/core/validate.v0.1",
+  "contract_ledger": "fixtures/removed_confidence.contract.jsonl",
+  "meta_contract": "contracts/meta.cue",
+  "contract_sha256": "sha256:d6059c46fdd2a8b269eb3e59aaf70a1b61c546a7982caa8999b0e4f0ab70cc36",
+  "meta_sha256": "sha256:950a5a30230caf6ed1ce197db9d35c6871a3f03eea6ccd09d06a62c0e41d949d",
+  "artifact_hashes": {
+    "indexes/contract-index.json": "sha256:d5cfcfda4baba8ac89f6f674df3313dda3d63bafafe65790672aaa2a5e16dead",
+    "jsonschema/contract-event.schema.json": "sha256:149b6b71b520d50280a5699d5829e073504d14a1e8bbeca0c174bad896e9c115",
+    "jsonschema/schema-catalog.json": "sha256:a74f75b349f586d2ccfba9206db8a21a2f139864202a90fd7d55cab238b647ac",
+    "ts/accessors.ts": "sha256:cf8e3a73a84fd83493773efc27ac784d25d08375acabf53919eeb1e6f326af82"
+  },
+  "scope": "generated/core"
+}

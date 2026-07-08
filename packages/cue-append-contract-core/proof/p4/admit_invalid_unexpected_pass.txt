@@ -1,0 +1,4 @@
+{
+  "error": "query q_bad.v1 references missing field claim.v1#missing_field",
+  "status": "rejected"
+}

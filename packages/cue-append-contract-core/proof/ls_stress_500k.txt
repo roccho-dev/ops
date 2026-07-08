@@ -1,0 +1,1 @@
+-rw-r--r-- 1 root root 179M Jul  5 19:25 ledgers/stress_500k.contract.jsonl

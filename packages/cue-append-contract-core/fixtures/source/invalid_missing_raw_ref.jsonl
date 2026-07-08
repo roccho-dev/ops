@@ -1,0 +1,2 @@
+{"kind":"source.registry.v1","source_id":"src_github_issues","source_kind":"github_issue","trust_class":"internal_operational","retention_class":"standard"}
+{"kind":"raw.evidence.v1","raw_id":"raw_issue_001","source_id":"src_github_issues","content_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","retention_class":"standard"}

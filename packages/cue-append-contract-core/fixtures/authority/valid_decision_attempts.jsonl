@@ -1,0 +1,2 @@
+{"kind":"decision_attempt.v1","actor_kind":"governance","actor_id":"board","decision_status":"accepted","decision_id":"dec_safe_001","receipt_ref":"rec_projection_001"}
+{"kind":"decision_attempt.v1","actor_kind":"projection","actor_id":"q_claim_summary.v2","decision_status":"proposed","decision_id":"dec_candidate_001","receipt_ref":"rec_projection_001"}

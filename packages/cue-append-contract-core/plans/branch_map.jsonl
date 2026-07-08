@@ -1,0 +1,15 @@
+{"branch":"main","purpose":"current characterized proof baseline","merge_rule":"only green characterized proof and receipt"}
+{"branch":"feature/p0-baseline-hardening","purpose":"explicit negative exits and baseline receipts","depends_on":"main"}
+{"branch":"feature/p1-generated-integrity","purpose":"contract/generated hash and no-dirty checks","depends_on":"main"}
+{"branch":"feature/p2-jsonschema-validator-generation","purpose":"generated JSON Schema and validator parity","depends_on":"feature/p1-generated-integrity"}
+{"branch":"feature/p3-ts-accessor-static-failure","purpose":"generated TS accessors and compile-time removed-field failure","depends_on":"feature/p2-jsonschema-validator-generation"}
+{"branch":"feature/p4-admission-gate","purpose":"draft/raw to canonical admission with reject receipt","depends_on":"feature/p2-jsonschema-validator-generation"}
+{"branch":"feature/p5-authority-boundary","purpose":"projection/CI/agent cannot become decision authority","depends_on":"feature/p4-admission-gate"}
+{"branch":"feature/p6-receipt-ledger","purpose":"first-class execution/check/migration receipts","depends_on":"feature/p5-authority-boundary"}
+{"branch":"feature/p7-graph-checker","purpose":"missing endpoints, forbidden flow, cycle checks","depends_on":"feature/p6-receipt-ledger"}
+{"branch":"feature/p8-source-policy","purpose":"source/raw/extraction/retention minimum policy","depends_on":"feature/p7-graph-checker"}
+{"branch":"feature/p9-lineage-impact-closure","purpose":"closure/path/impact/stale projections from direct edges","depends_on":"feature/p8-source-policy"}
+{"branch":"feature/p10-partition-snapshot-scale","purpose":"partition manifest, snapshot hash, incremental validation","depends_on":"feature/p9-lineage-impact-closure"}
+{"branch": "feature/p11-go-cue-jsonl-core-boundary", "done": "baseline + P1-P10 scripts pass with P11 architecture tests and receipt", "name": "core boundary refactor", "phase": "P11", "purpose": "move Python to proof/helper, keep core Go+CUE+JSONL, split generated scopes"}
+{"phase":"P12","branch":"feature/p12-core-realization","purpose":"move proof-kernel responsibilities into Go core while preserving P0-P10 behavior","depends_on":"feature/p11-go-cue-jsonl-core-boundary","done":"Go CLI owns generate/admission/authority/receipt/graph/source/lineage/partition behavior"}
+{"phase":"P13","branch":"feature/p13-core-package-split","purpose":"split broad core kernel into domain packages and wire adapters through ports","depends_on":"feature/p12-core-realization","done":"P13 RED/GREEN architecture tests, adapter tests, P0-P10 behavior preserved"}

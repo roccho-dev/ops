@@ -1,0 +1,7 @@
+{
+  "artifacts": 4,
+  "generator": "go/internal/core/artifacts",
+  "out": "generated/core",
+  "scope": "core",
+  "status": "generated"
+}

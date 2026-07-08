@@ -1,0 +1,15 @@
+{
+  "checks": [
+    "bash scripts/run_baseline_tdd.sh",
+    "go test ./...",
+    "P1-P10 phase scripts chunked",
+    "generated scope assertions",
+    "proof-kernel wrapper assertion"
+  ],
+  "generated_core_hash": "e12226fb6979b3d0d1dec973d17f9e2631f7c94782b61e9932819389ac3682c9",
+  "green": "P0-P10 behavior preserved with Go+CUE+JSONL core boundary and proof/adapters split",
+  "kind": "p11.package_boundary_refactor.receipt.v1",
+  "red": "architecture tests would fail if Python/DuckDB/AJV became core or generated scopes mixed",
+  "status": "pass",
+  "stress_lines": 500025
+}

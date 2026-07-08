@@ -1,0 +1,1 @@
+{"phase":"P10","status":"pass","red":"single unpartitioned scale-only proof rejected by assertions","green":"500025-line stress ledger partitioned, verified, and fast-validated","core":"go","note":"P13 manual completion after validation finished before wrapper timeout"}

@@ -1,0 +1,11 @@
+{
+  "status": "fail",
+  "check": "append-only",
+  "base": "tmp/p14/base.contract.jsonl",
+  "candidate": "tmp/p14/candidate_rewrite.contract.jsonl",
+  "previous_hash": "sha256:52de888e6ff2efd78eff38aaf7cff42cf7445e2ee3483b5ef98b5f4df65fc254",
+  "ledger_hash": "sha256:8dfada0b23c01a73cae1911b09022c535e1ec0f49a8fa9f99b8d23d2e5bbaba9",
+  "base_lines": 8,
+  "ledger_lines": 12,
+  "prefix_lines": 0
+}

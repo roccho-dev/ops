@@ -1,0 +1,13 @@
+{
+  "deprecated_fields": [],
+  "field_count": 4,
+  "fixture_count": 1,
+  "query_count": 1,
+  "query_inputs": {
+    "q_claim_summary.v2": [
+      "claim.v1#text",
+      "claim.v1#confidence_level"
+    ]
+  },
+  "schema_count": 2
+}

@@ -1,0 +1,38 @@
+{
+  "chunk_lines": 100000,
+  "ledger": "ledgers/stress_500k.contract.jsonl.gz",
+  "ledger_sha256": "sha256:7dc5c1eb7780bcf55d254927bce132725bf29d0aff83998b3ba88bede9520546",
+  "partitions": [
+    {
+      "lines": 100000,
+      "path": "part_00000.jsonl.gz",
+      "sha256": "sha256:c1011e4f61e64b38449d355297a76b5612261f1806d8f0cee1029c59c202ac2d"
+    },
+    {
+      "lines": 100000,
+      "path": "part_00001.jsonl.gz",
+      "sha256": "sha256:ffe47d4f01ab4860fe1b9c781a794f07dc4bddb7dad021397123150cdf3ac990"
+    },
+    {
+      "lines": 100000,
+      "path": "part_00002.jsonl.gz",
+      "sha256": "sha256:ec83169b36fa527197a68091e83eac0cf9d753dbaebd2de9b204150b6b0f5f13"
+    },
+    {
+      "lines": 100000,
+      "path": "part_00003.jsonl.gz",
+      "sha256": "sha256:2841c2d8f5b2864d8a32412d0cc6ede6d2e560ef2ac26550e76bf00ab5f22d1b"
+    },
+    {
+      "lines": 100000,
+      "path": "part_00004.jsonl.gz",
+      "sha256": "sha256:ba47f9c6b28f14ea773650bfec865aa5dedd241e246598ed2ab9c41645151dae"
+    },
+    {
+      "lines": 25,
+      "path": "part_00005.jsonl.gz",
+      "sha256": "sha256:2b95f0c4f83a3e5e60a2a9e838fe0287152d672cffb9a68b51b37180a674f853"
+    }
+  ],
+  "total_lines": 500025
+}

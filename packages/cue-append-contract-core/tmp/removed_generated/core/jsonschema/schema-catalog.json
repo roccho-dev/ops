@@ -1,0 +1,52 @@
+{
+  "deprecated_fields": [],
+  "queries": {
+    "q_claim_summary.v2": {
+      "fixture_ids": [
+        "fx_claim_summary_v2"
+      ],
+      "input_fields": [
+        "claim.v1#text",
+        "claim.v1#confidence_level"
+      ],
+      "output_schema": "claim.v1"
+    }
+  },
+  "schemas": {
+    "claim.v1": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence_level": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    },
+    "raw.v1": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "payload_ref": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content_hash",
+        "payload_ref"
+      ]
+    }
+  }
+}

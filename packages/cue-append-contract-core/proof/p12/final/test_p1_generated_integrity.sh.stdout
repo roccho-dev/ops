@@ -1,0 +1,14 @@
+{
+  "artifacts": 4,
+  "generator": "go/internal/core/kernel",
+  "out": "generated/core",
+  "scope": "core",
+  "status": "generated"
+}
+{
+  "artifacts": 4,
+  "check": "generated-integrity",
+  "generator": "go/internal/core/kernel",
+  "scope": "core",
+  "status": "pass"
+}

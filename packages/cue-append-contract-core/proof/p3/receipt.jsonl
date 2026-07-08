@@ -1,0 +1,1 @@
+{"phase":"P3","status":"pass","red":"removed field accessor failed tsc","green":"current generated accessor compiles","core":"go"}

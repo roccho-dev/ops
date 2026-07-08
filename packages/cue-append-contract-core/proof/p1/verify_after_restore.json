@@ -1,0 +1,7 @@
+{
+  "artifacts": 4,
+  "check": "generated-integrity",
+  "generator": "go/internal/core/artifacts",
+  "scope": "core",
+  "status": "pass"
+}

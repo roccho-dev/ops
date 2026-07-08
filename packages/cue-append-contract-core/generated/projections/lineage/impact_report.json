@@ -1,0 +1,10 @@
+{
+  "affected_queries": {
+    "claim.v1#confidence": [
+      "q_claim_summary.v1"
+    ]
+  },
+  "deprecated_fields": [
+    "claim.v1#confidence"
+  ]
+}

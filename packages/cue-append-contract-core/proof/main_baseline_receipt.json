@@ -1,0 +1,58 @@
+{
+  "kind": "main_baseline_receipt.v1",
+  "created_at_utc": "2026-07-06T02:54:20Z",
+  "status": "pass",
+  "scope": "current_poc_as_main_baseline",
+  "checks": [
+    "go test ./...",
+    "positive fixture validation",
+    "negative fixture fail-closed assertions"
+  ],
+  "artifacts": [
+    {
+      "path": "contracts/meta.cue",
+      "sha256": "950a5a30230caf6ed1ce197db9d35c6871a3f03eea6ccd09d06a62c0e41d949d",
+      "bytes": 3438
+    },
+    {
+      "path": "ledgers/small_before_fix.contract.jsonl",
+      "sha256": "86a8e82d637b33bb4021a7e53edb9f7e07b9091d950312c3d94cb0e3ac5347b2",
+      "bytes": 3512
+    },
+    {
+      "path": "ledgers/small_after_fix.contract.jsonl",
+      "sha256": "7b0cb568ccba86f840ec6fa326d0e003d76967c4114f7408d6cc1a9cd5eec0c1",
+      "bytes": 4781
+    },
+    {
+      "path": "proof/tdd/report_small_before_fix_both.json",
+      "sha256": "e78b586bef902973cbb46498959391f49222894fd4b55d40e1b3343d9ba9f9fa",
+      "bytes": 1391
+    },
+    {
+      "path": "proof/tdd/report_small_after_fix_both.json",
+      "sha256": "ce3fe964db8cf83f8fafe1dc04ceb4f60470e92c058cb3c7947bfda5b8d2a5fe",
+      "bytes": 1330
+    },
+    {
+      "path": "proof/tdd/report_invalid_shape.json",
+      "sha256": "02aa3d8775a2ee229d248b28e7e59ea4507a59438061ce8fbd87f4cc8028152b",
+      "bytes": 1061
+    },
+    {
+      "path": "proof/tdd/report_invalid_semantic.json",
+      "sha256": "5be7801e6447e5689fcb30545e351dee2312a4dae2a48609ab4866974ec95475",
+      "bytes": 1165
+    },
+    {
+      "path": "proof/tdd/report_invalid_unknown_fast.json",
+      "sha256": "8d24b56ef6da253ef289ea861f9c5acef570b555a4e6b8d9a7914e6ceeac7407",
+      "bytes": 1023
+    },
+    {
+      "path": "proof/tdd/negative_exit_assertions.jsonl",
+      "sha256": "745562051f3cb42768f61b5c4404c13bb8ae5bf5252fcc9e2873b34f480cce96",
+      "bytes": 206
+    }
+  ]
+}

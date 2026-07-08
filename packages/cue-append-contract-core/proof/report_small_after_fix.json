@@ -1,0 +1,43 @@
+{
+  "ledger": "ledgers/small_after_fix.contract.jsonl",
+  "meta": "contracts/meta.cue",
+  "started_at": "2026-07-05T19:23:25Z",
+  "duration_ms": 14,
+  "lines": 14,
+  "cue_checked": 14,
+  "cue_errors": null,
+  "semantic_errors": null,
+  "counts_by_kind": {
+    "contract.authority_rule.v1": 1,
+    "contract.edge.v1": 1,
+    "contract.field.deprecated.v1": 1,
+    "contract.field.v1": 5,
+    "contract.fixture.v1": 2,
+    "contract.query.v1": 2,
+    "contract.schema.v1": 2
+  },
+  "schemas": 2,
+  "fields": 5,
+  "edges": 1,
+  "queries": 2,
+  "fixtures": 2,
+  "deprecated_fields": 1,
+  "affected_queries_by_field": {
+    "claim.v1#confidence": [
+      "q_claim_summary.v1"
+    ]
+  },
+  "affected_fixtures_by_field": {
+    "claim.v1#confidence": [
+      "fx_claim_summary"
+    ]
+  },
+  "unresolved_affected_active_query_families": {},
+  "peak_alloc_mb": 2.716644287109375,
+  "input_sha256": "sha256:7b0cb568ccba86f840ec6fa326d0e003d76967c4114f7408d6cc1a9cd5eec0c1",
+  "report_sha256": "sha256:45764cf11918c5ed0f1e817d2a7d55e15f57f1d799d60cebf07aeb81728cf7f6",
+  "notes": [
+    "CUE validates row shape and local policy; Go indexes cross-row semantics and impact.",
+    "The ledger is append-only: changes are new events, not in-place schema rewrites."
+  ]
+}

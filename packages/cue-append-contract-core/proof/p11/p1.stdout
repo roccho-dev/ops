@@ -1,0 +1,3 @@
+{"artifacts": 4, "out": "generated/core", "scope": "core", "status": "generated"}
+{"artifacts": 4, "out": "/tmp/tmpjm4_odrv/generated/core", "scope": "core", "status": "generated"}
+{"artifacts": 4, "check": "generated-integrity", "scope": "core", "status": "pass"}

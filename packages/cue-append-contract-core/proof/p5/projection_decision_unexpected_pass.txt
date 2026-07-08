@@ -1,0 +1,2 @@
+null
+ERROR: authority check failed: line 1: projection cannot create accepted decision; line 1: actor_kind projection cannot accept decision

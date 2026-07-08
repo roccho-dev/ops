@@ -1,0 +1,12 @@
+=== RUN   TestP13CoreResponsibilitiesAreSplitByPackage
+    p13_package_split_test.go:24: read internal/core/receipt/receipt.go: open /mnt/data/p13_repo/internal/core/receipt/receipt.go: no such file or directory
+--- FAIL: TestP13CoreResponsibilitiesAreSplitByPackage (0.00s)
+=== RUN   TestP13KernelPackageNoLongerOwnsCoreImplementation
+    p13_package_split_test.go:45: internal/core/kernel should be removed or non-Go facade only after P13, found [/mnt/data/p13_repo/internal/core/kernel/artifacts.go /mnt/data/p13_repo/internal/core/kernel/gates.go /mnt/data/p13_repo/internal/core/kernel/kernel.go]
+--- FAIL: TestP13KernelPackageNoLongerOwnsCoreImplementation (0.00s)
+=== RUN   TestP13CLIAndAdaptersWireConcretePackages
+    p13_package_split_test.go:56: cmd/contractcheck/main.go still depends on legacy core surface cueappendpoc/internal/core/kernel
+--- FAIL: TestP13CLIAndAdaptersWireConcretePackages (0.00s)
+FAIL
+FAIL	cueappendpoc/internal/architecture	0.022s
+FAIL

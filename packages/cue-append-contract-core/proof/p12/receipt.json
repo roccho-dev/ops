@@ -1,0 +1,101 @@
+{
+  "branch": "feature/p12-core-realization",
+  "checks": [
+    {
+      "check": "go test ./...",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 552,
+      "stdout_exists": true
+    },
+    {
+      "check": "run_baseline_tdd.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 578,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p1_generated_integrity.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 270,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p2_jsonschema_validator_generation.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p3_ts_accessor_static_failure.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p4_admission_gate.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p5_authority_boundary.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p6_receipt_ledger.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p7_graph_checker.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p8_source_policy.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p9_lineage_impact_closure.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    },
+    {
+      "check": "test_p10_partition_snapshot_scale.sh",
+      "stderr_bytes": 0,
+      "stderr_exists": true,
+      "stdout_bytes": 0,
+      "stdout_exists": true
+    }
+  ],
+  "core_generator": "go/internal/core/kernel",
+  "created_at_utc": "2026-07-06T02:02:22Z",
+  "generated_manifest_sha256": "291b42451db1383c619d67ae71d0269595a0ddce6f950ce672cb02b95f6bfa28",
+  "green_checks": [
+    "go test ./...",
+    "P0 baseline",
+    "P1-P10 phase scripts"
+  ],
+  "kind": "p12.core_realization.receipt.v1",
+  "p10_lines": 500025,
+  "remaining_issue_policy": "See docs/p12_core_realization_report.md. Remaining issues are explicit and not hidden.",
+  "status": "pass"
+}
