@@ -16,3 +16,4 @@
 {"kind":"check","name":"hq-modeling-runtime-local-worker","script":"packages/hq-modeling-runtime/tests/local-worker.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-receipt-writer","script":"packages/hq-modeling-runtime/tests/receipt-writer.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-projection-builder","script":"packages/hq-modeling-runtime/tests/projection-builder.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-admission-gate","script":"packages/hq-modeling-runtime/tests/admission-gate.mjs","deps":["nodejs","hq-modeling-runtime"]}

@@ -12,27 +12,26 @@ import {
   assertNoForbiddenOwnership,
 } from '../lib/boundary.mjs';
 
+const implemented = ['package-boundary-metadata', 'queue-schema-validator', 'local-worker', 'receipt-writer', 'repo-map-projection-builder', 'local-dev-admission-gate'];
+
 assert.equal(runtimeBoundary.kind, 'hq.modelingRuntime.boundary.v1');
 assert.equal(runtimeBoundary.packageName, 'hq-modeling-runtime');
 assert.equal(runtimeBoundary.ownerRepo, 'ops');
-assert.deepEqual(runtimeBoundary.implementedNow, ['package-boundary-metadata', 'queue-schema-validator', 'local-worker', 'receipt-writer', 'repo-map-projection-builder']);
+assert.deepEqual(runtimeBoundary.implementedNow, implemented);
 assert.ok(runtimeBoundary.owns.includes('queue validator core'));
 assert.ok(runtimeBoundary.owns.includes('local worker core'));
 assert.ok(runtimeBoundary.owns.includes('receipt writer core'));
 assert.ok(runtimeBoundary.owns.includes('repo-map projection builder core'));
+assert.ok(runtimeBoundary.owns.includes('local-dev admission gate core'));
 
-for (const issue of ['ops#44']) {
-  assert.ok(
-    Object.hasOwn(runtimeBoundary.reservedForLaterIssues, issue),
-    `missing reserved issue ${issue}`,
-  );
-}
+assert.equal(Object.keys(runtimeBoundary.reservedForLaterIssues).length, 0);
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#40'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#41'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#42'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#43'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#44'));
 
-for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser renderer', 'UI state']) {
+for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser renderer', 'UI state', 'production governance authority']) {
   assert.ok(runtimeBoundary.doesNotOwn.includes(forbidden), `doesNotOwn must include ${forbidden}`);
   assert.ok(!runtimeBoundary.owns.includes(forbidden), `owns must not include ${forbidden}`);
 }
@@ -40,17 +39,22 @@ for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser rendere
 assert.equal(runtimeBoundary.authorityBoundary.queueRows, 'intent only');
 assert.equal(runtimeBoundary.authorityBoundary.receipts, 'evidence only');
 assert.equal(runtimeBoundary.authorityBoundary.projections, 'generated read models');
-assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /not implemented in projection builder/);
+assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /local-dev admission only/);
+assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /production governance adoption is not implemented/);
 
 assert.equal(assertNoForbiddenOwnership(), true);
 assert.throws(
   () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'editor UX'] }),
   /forbidden ownership/,
 );
+assert.throws(
+  () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'production governance authority'] }),
+  /forbidden ownership/,
+);
 
 const summary = boundarySummary();
-assert.equal(summary.laterIssueCount, 1);
-assert.deepEqual(summary.implementedNow, ['package-boundary-metadata', 'queue-schema-validator', 'local-worker', 'receipt-writer', 'repo-map-projection-builder']);
+assert.equal(summary.laterIssueCount, 0);
+assert.deepEqual(summary.implementedNow, implemented);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const siblingBin = path.join(here, '..', 'bin', 'hq-modeling-runtime.mjs');
@@ -66,6 +70,6 @@ const parsed = JSON.parse(output);
 assert.equal(parsed.kind, 'hq.modelingRuntime.boundary.v1');
 assert.equal(parsed.ownerRepo, 'ops');
 assert.equal(parsed.packageName, 'hq-modeling-runtime');
-assert.deepEqual(parsed.implementedNow, ['package-boundary-metadata', 'queue-schema-validator', 'local-worker', 'receipt-writer', 'repo-map-projection-builder']);
+assert.deepEqual(parsed.implementedNow, implemented);
 
 console.log('hq-modeling-runtime scaffold check: PASS');

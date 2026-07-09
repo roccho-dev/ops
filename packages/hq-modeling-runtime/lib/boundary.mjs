@@ -9,16 +9,16 @@ export const runtimeBoundary = Object.freeze({
     'local-worker',
     'receipt-writer',
     'repo-map-projection-builder',
+    'local-dev-admission-gate',
   ],
-  reservedForLaterIssues: Object.freeze({
-    'ops#44': 'admission gate',
-  }),
+  reservedForLaterIssues: Object.freeze({}),
   owns: [
     'queue contract port',
     'queue validator core',
     'local worker core',
     'receipt writer core',
     'repo-map projection builder core',
+    'local-dev admission gate core',
     'runtime core boundary',
     'worker boundary',
     'receipt boundary',
@@ -30,13 +30,13 @@ export const runtimeBoundary = Object.freeze({
     'Vim/hq command surface',
     'browser renderer',
     'UI state',
-    'accepted governance authority',
+    'production governance authority',
   ],
   authorityBoundary: {
     queueRows: 'intent only',
     receipts: 'evidence only',
     projections: 'generated read models',
-    acceptedLedger: 'explicit admission only; not implemented in projection builder',
+    acceptedLedger: 'local-dev admission only; production governance adoption is not implemented here',
   },
 });
 
@@ -59,6 +59,7 @@ export function assertNoForbiddenOwnership(boundary = runtimeBoundary) {
     'Vim/hq command surface',
     'browser renderer',
     'UI state',
+    'production governance authority',
   ]);
 
   const overlap = boundary.owns.filter((value) => forbidden.has(value));
