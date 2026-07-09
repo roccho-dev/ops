@@ -79,6 +79,26 @@ function errorCodes(result) {
 }
 
 {
+  const bad = { ...model, payload: { embedded: { kind: 'source.observation.v1', id: 'obs_001', status: 'observed' } } };
+  const result = runAdmissionGateJsonl(JSON.stringify(bad));
+  assert.equal(result.ok, false);
+  assert.equal(result.admitted, 0);
+  assert.equal(result.rejected, 1);
+  assert.ok(errorCodes(result).includes('payload-smuggled-row'));
+  assert.equal(result.acceptedRows.length, 0);
+}
+
+{
+  const bad = { ...model, payload: { embedded: { kind: 'model_source_reconcile.v1', id: 'rec_001', result: 'matched' } } };
+  const result = runAdmissionGateJsonl(JSON.stringify(bad));
+  assert.equal(result.ok, false);
+  assert.equal(result.admitted, 0);
+  assert.equal(result.rejected, 1);
+  assert.ok(errorCodes(result).includes('payload-smuggled-row'));
+  assert.equal(result.acceptedRows.length, 0);
+}
+
+{
   const result = runAdmissionGateJsonl([
     JSON.stringify(model),
     JSON.stringify({ ...model, op: 'addNode' }),
