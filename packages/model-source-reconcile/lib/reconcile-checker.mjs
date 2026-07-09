@@ -1,8 +1,3 @@
-import {
-  expectedObservedDigest,
-  expectedReceiptDigest,
-  validateSourceRecord,
-} from '../../hq-source-evidence-runtime/lib/source-validator.mjs';
 import { reconcileResults } from './reconcile-schema.mjs';
 import { sha256Digest } from './digest.mjs';
 
@@ -12,6 +7,19 @@ function isPlainObject(value) {
 
 function refId(value) {
   return isPlainObject(value) && typeof value.id === 'string' ? value.id : null;
+}
+
+function withoutKey(record, keyToRemove) {
+  const { [keyToRemove]: _removed, ...rest } = record;
+  return rest;
+}
+
+function expectedObservedDigest(record) {
+  return sha256Digest(withoutKey(record, 'observedDigest'));
+}
+
+function expectedReceiptDigest(record) {
+  return sha256Digest(withoutKey(record, 'receiptDigest'));
 }
 
 function observationKey(subjectId, sourceId) {
@@ -48,21 +56,15 @@ function classifyReceipt(observation, receipt) {
     return { ok: false, result: 'invalid_source_receipt', reason: 'missing source receipt' };
   }
 
-  const observationErrors = validateSourceRecord(observation);
-  if (observationErrors.some((error) => error.code === 'observed-digest-mismatch')) {
-    return { ok: false, result: 'stale_source_receipt', reason: 'observation digest mismatch', errors: observationErrors };
-  }
   if (observation.observedDigest !== expectedObservedDigest(observation)) {
     return { ok: false, result: 'stale_source_receipt', reason: 'observation digest mismatch' };
   }
 
-  const receiptErrors = validateSourceRecord(receipt);
   if (receipt.observedDigest !== observation.observedDigest) {
     return { ok: false, result: 'stale_source_receipt', reason: 'receipt observedDigest does not match observation' };
   }
-  if (receipt.receiptDigest !== expectedReceiptDigest(receipt)
-    || receiptErrors.some((error) => error.code === 'receipt-digest-mismatch')) {
-    return { ok: false, result: 'invalid_source_receipt', reason: 'receipt digest mismatch', errors: receiptErrors };
+  if (receipt.receiptDigest !== expectedReceiptDigest(receipt)) {
+    return { ok: false, result: 'invalid_source_receipt', reason: 'receipt digest mismatch' };
   }
   if (receipt.evidenceOnly !== true) {
     return { ok: false, result: 'invalid_source_receipt', reason: 'source receipt is not evidenceOnly' };
