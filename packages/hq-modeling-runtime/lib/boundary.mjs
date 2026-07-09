@@ -8,9 +8,9 @@ export const runtimeBoundary = Object.freeze({
     'queue-schema-validator',
     'local-worker',
     'receipt-writer',
+    'repo-map-projection-builder',
   ],
   reservedForLaterIssues: Object.freeze({
-    'ops#43': 'repo-map projection builder handoff',
     'ops#44': 'admission gate',
   }),
   owns: [
@@ -18,6 +18,7 @@ export const runtimeBoundary = Object.freeze({
     'queue validator core',
     'local worker core',
     'receipt writer core',
+    'repo-map projection builder core',
     'runtime core boundary',
     'worker boundary',
     'receipt boundary',
@@ -35,7 +36,7 @@ export const runtimeBoundary = Object.freeze({
     queueRows: 'intent only',
     receipts: 'evidence only',
     projections: 'generated read models',
-    acceptedLedger: 'explicit admission only; not implemented in receipt writer',
+    acceptedLedger: 'explicit admission only; not implemented in projection builder',
   },
 });
 
