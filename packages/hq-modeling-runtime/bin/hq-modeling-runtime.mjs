@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 
 import { boundarySummary, assertNoForbiddenOwnership } from '../lib/boundary.mjs';
 import { runLocalWorkerJsonl } from '../lib/local-worker.mjs';
+import { runLocalWorkerWithReceiptsJsonl, receiptsToJsonl } from '../lib/receipt-writer.mjs';
 import { validateJsonl } from '../lib/queue-validator.mjs';
 
 assertNoForbiddenOwnership();
@@ -12,16 +13,18 @@ function printHelp() {
   console.log('usage: hq-modeling-runtime [--json]');
   console.log('       hq-modeling-runtime validate --input <queue.jsonl> [--json]');
   console.log('       hq-modeling-runtime work --input <queue.jsonl> [--json]');
+  console.log('       hq-modeling-runtime receipts --input <queue.jsonl> [--jsonl|--json]');
   console.log('');
   console.log('Without a subcommand, prints the hq-modeling-runtime boundary summary.');
 }
 
-function parseInputArgs(args, usage) {
+function parseInputArgs(args, usage, extraOptions = {}) {
   const { values } = parseArgs({
     args,
     options: {
       input: { type: 'string' },
       json: { type: 'boolean', default: false },
+      ...extraOptions,
     },
     strict: true,
   });
@@ -59,6 +62,23 @@ if (argv[0] === 'work') {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.log(`hq local worker: ${result.ok ? 'PASS' : 'FAIL'} processed=${result.processed} pending=${result.pending} ignored=${result.ignored} failed=${result.failed}`);
+  }
+  process.exit(result.ok ? 0 : 1);
+}
+
+if (argv[0] === 'receipts') {
+  const values = parseInputArgs(
+    argv.slice(1),
+    'usage: hq-modeling-runtime receipts --input <queue.jsonl> [--jsonl|--json]',
+    { jsonl: { type: 'boolean', default: false } },
+  );
+  const result = runLocalWorkerWithReceiptsJsonl(readFileSync(values.input, 'utf8'));
+  if (values.jsonl) {
+    process.stdout.write(receiptsToJsonl(result.receiptRows));
+  } else if (values.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`hq receipt writer: ${result.ok ? 'PASS' : 'FAIL'} receipts=${result.receipts} digest=${result.receiptDigest}`);
   }
   process.exit(result.ok ? 0 : 1);
 }

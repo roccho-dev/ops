@@ -14,3 +14,4 @@
 {"kind":"check","name":"hq-modeling-runtime-scaffold","script":"packages/hq-modeling-runtime/tests/static.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-queue-validator","script":"packages/hq-modeling-runtime/tests/queue-validator.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-local-worker","script":"packages/hq-modeling-runtime/tests/local-worker.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-receipt-writer","script":"packages/hq-modeling-runtime/tests/receipt-writer.mjs","deps":["nodejs","hq-modeling-runtime"]}
