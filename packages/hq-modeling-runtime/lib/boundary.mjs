@@ -6,9 +6,9 @@ export const runtimeBoundary = Object.freeze({
   implementedNow: [
     'package-boundary-metadata',
     'queue-schema-validator',
+    'local-worker',
   ],
   reservedForLaterIssues: Object.freeze({
-    'ops#41': 'local worker',
     'ops#42': 'receipt writer',
     'ops#43': 'repo-map projection builder handoff',
     'ops#44': 'admission gate',
@@ -16,6 +16,7 @@ export const runtimeBoundary = Object.freeze({
   owns: [
     'queue contract port',
     'queue validator core',
+    'local worker core',
     'runtime core boundary',
     'worker boundary',
     'receipt boundary',
@@ -33,7 +34,7 @@ export const runtimeBoundary = Object.freeze({
     queueRows: 'intent only',
     receipts: 'evidence only',
     projections: 'generated read models',
-    acceptedLedger: 'explicit admission only; not implemented in validator',
+    acceptedLedger: 'explicit admission only; not implemented in local worker',
   },
 });
 
