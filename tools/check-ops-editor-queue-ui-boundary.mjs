@@ -41,7 +41,7 @@ function boundaryViolations(text) {
     /\bops\b.*\bwrites\b.*\bUI state\b/i,
     /\bops\b.*\bstores\b.*\bUI state\b/i,
   ];
-  const negationOrBoundary = /\b(does not|do not|must not|cannot|never|no|non-goal|forbidden|fail if|outside|not)\b/i;
+  const negationOrBoundary = /\b(does not|do not|must not|must fail|cannot|never|no|non-goal|forbidden|fail if|outside|not)\b/i;
 
   return text
     .split(/\r?\n/)
@@ -63,6 +63,7 @@ const falsePositiveFixtures = [
   'ops must not import or implement editor UX.',
   'docs fail if ops owns UI renderer.',
   'browser renderer is outside ops.',
+  'must fail: docs that claim ops owns editor UX.',
 ];
 
 for (const fixture of falsePositiveFixtures) {
