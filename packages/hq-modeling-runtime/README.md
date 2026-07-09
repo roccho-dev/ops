@@ -6,9 +6,9 @@
 
 | Generation | Purpose |
 |---|---|
-| Scope | Validate, locally process, and emit evidence-only receipts for editor-confirmed queue rows before projection/admission issues. |
+| Scope | Validate, locally process, receipt, and project editor-confirmed queue rows into a UI-readable repo-map artifact. |
 | Repo split | Keep edits as queue writer, ops as runtime/admission/receipt/projection owner, and ui as projection reader. |
-| Meta | Keep schema/validation/worker/receipt shaping in pure core and leave file/process effects in adapters. |
+| Meta | Keep schema/validation/worker/receipt/projection shaping in pure core and leave file/process effects in adapters. |
 | Meta^10 | Keep a buyer-auditable operational package boundary for the model-runtime path. |
 
 ## Current capabilities
@@ -22,13 +22,13 @@
 | JSONL queue validator | present | pure validation core |
 | local worker reducer | present | pure local shadow-state core |
 | receipt writer | present | evidence-only receipt core |
-| CLI validation/work/receipt adapter | present | file read + stdout only |
+| repo-map projection builder | present | generated read-model core |
+| CLI validation/work/receipt/projection adapter | present | file read + stdout only |
 
 Still not implemented here:
 
 | Issue | Adds |
 |---|---|
-| `ops#43` | repo-map projection builder handoff |
 | `ops#44` | admission gate |
 
 ## Core / port / adapter split
@@ -41,14 +41,14 @@ Still not implemented here:
 | local worker reducer | pure core | present in `lib/local-worker.mjs` |
 | digest calculation | pure core | present in `lib/digest.mjs` |
 | receipt writer | pure core | present in `lib/receipt-writer.mjs` |
+| projection builder | pure core | present in `lib/projection-builder.mjs` |
 | CLI file read/stdout | adapter | present in `bin/hq-modeling-runtime.mjs` |
-| projection artifact contract | port | reserved for `ops#43` |
 
 ## Authority boundary
 
-Queue rows are intent. Receipts are evidence. Projections are generated read models. Accepted-ledger-shaped rows exist only after explicit ops admission, which is not implemented by this receipt writer.
+Queue rows are intent. Receipts are evidence. Projections are generated read models. Accepted-ledger-shaped rows exist only after explicit ops admission, which is not implemented by this projection builder.
 
-The validator rejects authority-confusing fields such as accepted/admitted/approved/ledger-authority fields in queue or receipt rows. The local worker converts valid model commits into local shadow model operations and valid agent tasks into pending local task state only. The receipt writer emits evidence-only receipt rows from worker results and deterministic digests.
+The validator rejects authority-confusing fields such as accepted/admitted/approved/ledger-authority fields in queue or receipt rows. The local worker converts valid model commits into local shadow model operations and valid agent tasks into pending local task state only. The receipt writer emits evidence-only receipt rows from worker results and deterministic digests. The projection builder emits `repoMap.projection.v1` read-model artifacts for ui input; it does not write source model authority.
 
 ## Repo cleanliness
 
