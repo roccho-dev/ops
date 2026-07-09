@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 
 import { boundarySummary, assertNoForbiddenOwnership } from '../lib/boundary.mjs';
 import { runLocalWorkerJsonl } from '../lib/local-worker.mjs';
+import { buildRepoMapProjectionFromQueueJsonl } from '../lib/projection-builder.mjs';
 import { runLocalWorkerWithReceiptsJsonl, receiptsToJsonl } from '../lib/receipt-writer.mjs';
 import { validateJsonl } from '../lib/queue-validator.mjs';
 
@@ -14,6 +15,7 @@ function printHelp() {
   console.log('       hq-modeling-runtime validate --input <queue.jsonl> [--json]');
   console.log('       hq-modeling-runtime work --input <queue.jsonl> [--json]');
   console.log('       hq-modeling-runtime receipts --input <queue.jsonl> [--jsonl|--json]');
+  console.log('       hq-modeling-runtime projection --input <queue.jsonl> [--json]');
   console.log('');
   console.log('Without a subcommand, prints the hq-modeling-runtime boundary summary.');
 }
@@ -79,6 +81,17 @@ if (argv[0] === 'receipts') {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.log(`hq receipt writer: ${result.ok ? 'PASS' : 'FAIL'} receipts=${result.receipts} digest=${result.receiptDigest}`);
+  }
+  process.exit(result.ok ? 0 : 1);
+}
+
+if (argv[0] === 'projection') {
+  const values = parseInputArgs(argv.slice(1), 'usage: hq-modeling-runtime projection --input <queue.jsonl> [--json]');
+  const result = buildRepoMapProjectionFromQueueJsonl(readFileSync(values.input, 'utf8'));
+  if (values.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`hq repo-map projection: ${result.ok ? 'PASS' : 'FAIL'} nodes=${result.projection.nodes.length} edges=${result.projection.edges.length} digest=${result.projection.projectionDigest}`);
   }
   process.exit(result.ok ? 0 : 1);
 }
