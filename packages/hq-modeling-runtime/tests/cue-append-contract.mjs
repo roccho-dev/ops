@@ -72,7 +72,7 @@ try {
     'validate',
     '--meta', metaPath,
     '--ledger', candidatePath,
-    '--row-validator', 'both',
+    '--row-validator', 'cue',
     '--report', reportPath,
   ]);
   assert.equal(validateResult.status, 'pass');
@@ -101,7 +101,7 @@ try {
     'validate',
     '--meta', metaPath,
     '--ledger', invalidPath,
-    '--row-validator', 'both',
+    '--row-validator', 'cue',
   ]);
   assert.match(`${invalid.stdout}\n${invalid.stderr}`, /ERROR|invalid/i);
 
