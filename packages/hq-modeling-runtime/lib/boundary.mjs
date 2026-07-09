@@ -10,6 +10,7 @@ export const runtimeBoundary = Object.freeze({
     'receipt-writer',
     'repo-map-projection-builder',
     'local-dev-admission-gate',
+    'cue-append-contract-adapter',
   ],
   reservedForLaterIssues: Object.freeze({}),
   owns: [
@@ -19,6 +20,7 @@ export const runtimeBoundary = Object.freeze({
     'receipt writer core',
     'repo-map projection builder core',
     'local-dev admission gate core',
+    'cue append contract adapter core',
     'runtime core boundary',
     'worker boundary',
     'receipt boundary',
@@ -31,12 +33,14 @@ export const runtimeBoundary = Object.freeze({
     'browser renderer',
     'UI state',
     'production governance authority',
+    'CUE contract core implementation',
   ],
   authorityBoundary: {
     queueRows: 'intent only',
     receipts: 'evidence only',
     projections: 'generated read models',
     acceptedLedger: 'local-dev admission only; production governance adoption is not implemented here',
+    cueContractCore: 'external ops contract package; invoked through adapter only',
   },
 });
 
@@ -60,6 +64,7 @@ export function assertNoForbiddenOwnership(boundary = runtimeBoundary) {
     'browser renderer',
     'UI state',
     'production governance authority',
+    'CUE contract core implementation',
   ]);
 
   const overlap = boundary.owns.filter((value) => forbidden.has(value));
