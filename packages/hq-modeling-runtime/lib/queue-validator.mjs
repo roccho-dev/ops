@@ -1,5 +1,8 @@
 import {
+  forbiddenAcceptedLedgerShapeFields,
   forbiddenAuthorityFields,
+  forbiddenEmbeddedRowKindPrefixes,
+  forbiddenEmbeddedRowKinds,
   queueKinds,
   schemaByKind,
 } from './queue-schema.mjs';
@@ -30,6 +33,40 @@ function findForbiddenAuthorityFields(value, path = []) {
       found.push([...path, key].join('.'));
     }
     found.push(...findForbiddenAuthorityFields(nested, [...path, key]));
+  }
+  return found;
+}
+
+function isForbiddenEmbeddedKind(kind) {
+  return forbiddenEmbeddedRowKinds.includes(kind)
+    || forbiddenEmbeddedRowKindPrefixes.some((prefix) => kind.startsWith(prefix));
+}
+
+function findForbiddenEmbeddedRows(value, path = ['payload']) {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) => findForbiddenEmbeddedRows(entry, [...path, String(index)]));
+  }
+  if (!isPlainObject(value)) {
+    return [];
+  }
+
+  const found = [];
+  if (typeof value.kind === 'string' && isForbiddenEmbeddedKind(value.kind)) {
+    found.push({ path: [...path, 'kind'].join('.'), kind: value.kind, reason: 'forbidden-kind' });
+  }
+
+  const acceptedShapeFields = forbiddenAcceptedLedgerShapeFields.filter((field) => field in value);
+  if (acceptedShapeFields.length > 0) {
+    found.push({
+      path: path.join('.'),
+      kind: typeof value.kind === 'string' ? value.kind : null,
+      reason: 'accepted-ledger-shape',
+      fields: acceptedShapeFields,
+    });
+  }
+
+  for (const [key, nested] of Object.entries(value)) {
+    found.push(...findForbiddenEmbeddedRows(nested, [...path, key]));
   }
   return found;
 }
@@ -100,6 +137,19 @@ export function validateRecord(record, { line = 1 } = {}) {
     }
     if (!isPlainObject(record.payload)) {
       add(errors, 'payload-not-object', 'payload must be an object', { line, id: record.id });
+    } else {
+      const smuggledRows = findForbiddenEmbeddedRows(record.payload);
+      for (const smuggled of smuggledRows) {
+        add(errors, 'payload-smuggled-row', `model payload must not embed source/reconcile/admission/accepted rows: ${smuggled.path}`, {
+          line,
+          kind: record.kind,
+          id: record.id,
+          fieldPath: smuggled.path,
+          embeddedKind: smuggled.kind,
+          reason: smuggled.reason,
+          fields: smuggled.fields,
+        });
+      }
     }
     if (!isNonEmptyString(record.confirmedBy)) {
       add(errors, 'invalid-confirmedBy', 'confirmedBy must be a non-empty string', { line, id: record.id });
