@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { boundarySummary, assertNoForbiddenOwnership } from '../lib/boundary.mjs';
+import { runLocalWorkerJsonl } from '../lib/local-worker.mjs';
 import { validateJsonl } from '../lib/queue-validator.mjs';
 
 assertNoForbiddenOwnership();
@@ -10,8 +11,27 @@ assertNoForbiddenOwnership();
 function printHelp() {
   console.log('usage: hq-modeling-runtime [--json]');
   console.log('       hq-modeling-runtime validate --input <queue.jsonl> [--json]');
+  console.log('       hq-modeling-runtime work --input <queue.jsonl> [--json]');
   console.log('');
   console.log('Without a subcommand, prints the hq-modeling-runtime boundary summary.');
+}
+
+function parseInputArgs(args, usage) {
+  const { values } = parseArgs({
+    args,
+    options: {
+      input: { type: 'string' },
+      json: { type: 'boolean', default: false },
+    },
+    strict: true,
+  });
+
+  if (!values.input) {
+    console.error(usage);
+    process.exit(2);
+  }
+
+  return values;
 }
 
 const argv = process.argv.slice(2);
@@ -22,25 +42,23 @@ if (argv.includes('--help')) {
 }
 
 if (argv[0] === 'validate') {
-  const { values } = parseArgs({
-    args: argv.slice(1),
-    options: {
-      input: { type: 'string' },
-      json: { type: 'boolean', default: false },
-    },
-    strict: true,
-  });
-
-  if (!values.input) {
-    console.error('usage: hq-modeling-runtime validate --input <queue.jsonl> [--json]');
-    process.exit(2);
-  }
-
+  const values = parseInputArgs(argv.slice(1), 'usage: hq-modeling-runtime validate --input <queue.jsonl> [--json]');
   const result = validateJsonl(readFileSync(values.input, 'utf8'));
   if (values.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.log(`hq queue validation: ${result.ok ? 'PASS' : 'FAIL'} records=${result.records} errors=${result.errors.length}`);
+  }
+  process.exit(result.ok ? 0 : 1);
+}
+
+if (argv[0] === 'work') {
+  const values = parseInputArgs(argv.slice(1), 'usage: hq-modeling-runtime work --input <queue.jsonl> [--json]');
+  const result = runLocalWorkerJsonl(readFileSync(values.input, 'utf8'));
+  if (values.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(`hq local worker: ${result.ok ? 'PASS' : 'FAIL'} processed=${result.processed} pending=${result.pending} ignored=${result.ignored} failed=${result.failed}`);
   }
   process.exit(result.ok ? 0 : 1);
 }
