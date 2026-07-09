@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import {
   buildLocalStatus,
@@ -62,5 +66,21 @@ assert.equal(status.localRootIsSsot, false);
 assert.equal(status.counts.modelQueueRows, 1);
 assert.equal(status.counts.agentTaskRows, 2);
 assert.match(status.digests.queueDigest, /^sha256:/);
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const serveLocalBin = path.join(here, '..', 'bin', 'hq-serve-local.mjs');
+const output = execFileSync(process.execPath, [serveLocalBin, '--root', '/tmp/hq-local', '--host', '127.0.0.1', '--dry-run', '--json'], {
+  encoding: 'utf8',
+  timeout: 10_000,
+});
+const parsed = JSON.parse(output);
+assert.equal(parsed.ok, true);
+assert.equal(parsed.plan.kind, 'hq.serveLocal.plan.v1');
+assert.equal(parsed.plan.authority, false);
+
+assert.throws(
+  () => execFileSync(process.execPath, [serveLocalBin, '--root', '/tmp/hq-local', '--host', '0.0.0.0', '--dry-run'], { encoding: 'utf8', timeout: 10_000 }),
+  /Command failed/,
+);
 
 console.log('hq local root and serve-local boundary check: PASS');
