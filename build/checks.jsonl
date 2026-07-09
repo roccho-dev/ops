@@ -23,3 +23,4 @@
 {"kind":"check","name":"hq-modeling-runtime-promotion-gate","script":"packages/hq-modeling-runtime/tests/promotion-gate.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-cross-repo-proof","script":"packages/hq-modeling-runtime/tests/cross-repo-proof.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-ui-preview-proof","script":"packages/hq-modeling-runtime/tests/ui-preview-proof.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-editor-to-ui-receipt","script":"packages/hq-modeling-runtime/tests/editor-to-ui-receipt.mjs","deps":["nodejs","hq-modeling-runtime"]}
