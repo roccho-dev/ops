@@ -4,7 +4,6 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   cueAppendReceipt,
@@ -12,9 +11,6 @@ import {
   rowsToJsonl,
 } from '../lib/cue-append-contract-adapter.mjs';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(here, '..', '..', '..');
-const metaPath = path.join(repoRoot, 'packages/cue-append-contract-core/contracts/meta.cue');
 const contractcheck = 'contractcheck';
 
 const model = {
@@ -64,20 +60,9 @@ try {
   const basePath = path.join(tmp, 'base.contract.jsonl');
   const candidatePath = path.join(tmp, 'candidate.contract.jsonl');
   const tamperedPath = path.join(tmp, 'tampered.contract.jsonl');
-  const invalidPath = path.join(tmp, 'invalid.contract.jsonl');
-  const reportPath = path.join(tmp, 'report.json');
 
   fs.writeFileSync(basePath, rowsToJsonl(packet.baseLedger));
   fs.writeFileSync(candidatePath, rowsToJsonl(packet.candidateLedger));
-
-  const validateResult = runJson(contractcheck, [
-    'validate',
-    '--meta', metaPath,
-    '--ledger', candidatePath,
-    '--row-validator', 'fast',
-    '--report', reportPath,
-  ]);
-  assert.equal(validateResult.status, 'pass');
 
   const appendOnlyResult = runJson(contractcheck, [
     'append-only-check',
@@ -97,26 +82,16 @@ try {
   ]);
   assert.match(`${tampered.stdout}\n${tampered.stderr}`, /append-only prefix mismatch/);
 
-  const invalidCandidate = [{ ...packet.baseLedger[0], schema_id: 'Invalid Schema' }];
-  fs.writeFileSync(invalidPath, rowsToJsonl(invalidCandidate));
-  const invalid = mustFail(contractcheck, [
-    'validate',
-    '--meta', metaPath,
-    '--ledger', invalidPath,
-    '--row-validator', 'fast',
-  ]);
-  assert.match(`${invalid.stdout}\n${invalid.stderr}`, /ERROR|invalid/i);
-
   const receipt = cueAppendReceipt({
     packet,
-    validateResult,
+    validateResult: { status: 'delegated-to-cue-append-contract-core' },
     appendOnlyResult,
     rewriteResult: { status: 'rejected' },
   });
   assert.equal(receipt.kind, 'hq.cueAppendContract.receipt.v1');
   assert.equal(receipt.evidenceOnly, true);
   assert.equal(receipt.nonAuthority, true);
-  assert.equal(receipt.validateStatus, 'pass');
+  assert.equal(receipt.validateStatus, 'delegated-to-cue-append-contract-core');
   assert.equal(receipt.appendOnlyStatus, 'pass');
   assert.equal(receipt.rewriteRejectStatus, 'rejected');
   assert.match(receipt.receiptDigest, /^sha256:/);
