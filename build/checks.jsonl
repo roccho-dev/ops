@@ -20,3 +20,4 @@
 {"kind":"check","name":"hq-modeling-runtime-cue-append-contract","script":"packages/hq-modeling-runtime/tests/cue-append-contract.mjs","deps":["nodejs","hq-modeling-runtime","cue-append-contract-core"]}
 {"kind":"check","name":"hq-modeling-runtime-agent-task-boundary","script":"packages/hq-modeling-runtime/tests/agent-task-runtime.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-modeling-proposal","script":"packages/hq-modeling-runtime/tests/modeling-proposal.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-promotion-gate","script":"packages/hq-modeling-runtime/tests/promotion-gate.mjs","deps":["nodejs","hq-modeling-runtime"]}
