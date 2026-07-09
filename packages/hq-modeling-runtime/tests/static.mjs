@@ -12,7 +12,15 @@ import {
   assertNoForbiddenOwnership,
 } from '../lib/boundary.mjs';
 
-const implemented = ['package-boundary-metadata', 'queue-schema-validator', 'local-worker', 'receipt-writer', 'repo-map-projection-builder', 'local-dev-admission-gate'];
+const implemented = [
+  'package-boundary-metadata',
+  'queue-schema-validator',
+  'local-worker',
+  'receipt-writer',
+  'repo-map-projection-builder',
+  'local-dev-admission-gate',
+  'cue-append-contract-adapter',
+];
 
 assert.equal(runtimeBoundary.kind, 'hq.modelingRuntime.boundary.v1');
 assert.equal(runtimeBoundary.packageName, 'hq-modeling-runtime');
@@ -23,6 +31,7 @@ assert.ok(runtimeBoundary.owns.includes('local worker core'));
 assert.ok(runtimeBoundary.owns.includes('receipt writer core'));
 assert.ok(runtimeBoundary.owns.includes('repo-map projection builder core'));
 assert.ok(runtimeBoundary.owns.includes('local-dev admission gate core'));
+assert.ok(runtimeBoundary.owns.includes('cue append contract adapter core'));
 
 assert.equal(Object.keys(runtimeBoundary.reservedForLaterIssues).length, 0);
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#40'));
@@ -30,8 +39,9 @@ assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#41'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#42'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#43'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#44'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#45'));
 
-for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser renderer', 'UI state', 'production governance authority']) {
+for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser renderer', 'UI state', 'production governance authority', 'CUE contract core implementation']) {
   assert.ok(runtimeBoundary.doesNotOwn.includes(forbidden), `doesNotOwn must include ${forbidden}`);
   assert.ok(!runtimeBoundary.owns.includes(forbidden), `owns must not include ${forbidden}`);
 }
@@ -41,6 +51,7 @@ assert.equal(runtimeBoundary.authorityBoundary.receipts, 'evidence only');
 assert.equal(runtimeBoundary.authorityBoundary.projections, 'generated read models');
 assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /local-dev admission only/);
 assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /production governance adoption is not implemented/);
+assert.match(runtimeBoundary.authorityBoundary.cueContractCore, /invoked through adapter only/);
 
 assert.equal(assertNoForbiddenOwnership(), true);
 assert.throws(
@@ -49,6 +60,10 @@ assert.throws(
 );
 assert.throws(
   () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'production governance authority'] }),
+  /forbidden ownership/,
+);
+assert.throws(
+  () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'CUE contract core implementation'] }),
   /forbidden ownership/,
 );
 
