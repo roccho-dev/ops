@@ -53,9 +53,11 @@ try {
   assert.equal(packet.nonAuthority, true);
   assert.equal(packet.admission.ok, true);
   assert.equal(packet.admission.admitted, 1);
-  assert.equal(packet.appendedEvents.length, 1);
-  assert.equal(packet.appendedEvents[0].kind, 'contract.authority_rule.v1');
-  assert.match(packet.appendedEvents[0].subject_id, /^accepted:mq_001:sha256:/);
+  assert.equal(packet.appendedEvents.length, 2);
+  assert.equal(packet.appendedEvents[0].kind, 'contract.query.v1');
+  assert.equal(packet.appendedEvents[1].kind, 'contract.fixture.v1');
+  assert.equal(packet.appendedEvents[0].fixture_ids[0], packet.appendedEvents[1].fixture_id);
+  assert.match(packet.appendedEvents[1].payload_hash, /^sha256:/);
   assert.ok(!('accepted' in packet));
   assert.ok(!('authority' in packet));
 
@@ -72,7 +74,7 @@ try {
     'validate',
     '--meta', metaPath,
     '--ledger', candidatePath,
-    '--row-validator', 'cue',
+    '--row-validator', 'both',
     '--report', reportPath,
   ]);
   assert.equal(validateResult.status, 'pass');
@@ -101,7 +103,7 @@ try {
     'validate',
     '--meta', metaPath,
     '--ledger', invalidPath,
-    '--row-validator', 'cue',
+    '--row-validator', 'both',
   ]);
   assert.match(`${invalid.stdout}\n${invalid.stderr}`, /ERROR|invalid/i);
 
