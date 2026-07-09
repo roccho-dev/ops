@@ -23,3 +23,7 @@
 {"kind":"check","name":"hq-modeling-runtime-promotion-gate","script":"packages/hq-modeling-runtime/tests/promotion-gate.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-cross-repo-proof","script":"packages/hq-modeling-runtime/tests/cross-repo-proof.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-ui-preview-proof","script":"packages/hq-modeling-runtime/tests/ui-preview-proof.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-local-root-boundary","script":"packages/hq-modeling-runtime/tests/local-root.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-ci-mode-boundary","script":"packages/hq-modeling-runtime/tests/ci-mode.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-github-readback-boundary","script":"packages/hq-modeling-runtime/tests/github-readback.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-canonical-promotion-boundary","script":"packages/hq-modeling-runtime/tests/canonical-promotion.mjs","deps":["nodejs","hq-modeling-runtime"]}
