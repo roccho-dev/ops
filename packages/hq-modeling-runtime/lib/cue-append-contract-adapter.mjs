@@ -83,13 +83,40 @@ function stableEventSuffix(value) {
 }
 
 export function contractEventsForAcceptedRows(acceptedRows) {
-  return acceptedRows.map((row, index) => contractEvent({
-    kind: 'contract.authority_rule.v1',
-    event_id: `evt_hqacc_${stableEventSuffix({ row, index })}`,
-    subject_kind: 'decision',
-    subject_id: `${row.id}:${row.acceptedDigest}`,
-    rule: 'receipt_required',
-  }));
+  return acceptedRows.flatMap((row, index) => {
+    const suffix = stableEventSuffix({ row, index });
+    const queryId = `q_hqacc_${suffix}.v1`;
+    const fixtureId = `fx_hqacc_${suffix}`;
+    return [
+      contractEvent({
+        kind: 'contract.query.v1',
+        event_id: `evt_hqacc_q_${suffix}`,
+        query_id: queryId,
+        query_family: 'hqacc',
+        input_fields: [
+          'accepted_model_commit.v1#source_queue_id',
+          'accepted_model_commit.v1#target_ref_id',
+          'accepted_model_commit.v1#op',
+          'accepted_model_commit.v1#queue_digest',
+          'accepted_model_commit.v1#accepted_digest',
+        ],
+        output_schema: 'accepted_model_commit.v1',
+        runner_kind: 'generated',
+        projection_only: true,
+        side_effects: false,
+        fixture_ids: [fixtureId],
+        expected_output_hash: row.acceptedDigest,
+      }),
+      contractEvent({
+        kind: 'contract.fixture.v1',
+        event_id: `evt_hqacc_fx_${suffix}`,
+        fixture_id: fixtureId,
+        target_query_id: queryId,
+        polarity: 'positive',
+        payload_hash: row.acceptedDigest,
+      }),
+    ];
+  });
 }
 
 export function hqAdmissionToCueAppendPacket(queueJsonl) {
