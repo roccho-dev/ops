@@ -17,3 +17,4 @@
 {"kind":"check","name":"hq-modeling-runtime-receipt-writer","script":"packages/hq-modeling-runtime/tests/receipt-writer.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-projection-builder","script":"packages/hq-modeling-runtime/tests/projection-builder.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-admission-gate","script":"packages/hq-modeling-runtime/tests/admission-gate.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-cue-append-contract","script":"packages/hq-modeling-runtime/tests/cue-append-contract.mjs","deps":["nodejs","hq-modeling-runtime","cue-append-contract-core"]}
