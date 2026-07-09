@@ -24,3 +24,7 @@
 {"kind":"check","name":"hq-modeling-runtime-ci-mode-boundary","script":"packages/hq-modeling-runtime/tests/ci-mode.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-github-readback-boundary","script":"packages/hq-modeling-runtime/tests/github-readback.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-canonical-promotion-boundary","script":"packages/hq-modeling-runtime/tests/canonical-promotion.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-source-evidence-runtime-validator","script":"packages/hq-source-evidence-runtime/tests/source-validator.mjs","deps":["nodejs","hq-source-evidence-runtime"]}
+{"kind":"check","name":"hq-source-evidence-runtime-receipt-writer","script":"packages/hq-source-evidence-runtime/tests/source-receipt-writer.mjs","deps":["nodejs","hq-source-evidence-runtime"]}
+{"kind":"check","name":"model-source-reconcile-checker","script":"packages/model-source-reconcile/tests/reconcile-checker.mjs","deps":["nodejs","model-source-reconcile","hq-modeling-runtime","hq-source-evidence-runtime"]}
+{"kind":"check","name":"model-source-reconcile-projection","script":"packages/model-source-reconcile/tests/reconcile-projection.mjs","deps":["nodejs","model-source-reconcile","hq-modeling-runtime","hq-source-evidence-runtime"]}
