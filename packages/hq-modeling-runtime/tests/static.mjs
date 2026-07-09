@@ -20,6 +20,11 @@ const implemented = [
   'repo-map-projection-builder',
   'local-dev-admission-gate',
   'cue-append-contract-adapter',
+  'hq-local-root-catalog',
+  'hq-serve-local-scaffold',
+  'hq-ci-mode-contract',
+  'github-issue-comment-readback-adapter-contract',
+  'staged-canonical-promotion-eligibility',
 ];
 
 assert.equal(runtimeBoundary.kind, 'hq.modelingRuntime.boundary.v1');
@@ -32,6 +37,11 @@ assert.ok(runtimeBoundary.owns.includes('receipt writer core'));
 assert.ok(runtimeBoundary.owns.includes('repo-map projection builder core'));
 assert.ok(runtimeBoundary.owns.includes('local-dev admission gate core'));
 assert.ok(runtimeBoundary.owns.includes('cue append contract adapter core'));
+assert.ok(runtimeBoundary.owns.includes('hq local root catalog port'));
+assert.ok(runtimeBoundary.owns.includes('local-only serve scaffold adapter'));
+assert.ok(runtimeBoundary.owns.includes('ci artifact receipt boundary core'));
+assert.ok(runtimeBoundary.owns.includes('GitHub issue-comment readback evidence adapter core'));
+assert.ok(runtimeBoundary.owns.includes('staged-to-canonical promotion eligibility core'));
 
 assert.equal(Object.keys(runtimeBoundary.reservedForLaterIssues).length, 0);
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#40'));
@@ -40,8 +50,23 @@ assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#42'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#43'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#44'));
 assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#45'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#63'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#64'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#65'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#66'));
+assert.ok(!Object.hasOwn(runtimeBoundary.reservedForLaterIssues, 'ops#67'));
 
-for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser renderer', 'UI state', 'production governance authority', 'CUE contract core implementation']) {
+for (const forbidden of [
+  'editor UX',
+  'Vim/hq command surface',
+  'browser renderer',
+  'UI state',
+  'production governance authority',
+  'CUE contract core implementation',
+  'remote bare repo write implementation',
+  'GitHub issue authority',
+  'ChatGPT direct local control',
+]) {
   assert.ok(runtimeBoundary.doesNotOwn.includes(forbidden), `doesNotOwn must include ${forbidden}`);
   assert.ok(!runtimeBoundary.owns.includes(forbidden), `owns must not include ${forbidden}`);
 }
@@ -49,8 +74,12 @@ for (const forbidden of ['editor UX', 'Vim/hq command surface', 'browser rendere
 assert.equal(runtimeBoundary.authorityBoundary.queueRows, 'intent only');
 assert.equal(runtimeBoundary.authorityBoundary.receipts, 'evidence only');
 assert.equal(runtimeBoundary.authorityBoundary.projections, 'generated read models');
+assert.match(runtimeBoundary.authorityBoundary.localRoot, /never SSOT/);
+assert.match(runtimeBoundary.authorityBoundary.ciArtifacts, /ephemeral evidence only/);
+assert.match(runtimeBoundary.authorityBoundary.githubReadback, /not accepted authority/);
 assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /local-dev admission only/);
 assert.match(runtimeBoundary.authorityBoundary.acceptedLedger, /production governance adoption is not implemented/);
+assert.match(runtimeBoundary.authorityBoundary.canonicalPromotion, /remote bare repo becomes canonical/);
 assert.match(runtimeBoundary.authorityBoundary.cueContractCore, /invoked through adapter only/);
 
 assert.equal(assertNoForbiddenOwnership(), true);
@@ -64,6 +93,14 @@ assert.throws(
 );
 assert.throws(
   () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'CUE contract core implementation'] }),
+  /forbidden ownership/,
+);
+assert.throws(
+  () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'remote bare repo write implementation'] }),
+  /forbidden ownership/,
+);
+assert.throws(
+  () => assertNoForbiddenOwnership({ ...runtimeBoundary, owns: [...runtimeBoundary.owns, 'GitHub issue authority'] }),
   /forbidden ownership/,
 );
 
