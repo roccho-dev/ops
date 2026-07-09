@@ -6,9 +6,9 @@
 
 | Generation | Purpose |
 |---|---|
-| Scope | Validate, locally process, receipt, project, local-dev admit, and connect admitted rows to CUE append-only contract evidence. |
+| Scope | Validate, locally process, receipt, project, local-dev admit, connect admitted rows to CUE evidence, and keep agent tasks non-authority. |
 | Repo split | Keep edits as queue writer, ops as runtime/admission/receipt/projection/CUE-boundary owner, and ui as projection reader. |
-| Meta | Keep schema/validation/worker/receipt/projection/admission/CUE mapping in pure core and leave file/process effects in adapters. |
+| Meta | Keep schema/validation/worker/receipt/projection/admission/CUE/agent-task classification in pure core and leave file/process effects in adapters. |
 | Meta^10 | Keep a buyer-auditable operational package boundary for the model-runtime path. |
 
 ## Current capabilities
@@ -21,6 +21,7 @@
 | `hq.receipt.v1` schema | present | evidence only |
 | JSONL queue validator | present | pure validation core |
 | local worker reducer | present | pure local shadow-state core |
+| agent task runtime boundary | present | pending task state + pending receipt only |
 | receipt writer | present | evidence-only receipt core |
 | repo-map projection builder | present | generated read-model core |
 | local-dev admission gate | present | accepted-ledger-shaped local/dev output only |
@@ -35,6 +36,7 @@
 | queue schema contract | port | present in `lib/queue-schema.mjs` |
 | queue validator | pure core | present in `lib/queue-validator.mjs` |
 | local worker reducer | pure core | present in `lib/local-worker.mjs` |
+| agent task runtime classification | pure core | present in `lib/local-worker.mjs` and fixed by `tests/agent-task-runtime.mjs` |
 | digest calculation | pure core | present in `lib/digest.mjs` |
 | receipt writer | pure core | present in `lib/receipt-writer.mjs` |
 | projection builder | pure core | present in `lib/projection-builder.mjs` |
@@ -47,7 +49,7 @@
 
 Queue rows are intent. Receipts are evidence. Projections are generated read models. The admission gate emits accepted-ledger-shaped rows for local/dev only and explicitly does not implement production governance adoption.
 
-Only `hq.modelCommitQueued.v1` rows can be admitted. `hq.agentTaskQueued.v1` and `hq.receipt.v1` rows are rejected by admission. The validator rejects authority-confusing fields such as accepted/admitted/approved/ledger-authority fields in queue or receipt rows.
+Only `hq.modelCommitQueued.v1` rows can be admitted. `hq.agentTaskQueued.v1` and `hq.receipt.v1` rows are rejected by admission. Agent task rows can become pending local task state and pending receipts only; they can later lead to proposals, never direct accepted ledger writes.
 
 The CUE append adapter proves that admitted rows can be represented as append-only contract evidence. It does not move CUE core into hq runtime, and it does not make queue/projection/preview authority.
 
