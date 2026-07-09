@@ -52,7 +52,7 @@ Only an explicit ops admission gate may produce accepted-ledger-shaped local/dev
 | queue boundary | valid `hq.modelCommitQueued.v1` and `hq.agentTaskQueued.v1` intent rows | rows that claim accepted/admission/ledger authority |
 | receipt boundary | evidence-only receipts with matching digests | stale, mutated, missing, or authority-bearing receipts |
 | projection boundary | generated repo-map projection artifacts for ui input | projection artifacts that claim source-model or ledger authority |
-| repo cleanliness | docs that place runtime in ops and editor/renderer in edits/ui | docs or code that claim ops owns editor UX, browser renderer, or UI state |
+| repo cleanliness | docs that place runtime in ops and editor/renderer in edits/ui | must fail if docs or code place editor UX, browser renderer, or UI state in ops |
 
 ## Repo cleanliness rule
 
