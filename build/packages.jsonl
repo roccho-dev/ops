@@ -23,3 +23,4 @@
 {"kind":"package","name":"codex-app-browser-chatgpt-ops","runtime":"node","entry":"packages/codex-app-browser-chatgpt-ops/bin/codex-app-browser-chatgpt-ops.mjs","bin":"codex-app-browser-chatgpt-ops","deps":["node"],"env":[]}
 {"kind":"package","name":"ops-package-responses","runtime":"node","entry":"packages/ops-package-responses/bin/ops-package-responses.mjs","bin":"ops-package-responses","deps":["node"],"env":[]}
 {"kind":"package","name":"ops-gov-package-output","runtime":"node","entry":"packages/ops-gov-package-output/bin/ops-gov-package-output.mjs","bin":"ops-gov-package-output","deps":["node","ops-package-responses"],"env":[]}
+{"kind":"package","name":"hq-modeling-runtime","runtime":"node","entry":"packages/hq-modeling-runtime/bin/hq-modeling-runtime.mjs","bin":"hq-modeling-runtime","deps":["node"],"env":[]}
