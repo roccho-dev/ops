@@ -6,22 +6,26 @@
 
 | Generation | Purpose |
 |---|---|
-| Scope | Provide the package boundary where validated editor queue rows will be processed. |
+| Scope | Validate editor-confirmed queue rows before later worker/runtime issues process them. |
 | Repo split | Keep edits as queue writer, ops as runtime/admission/receipt/projection owner, and ui as projection reader. |
-| Meta | Give later schema, worker, receipt, admission, and projection issues one package home without mixing adapters into core. |
+| Meta | Keep schema/validation in pure core and leave file/process effects in adapters. |
 | Meta^10 | Keep a buyer-auditable operational package boundary for the model-runtime path. |
 
-## Current scaffold
+## Current capabilities
 
-This package is intentionally minimal.
+| Capability | Status | Boundary |
+|---|---|---|
+| package boundary metadata | present | pure core |
+| `hq.modelCommitQueued.v1` schema | present | queue intent, not accepted authority |
+| `hq.agentTaskQueued.v1` schema | present | agent request intent, not proposal authority |
+| `hq.receipt.v1` schema | present | evidence only |
+| JSONL queue validator | present | pure validation core |
+| CLI validation adapter | present | file read + stdout only |
 
-It may expose package metadata and boundary claims. It must not yet implement queue validation, worker processing, admission, ledger writing, projection building, editor UX, or browser rendering.
-
-Those behaviors are added only by later issues:
+Still not implemented here:
 
 | Issue | Adds |
 |---|---|
-| `ops#40` | queue schema and validator |
 | `ops#41` | local worker |
 | `ops#42` | receipt writer |
 | `ops#43` | repo-map projection builder handoff |
@@ -32,15 +36,18 @@ Those behaviors are added only by later issues:
 | Area | Classification | Current status |
 |---|---|---|
 | package boundary metadata | pure core | present |
-| queue schema contract | port | reserved for `ops#40` |
+| queue schema contract | port | present in `lib/queue-schema.mjs` |
+| queue validator | pure core | present in `lib/queue-validator.mjs` |
+| CLI file read/stdout | adapter | present in `bin/hq-modeling-runtime.mjs` |
 | worker runtime contract | port/core | reserved for `ops#41` |
-| receipt contract | port | reserved for `ops#42` |
+| receipt writer | adapter/core split | reserved for `ops#42` |
 | projection artifact contract | port | reserved for `ops#43` |
-| file/process/repo IO | adapter | not present in scaffold except CLI stdout |
 
 ## Authority boundary
 
-Queue rows are intent. Receipts are evidence. Projections are generated read models. Accepted-ledger-shaped rows exist only after explicit ops admission, which is not implemented by this scaffold.
+Queue rows are intent. Receipts are evidence. Projections are generated read models. Accepted-ledger-shaped rows exist only after explicit ops admission, which is not implemented by this validator.
+
+The validator rejects authority-confusing fields such as accepted/admitted/approved/ledger-authority fields in queue or receipt rows.
 
 ## Repo cleanliness
 

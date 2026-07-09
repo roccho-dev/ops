@@ -12,3 +12,4 @@
 {"kind":"check","name":"ops-gov-package-output","script":"packages/ops-gov-package-output/tests/e2e.mjs","deps":["nodejs","ops-gov-package-output","ops-package-responses"]}
 {"kind":"check","name":"ops-editor-queue-ui-boundary","script":"tools/check-ops-editor-queue-ui-boundary.mjs","deps":["nodejs"]}
 {"kind":"check","name":"hq-modeling-runtime-scaffold","script":"packages/hq-modeling-runtime/tests/static.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-queue-validator","script":"packages/hq-modeling-runtime/tests/queue-validator.mjs","deps":["nodejs","hq-modeling-runtime"]}
