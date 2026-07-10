@@ -2,6 +2,7 @@ package queue
 
 import (
 	"bufio"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -72,13 +73,16 @@ func ParseHostOpenRequest(text string) (HostOpenRequest, error) {
 	return request, nil
 }
 
-func NewRow(profile, uri string, version int, text string, request HostOpenRequest) Row {
+func NewRow(profile, uri string, version int, text string, request HostOpenRequest) (Row, error) {
 	digest := sha256.Sum256([]byte(text))
 	digestText := hex.EncodeToString(digest[:])
-	idDigest := sha256.Sum256([]byte(profile + "\x00" + uri + "\x00" + fmt.Sprint(version) + "\x00" + digestText))
+	idBytes := make([]byte, 12)
+	if _, err := rand.Read(idBytes); err != nil {
+		return Row{}, fmt.Errorf("generate queue id: %w", err)
+	}
 	return Row{
 		Kind:          QueuedKind,
-		ID:            "hqcmd_" + hex.EncodeToString(idDigest[:12]),
+		ID:            "hqcmd_" + hex.EncodeToString(idBytes),
 		Status:        "queued",
 		Command:       "host.open",
 		Path:          request.Path,
@@ -88,7 +92,7 @@ func NewRow(profile, uri string, version int, text string, request HostOpenReque
 		BufferSHA256:  digestText,
 		ConfirmedBy:   "vim-lsp",
 		QueuedAt:      time.Now().UTC().Format(time.RFC3339Nano),
-	}
+	}, nil
 }
 
 func Append(path string, value any) error {

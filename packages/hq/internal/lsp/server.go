@@ -152,7 +152,10 @@ func (s *Server) executeCommand(w io.Writer, msg message) error {
 	if err != nil {
 		return writeError(w, msg.ID, -32602, err.Error())
 	}
-	row := queue.NewRow(s.profile.Name, arg.URI, doc.Version, doc.Text, request)
+	row, err := queue.NewRow(s.profile.Name, arg.URI, doc.Version, doc.Text, request)
+	if err != nil {
+		return writeError(w, msg.ID, -32603, err.Error())
+	}
 	if err := queue.Append(s.profile.QueuePath, row); err != nil {
 		return writeError(w, msg.ID, -32603, err.Error())
 	}
