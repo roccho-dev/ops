@@ -76,6 +76,11 @@ This package must not import or implement editor UX, Vim/hq surface behavior, br
 
 Generated HQ runtime paths such as `.local/hq/` and `.hq/local/` must not be committed as source except fixture or documentation material.
 
+The sibling `packages/hq` package owns the Go LSP adapter and confirmed local
+host-command runner. This package remains the queue-after-confirm modeling,
+admission, projection, and shared local-root catalog owner; it does not absorb
+Vim UX or LSP protocol implementation.
+
 ## Boundary document
 
 See `docs/hq-local-ci-readback-promotion-boundary.md` for the issue closure mapping for ops#63 through ops#67.

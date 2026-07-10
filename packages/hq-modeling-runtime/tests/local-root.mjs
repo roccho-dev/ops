@@ -27,7 +27,9 @@ for (const area of ['queues', 'state', 'proposals', 'ledgers', 'projections', 'r
 assert.ok(localRootCatalog.every((entry) => entry.authority === false));
 
 assert.equal(classifyLocalRootPath('queues/hq.model-commit.queue.jsonl').ok, true);
+assert.equal(classifyLocalRootPath('queues/hq.host-command.queue.jsonl').ok, true);
 assert.equal(classifyLocalRootPath('/receipts/hq.receipt.v1.jsonl').ok, true);
+assert.equal(classifyLocalRootPath('/receipts/hq.host-command.receipt.jsonl').ok, true);
 assert.equal(classifyLocalRootPath('cache/github-readback/ops-66.jsonl').ok, true);
 assert.equal(classifyLocalRootPath('unknown/authority.jsonl').ok, false);
 
@@ -55,7 +57,9 @@ const status = buildLocalStatus({
   files: {
     'queues/hq.model-commit.queue.jsonl': '{"kind":"hq.modelCommitQueued.v1"}\n',
     'queues/hq.agent-task.queue.jsonl': '{"kind":"hq.agentTaskQueued.v1"}\n{"kind":"hq.agentTaskQueued.v1"}\n',
+    'queues/hq.host-command.queue.jsonl': '{"kind":"hq.hostCommandQueued.v1"}\n',
     'receipts/hq.receipt.v1.jsonl': '{"kind":"hq.receipt.v1"}\n',
+    'receipts/hq.host-command.receipt.jsonl': '{"kind":"hq.hostCommandReceipt.v1"}\n',
     'projections/repoMap.projection.v1.json': '{"nodes":[]}',
     'previews/repo-map/index.html': '<html></html>',
   },
@@ -65,6 +69,8 @@ assert.equal(status.authority, false);
 assert.equal(status.localRootIsSsot, false);
 assert.equal(status.counts.modelQueueRows, 1);
 assert.equal(status.counts.agentTaskRows, 2);
+assert.equal(status.counts.hostCommandRows, 1);
+assert.equal(status.counts.hostCommandReceiptRows, 1);
 assert.match(status.digests.queueDigest, /^sha256:/);
 
 const here = path.dirname(fileURLToPath(import.meta.url));

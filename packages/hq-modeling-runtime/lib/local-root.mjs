@@ -5,6 +5,7 @@ export const localRootKind = 'hq.localRoot.catalog.v1';
 export const localRootCatalog = Object.freeze([
   Object.freeze({ area: 'queues', path: 'queues/hq.model-commit.queue.jsonl', role: 'model commit queue intent', authority: false }),
   Object.freeze({ area: 'queues', path: 'queues/hq.agent-task.queue.jsonl', role: 'agent task queue intent', authority: false }),
+  Object.freeze({ area: 'queues', path: 'queues/hq.host-command.queue.jsonl', role: 'confirmed local host command intent', authority: false }),
   Object.freeze({ area: 'state', path: 'state/shadow-model.v1.jsonl', role: 'recoverable local shadow state', authority: false }),
   Object.freeze({ area: 'state', path: 'state/agent-task-state.v1.jsonl', role: 'recoverable pending agent task state', authority: false }),
   Object.freeze({ area: 'proposals', path: 'proposals/modeling.proposal.v1.jsonl', role: 'proposal evidence', authority: false }),
@@ -12,6 +13,7 @@ export const localRootCatalog = Object.freeze([
   Object.freeze({ area: 'projections', path: 'projections/repoMap.projection.v1.json', role: 'generated read model', authority: false }),
   Object.freeze({ area: 'projections', path: 'projections/repoMap.projection.v1.jsonl', role: 'generated read model rows', authority: false }),
   Object.freeze({ area: 'receipts', path: 'receipts/hq.receipt.v1.jsonl', role: 'worker evidence receipt', authority: false }),
+  Object.freeze({ area: 'receipts', path: 'receipts/hq.host-command.receipt.jsonl', role: 'host command launch evidence', authority: false }),
   Object.freeze({ area: 'receipts', path: 'receipts/admission.receipt.v1.jsonl', role: 'local admission evidence receipt', authority: false }),
   Object.freeze({ area: 'receipts', path: 'receipts/cross-repo.editor-to-ui.receipt.v1.jsonl', role: 'cross-repo evidence receipt', authority: false }),
   Object.freeze({ area: 'previews', path: 'previews/repo-map/index.html', role: 'localhost preview artifact', authority: false }),
@@ -112,7 +114,9 @@ export function buildLocalStatus({ root = '$HQ_LOCAL_ROOT', files = {}, endpoint
   const serve = buildServeLocalPlan({ root, ...endpoint });
   const queueText = files['queues/hq.model-commit.queue.jsonl'] || '';
   const agentText = files['queues/hq.agent-task.queue.jsonl'] || '';
+  const hostCommandText = files['queues/hq.host-command.queue.jsonl'] || '';
   const receiptText = files['receipts/hq.receipt.v1.jsonl'] || '';
+  const hostReceiptText = files['receipts/hq.host-command.receipt.jsonl'] || '';
   const projectionText = files['projections/repoMap.projection.v1.json'] || files['projections/repoMap.projection.v1.jsonl'] || '';
   const previewText = files['previews/repo-map/index.html'] || '';
   return {
@@ -125,11 +129,13 @@ export function buildLocalStatus({ root = '$HQ_LOCAL_ROOT', files = {}, endpoint
     counts: {
       modelQueueRows: countNonEmptyJsonlRows(queueText),
       agentTaskRows: countNonEmptyJsonlRows(agentText),
+      hostCommandRows: countNonEmptyJsonlRows(hostCommandText),
       receiptRows: countNonEmptyJsonlRows(receiptText),
+      hostCommandReceiptRows: countNonEmptyJsonlRows(hostReceiptText),
     },
     digests: {
-      queueDigest: sha256Digest({ model: queueText, agent: agentText }),
-      receiptDigest: sha256Digest(receiptText),
+      queueDigest: sha256Digest({ model: queueText, agent: agentText, hostCommand: hostCommandText }),
+      receiptDigest: sha256Digest({ runtime: receiptText, hostCommand: hostReceiptText }),
       projectionDigest: sha256Digest(projectionText),
       previewDigest: sha256Digest(previewText),
     },
