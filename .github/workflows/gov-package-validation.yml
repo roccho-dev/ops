@@ -19,7 +19,21 @@ jobs:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
       - name: Run primary flake checks
-        run: nix flake check --show-trace --no-write-lock-file
+        run: |
+          set -euo pipefail
+          log="nix-flake-check.log"
+          if ! nix flake check --show-trace --no-write-lock-file >"$log" 2>&1; then
+            tail -n 220 "$log" >&2
+            exit 1
+          fi
+          tail -n 80 "$log"
+      - name: Upload primary flake check log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gov-primary-flake-check-log
+          path: nix-flake-check.log
+          if-no-files-found: ignore
       - name: Emit ops package response packet
         run: |
           set -euo pipefail

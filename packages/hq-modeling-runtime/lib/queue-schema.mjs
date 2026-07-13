@@ -29,6 +29,25 @@ export const forbiddenAuthorityFields = Object.freeze([
   'writesAcceptedLedger',
 ]);
 
+export const forbiddenEmbeddedRowKindPrefixes = Object.freeze([
+  'source.',
+  'admission.',
+  'accepted.',
+]);
+
+export const forbiddenEmbeddedRowKinds = Object.freeze([
+  'source.observation.v1',
+  'source.receipt.v1',
+  'model_source_reconcile.v1',
+]);
+
+export const forbiddenAcceptedLedgerShapeFields = Object.freeze([
+  'acceptedDigest',
+  'admissionScope',
+  'localDevOnly',
+  'sourceQueueId',
+]);
+
 export const schemaByKind = Object.freeze({
   'hq.modelCommitQueued.v1': Object.freeze({
     required: Object.freeze(['kind', 'id', 'status', 'targetRef', 'op', 'payload', 'confirmedBy']),

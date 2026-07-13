@@ -24,3 +24,5 @@
 {"kind":"package","name":"ops-package-responses","runtime":"node","entry":"packages/ops-package-responses/bin/ops-package-responses.mjs","bin":"ops-package-responses","deps":["node"],"env":[]}
 {"kind":"package","name":"ops-gov-package-output","runtime":"node","entry":"packages/ops-gov-package-output/bin/ops-gov-package-output.mjs","bin":"ops-gov-package-output","deps":["node","ops-package-responses"],"env":[]}
 {"kind":"package","name":"hq-modeling-runtime","runtime":"node","entry":"packages/hq-modeling-runtime/bin/hq-modeling-runtime.mjs","bin":"hq-modeling-runtime","deps":["node"],"env":[]}
+{"kind":"package","name":"hq-source-evidence-runtime","runtime":"node","entry":"packages/hq-source-evidence-runtime/bin/hq-source-evidence-runtime.mjs","bin":"hq-source-evidence-runtime","deps":["node"],"env":[]}
+{"kind":"package","name":"model-source-reconcile","runtime":"node","entry":"packages/model-source-reconcile/bin/model-source-reconcile.mjs","bin":"model-source-reconcile","deps":["node"],"env":[]}

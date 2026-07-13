@@ -76,6 +76,45 @@ function codes(result) {
 }
 
 {
+  const directSource = {
+    kind: 'source.observation.v1',
+    id: 'obs_001',
+    status: 'observed',
+  };
+  const result = validateJsonl(JSON.stringify(directSource));
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('unknown-kind'));
+}
+
+for (const embedded of [
+  { kind: 'source.observation.v1', id: 'obs_001', status: 'observed' },
+  { kind: 'source.receipt.v1', id: 'sr_001', status: 'observed' },
+  { kind: 'model_source_reconcile.v1', id: 'rec_001', result: 'matched' },
+  { kind: 'admission.receipt.v1', id: 'adm_001', status: 'admitted' },
+  { kind: 'accepted.modelCommit.v1', id: 'accepted:mq_001', sourceQueueId: 'mq_001', acceptedDigest: 'sha256:x' },
+]) {
+  const bad = { ...validModel, id: `mq_${embedded.kind}`, payload: { edge: validModel.payload, embedded } };
+  const result = validateJsonl(JSON.stringify(bad));
+  assert.equal(result.ok, false, embedded.kind);
+  assert.ok(codes(result).includes('payload-smuggled-row'), JSON.stringify(result.errors));
+}
+
+{
+  const bad = {
+    ...validModel,
+    payload: {
+      from: 'pkg:core',
+      to: 'pkg:ui',
+      type: 'uses',
+      nested: [{ id: 'ledger-shaped', sourceQueueId: 'mq_001', acceptedDigest: 'sha256:x' }],
+    },
+  };
+  const result = validateJsonl(JSON.stringify(bad));
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('payload-smuggled-row'));
+}
+
+{
   const result = validateJsonl([
     JSON.stringify(validModel),
     JSON.stringify({ ...validAgent, id: validModel.id }),
@@ -135,6 +174,24 @@ try {
   }
   assert.equal(invalidParsed.ok, false);
   assert.ok(codes(invalidParsed).includes('authority-field-present'));
+
+  const smuggledPath = path.join(tmp, 'smuggled.jsonl');
+  fs.writeFileSync(smuggledPath, JSON.stringify({
+    ...validModel,
+    payload: { source: { kind: 'source.observation.v1', id: 'obs_001' } },
+  }));
+  let smuggledParsed;
+  try {
+    execFileSync(cmd[0], [...cmd.slice(1), 'validate', '--input', smuggledPath, '--json'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    assert.fail('smuggled source payload should fail CLI validation');
+  } catch (error) {
+    smuggledParsed = JSON.parse(error.stdout);
+  }
+  assert.equal(smuggledParsed.ok, false);
+  assert.ok(codes(smuggledParsed).includes('payload-smuggled-row'));
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

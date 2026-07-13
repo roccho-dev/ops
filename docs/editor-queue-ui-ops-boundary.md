@@ -11,7 +11,7 @@
 
 ## Ownership statement
 
-`ops = queue runtime + admission + receipt + projection builder`.
+`ops = queue runtime + admission + receipt + projection builder + source evidence lane + model/source reconcile lane`.
 
 `ops` owns the execution and evidence side after a human-confirmed queue row exists. It does not own editor UX, browser rendering, UI state, or model selection UI.
 
@@ -19,7 +19,9 @@
 
 | Future package | Responsibility | Boundary |
 |---|---|---|
-| `hq-modeling-runtime` | queue schema, validator, worker runtime | reads queue intent and produces runtime results |
+| `hq-modeling-runtime` | queue schema, validator, worker runtime | reads model queue intent and produces runtime results; rejects source/reconcile payload smuggling |
+| `hq-source-evidence-runtime` | source observation validation and source receipt generation | accepts real source evidence outside the model queue |
+| `model-source-reconcile` | compare model projection with source evidence and receipts | emits evidence-only findings and non-authority projection |
 | `hq-admission-gate` | local/dev admission from model queue into accepted-ledger-shaped rows | admits only validated model queue rows |
 | `repo-map-projection-builder` | projection artifacts for ui read-model consumption | produces generated evidence, not authority |
 | `cue-append-contract-core` | append-only contract check boundary | validates append/rewrite behavior outside editor/ui |
@@ -30,6 +32,9 @@
 |---|---|---|
 | queue row classification | pure core | no file, process, GitHub, editor, or browser side effect |
 | queue validation decision | pure core | accepts/rejects by schema and authority-boundary fields |
+| model/source payload split | pure core | source, reconcile, admission, and accepted-ledger-shaped rows must not be embedded in model payloads |
+| source evidence validation | pure core | validates observations and receipts as evidence only |
+| model/source reconcile | pure core | compares expectations and evidence without mutating either side |
 | worker decision | pure core | converts validated intent into local shadow state or pending task state |
 | receipt shaping and digest comparison | pure core | evidence rows are deterministic from inputs |
 | queue, receipt, ledger, projection, contractcheck surfaces | port | data contracts that adapters may read/write |
@@ -43,6 +48,10 @@ Pure code decides whether a row, receipt, projection, or boundary claim is valid
 
 Queue rows are intent. Receipts are evidence. Projections and previews are generated read models. None of these is accepted authority by itself.
 
+Source observations and source receipts are evidence only. They are not model rows, not model authority, and not accepted ledger authority.
+
+Reconcile findings compare model expectations with source evidence. They are evidence-only findings, not rewrites of model rows and not promotion of source rows into authority.
+
 Only an explicit ops admission gate may produce accepted-ledger-shaped local/dev rows, and that local/dev output remains separate from future production governance adoption.
 
 ## False-positive and false-negative gates
@@ -50,6 +59,9 @@ Only an explicit ops admission gate may produce accepted-ledger-shaped local/dev
 | Gate | Must pass | Must fail |
 |---|---|---|
 | queue boundary | valid `hq.modelCommitQueued.v1` and `hq.agentTaskQueued.v1` intent rows | rows that claim accepted/admission/ledger authority |
+| payload smuggling boundary | clean model payloads | `source.*`, `model_source_reconcile.v1`, `admission.*`, or `accepted.*` rows embedded inside model payloads |
+| source evidence boundary | evidence-only `source.observation.v1` and `source.receipt.v1` rows with matching digests | source rows with accepted/admission/ledger authority fields or stale digests |
+| reconcile boundary | matched, missing, conflict, stale, and invalid receipt findings | reconcile rows admitted into hq model queue or wrapped inside model payloads |
 | receipt boundary | evidence-only receipts with matching digests | stale, mutated, missing, or authority-bearing receipts |
 | projection boundary | generated repo-map projection artifacts for ui input | projection artifacts that claim source-model or ledger authority |
 | repo cleanliness | docs that place runtime in ops and editor/renderer in edits/ui | must fail if docs or code place editor UX, browser renderer, or UI state in ops |

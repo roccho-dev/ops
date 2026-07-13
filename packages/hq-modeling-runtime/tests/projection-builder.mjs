@@ -72,6 +72,15 @@ const agent = {
   assert.equal(result.projection.errors[0].code, 'authority-field-present');
 }
 
+{
+  const bad = { ...addEdge, payload: { embedded: { kind: 'source.observation.v1', id: 'obs_001', status: 'observed' } } };
+  const result = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(bad));
+  assert.equal(result.ok, false);
+  assert.equal(result.projection.edges.length, 0);
+  assert.equal(result.projection.errors.length, 1);
+  assert.equal(result.projection.errors[0].code, 'payload-smuggled-row');
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-projection-builder-'));
 try {
   const input = path.join(tmp, 'queue.jsonl');
