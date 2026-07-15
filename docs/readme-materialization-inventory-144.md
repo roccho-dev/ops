@@ -2,11 +2,13 @@
 
 ## Purpose
 
-Resolve the ops-specific unknown in governance #144 without adding copied README comparison logic.
+Resolve the ops-specific materialization state in governance #144 without adding copied README comparison logic.
 
 ## Selected mode
 
-Ops is currently in `checked-handwritten` README mode. Root `README.md` is a checked artifact, but there is not yet a repo-local generated README artifact that can be byte-compared against the committed README.
+The committed root `README.md` remains `checked-handwritten`.
+
+A repo-local generated README artifact packet exists at `packages/ops-readme-artifact`, and its manifest currently declares `readmeMode=generated`. However, the committed root README is not byte-materialized from that packet and the two README contents differ. Generated root materialization is therefore not yet complete.
 
 ## Implemented residual path
 
@@ -15,9 +17,9 @@ The `gov package validation` workflow imports the governance common README mater
 The residual is bounded by:
 
 - owner: `roccho-dev/ops`;
-- reason: root README is checked handwritten, not generated;
-- nextAction: add an ops generated README artifact and switch to `mkReadmeMaterializedCheck`;
-- returnCondition: generated README artifact and committed README can be compared by the governance common checker;
+- reason: a generated artifact packet exists, but root README is still independently checked and is not byte-materialized from it;
+- nextAction: select the artifact as the root README producer, materialize committed `README.md`, and switch to `mkReadmeMaterializedCheck`;
+- returnCondition: the generated artifact is the declared root README source and its `README.md` is byte-identical to committed root README under the governance common checker;
 - expiry: `2026-08-05`.
 
 ## Boundary
