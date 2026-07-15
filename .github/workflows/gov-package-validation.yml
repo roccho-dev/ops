@@ -19,21 +19,31 @@ jobs:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
       - name: Run primary flake checks
+        run: nix flake check --show-trace --no-write-lock-file
+      - name: Emit ops package response packet
         run: |
           set -euo pipefail
-          log="nix-flake-check.log"
-          if ! nix flake check --show-trace --no-write-lock-file >"$log" 2>&1; then
-            tail -n 220 "$log" >&2
-            exit 1
-          fi
-          tail -n 80 "$log"
-      - name: Upload primary flake check log
-        if: always()
+          nix shell --no-write-lock-file .#ops-package-responses -c \
+            ops-package-responses emit --out-dir ops-package-response-out --json
+      - name: Validate ops package response packet
+        run: |
+          set -euo pipefail
+          nix shell --no-write-lock-file .#ops-package-responses -c \
+            ops-package-responses validate --out-dir ops-package-response-out --json
+      - name: Check selected package closure pass
+        run: |
+          set -euo pipefail
+          node tools/check-ops-selected-package-closure.mjs --out-dir ops-package-response-out --json
+          test -s ops-package-response-out/selected-package-inventory.jsonl
+          test -s ops-package-response-out/selected-package-responses.jsonl
+          test -s ops-package-response-out/selected-package-receipts.jsonl
+          test -s ops-package-response-out/selected-package-closure.json
+      - name: Upload ops package response packet
         uses: actions/upload-artifact@v4
         with:
-          name: gov-primary-flake-check-log
-          path: nix-flake-check.log
-          if-no-files-found: ignore
+          name: ops-package-response-packet
+          path: ops-package-response-out
+          if-no-files-found: error
       - name: Emit README materialization residual
         run: |
           set -euo pipefail
@@ -70,28 +80,4 @@ jobs:
         with:
           name: readme-materialization-residual
           path: readme-materialization-artifact
-          if-no-files-found: error
-      - name: Emit ops package response packet
-        run: |
-          set -euo pipefail
-          nix shell --no-write-lock-file .#ops-package-responses -c \
-            ops-package-responses emit --out-dir ops-package-response-out --json
-      - name: Validate ops package response packet
-        run: |
-          set -euo pipefail
-          nix shell --no-write-lock-file .#ops-package-responses -c \
-            ops-package-responses validate --out-dir ops-package-response-out --json
-      - name: Check selected package closure pass
-        run: |
-          set -euo pipefail
-          node tools/check-ops-selected-package-closure.mjs --out-dir ops-package-response-out --json
-          test -s ops-package-response-out/selected-package-inventory.jsonl
-          test -s ops-package-response-out/selected-package-responses.jsonl
-          test -s ops-package-response-out/selected-package-receipts.jsonl
-          test -s ops-package-response-out/selected-package-closure.json
-      - name: Upload ops package response packet
-        uses: actions/upload-artifact@v4
-        with:
-          name: ops-package-response-packet
-          path: ops-package-response-out
           if-no-files-found: error
