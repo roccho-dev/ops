@@ -63,9 +63,9 @@ jobs:
               repoId = "roccho-dev/ops";
               mode = "checked-handwritten";
               owner = "roccho-dev/ops";
-              reason = "Root README is currently a checked handwritten artifact, not a generated README artifact.";
-              nextAction = "Add an ops generated README artifact and switch this residual to mkReadmeMaterializedCheck.";
-              returnCondition = "Root README is generated from a repo-local artifact and can be compared against the committed README by the governance common checker.";
+              reason = "A generated README artifact packet exists, but the committed root README is still independently checked and is not byte-materialized from that artifact.";
+              nextAction = "Select the artifact as the root README producer, materialize committed README.md, and switch this residual to mkReadmeMaterializedCheck.";
+              returnCondition = "The generated artifact is the declared root README source and its README.md is byte-identical to the committed root README under the governance common checker.";
               expires = "2026-08-05";
             }
           ' -o readme-materialization-out
