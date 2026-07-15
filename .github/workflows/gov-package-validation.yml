@@ -58,3 +58,40 @@ jobs:
           name: ops-package-response-packet
           path: ops-package-response-out
           if-no-files-found: error
+      - name: Emit README materialization residual
+        run: |
+          set -euo pipefail
+          nix build --no-write-lock-file --impure --expr '
+            let
+              flake = builtins.getFlake (builtins.toString ./.);
+              system = builtins.currentSystem;
+              pkgs = flake.inputs.nixpkgs.legacyPackages.${system};
+              governanceSrc =
+                if builtins.isAttrs flake.inputs.governance && flake.inputs.governance ? outPath
+                then flake.inputs.governance.outPath
+                else flake.inputs.governance;
+              readmeChecks = import (governanceSrc + "/nix/readme-materialization-checks.nix") {
+                inherit pkgs governanceSrc;
+              };
+            in readmeChecks.mkReadmeMaterializationResidual {
+              repoId = "roccho-dev/ops";
+              mode = "checked-handwritten";
+              owner = "roccho-dev/ops";
+              reason = "A generated README artifact packet exists, but the committed root README is still independently checked and is not byte-materialized from that artifact.";
+              nextAction = "Select the artifact as the root README producer, materialize committed README.md, and switch this residual to mkReadmeMaterializedCheck.";
+              returnCondition = "The generated artifact is the declared root README source and its README.md is byte-identical to the committed root README under the governance common checker.";
+              expires = "2026-08-05";
+            }
+          ' -o readme-materialization-out
+          mkdir -p readme-materialization-artifact
+          cp -L readme-materialization-out/residual.json readme-materialization-artifact/residual.json
+          cp -L readme-materialization-out/pass readme-materialization-artifact/pass
+          grep -q '"kind":"readmeMaterializationResidual.v1"' readme-materialization-artifact/residual.json
+          grep -q '"status":"residual"' readme-materialization-artifact/residual.json
+          grep -q '"expires":"2026-08-05"' readme-materialization-artifact/residual.json
+      - name: Upload README materialization residual
+        uses: actions/upload-artifact@v4
+        with:
+          name: readme-materialization-residual
+          path: readme-materialization-artifact
+          if-no-files-found: error
