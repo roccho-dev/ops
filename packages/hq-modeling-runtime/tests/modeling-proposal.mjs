@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 
-import {
-  proposalDigest,
-  proposalToQueueIntentCandidate,
-  validateModelingProposal,
-} from '../lib/modeling-proposal.mjs';
-import { validateRecord } from '../lib/queue-validator.mjs';
+import * as modelingProposal from '../lib/modeling-proposal.mjs';
+
+const { proposalDigest, validateModelingProposal } = modelingProposal;
+
+assert.deepEqual(
+  Object.keys(modelingProposal).sort(),
+  ['proposalDigest', 'validateModelingProposal'],
+);
+assert.equal('proposalToQueueIntentCandidate' in modelingProposal, false);
 
 const proposal = {
   kind: 'modeling.proposal.v1',
@@ -32,6 +35,11 @@ function codes(errors) {
   const errors = validateModelingProposal(proposal);
   assert.deepEqual(errors, []);
   assert.match(proposalDigest(proposal), /^sha256:/);
+}
+
+for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('proposal'), () => {}]) {
+  const errors = validateModelingProposal(malformed);
+  assert.deepEqual(codes(errors), ['proposal-not-object']);
 }
 
 {
@@ -62,18 +70,6 @@ function codes(errors) {
   const embedded = { ...proposal, acceptedRow: { kind: 'accepted.modelCommit.v1' } };
   const errors = validateModelingProposal(embedded);
   assert.ok(codes(errors).includes('embedded-authority-shape'));
-}
-
-{
-  const candidate = proposalToQueueIntentCandidate(proposal, { confirmedBy: 'human-review' });
-  assert.equal(candidate.kind, 'hq.modelCommitQueued.v1');
-  assert.equal(candidate.id, 'mq_from_proposal_001');
-  assert.equal(candidate.confirmedBy, 'human-review');
-  assert.equal(candidate.targetRef.id, proposal.targetRef.id);
-  assert.equal(candidate.op, proposal.proposedOperation.op);
-  assert.match(candidate.proposalDigest, /^sha256:/);
-  const errors = validateRecord(candidate);
-  assert.deepEqual(errors, []);
 }
 
 console.log('hq modeling proposal schema check: PASS');
