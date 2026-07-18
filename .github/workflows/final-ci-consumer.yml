@@ -3,8 +3,7 @@ name: final CI consumer
 on:
   pull_request:
   push:
-    branches:
-      - proposals
+    branches: [proposals]
   workflow_dispatch:
 
 permissions:
