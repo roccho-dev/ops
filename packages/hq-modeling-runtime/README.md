@@ -6,9 +6,9 @@
 
 | Generation | Purpose |
 |---|---|
-| Scope | Validate, locally process, receipt, project, local-dev admit, connect admitted rows to CUE evidence, define local root/CI/GitHub readback/canonical promotion boundaries, and keep agent tasks non-authority. |
-| Repo split | Keep edits as queue writer, ops as runtime/admission/receipt/projection/CUE/local-root/CI/readback/promotion-boundary owner, and ui as projection reader. |
-| Meta | Keep schema/validation/worker/receipt/projection/admission/CUE/local root/CI/readback/promotion classification in pure core and leave file/process/network effects in adapters. |
+| Scope | Validate, human-promote, locally process, receipt, project, local-dev admit, connect admitted rows to CUE evidence, define local root/CI/GitHub readback/canonical promotion boundaries, and keep agent tasks and proposals non-authority. |
+| Repo split | Keep edits as queue writer, ops as proposal/promotion/runtime/admission/receipt/projection/CUE/local-root/CI/readback/promotion-boundary owner, and ui as projection reader. |
+| Meta | Keep schema/validation/promotion/worker/receipt/projection/admission/CUE/local root/CI/readback/promotion classification in pure core and leave file/process/network effects in adapters. |
 | Meta^10 | Keep a buyer-auditable operational package boundary for the model-runtime path. |
 
 ## Current capabilities
@@ -19,6 +19,9 @@
 | `hq.modelCommitQueued.v1` schema | present | queue intent, not accepted authority |
 | `hq.agentTaskQueued.v1` schema | present | agent request intent, not proposal authority |
 | `hq.receipt.v1` schema | present | evidence only |
+| `modeling.proposal.v1` validation and digest | present | acyclic JSON-compatible proposal data; non-authority evidence |
+| explicit human proposal promotion | present | pure core emits validated queue intent with proposal evidence and an evidence-only receipt |
+| proposal promotion CLI | present | reads proposal and confirmation JSON; stdout/stderr only; no queue or ledger writes |
 | JSONL queue validator | present | pure validation core |
 | source/reconcile payload smuggling rejection | present | recursively rejects source, reconcile, admission, and accepted-ledger-shaped rows inside model payloads |
 | local worker reducer | present | pure local shadow-state core |
@@ -32,7 +35,7 @@
 | `hq run ci` contract | present | ephemeral CI artifact receipts; evidence only |
 | GitHub issue/comment readback | present | JSONL extraction/readback evidence only; no accepted state |
 | staged-to-canonical promotion eligibility | present | pure eligibility gate; no remote write implementation |
-| CLI validation/work/receipt/projection/admission adapter | present | file read + stdout only |
+| CLI validation/work/receipt/projection/admission/promotion adapter | present | file read + stdout/stderr only |
 
 ## Core / port / adapter split
 
@@ -41,6 +44,10 @@
 | package boundary metadata | pure core | present |
 | queue schema contract | port | present in `lib/queue-schema.mjs` |
 | queue validator | pure core | present in `lib/queue-validator.mjs` |
+| modeling proposal validation and digest | pure core | present in `lib/modeling-proposal.mjs`; recursively rejects non-JSON data, cycles, sparse arrays, non-plain objects, and authority fields |
+| explicit human proposal promotion | pure core | present in `lib/promotion-gate.mjs`; one snapshot, clone revalidation, digest match, queue validation, no effects |
+| proposal and confirmation file input | adapter | `promote` subcommand in `bin/hq-modeling-runtime.mjs` |
+| queue intent and promotion receipt output | adapter | stdout only; no queue file, accepted ledger, admission, network, or agent effect |
 | model/source payload split | pure core | `source.*`, `model_source_reconcile.v1`, `admission.*`, and `accepted.*` rows are rejected recursively when embedded in model payloads |
 | local worker reducer | pure core | present in `lib/local-worker.mjs` |
 | agent task runtime classification | pure core | present in `lib/local-worker.mjs` and fixed by `tests/agent-task-runtime.mjs` |
@@ -54,11 +61,26 @@
 | GitHub JSONL readback extraction | pure core behind adapter boundary | present in `lib/github-readback.mjs` |
 | staged-to-canonical promotion eligibility | pure core | present in `lib/canonical-promotion.mjs` |
 | `contractcheck` invocation | adapter | present in test/check surface only |
-| CLI file read/stdout | adapter | present in `bin/hq-modeling-runtime.mjs` |
+| other CLI file read/stdout | adapter | present in `bin/hq-modeling-runtime.mjs` |
+
+## Proposal promotion CLI
+
+```text
+hq-modeling-runtime promote \
+  --input <proposal.json> \
+  --confirmation <confirmation.json> \
+  [--queue-jsonl|--receipt-jsonl|--json]
+```
+
+`--input` and `--confirmation` each contain one JSON value. The confirmation must set `confirm: true`, a non-empty `confirmedBy`, and the exact proposal digest. The default output is a one-line status. `--json` returns the full structured result. `--queue-jsonl` emits exactly one `hq.modelCommitQueued.v1` row only after successful promotion. `--receipt-jsonl` emits exactly one evidence-only promotion receipt only after successful promotion.
+
+Exit status is `0` for successful promotion, `1` for read/JSON/validation/confirmation rejection, and `2` for CLI misuse. Rejected JSONL output modes write no queue intent to stdout. The command does not append a queue file, write an accepted ledger, perform admission, use network access, run agents, or mutate either input.
 
 ## Authority boundary
 
 Queue rows are intent. Receipts are evidence. Projections are generated read models. The admission gate emits accepted-ledger-shaped rows for local/dev only and explicitly does not implement production governance adoption.
+
+A reviewed `modeling.proposal.v1` remains non-authority until the pure promotion gate receives explicit human confirmation whose digest matches the validated proposal snapshot. Successful promotion preserves the proposal evidence in queue intent and also produces an evidence-only receipt. The CLI only reads the two JSON inputs and exposes those values through stdout; it does not persist, admit, accept, network, or execute anything.
 
 Only `hq.modelCommitQueued.v1` rows can be admitted. `hq.agentTaskQueued.v1` and `hq.receipt.v1` rows are rejected by admission. Agent task rows can become pending local task state and pending receipts only; they can later lead to proposals, never direct accepted ledger writes.
 
