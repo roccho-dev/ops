@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 
-import { proposalDigest } from '../lib/modeling-proposal.mjs';
+import * as modelingProposal from '../lib/modeling-proposal.mjs';
 import { promoteProposalToModelQueue } from '../lib/promotion-gate.mjs';
 import { validateRecord } from '../lib/queue-validator.mjs';
+
+const { proposalDigest } = modelingProposal;
+
+assert.deepEqual(
+  Object.keys(modelingProposal).sort(),
+  ['proposalDigest', 'validateModelingProposal'],
+);
+assert.equal('proposalToQueueIntentCandidate' in modelingProposal, false);
 
 const proposal = {
   kind: 'modeling.proposal.v1',
@@ -16,48 +24,16 @@ const proposal = {
   status: 'proposed',
 };
 
-function codes(result) { return result.errors.map((error) => error.code); }
-
-{
-  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: 'human-review', proposalDigest: proposalDigest(proposal) });
-  assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(result.queueRow.kind, 'hq.modelCommitQueued.v1');
-  assert.equal(result.queueRow.id, 'mq_from_proposal_001');
-  assert.equal(result.queueRow.confirmedBy, 'human-review');
-  assert.equal(result.queueRow.targetRef.id, proposal.targetRef.id);
-  assert.match(result.queueRow.proposalDigest, /^sha256:/);
-  assert.equal(result.promotionReceipt.kind, 'proposal.promotionReceipt.v1');
-  assert.equal(result.promotionReceipt.evidenceOnly, true);
-  assert.equal(result.promotionReceipt.nonAuthority, true);
-  assert.ok(!('accepted' in result.promotionReceipt));
-  assert.deepEqual(validateRecord(result.queueRow), []);
+function codes(result) {
+  return result.errors.map((error) => error.code);
 }
 
-{
-  const result = promoteProposalToModelQueue(proposal, { confirm: false, confirmedBy: 'human-review', proposalDigest: proposalDigest(proposal) });
+function assertStableFailure(result, expectedCode) {
   assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('confirmation-not-true'));
+  assert.deepEqual(Object.keys(result).sort(), ['errors', 'ok', 'queueRow']);
   assert.equal(result.queueRow, null);
-}
-
-{
-  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: 'human-review', proposalDigest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' });
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('proposal-digest-mismatch'));
-}
-
-{
-  const promoted = { ...proposal, status: 'promoted' };
-  const result = promoteProposalToModelQueue(promoted, { confirm: true, confirmedBy: 'human-review', proposalDigest: proposalDigest(promoted) });
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('proposal-not-promotable'));
-}
-
-{
-  const authority = { ...proposal, acceptedLedger: true };
-  const result = promoteProposalToModelQueue(authority, { confirm: true, confirmedBy: 'human-review', proposalDigest: proposalDigest(authority) });
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('authority-field-present'));
+  assert.equal('promotionReceipt' in result, false);
+  assert.ok(codes(result).includes(expectedCode), JSON.stringify(result.errors));
 }
 
 const validProposalDigest = proposalDigest(proposal);
@@ -65,55 +41,154 @@ const validConfirmation = { confirm: true, confirmedBy: 'human-review', proposal
 assert.match(validProposalDigest, /^sha256:/);
 
 {
-  const result = promoteProposalToModelQueue(proposal);
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('confirmation-missing'));
-  assert.equal(result.queueRow, null);
+  const result = promoteProposalToModelQueue(proposal, validConfirmation);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(result.queueRow.kind, 'hq.modelCommitQueued.v1');
+  assert.equal(result.queueRow.id, 'mq_from_proposal_001');
+  assert.equal(result.queueRow.confirmedBy, 'human-review');
+  assert.equal(result.queueRow.targetRef.id, proposal.targetRef.id);
+  assert.equal(result.queueRow.op, proposal.proposedOperation.op);
+  assert.equal(result.queueRow.payload, proposal.proposedOperation.payload);
+  assert.equal(result.queueRow.proposalDigest, validProposalDigest);
+  assert.equal(result.promotionReceipt.kind, 'proposal.promotionReceipt.v1');
+  assert.equal(result.promotionReceipt.proposalDigest, validProposalDigest);
+  assert.equal(result.promotionReceipt.evidenceOnly, true);
+  assert.equal(result.promotionReceipt.nonAuthority, true);
+  assert.ok(!('accepted' in result.promotionReceipt));
+  assert.deepEqual(validateRecord(result.queueRow), []);
+}
+
+for (const confirmation of [undefined, null, [], 'confirmed', 1, true]) {
+  assertStableFailure(promoteProposalToModelQueue(proposal, confirmation), 'confirmation-missing');
+}
+
+for (const confirmation of [
+  { confirmedBy: 'human-review', proposalDigest: validProposalDigest },
+  { confirm: false, confirmedBy: 'human-review', proposalDigest: validProposalDigest },
+  { confirm: null, confirmedBy: 'human-review', proposalDigest: validProposalDigest },
+]) {
+  assertStableFailure(promoteProposalToModelQueue(proposal, confirmation), 'confirmation-not-true');
+}
+
+for (const confirmedBy of [undefined, null, '', '   ']) {
+  assertStableFailure(
+    promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy, proposalDigest: validProposalDigest }),
+    'confirmedBy-missing',
+  );
+}
+
+for (const digest of [undefined, null, '', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb']) {
+  assertStableFailure(
+    promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: 'human-review', proposalDigest: digest }),
+    'proposal-digest-mismatch',
+  );
+}
+
+for (const status of ['rejected', 'promoted']) {
+  const nonProposed = { ...proposal, status };
+  assertStableFailure(
+    promoteProposalToModelQueue(nonProposed, {
+      confirm: true,
+      confirmedBy: 'human-review',
+      proposalDigest: proposalDigest(nonProposed),
+    }),
+    'proposal-not-promotable',
+  );
 }
 
 {
-  const result = promoteProposalToModelQueue(proposal, { confirm: true, proposalDigest: validProposalDigest });
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('confirmedBy-missing'));
-  assert.equal(result.queueRow, null);
+  const authority = { ...proposal, acceptedLedger: true };
+  assertStableFailure(promoteProposalToModelQueue(authority, validConfirmation), 'authority-field-present');
+}
+
+for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('proposal'), () => {}]) {
+  assert.doesNotThrow(() => {
+    assertStableFailure(promoteProposalToModelQueue(malformed, validConfirmation), 'proposal-not-object');
+  });
 }
 
 {
-  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: '', proposalDigest: validProposalDigest });
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('confirmedBy-missing'));
-  assert.equal(result.queueRow, null);
+  const incomplete = { kind: 'modeling.proposal.v1' };
+  const result = promoteProposalToModelQueue(incomplete, validConfirmation);
+  assertStableFailure(result, 'missing-required-field');
+  assert.equal(codes(result).includes('proposal-digest-mismatch'), false);
 }
 
 {
-  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: '   ', proposalDigest: validProposalDigest });
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('confirmedBy-missing'));
-  assert.equal(result.queueRow, null);
+  const invalidKindWithDigestTrap = { kind: 'not.modeling.proposal.v1' };
+  Object.defineProperty(invalidKindWithDigestTrap, 'digestTrap', {
+    enumerable: true,
+    get() {
+      throw new Error('digest must not inspect validator-invalid proposal');
+    },
+  });
+  assert.doesNotThrow(() => {
+    assertStableFailure(
+      promoteProposalToModelQueue(invalidKindWithDigestTrap, validConfirmation),
+      'invalid-proposal-kind',
+    );
+  });
 }
 
 {
-  const evidenceMutatedProposal = {
+  const hostileConfirmation = new Proxy({}, {
+    get() {
+      throw new Error('confirmation must not be inspected for invalid proposal');
+    },
+  });
+  assert.doesNotThrow(() => {
+    assertStableFailure(promoteProposalToModelQueue(undefined, hostileConfirmation), 'proposal-not-object');
+  });
+}
+
+for (const [name, mutatedProposal] of [
+  ['evidence', {
     ...proposal,
     evidence: [{ ...proposal.evidence[0], value: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' }],
-  };
-  assert.notEqual(proposalDigest(evidenceMutatedProposal), validProposalDigest);
-  const result = promoteProposalToModelQueue(evidenceMutatedProposal, validConfirmation);
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('proposal-digest-mismatch'));
-  assert.equal(result.queueRow, null);
+  }],
+  ['acceptanceCriteria', {
+    ...proposal,
+    acceptanceCriteria: [...proposal.acceptanceCriteria, 'promotion must preserve reviewed acceptance criteria'],
+  }],
+  ['targetRef', { ...proposal, targetRef: { ...proposal.targetRef, id: 'pkg:changed' } }],
+  ['operation', { ...proposal, proposedOperation: { ...proposal.proposedOperation, op: 'removeEdge' } }],
+  ['payload', {
+    ...proposal,
+    proposedOperation: {
+      ...proposal.proposedOperation,
+      payload: { ...proposal.proposedOperation.payload, type: 'dependsOn' },
+    },
+  }],
+  ['extra-field', { ...proposal, reviewContext: { ticket: 'changed-after-confirmation' } }],
+]) {
+  assert.notEqual(proposalDigest(mutatedProposal), validProposalDigest, name);
+  assertStableFailure(
+    promoteProposalToModelQueue(mutatedProposal, validConfirmation),
+    'proposal-digest-mismatch',
+  );
 }
 
 {
-  const acceptanceCriteriaMutatedProposal = {
-    ...proposal,
-    acceptanceCriteria: [...proposal.acceptanceCriteria, 'promotion must preserve reviewed acceptance criteria'],
-  };
-  assert.notEqual(proposalDigest(acceptanceCriteriaMutatedProposal), validProposalDigest);
-  const result = promoteProposalToModelQueue(acceptanceCriteriaMutatedProposal, validConfirmation);
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('proposal-digest-mismatch'));
-  assert.equal(result.queueRow, null);
+  const expectedDigest = proposalDigest({ ...proposal, digestProbe: 'one-digest' });
+  let reads = 0;
+  const countedProposal = { ...proposal };
+  Object.defineProperty(countedProposal, 'digestProbe', {
+    enumerable: true,
+    get() {
+      reads += 1;
+      return 'one-digest';
+    },
+  });
+
+  const result = promoteProposalToModelQueue(countedProposal, {
+    confirm: true,
+    confirmedBy: 'human-review',
+    proposalDigest: expectedDigest,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(reads, 2, 'proposal must be read once by validation and once by its single digest computation');
+  assert.equal(result.queueRow.proposalDigest, expectedDigest);
+  assert.equal(result.promotionReceipt.proposalDigest, expectedDigest);
 }
 
 console.log('hq human promotion gate check: PASS');
