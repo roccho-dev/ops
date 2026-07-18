@@ -1,0 +1,37 @@
+name: final CI consumer
+
+on:
+  pull_request:
+  push:
+    branches:
+      - proposals
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  receipt:
+    name: exact-sha receipt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Validate migration claim and emit receipt
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python3 tools/check-final-ci-consumer.py selftest --claim governance/final-ci-claim.v1.json
+          python3 tools/check-final-ci-consumer.py check --claim governance/final-ci-claim.v1.json --candidate-sha "$CANDIDATE_SHA" --out "$RUNNER_TEMP/final-ci-consumer-receipt.json"
+
+      - name: Upload non-authority receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-ci-consumer-receipt
+          path: ${{ runner.temp }}/final-ci-consumer-receipt.json
+          if-no-files-found: error
