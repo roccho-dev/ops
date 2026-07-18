@@ -60,4 +60,60 @@ function codes(result) { return result.errors.map((error) => error.code); }
   assert.ok(codes(result).includes('authority-field-present'));
 }
 
+const validProposalDigest = proposalDigest(proposal);
+const validConfirmation = { confirm: true, confirmedBy: 'human-review', proposalDigest: validProposalDigest };
+assert.match(validProposalDigest, /^sha256:/);
+
+{
+  const result = promoteProposalToModelQueue(proposal);
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('confirmation-missing'));
+  assert.equal(result.queueRow, null);
+}
+
+{
+  const result = promoteProposalToModelQueue(proposal, { confirm: true, proposalDigest: validProposalDigest });
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('confirmedBy-missing'));
+  assert.equal(result.queueRow, null);
+}
+
+{
+  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: '', proposalDigest: validProposalDigest });
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('confirmedBy-missing'));
+  assert.equal(result.queueRow, null);
+}
+
+{
+  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: '   ', proposalDigest: validProposalDigest });
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('confirmedBy-missing'));
+  assert.equal(result.queueRow, null);
+}
+
+{
+  const evidenceMutatedProposal = {
+    ...proposal,
+    evidence: [{ ...proposal.evidence[0], value: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' }],
+  };
+  assert.notEqual(proposalDigest(evidenceMutatedProposal), validProposalDigest);
+  const result = promoteProposalToModelQueue(evidenceMutatedProposal, validConfirmation);
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('proposal-digest-mismatch'));
+  assert.equal(result.queueRow, null);
+}
+
+{
+  const acceptanceCriteriaMutatedProposal = {
+    ...proposal,
+    acceptanceCriteria: [...proposal.acceptanceCriteria, 'promotion must preserve reviewed acceptance criteria'],
+  };
+  assert.notEqual(proposalDigest(acceptanceCriteriaMutatedProposal), validProposalDigest);
+  const result = promoteProposalToModelQueue(acceptanceCriteriaMutatedProposal, validConfirmation);
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).includes('proposal-digest-mismatch'));
+  assert.equal(result.queueRow, null);
+}
+
 console.log('hq human promotion gate check: PASS');
