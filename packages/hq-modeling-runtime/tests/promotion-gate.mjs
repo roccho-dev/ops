@@ -2,23 +2,42 @@
 import assert from 'node:assert/strict';
 
 import * as modelingProposal from '../lib/modeling-proposal.mjs';
-import { promoteProposalToModelQueue } from '../lib/promotion-gate.mjs';
+import * as promotionGate from '../lib/promotion-gate.mjs';
 import { validateRecord } from '../lib/queue-validator.mjs';
 
 const { proposalDigest } = modelingProposal;
+const { promoteProposalToModelQueue } = promotionGate;
 
 assert.deepEqual(
   Object.keys(modelingProposal).sort(),
   ['proposalDigest', 'validateModelingProposal'],
 );
 assert.equal('proposalToQueueIntentCandidate' in modelingProposal, false);
+assert.deepEqual(
+  Object.keys(promotionGate).sort(),
+  ['promoteProposalToModelQueue'],
+);
 
 const proposal = {
   kind: 'modeling.proposal.v1',
   id: 'proposal_001',
   sourceAgentTaskId: 'aq_agent_001',
-  targetRef: { kind: 'repoMap.node', id: 'pkg:core' },
-  proposedOperation: { op: 'addEdge', payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' } },
+  targetRef: {
+    kind: 'repoMap.node',
+    id: 'pkg:core',
+    coordinates: { repo: 'ops', package: 'hq-modeling-runtime' },
+    path: ['packages', 'hq-modeling-runtime'],
+  },
+  proposedOperation: {
+    op: 'addEdge',
+    payload: {
+      from: 'pkg:core',
+      to: 'pkg:ui',
+      type: 'uses',
+      metadata: { reviewed: true, risk: 'bounded' },
+      steps: ['validate', { kind: 'emit', details: { destination: 'model-queue' } }],
+    },
+  },
   evidence: [{ kind: 'digest', value: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }],
   acceptanceCriteria: ['human may promote into model queue only after review'],
   status: 'proposed',
@@ -41,20 +60,59 @@ const validConfirmation = { confirm: true, confirmedBy: 'human-review', proposal
 assert.match(validProposalDigest, /^sha256:/);
 
 {
-  const result = promoteProposalToModelQueue(proposal, validConfirmation);
+  const promotedProposal = structuredClone(proposal);
+  const result = promoteProposalToModelQueue(promotedProposal, validConfirmation);
+  const expectedQueueRow = {
+    kind: 'hq.modelCommitQueued.v1',
+    id: 'mq_from_proposal_001',
+    status: 'queued',
+    targetRef: structuredClone(proposal.targetRef),
+    op: 'addEdge',
+    payload: structuredClone(proposal.proposedOperation.payload),
+    reason: 'promoted proposal proposal_001',
+    confirmedBy: 'human-review',
+    proposalDigest: validProposalDigest,
+  };
+  const expectedReceipt = {
+    kind: 'proposal.promotionReceipt.v1',
+    proposalId: 'proposal_001',
+    proposalDigest: validProposalDigest,
+    queueId: 'mq_from_proposal_001',
+    confirmedBy: 'human-review',
+    evidenceOnly: true,
+    nonAuthority: true,
+  };
+
   assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(result.queueRow.kind, 'hq.modelCommitQueued.v1');
-  assert.equal(result.queueRow.id, 'mq_from_proposal_001');
-  assert.equal(result.queueRow.confirmedBy, 'human-review');
-  assert.equal(result.queueRow.targetRef.id, proposal.targetRef.id);
-  assert.equal(result.queueRow.op, proposal.proposedOperation.op);
-  assert.equal(result.queueRow.payload, proposal.proposedOperation.payload);
-  assert.equal(result.queueRow.proposalDigest, validProposalDigest);
-  assert.equal(result.promotionReceipt.kind, 'proposal.promotionReceipt.v1');
-  assert.equal(result.promotionReceipt.proposalDigest, validProposalDigest);
-  assert.equal(result.promotionReceipt.evidenceOnly, true);
-  assert.equal(result.promotionReceipt.nonAuthority, true);
+  assert.deepEqual(result.queueRow, expectedQueueRow);
+  assert.deepEqual(result.promotionReceipt, expectedReceipt);
+  assert.notStrictEqual(result.queueRow.targetRef, promotedProposal.targetRef);
+  assert.notStrictEqual(result.queueRow.targetRef.coordinates, promotedProposal.targetRef.coordinates);
+  assert.notStrictEqual(result.queueRow.targetRef.path, promotedProposal.targetRef.path);
+  assert.notStrictEqual(result.queueRow.payload, promotedProposal.proposedOperation.payload);
+  assert.notStrictEqual(result.queueRow.payload.metadata, promotedProposal.proposedOperation.payload.metadata);
+  assert.notStrictEqual(result.queueRow.payload.steps, promotedProposal.proposedOperation.payload.steps);
+  assert.notStrictEqual(result.queueRow.payload.steps[1], promotedProposal.proposedOperation.payload.steps[1]);
   assert.ok(!('accepted' in result.promotionReceipt));
+  assert.deepEqual(validateRecord(result.queueRow), []);
+
+  promotedProposal.targetRef.id = 'pkg:mutated';
+  promotedProposal.targetRef.coordinates.repo = 'mutated';
+  promotedProposal.targetRef.path.push('mutated');
+  promotedProposal.proposedOperation.payload.type = 'dependsOn';
+  promotedProposal.proposedOperation.payload.metadata.reviewed = false;
+  promotedProposal.proposedOperation.payload.steps.push('mutated');
+  promotedProposal.proposedOperation.payload.steps[1].kind = 'mutated';
+  promotedProposal.proposedOperation.payload.steps[1].details.destination = 'mutated';
+  promotedProposal.id = 'proposal_mutated';
+  promotedProposal.proposedOperation.op = 'removeEdge';
+  promotedProposal.status = 'rejected';
+
+  assert.deepEqual(result.queueRow, expectedQueueRow);
+  assert.deepEqual(result.promotionReceipt, expectedReceipt);
+  assert.equal(result.queueRow.proposalDigest, validProposalDigest);
+  assert.equal(result.promotionReceipt.proposalDigest, validProposalDigest);
+  assert.notEqual(proposalDigest(promotedProposal), validProposalDigest);
   assert.deepEqual(validateRecord(result.queueRow), []);
 }
 
@@ -141,6 +199,43 @@ for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('p
   });
 }
 
+{
+  const uncloneable = structuredClone(proposal);
+  uncloneable.proposedOperation.payload.uncloneable = () => {};
+  const uncloneableConfirmation = {
+    confirm: true,
+    confirmedBy: 'human-review',
+    proposalDigest: proposalDigest(uncloneable),
+  };
+  assert.doesNotThrow(() => {
+    assertStableFailure(
+      promoteProposalToModelQueue(uncloneable, uncloneableConfirmation),
+      'proposal-snapshot-failed',
+    );
+  });
+}
+
+{
+  const reentrant = structuredClone(proposal);
+  let reads = 0;
+  Object.defineProperty(reentrant, 'validationProbe', {
+    enumerable: true,
+    get() {
+      reads += 1;
+      reentrant.evidence = [];
+      return 'mutated-during-validation';
+    },
+  });
+
+  assert.doesNotThrow(() => {
+    assertStableFailure(
+      promoteProposalToModelQueue(reentrant, validConfirmation),
+      'evidence-missing',
+    );
+  });
+  assert.equal(reads, 2, 'proposal getter is read by initial validation and structuredClone only');
+}
+
 for (const [name, mutatedProposal] of [
   ['evidence', {
     ...proposal,
@@ -186,7 +281,7 @@ for (const [name, mutatedProposal] of [
     proposalDigest: expectedDigest,
   });
   assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(reads, 2, 'proposal must be read once by validation and once by its single digest computation');
+  assert.equal(reads, 2, 'proposal must be read once by validation and once by structuredClone');
   assert.equal(result.queueRow.proposalDigest, expectedDigest);
   assert.equal(result.promotionReceipt.proposalDigest, expectedDigest);
 }
