@@ -90,17 +90,3 @@ export function validateModelingProposal(record, { line = 1 } = {}) {
 export function proposalDigest(record) {
   return sha256Digest(record);
 }
-
-export function proposalToQueueIntentCandidate(proposal, { confirmedBy = 'human' } = {}) {
-  return {
-    kind: 'hq.modelCommitQueued.v1',
-    id: `mq_from_${proposal.id}`,
-    status: 'queued',
-    targetRef: proposal.targetRef,
-    op: proposal.proposedOperation.op,
-    payload: proposal.proposedOperation.payload,
-    reason: `promoted proposal ${proposal.id}`,
-    confirmedBy,
-    proposalDigest: proposalDigest(proposal),
-  };
-}
