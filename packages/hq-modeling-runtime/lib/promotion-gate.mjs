@@ -20,7 +20,9 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
   if (!isPlainObject(confirmation)) {
     add(errors, 'confirmation-missing', 'human confirmation object is required');
   } else {
-    if (confirmation.confirm !== true) add(errors, 'confirmation-not-true', 'confirmation.confirm must be true');
+    if (confirmation.confirm !== true) {
+      add(errors, 'confirmation-not-true', 'confirmation.confirm must be true');
+    }
     if (typeof confirmation.confirmedBy !== 'string' || confirmation.confirmedBy.trim().length === 0) {
       add(errors, 'confirmedBy-missing', 'confirmation.confirmedBy must be a non-empty string');
     }
@@ -33,11 +35,15 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
     add(errors, 'proposal-not-promotable', 'only status=proposed can be promoted', { status: proposal?.status });
   }
 
-  if (errors.length > 0) return { ok: false, errors, queueRow: null };
+  if (errors.length > 0) {
+    return { ok: false, errors, queueRow: null };
+  }
 
   const queueRow = proposalToQueueIntentCandidate(proposal, { confirmedBy: confirmation.confirmedBy });
   const queueErrors = validateRecord(queueRow);
-  if (queueErrors.length > 0) return { ok: false, errors: queueErrors, queueRow: null };
+  if (queueErrors.length > 0) {
+    return { ok: false, errors: queueErrors, queueRow: null };
+  }
 
   return {
     ok: true,
