@@ -30,7 +30,19 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
   const proposalErrors = validateModelingProposal(proposal);
   if (proposalErrors.length > 0) return { ok: false, errors: proposalErrors, queueRow: null };
 
-  const digest = proposalDigest(proposal);
+  let proposalSnapshot;
+  try {
+    proposalSnapshot = structuredClone(proposal);
+  } catch {
+    const errors = [];
+    add(errors, 'proposal-snapshot-failed', 'proposal must be structured-cloneable for promotion');
+    return { ok: false, errors, queueRow: null };
+  }
+
+  const snapshotErrors = validateModelingProposal(proposalSnapshot);
+  if (snapshotErrors.length > 0) return { ok: false, errors: snapshotErrors, queueRow: null };
+
+  const digest = proposalDigest(proposalSnapshot);
   const errors = [];
 
   if (!isPlainObject(confirmation)) {
@@ -45,13 +57,13 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
     }
   }
 
-  if (proposal.status !== 'proposed') {
-    add(errors, 'proposal-not-promotable', 'only status=proposed can be promoted', { status: proposal.status });
+  if (proposalSnapshot.status !== 'proposed') {
+    add(errors, 'proposal-not-promotable', 'only status=proposed can be promoted', { status: proposalSnapshot.status });
   }
 
   if (errors.length > 0) return { ok: false, errors, queueRow: null };
 
-  const queueRow = proposalToQueueIntentCandidate(proposal, {
+  const queueRow = proposalToQueueIntentCandidate(proposalSnapshot, {
     confirmedBy: confirmation.confirmedBy,
     proposalDigest: digest,
   });
@@ -64,7 +76,7 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
     queueRow,
     promotionReceipt: {
       kind: 'proposal.promotionReceipt.v1',
-      proposalId: proposal.id,
+      proposalId: proposalSnapshot.id,
       proposalDigest: digest,
       queueId: queueRow.id,
       confirmedBy: confirmation.confirmedBy,
