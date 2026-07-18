@@ -1,6 +1,5 @@
 import {
   proposalDigest,
-  proposalToQueueIntentCandidate,
   validateModelingProposal,
 } from './modeling-proposal.mjs';
 import { validateRecord } from './queue-validator.mjs';
@@ -13,9 +12,26 @@ function add(errors, code, message, extra = {}) {
   errors.push({ code, message, ...extra });
 }
 
+function proposalToQueueIntentCandidate(proposal, { confirmedBy, proposalDigest: digest }) {
+  return {
+    kind: 'hq.modelCommitQueued.v1',
+    id: `mq_from_${proposal.id}`,
+    status: 'queued',
+    targetRef: proposal.targetRef,
+    op: proposal.proposedOperation.op,
+    payload: proposal.proposedOperation.payload,
+    reason: `promoted proposal ${proposal.id}`,
+    confirmedBy,
+    proposalDigest: digest,
+  };
+}
+
 export function promoteProposalToModelQueue(proposal, confirmation) {
+  const proposalErrors = validateModelingProposal(proposal);
+  if (proposalErrors.length > 0) return { ok: false, errors: proposalErrors, queueRow: null };
+
+  const digest = proposalDigest(proposal);
   const errors = [];
-  errors.push(...validateModelingProposal(proposal));
 
   if (!isPlainObject(confirmation)) {
     add(errors, 'confirmation-missing', 'human confirmation object is required');
@@ -24,18 +40,21 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
     if (typeof confirmation.confirmedBy !== 'string' || confirmation.confirmedBy.trim().length === 0) {
       add(errors, 'confirmedBy-missing', 'confirmation.confirmedBy must be a non-empty string');
     }
-    if (confirmation.proposalDigest !== proposalDigest(proposal)) {
+    if (confirmation.proposalDigest !== digest) {
       add(errors, 'proposal-digest-mismatch', 'confirmation.proposalDigest must match proposal digest');
     }
   }
 
-  if (proposal?.status !== 'proposed') {
-    add(errors, 'proposal-not-promotable', 'only status=proposed can be promoted', { status: proposal?.status });
+  if (proposal.status !== 'proposed') {
+    add(errors, 'proposal-not-promotable', 'only status=proposed can be promoted', { status: proposal.status });
   }
 
   if (errors.length > 0) return { ok: false, errors, queueRow: null };
 
-  const queueRow = proposalToQueueIntentCandidate(proposal, { confirmedBy: confirmation.confirmedBy });
+  const queueRow = proposalToQueueIntentCandidate(proposal, {
+    confirmedBy: confirmation.confirmedBy,
+    proposalDigest: digest,
+  });
   const queueErrors = validateRecord(queueRow);
   if (queueErrors.length > 0) return { ok: false, errors: queueErrors, queueRow: null };
 
@@ -46,7 +65,7 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
     promotionReceipt: {
       kind: 'proposal.promotionReceipt.v1',
       proposalId: proposal.id,
-      proposalDigest: proposalDigest(proposal),
+      proposalDigest: digest,
       queueId: queueRow.id,
       confirmedBy: confirmation.confirmedBy,
       evidenceOnly: true,
