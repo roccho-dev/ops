@@ -1,0 +1,41 @@
+{
+  "allRepositoriesEnforced": false,
+  "assertion": {
+    "acceptedBundleDigest": "sha256:8106d85404e636a9797dfb8e0a1f6343db8a7867ff904577f682e5d82ad9b314",
+    "assertionId": "ops.final-ci-migration-consumer.v1",
+    "generatedMeaningFreeAdapter": true,
+    "lifecycle": "active",
+    "sourceClosureDigest": "sha256:a8fc9e8e04d53f1d783317059e4421c8dc724d01"
+  },
+  "decision": {
+    "acceptedMerge": "a8fc9e8e04d53f1d783317059e4421c8dc724d01",
+    "contractDigest": "8106d85404e636a9797dfb8e0a1f6343db8a7867ff904577f682e5d82ad9b314",
+    "decisionId": "01K0D7C3A00000000000000233",
+    "releaseId": "final-organization-ci-topology-v1.0.0",
+    "source": "roccho-dev/adrs#233"
+  },
+  "kind": "governance.selectedConsumerClaim.v1",
+  "migration": {
+    "correctedState": {
+      "defaultBranch": "proposals",
+      "requiredCheck": "gov-final-scope-purpose-join / gate"
+    },
+    "knownMismatch": {
+      "defaultBranch": "main",
+      "requiredCheck": "repo-governance / proof"
+    },
+    "knownMismatchRejected": true
+  },
+  "mustNotOwn": [
+    "accepted ADRS meaning",
+    "final organization admission",
+    "alternative required final-green interpretation"
+  ],
+  "receiptContract": {
+    "authority": false,
+    "candidateShaSource": "github.event.pull_request.head.sha || github.sha",
+    "requiredResult": "pass"
+  },
+  "repository": "roccho-dev/ops",
+  "role": "migration-consumer-known-mismatch"
+}
