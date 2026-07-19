@@ -54,23 +54,39 @@ const exactForbiddenFieldTokens = new Set([
   'modelQueueRow',
 ].map(normalizeBoundaryToken));
 
-const authorityConceptFragments = Object.freeze([
+const forbiddenConceptWords = new Set([
   'accepted',
+  'admitted',
   'admission',
   'admit',
+  'approved',
   'approval',
   'approve',
   'authority',
   'authorization',
   'authorisation',
+  'authorized',
+  'authorised',
+  'authoritative',
 ]);
 
-const allowedAuthorityFieldValues = new Map([
-  ['nonauthority', true],
+const allowedAuthorityFieldRules = new Map([
+  ['nonauthority', (value) => value === true],
+  ['authoritativesourcename', (value) => typeof value === 'string' && value.trim().length > 0],
 ]);
 
-function authorityConcept(token) {
-  return authorityConceptFragments.find((fragment) => token.includes(fragment)) ?? null;
+function boundaryWords(value) {
+  if (typeof value !== 'string') return [];
+  return value
+    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replaceAll(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+}
+
+function authorityConcept(value) {
+  return boundaryWords(value).find((word) => forbiddenConceptWords.has(word)) ?? null;
 }
 
 function pathText(path) {
@@ -279,14 +295,15 @@ export function snapshotJsonData(input) {
 }
 
 function allowedAuthorityField(token, value) {
-  return allowedAuthorityFieldValues.has(token)
-    && Object.is(allowedAuthorityFieldValues.get(token), value);
+  const rule = allowedAuthorityFieldRules.get(token);
+  return rule ? rule(value) : false;
 }
 
-function forbiddenFieldConcept(token, value) {
+function forbiddenFieldConcept(field, value) {
+  const token = normalizeBoundaryToken(field);
   if (allowedAuthorityField(token, value)) return null;
   if (exactForbiddenFieldTokens.has(token)) return token;
-  return authorityConcept(token);
+  return authorityConcept(field);
 }
 
 export function findAuthorityBearingShapes(value) {
@@ -331,7 +348,7 @@ export function findAuthorityBearingShapes(value) {
 
       const nested = descriptor.value;
       const token = normalizeBoundaryToken(key);
-      const fieldConcept = forbiddenFieldConcept(token, nested);
+      const fieldConcept = forbiddenFieldConcept(key, nested);
       if (fieldConcept) {
         findings.push({
           path: pathText(fieldPath),
@@ -345,7 +362,7 @@ export function findAuthorityBearingShapes(value) {
 
       if ((token === 'kind' || token === 'status') && typeof nested === 'string') {
         const normalizedValue = normalizeBoundaryToken(nested);
-        const concept = authorityConcept(normalizedValue);
+        const concept = authorityConcept(nested);
         if (concept) {
           findings.push({
             path: pathText(fieldPath),
