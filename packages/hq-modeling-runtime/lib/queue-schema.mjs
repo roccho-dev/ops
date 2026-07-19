@@ -46,70 +46,273 @@ export function normalizeBoundaryToken(value) {
   return typeof value === 'string' ? value.toLowerCase().replaceAll(/[^a-z0-9]/g, '') : '';
 }
 
-const queueOnlyAuthorityFields = Object.freeze([
-  'acceptedDigest',
+const exactForbiddenFieldTokens = new Set([
+  ...forbiddenAuthorityFields,
+  ...forbiddenAcceptedLedgerShapeFields,
   'acceptedRow',
   'admission',
-  'admissionScope',
-  'localDevOnly',
-  'sourceQueueId',
+  'modelQueueRow',
+].map(normalizeBoundaryToken));
+
+const authorityConceptFragments = Object.freeze([
+  'accepted',
+  'admission',
+  'admit',
+  'approval',
+  'approve',
+  'authority',
+  'authorization',
+  'authorisation',
 ]);
-const forbiddenFieldTokens = new Set(
-  [...forbiddenAuthorityFields, ...queueOnlyAuthorityFields].map(normalizeBoundaryToken),
-);
-const allowedFieldTokens = new Set(['nonauthority']);
-const forbiddenStatusTokens = new Set(['accepted', 'admitted', 'approved']);
 
-function isForbiddenFieldToken(token) {
-  if (allowedFieldTokens.has(token)) return false;
-  return forbiddenFieldTokens.has(token)
-    || token.startsWith('accepted')
-    || token.startsWith('admission')
-    || token.startsWith('authority')
-    || token.endsWith('authority');
-}
+const allowedAuthorityFieldValues = new Map([
+  ['nonauthority', true],
+]);
 
-function isForbiddenKindToken(token) {
-  return token.startsWith('accepted') || token.startsWith('admission');
+function authorityConcept(token) {
+  return authorityConceptFragments.find((fragment) => token.includes(fragment)) ?? null;
 }
 
 function pathText(path) {
   return path.length === 0 ? '$' : path.join('.');
 }
 
-export function findAuthorityBearingShapes(value) {
-  const findings = [];
-  const ancestors = new Set();
+function pointer(path) {
+  if (path.length === 0) return '/';
+  return `/${path
+    .map((segment) => String(segment).replaceAll('~', '~0').replaceAll('/', '~1'))
+    .join('/')}`;
+}
 
-  function add(path, reason, extra = {}) {
-    findings.push({ path: pathText(path), segments: [...path], reason, ...extra });
+function addDataFinding(errors, path, reason, extra = {}) {
+  const jsonPointer = pointer(path);
+  if (errors.some((error) => error.path === jsonPointer && error.reason === reason)) return;
+  errors.push({ path: jsonPointer, segments: [...path], reason, ...extra });
+}
+
+function defineData(target, key, value) {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+}
+
+export function snapshotJsonData(input) {
+  const errors = [];
+  const active = new Set();
+  let root;
+  const stack = [{ type: 'visit', value: input, path: [], assign: (value) => { root = value; } }];
+
+  while (stack.length > 0) {
+    const frame = stack.pop();
+    if (frame.type === 'exit') {
+      active.delete(frame.value);
+      continue;
+    }
+
+    const { value, path, assign } = frame;
+    if (value === null) {
+      assign(null);
+      continue;
+    }
+
+    const valueType = typeof value;
+    if (valueType === 'string' || valueType === 'boolean') {
+      assign(value);
+      continue;
+    }
+    if (valueType === 'number') {
+      if (!Number.isFinite(value)) addDataFinding(errors, path, 'non-finite-number');
+      else if (Object.is(value, -0)) addDataFinding(errors, path, 'negative-zero');
+      else assign(value);
+      continue;
+    }
+    if (valueType === 'undefined' || valueType === 'bigint' || valueType === 'function' || valueType === 'symbol') {
+      addDataFinding(errors, path, valueType);
+      continue;
+    }
+    if (valueType !== 'object') {
+      addDataFinding(errors, path, `unsupported-${valueType}`);
+      continue;
+    }
+
+    if (types.isProxy(value)) {
+      addDataFinding(errors, path, 'proxy-not-allowed');
+      continue;
+    }
+    if (active.has(value)) {
+      addDataFinding(errors, path, 'cycle');
+      continue;
+    }
+
+    const array = Array.isArray(value);
+    let prototype;
+    try {
+      prototype = Object.getPrototypeOf(value);
+    } catch {
+      addDataFinding(errors, path, 'prototype-read-failed');
+      continue;
+    }
+    if ((array && prototype !== Array.prototype)
+      || (!array && prototype !== Object.prototype && prototype !== null)) {
+      addDataFinding(errors, path, 'non-plain-object');
+      continue;
+    }
+
+    let keys;
+    try {
+      keys = Reflect.ownKeys(value);
+    } catch {
+      addDataFinding(errors, path, 'property-enumeration-failed');
+      continue;
+    }
+
+    const entries = [];
+    let nodeInvalid = false;
+    let arrayLength = null;
+    for (const key of keys) {
+      let descriptor;
+      try {
+        descriptor = Object.getOwnPropertyDescriptor(value, key);
+      } catch {
+        addDataFinding(errors, [...path, typeof key === 'symbol' ? '<symbol>' : key], 'property-descriptor-read-failed');
+        nodeInvalid = true;
+        continue;
+      }
+      if (!descriptor) {
+        addDataFinding(errors, [...path, typeof key === 'symbol' ? '<symbol>' : key], 'property-descriptor-missing');
+        nodeInvalid = true;
+        continue;
+      }
+
+      if (array && key === 'length') {
+        if (!Object.hasOwn(descriptor, 'value')
+          || !Number.isInteger(descriptor.value)
+          || descriptor.value < 0
+          || descriptor.value > 4_294_967_295) {
+          addDataFinding(errors, path, 'array-length-invalid');
+          nodeInvalid = true;
+        } else {
+          arrayLength = descriptor.value;
+        }
+        continue;
+      }
+
+      if (typeof key === 'symbol') {
+        addDataFinding(errors, path, 'symbol-key', { symbol: key.description ?? null });
+        nodeInvalid = true;
+        continue;
+      }
+      if (descriptor.enumerable !== true) {
+        addDataFinding(errors, [...path, key], 'non-enumerable-property');
+        nodeInvalid = true;
+        continue;
+      }
+      if (!Object.hasOwn(descriptor, 'value')) {
+        addDataFinding(errors, [...path, key], 'accessor-property');
+        nodeInvalid = true;
+        continue;
+      }
+      entries.push({ key, value: descriptor.value });
+    }
+
+    if (array) {
+      if (arrayLength === null) {
+        addDataFinding(errors, path, 'array-length-missing');
+        nodeInvalid = true;
+      } else {
+        const indexed = [];
+        for (const entry of entries) {
+          const index = Number(entry.key);
+          const canonical = Number.isInteger(index)
+            && index >= 0
+            && index < arrayLength
+            && String(index) === entry.key;
+          if (!canonical) {
+            addDataFinding(errors, [...path, entry.key], 'extra-array-property');
+            nodeInvalid = true;
+          } else {
+            indexed.push({ ...entry, index });
+          }
+        }
+        indexed.sort((left, right) => left.index - right.index);
+        let expected = 0;
+        for (const entry of indexed) {
+          if (entry.index !== expected) break;
+          expected += 1;
+        }
+        if (expected !== arrayLength) {
+          addDataFinding(errors, [...path, String(expected)], 'sparse-array-hole');
+          nodeInvalid = true;
+        }
+        entries.length = 0;
+        entries.push(...indexed.map(({ key, value: nested }) => ({ key, value: nested })));
+      }
+    }
+
+    if (nodeInvalid) continue;
+
+    const snapshot = array
+      ? new Array(arrayLength)
+      : (prototype === null ? Object.create(null) : {});
+    assign(snapshot);
+    active.add(value);
+    stack.push({ type: 'exit', value });
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index];
+      stack.push({
+        type: 'visit',
+        value: entry.value,
+        path: [...path, entry.key],
+        assign: (nested) => defineData(snapshot, entry.key, nested),
+      });
+    }
   }
 
-  function visit(node, path) {
-    if (node === null || typeof node !== 'object') return;
+  return {
+    ok: errors.length === 0,
+    value: errors.length === 0 ? root : null,
+    errors,
+  };
+}
+
+function allowedAuthorityField(token, value) {
+  return allowedAuthorityFieldValues.has(token)
+    && Object.is(allowedAuthorityFieldValues.get(token), value);
+}
+
+function forbiddenFieldConcept(token, value) {
+  if (allowedAuthorityField(token, value)) return null;
+  if (exactForbiddenFieldTokens.has(token)) return token;
+  return authorityConcept(token);
+}
+
+export function findAuthorityBearingShapes(value) {
+  const findings = [];
+  const stack = [{ node: value, path: [] }];
+
+  while (stack.length > 0) {
+    const { node, path } = stack.pop();
+    if (node === null || typeof node !== 'object') continue;
     if (types.isProxy(node)) {
-      add(path, 'scan-failed', { detail: 'proxy-not-allowed' });
-      return;
-    }
-    if (ancestors.has(node)) {
-      add(path, 'scan-failed', { detail: 'cycle' });
-      return;
+      findings.push({ path: pathText(path), segments: [...path], reason: 'scan-failed', detail: 'proxy-not-allowed' });
+      continue;
     }
 
-    ancestors.add(node);
     let keys;
     try {
       keys = Reflect.ownKeys(node);
     } catch {
-      add(path, 'scan-failed', { detail: 'own-keys-failed' });
-      ancestors.delete(node);
-      return;
+      findings.push({ path: pathText(path), segments: [...path], reason: 'scan-failed', detail: 'own-keys-failed' });
+      continue;
     }
 
     for (const key of keys) {
       if (Array.isArray(node) && key === 'length') continue;
       if (typeof key === 'symbol') {
-        add(path, 'scan-failed', { detail: 'symbol-key' });
+        findings.push({ path: pathText(path), segments: [...path], reason: 'scan-failed', detail: 'symbol-key' });
         continue;
       }
 
@@ -118,38 +321,49 @@ export function findAuthorityBearingShapes(value) {
       try {
         descriptor = Object.getOwnPropertyDescriptor(node, key);
       } catch {
-        add(fieldPath, 'scan-failed', { detail: 'descriptor-read-failed' });
+        findings.push({ path: pathText(fieldPath), segments: fieldPath, reason: 'scan-failed', detail: 'descriptor-read-failed' });
         continue;
       }
       if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
-        add(fieldPath, 'scan-failed', { detail: 'accessor-or-missing-descriptor' });
+        findings.push({ path: pathText(fieldPath), segments: fieldPath, reason: 'scan-failed', detail: 'accessor-or-missing-descriptor' });
         continue;
       }
 
+      const nested = descriptor.value;
       const token = normalizeBoundaryToken(key);
-      if (isForbiddenFieldToken(token)) {
-        add(fieldPath, 'forbidden-field', { field: key, normalizedField: token });
+      const fieldConcept = forbiddenFieldConcept(token, nested);
+      if (fieldConcept) {
+        findings.push({
+          path: pathText(fieldPath),
+          segments: fieldPath,
+          reason: 'forbidden-field',
+          field: key,
+          normalizedField: token,
+          concept: fieldConcept,
+        });
       }
 
-      const nested = descriptor.value;
-      if (token === 'kind' && typeof nested === 'string') {
-        const normalizedKind = normalizeBoundaryToken(nested);
-        if (isForbiddenKindToken(normalizedKind)) {
-          add(fieldPath, 'forbidden-kind', { value: nested, normalizedValue: normalizedKind });
+      if ((token === 'kind' || token === 'status') && typeof nested === 'string') {
+        const normalizedValue = normalizeBoundaryToken(nested);
+        const concept = authorityConcept(normalizedValue);
+        if (concept) {
+          findings.push({
+            path: pathText(fieldPath),
+            segments: fieldPath,
+            reason: token === 'kind' ? 'forbidden-kind' : 'forbidden-status',
+            value: nested,
+            normalizedValue,
+            concept,
+          });
         }
       }
-      if (token === 'status' && typeof nested === 'string') {
-        const normalizedStatus = normalizeBoundaryToken(nested);
-        if (forbiddenStatusTokens.has(normalizedStatus)) {
-          add(fieldPath, 'forbidden-status', { value: nested, normalizedValue: normalizedStatus });
-        }
+
+      if (nested !== null && typeof nested === 'object') {
+        stack.push({ node: nested, path: fieldPath });
       }
-      visit(nested, fieldPath);
     }
-    ancestors.delete(node);
   }
 
-  visit(value, []);
   return findings;
 }
 
