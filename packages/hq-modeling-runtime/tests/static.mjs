@@ -111,9 +111,7 @@ assert.deepEqual(summary.implementedNow, implemented);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const siblingBin = path.join(here, '..', 'bin', 'hq-modeling-runtime.mjs');
-const cmd = fs.existsSync(siblingBin)
-  ? [process.execPath, siblingBin]
-  : ['hq-modeling-runtime'];
+const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ['hq-modeling-runtime'];
 
 const output = execFileSync(cmd[0], [...cmd.slice(1), '--json'], {
   encoding: 'utf8',
@@ -145,6 +143,12 @@ function parseJsonOutput(run) {
 
 function errorCodes(run) {
   return `${run.stdout}${run.stderr}`;
+}
+
+function assertJsonlRejection(run, expectedCode, message) {
+  assert.notEqual(run.status, 0);
+  assert.equal(run.stdout, '', `${message}: JSONL rejection must keep stdout empty`);
+  assert.match(run.stderr, new RegExp(expectedCode), message);
 }
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-modeling-promotion-'));
@@ -194,6 +198,8 @@ try {
     const result = parseJsonOutput(run);
     assert.equal(result.ok, true);
     assert.equal(result.queueRow.kind, 'hq.modelCommitQueued.v1');
+    assert.equal(result.queueRow.origin.kind, 'proposal-promotion.v1');
+    assert.match(result.queueRow.origin.integrityDigest, /^sha256:/);
     assert.equal(result.promotionReceipt.kind, 'proposal.promotionReceipt.v1');
   }
 
@@ -206,6 +212,7 @@ try {
     const row = JSON.parse(rows[0]);
     assert.equal(row.kind, 'hq.modelCommitQueued.v1');
     assert.equal(row.id, 'mq_from_proposal_cli_001');
+    assert.equal(row.origin.kind, 'proposal-promotion.v1');
     assert.deepEqual(row.evidence, proposal.evidence);
     assert.equal('promotionReceipt' in row, false);
   }
@@ -218,22 +225,20 @@ try {
     assert.equal(rows.length, 1);
     const row = JSON.parse(rows[0]);
     assert.equal(row.kind, 'proposal.promotionReceipt.v1');
+    assert.match(row.confirmationDigest, /^sha256:/);
+    assert.match(row.queueIntegrityDigest, /^sha256:/);
     assert.equal(row.evidenceOnly, true);
     assert.equal(row.nonAuthority, true);
   }
 
   {
     const run = runCli(['promote', '--input', proposalPath, '--confirmation', badConfirmationPath, '--queue-jsonl']);
-    assert.equal(run.status, 1);
-    assert.equal(run.stdout, '', 'rejected queue-jsonl mode must expose no queue intent');
-    assert.match(run.stderr, /proposal-digest-mismatch/);
+    assertJsonlRejection(run, 'proposal-digest-mismatch', 'invalid queue-jsonl promotion');
   }
 
   {
     const run = runCli(['promote', '--input', proposalPath, '--confirmation', badConfirmationPath, '--receipt-jsonl']);
-    assert.equal(run.status, 1);
-    assert.equal(run.stdout, '', 'rejected receipt-jsonl mode must expose no receipt');
-    assert.match(run.stderr, /proposal-digest-mismatch/);
+    assertJsonlRejection(run, 'proposal-digest-mismatch', 'invalid receipt-jsonl promotion');
   }
 
   {
@@ -288,13 +293,16 @@ try {
     assert.ok(result.errors.some((error) => error.code === 'promotion-input-required'));
   }
 
-  {
-    const run = runCli([
-      'promote', '--input', proposalPath, '--confirmation', confirmationPath, '--json', '--queue-jsonl',
-    ]);
-    assert.equal(run.status, 2);
-    const result = parseJsonOutput(run);
-    assert.ok(result.errors.some((error) => error.code === 'promotion-output-mode-conflict'));
+  for (const [name, args, expectedCode] of [
+    ['json plus queue-jsonl', ['promote', '--input', proposalPath, '--confirmation', confirmationPath, '--json', '--queue-jsonl'], 'promotion-output-mode-conflict'],
+    ['json plus receipt-jsonl', ['promote', '--input', proposalPath, '--confirmation', confirmationPath, '--json', '--receipt-jsonl'], 'promotion-output-mode-conflict'],
+    ['both JSONL modes', ['promote', '--input', proposalPath, '--confirmation', confirmationPath, '--queue-jsonl', '--receipt-jsonl'], 'promotion-output-mode-conflict'],
+    ['missing confirmation queue-jsonl', ['promote', '--input', proposalPath, '--queue-jsonl'], 'promotion-confirmation-required'],
+    ['missing input receipt-jsonl', ['promote', '--confirmation', confirmationPath, '--receipt-jsonl'], 'promotion-input-required'],
+    ['unknown queue-jsonl', ['promote', '--input', proposalPath, '--confirmation', confirmationPath, '--queue-jsonl', '--unknown'], 'promotion-usage-error'],
+    ['unknown receipt-jsonl', ['promote', '--input', proposalPath, '--confirmation', confirmationPath, '--receipt-jsonl', '--unknown'], 'promotion-usage-error'],
+  ]) {
+    assertJsonlRejection(runCli(args), expectedCode, name);
   }
 
   {
