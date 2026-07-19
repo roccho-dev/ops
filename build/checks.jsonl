@@ -21,6 +21,7 @@
 {"kind":"check","name":"hq-modeling-runtime-agent-task-boundary","script":"packages/hq-modeling-runtime/tests/agent-task-runtime.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-modeling-proposal","script":"packages/hq-modeling-runtime/tests/modeling-proposal.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-promotion-gate","script":"packages/hq-modeling-runtime/tests/promotion-gate.mjs","deps":["nodejs","hq-modeling-runtime"]}
+{"kind":"check","name":"hq-modeling-runtime-promotion-cli-jsonl","script":"packages/hq-modeling-runtime/tests/promotion-cli-jsonl.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-local-root-boundary","script":"packages/hq-modeling-runtime/tests/local-root.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-ci-mode-boundary","script":"packages/hq-modeling-runtime/tests/ci-mode.mjs","deps":["nodejs","hq-modeling-runtime"]}
 {"kind":"check","name":"hq-modeling-runtime-github-readback-boundary","script":"packages/hq-modeling-runtime/tests/github-readback.mjs","deps":["nodejs","hq-modeling-runtime"]}
