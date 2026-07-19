@@ -1,8 +1,19 @@
+import { types } from 'node:util';
+
 import { sha256Digest } from './digest.mjs';
-import { forbiddenAuthorityFields } from './queue-schema.mjs';
+import {
+  findAuthorityBearingShapes,
+  snapshotJsonData,
+} from './queue-schema.mjs';
 
 function isPlainObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
 }
 
 function isNonEmptyString(value) {
@@ -13,94 +24,144 @@ function add(errors, code, message, extra = {}) {
   errors.push({ code, message, ...extra });
 }
 
-function findForbiddenAuthorityFields(value, path = []) {
-  if (Array.isArray(value)) {
-    return value.flatMap((entry, index) => findForbiddenAuthorityFields(entry, [...path, String(index)]));
-  }
-  if (!isPlainObject(value)) return [];
-
-  const found = [];
-  for (const [key, nested] of Object.entries(value)) {
-    if (forbiddenAuthorityFields.includes(key)) {
-      found.push([...path, key].join('.'));
-    }
-    found.push(...findForbiddenAuthorityFields(nested, [...path, key]));
-  }
-  return found;
+function pointer(path) {
+  if (path.length === 0) return '/';
+  return `/${path
+    .map((segment) => String(segment).replaceAll('~', '~0').replaceAll('/', '~1'))
+    .join('/')}`;
 }
 
-export function validateModelingProposal(record, { line = 1 } = {}) {
-  const errors = [];
-
-  if (!isPlainObject(record)) {
-    add(errors, 'proposal-not-object', 'proposal must be an object', { line });
-    return errors;
+function addSnapshotErrors(errors, snapshotErrors, line) {
+  for (const error of snapshotErrors) {
+    add(
+      errors,
+      'proposal-data-invalid',
+      `proposal data is not JSON-compatible at ${error.path}: ${error.reason}`,
+      {
+        line,
+        path: error.path,
+        reason: error.reason,
+        detail: error.detail,
+        symbol: error.symbol,
+      },
+    );
   }
+}
+
+function addAuthorityShapeErrors(errors, record, line) {
+  const findings = findAuthorityBearingShapes(record);
+  const id = record.id;
+  for (const finding of findings) {
+    const code = finding.reason === 'forbidden-field'
+      ? 'authority-field-present'
+      : 'authority-shape-present';
+    const segments = finding.segments ?? [];
+    const fieldPath = segments.join('.');
+    add(errors, code, `authority-bearing proposal shape is prohibited: ${fieldPath || '$'}`, {
+      line,
+      id,
+      fieldPath,
+      path: pointer(segments),
+      reason: finding.reason,
+      detail: finding.detail,
+      concept: finding.concept,
+      normalizedField: finding.normalizedField,
+      normalizedValue: finding.normalizedValue,
+    });
+  }
+}
+
+function validateProposalSnapshot(record, { line = 1 } = {}) {
+  const errors = [];
+  addAuthorityShapeErrors(errors, record, line);
+  const id = record.id;
 
   if (record.kind !== 'modeling.proposal.v1') {
-    add(errors, 'invalid-proposal-kind', `proposal kind must be modeling.proposal.v1, got ${record.kind}`, { line, kind: record.kind });
+    add(errors, 'invalid-proposal-kind', `proposal kind must be modeling.proposal.v1, got ${record.kind}`, {
+      line,
+      kind: record.kind,
+    });
     return errors;
   }
 
-  for (const field of ['id', 'sourceAgentTaskId', 'targetRef', 'proposedOperation', 'evidence', 'acceptanceCriteria', 'status']) {
-    if (!(field in record)) {
+  const required = ['id', 'sourceAgentTaskId', 'targetRef', 'proposedOperation', 'evidence', 'acceptanceCriteria', 'status'];
+  for (const field of required) {
+    if (!Object.hasOwn(record, field)) {
       add(errors, 'missing-required-field', `missing required field: ${field}`, { line, field });
     }
   }
 
   if (!isNonEmptyString(record.id)) add(errors, 'invalid-id', 'id must be a non-empty string', { line });
-  if (!isNonEmptyString(record.sourceAgentTaskId)) add(errors, 'invalid-sourceAgentTaskId', 'sourceAgentTaskId must be a non-empty string', { line, id: record.id });
+  if (!isNonEmptyString(record.sourceAgentTaskId)) {
+    add(errors, 'invalid-sourceAgentTaskId', 'sourceAgentTaskId must be a non-empty string', { line, id });
+  }
 
   if (!isPlainObject(record.targetRef)) {
-    add(errors, 'targetRef-not-object', 'targetRef must be an object', { line, id: record.id });
+    add(errors, 'targetRef-not-object', 'targetRef must be an object', { line, id });
   } else {
-    if (!isNonEmptyString(record.targetRef.kind)) add(errors, 'targetRef-missing-kind', 'targetRef.kind must be a non-empty string', { line, id: record.id });
-    if (!isNonEmptyString(record.targetRef.id)) add(errors, 'targetRef-missing-id', 'targetRef.id must be a non-empty string', { line, id: record.id });
+    if (!isNonEmptyString(record.targetRef.kind)) {
+      add(errors, 'targetRef-missing-kind', 'targetRef.kind must be a non-empty string', { line, id });
+    }
+    if (!isNonEmptyString(record.targetRef.id)) {
+      add(errors, 'targetRef-missing-id', 'targetRef.id must be a non-empty string', { line, id });
+    }
   }
 
   if (!isPlainObject(record.proposedOperation)) {
-    add(errors, 'proposedOperation-not-object', 'proposedOperation must be an object', { line, id: record.id });
+    add(errors, 'proposedOperation-not-object', 'proposedOperation must be an object', { line, id });
   } else {
-    if (!isNonEmptyString(record.proposedOperation.op)) add(errors, 'proposal-op-missing', 'proposedOperation.op must be a non-empty string', { line, id: record.id });
-    if (!isPlainObject(record.proposedOperation.payload)) add(errors, 'proposal-payload-not-object', 'proposedOperation.payload must be an object', { line, id: record.id });
+    if (!isNonEmptyString(record.proposedOperation.op)) {
+      add(errors, 'proposal-op-missing', 'proposedOperation.op must be a non-empty string', { line, id });
+    }
+    if (!isPlainObject(record.proposedOperation.payload)) {
+      add(errors, 'proposal-payload-not-object', 'proposedOperation.payload must be an object', { line, id });
+    }
   }
 
   if (!Array.isArray(record.evidence) || record.evidence.length === 0) {
-    add(errors, 'evidence-missing', 'evidence must be a non-empty array', { line, id: record.id });
+    add(errors, 'evidence-missing', 'evidence must be a non-empty array', { line, id });
   }
   if (!Array.isArray(record.acceptanceCriteria) || record.acceptanceCriteria.length === 0) {
-    add(errors, 'acceptanceCriteria-missing', 'acceptanceCriteria must be a non-empty array', { line, id: record.id });
+    add(errors, 'acceptanceCriteria-missing', 'acceptanceCriteria must be a non-empty array', { line, id });
   }
 
   if (!['proposed', 'rejected', 'promoted'].includes(record.status)) {
-    add(errors, 'invalid-proposal-status', 'status must be proposed, rejected, or promoted', { line, id: record.id, status: record.status });
-  }
-
-  for (const fieldPath of findForbiddenAuthorityFields(record)) {
-    add(errors, 'authority-field-present', `authority field is prohibited: ${fieldPath}`, { line, id: record.id, fieldPath });
-  }
-
-  if ('modelQueueRow' in record || 'acceptedRow' in record) {
-    add(errors, 'embedded-authority-shape', 'proposal must not embed modelQueueRow or acceptedRow', { line, id: record.id });
+    add(errors, 'invalid-proposal-status', 'status must be proposed, rejected, or promoted', {
+      line,
+      id,
+      status: record.status,
+    });
   }
 
   return errors;
 }
 
-export function proposalDigest(record) {
-  return sha256Digest(record);
+export function snapshotModelingProposal(record, { line = 1 } = {}) {
+  const errors = [];
+  if (!isPlainObject(record)) {
+    add(errors, 'proposal-not-object', 'proposal must be a plain non-Proxy object', { line });
+    return { snapshot: null, errors };
+  }
+
+  const dataSnapshot = snapshotJsonData(record);
+  if (!dataSnapshot.ok) {
+    addSnapshotErrors(errors, dataSnapshot.errors, line);
+    return { snapshot: null, errors };
+  }
+
+  errors.push(...validateProposalSnapshot(dataSnapshot.value, { line }));
+  return { snapshot: dataSnapshot.value, errors };
 }
 
-export function proposalToQueueIntentCandidate(proposal, { confirmedBy = 'human' } = {}) {
-  return {
-    kind: 'hq.modelCommitQueued.v1',
-    id: `mq_from_${proposal.id}`,
-    status: 'queued',
-    targetRef: proposal.targetRef,
-    op: proposal.proposedOperation.op,
-    payload: proposal.proposedOperation.payload,
-    reason: `promoted proposal ${proposal.id}`,
-    confirmedBy,
-    proposalDigest: proposalDigest(proposal),
-  };
+export function validateModelingProposal(record, { line = 1 } = {}) {
+  return snapshotModelingProposal(record, { line }).errors;
+}
+
+export function proposalDigest(record) {
+  const snapshot = snapshotJsonData(record);
+  if (!snapshot.ok) {
+    const first = snapshot.errors[0];
+    throw new TypeError(`proposal data is not digestible at ${first?.path ?? '/'}: ${first?.reason ?? 'invalid-data'}`);
+  }
+  return sha256Digest(snapshot.value);
 }

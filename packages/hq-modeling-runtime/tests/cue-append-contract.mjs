@@ -21,6 +21,7 @@ const model = {
   op: 'addEdge',
   payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' },
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_001', confirmedBy: 'human' },
 };
 
 function runJson(cmd, args, options = {}) {

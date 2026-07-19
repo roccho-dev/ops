@@ -16,6 +16,7 @@ export const runtimeBoundary = Object.freeze({
     'hq-ci-mode-contract',
     'github-issue-comment-readback-adapter-contract',
     'staged-canonical-promotion-eligibility',
+    'human-confirmed-modeling-proposal-promotion',
   ],
   reservedForLaterIssues: Object.freeze({}),
   owns: [
@@ -31,6 +32,8 @@ export const runtimeBoundary = Object.freeze({
     'ci artifact receipt boundary core',
     'GitHub issue-comment readback evidence adapter core',
     'staged-to-canonical promotion eligibility core',
+    'modeling proposal promotion core',
+    'proposal promotion CLI adapter',
     'runtime core boundary',
     'worker boundary',
     'receipt boundary',
@@ -47,6 +50,10 @@ export const runtimeBoundary = Object.freeze({
     'remote bare repo write implementation',
     'GitHub issue authority',
     'ChatGPT direct local control',
+    'model queue file persistence during proposal promotion',
+    'accepted ledger writes during proposal promotion',
+    'network access during proposal promotion',
+    'agent execution during proposal promotion',
   ],
   authorityBoundary: {
     queueRows: 'intent only',
@@ -58,6 +65,7 @@ export const runtimeBoundary = Object.freeze({
     acceptedLedger: 'local-dev admission only; production governance adoption is not implemented here',
     canonicalPromotion: 'remote bare repo becomes canonical only after eligible staged accepted rows, required receipts, remote write candidate manifest, and successful remote readback',
     cueContractCore: 'external ops contract package; invoked through adapter only',
+    proposalPromotion: 'explicit human confirmation may emit queue intent and evidence-only receipt; CLI reads proposal and confirmation JSON and writes stdout or stderr only',
   },
 });
 
@@ -85,6 +93,10 @@ export function assertNoForbiddenOwnership(boundary = runtimeBoundary) {
     'remote bare repo write implementation',
     'GitHub issue authority',
     'ChatGPT direct local control',
+    'model queue file persistence during proposal promotion',
+    'accepted ledger writes during proposal promotion',
+    'network access during proposal promotion',
+    'agent execution during proposal promotion',
   ]);
 
   const overlap = boundary.owns.filter((value) => forbidden.has(value));

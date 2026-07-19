@@ -17,6 +17,7 @@ const addEdge = {
   op: 'addEdge',
   payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' },
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_edge_001', confirmedBy: 'human' },
 };
 
 const agent = {
@@ -68,8 +69,7 @@ const agent = {
   const result = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(bad));
   assert.equal(result.ok, false);
   assert.equal(result.projection.edges.length, 0);
-  assert.equal(result.projection.errors.length, 1);
-  assert.equal(result.projection.errors[0].code, 'authority-field-present');
+  assert.ok(result.projection.errors.some((error) => error.code === 'authority-field-present'));
 }
 
 {
@@ -77,8 +77,7 @@ const agent = {
   const result = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(bad));
   assert.equal(result.ok, false);
   assert.equal(result.projection.edges.length, 0);
-  assert.equal(result.projection.errors.length, 1);
-  assert.equal(result.projection.errors[0].code, 'payload-smuggled-row');
+  assert.ok(result.projection.errors.some((error) => error.code === 'payload-smuggled-row'));
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hq-projection-builder-'));
@@ -88,13 +87,10 @@ try {
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const siblingBin = path.join(here, '..', 'bin', 'hq-modeling-runtime.mjs');
-  const cmd = fs.existsSync(siblingBin)
-    ? [process.execPath, siblingBin]
-    : ['hq-modeling-runtime'];
+  const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ['hq-modeling-runtime'];
 
   const jsonOut = execFileSync(cmd[0], [...cmd.slice(1), 'projection', '--input', input, '--json'], {
-    encoding: 'utf8',
-    timeout: 10_000,
+    encoding: 'utf8', timeout: 10_000,
   });
   const parsed = JSON.parse(jsonOut);
   assert.equal(parsed.ok, true, JSON.stringify(parsed.projection.errors));

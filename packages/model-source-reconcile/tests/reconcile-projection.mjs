@@ -19,6 +19,7 @@ const queue = {
   op: 'addEdge',
   payload: { from: 'package:ceo', to: 'repo:adrs', type: 'located_in' },
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_package_ceo_repo_adrs', confirmedBy: 'human' },
 };
 const modelProjection = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(queue)).projection;
 const observation = sourceObservationRow({
