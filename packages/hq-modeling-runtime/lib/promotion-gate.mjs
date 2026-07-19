@@ -3,11 +3,11 @@ import { types } from 'node:util';
 import { sha256Digest } from './digest.mjs';
 import {
   proposalDigest,
-  validateModelingProposal,
+  snapshotModelingProposal,
 } from './modeling-proposal.mjs';
 import {
   buildProposalPromotionOrigin,
-  validateRecord,
+  validateProposalPromotionRecord,
 } from './queue-validator.mjs';
 
 function isPlainObject(value) {
@@ -109,20 +109,9 @@ function proposalToQueueIntentCandidate(proposal, confirmation, digest) {
 }
 
 export function promoteProposalToModelQueue(proposal, confirmation) {
-  const proposalErrors = validateModelingProposal(proposal);
-  if (proposalErrors.length > 0) return failure(proposalErrors);
-
-  let proposalSnapshot;
-  try {
-    proposalSnapshot = structuredClone(proposal);
-  } catch {
-    const errors = [];
-    add(errors, 'proposal-snapshot-failed', 'proposal must be structured-cloneable for promotion');
-    return failure(errors);
-  }
-
-  const snapshotErrors = validateModelingProposal(proposalSnapshot);
-  if (snapshotErrors.length > 0) return failure(snapshotErrors);
+  const proposalResult = snapshotModelingProposal(proposal);
+  if (proposalResult.errors.length > 0) return failure(proposalResult.errors);
+  const proposalSnapshot = proposalResult.snapshot;
 
   let digest;
   try {
@@ -150,11 +139,12 @@ export function promoteProposalToModelQueue(proposal, confirmation) {
   if (proposalSnapshot.status !== 'proposed') {
     add(errors, 'proposal-not-promotable', 'only status=proposed can be promoted', { status: proposalSnapshot.status });
   }
-
   if (errors.length > 0) return failure(errors);
 
   const queueRow = proposalToQueueIntentCandidate(proposalSnapshot, confirmationSnapshot, digest);
-  const queueErrors = validateRecord(queueRow);
+  const queueErrors = validateProposalPromotionRecord(queueRow, {
+    expectedOrigin: queueRow.origin,
+  });
   if (queueErrors.length > 0) return failure(queueErrors);
 
   return {
