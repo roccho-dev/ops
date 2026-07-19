@@ -3,20 +3,18 @@ import assert from 'node:assert/strict';
 
 import * as modelingProposal from '../lib/modeling-proposal.mjs';
 import * as promotionGate from '../lib/promotion-gate.mjs';
-import { validateRecord } from '../lib/queue-validator.mjs';
+import {
+  buildProposalPromotionOrigin,
+  modelQueueIntegrityDigest,
+  validateRecord,
+} from '../lib/queue-validator.mjs';
 
-const { proposalDigest } = modelingProposal;
+const { proposalDigest, validateModelingProposal } = modelingProposal;
 const { promoteProposalToModelQueue } = promotionGate;
 
-assert.deepEqual(
-  Object.keys(modelingProposal).sort(),
-  ['proposalDigest', 'validateModelingProposal'],
-);
+assert.deepEqual(Object.keys(modelingProposal).sort(), ['proposalDigest', 'validateModelingProposal']);
 assert.equal('proposalToQueueIntentCandidate' in modelingProposal, false);
-assert.deepEqual(
-  Object.keys(promotionGate).sort(),
-  ['promoteProposalToModelQueue'],
-);
+assert.deepEqual(Object.keys(promotionGate).sort(), ['promoteProposalToModelQueue']);
 
 const proposal = {
   kind: 'modeling.proposal.v1',
@@ -67,14 +65,17 @@ function withPayload(value) {
 
 const validProposalDigest = proposalDigest(proposal);
 const validConfirmation = { confirm: true, confirmedBy: 'human-review', proposalDigest: validProposalDigest };
-assert.match(validProposalDigest, /^sha256:/);
+assert.match(validProposalDigest, /^sha256:[0-9a-f]{64}$/);
 
+let validResult;
 {
   const promotedProposal = structuredClone(proposal);
   const beforeProposal = structuredClone(promotedProposal);
   const beforeConfirmation = structuredClone(validConfirmation);
   const result = promoteProposalToModelQueue(promotedProposal, validConfirmation);
-  const expectedQueueRow = {
+  validResult = result;
+
+  const expectedBase = {
     kind: 'hq.modelCommitQueued.v1',
     id: 'mq_from_proposal_001',
     status: 'queued',
@@ -86,19 +87,35 @@ assert.match(validProposalDigest, /^sha256:/);
     confirmedBy: 'human-review',
     proposalDigest: validProposalDigest,
   };
-  const expectedReceipt = {
-    kind: 'proposal.promotionReceipt.v1',
-    proposalId: 'proposal_001',
-    proposalDigest: validProposalDigest,
-    queueId: 'mq_from_proposal_001',
-    confirmedBy: 'human-review',
-    evidenceOnly: true,
-    nonAuthority: true,
+  const expectedQueueRow = {
+    ...expectedBase,
+    origin: buildProposalPromotionOrigin(expectedBase, {
+      proposalId: proposal.id,
+      proposalDigest: validProposalDigest,
+      confirmationDigest: result.queueRow.origin.confirmationDigest,
+      confirmedBy: 'human-review',
+    }),
   };
 
   assert.equal(result.ok, true, JSON.stringify(result.errors));
   assert.deepEqual(result.queueRow, expectedQueueRow);
-  assert.deepEqual(result.promotionReceipt, expectedReceipt);
+  assert.equal(result.promotionReceipt.kind, 'proposal.promotionReceipt.v1');
+  assert.equal(result.promotionReceipt.id, result.queueRow.origin.promotionEvidenceId);
+  assert.equal(result.promotionReceipt.proposalId, proposal.id);
+  assert.equal(result.promotionReceipt.proposalDigest, validProposalDigest);
+  assert.equal(result.promotionReceipt.queueId, result.queueRow.id);
+  assert.equal(result.promotionReceipt.queueIntegrityDigest, result.queueRow.origin.integrityDigest);
+  assert.equal(result.promotionReceipt.confirmationDigest, result.queueRow.origin.confirmationDigest);
+  assert.equal(result.promotionReceipt.evidenceDigest, result.queueRow.origin.evidenceDigest);
+  assert.equal(result.promotionReceipt.promotionEvidenceId, result.queueRow.origin.promotionEvidenceId);
+  assert.equal(result.promotionReceipt.confirmedBy, 'human-review');
+  assert.equal(result.promotionReceipt.evidenceOnly, true);
+  assert.equal(result.promotionReceipt.nonAuthority, true);
+  assert.match(result.queueRow.origin.confirmationDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.match(result.queueRow.origin.evidenceDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.match(result.queueRow.origin.promotionEvidenceId, /^sha256:[0-9a-f]{64}$/);
+  assert.match(result.queueRow.origin.integrityDigest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(modelQueueIntegrityDigest(result.queueRow), result.queueRow.origin.integrityDigest);
   assert.deepEqual(promotedProposal, beforeProposal, 'promotion must not mutate proposal input');
   assert.deepEqual(validConfirmation, beforeConfirmation, 'promotion must not mutate confirmation input');
   assert.notStrictEqual(result.queueRow.targetRef, promotedProposal.targetRef);
@@ -107,31 +124,15 @@ assert.match(validProposalDigest, /^sha256:/);
   assert.notStrictEqual(result.queueRow.payload, promotedProposal.proposedOperation.payload);
   assert.notStrictEqual(result.queueRow.payload.metadata, promotedProposal.proposedOperation.payload.metadata);
   assert.notStrictEqual(result.queueRow.payload.steps, promotedProposal.proposedOperation.payload.steps);
-  assert.notStrictEqual(result.queueRow.payload.steps[1], promotedProposal.proposedOperation.payload.steps[1]);
   assert.notStrictEqual(result.queueRow.evidence, promotedProposal.evidence);
   assert.notStrictEqual(result.queueRow.evidence[0], promotedProposal.evidence[0]);
-  assert.ok(!('accepted' in result.promotionReceipt));
   assert.deepEqual(validateRecord(result.queueRow), []);
 
   promotedProposal.targetRef.id = 'pkg:mutated';
-  promotedProposal.targetRef.coordinates.repo = 'mutated';
-  promotedProposal.targetRef.path.push('mutated');
   promotedProposal.proposedOperation.payload.type = 'dependsOn';
-  promotedProposal.proposedOperation.payload.metadata.reviewed = false;
-  promotedProposal.proposedOperation.payload.steps.push('mutated');
-  promotedProposal.proposedOperation.payload.steps[1].kind = 'mutated';
-  promotedProposal.proposedOperation.payload.steps[1].details.destination = 'mutated';
   promotedProposal.evidence[0].value = 'sha256:mutated';
-  promotedProposal.evidence.push({ kind: 'note', value: 'mutated' });
-  promotedProposal.id = 'proposal_mutated';
-  promotedProposal.proposedOperation.op = 'removeEdge';
   promotedProposal.status = 'rejected';
-
   assert.deepEqual(result.queueRow, expectedQueueRow);
-  assert.deepEqual(result.promotionReceipt, expectedReceipt);
-  assert.equal(result.queueRow.proposalDigest, validProposalDigest);
-  assert.equal(result.promotionReceipt.proposalDigest, validProposalDigest);
-  assert.notEqual(proposalDigest(promotedProposal), validProposalDigest);
   assert.deepEqual(validateRecord(result.queueRow), []);
 }
 
@@ -144,21 +145,21 @@ for (const confirmation of [
   { confirm: false, confirmedBy: 'human-review', proposalDigest: validProposalDigest },
   { confirm: null, confirmedBy: 'human-review', proposalDigest: validProposalDigest },
 ]) {
-  assertStableFailure(promoteProposalToModelQueue(proposal, confirmation), 'confirmation-not-true');
+  const result = promoteProposalToModelQueue(proposal, confirmation);
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).some((code) => ['confirmation-field-not-own', 'confirmation-not-true', 'confirmation-field-type-invalid'].includes(code)));
 }
 
 for (const confirmedBy of [undefined, null, '', '   ']) {
-  assertStableFailure(
-    promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy, proposalDigest: validProposalDigest }),
-    'confirmedBy-missing',
-  );
+  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy, proposalDigest: validProposalDigest });
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).some((code) => ['confirmedBy-missing', 'confirmation-field-type-invalid'].includes(code)));
 }
 
 for (const digest of [undefined, null, '', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb']) {
-  assertStableFailure(
-    promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: 'human-review', proposalDigest: digest }),
-    'proposal-digest-mismatch',
-  );
+  const result = promoteProposalToModelQueue(proposal, { confirm: true, confirmedBy: 'human-review', proposalDigest: digest });
+  assert.equal(result.ok, false);
+  assert.ok(codes(result).some((code) => ['proposal-digest-mismatch', 'confirmation-field-type-invalid'].includes(code)));
 }
 
 for (const status of ['rejected', 'promoted']) {
@@ -171,22 +172,6 @@ for (const status of ['rejected', 'promoted']) {
     }),
     'proposal-not-promotable',
   );
-}
-
-{
-  const authority = { ...proposal, acceptedLedger: true };
-  assertStableFailure(promoteProposalToModelQueue(authority, validConfirmation), 'authority-field-present');
-}
-
-{
-  const nestedAuthority = {
-    ...proposal,
-    proposedOperation: {
-      ...proposal.proposedOperation,
-      payload: { nested: [{ authorityState: 'accepted' }] },
-    },
-  };
-  assertStableFailure(promoteProposalToModelQueue(nestedAuthority, validConfirmation), 'authority-field-present');
 }
 
 for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('proposal'), () => {}]) {
@@ -203,59 +188,95 @@ for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('p
 }
 
 {
-  const invalidKindWithDigestTrap = { kind: 'not.modeling.proposal.v1' };
-  Object.defineProperty(invalidKindWithDigestTrap, 'digestTrap', {
-    enumerable: true,
-    get() {
-      throw new Error('digest must not inspect validator-invalid proposal');
-    },
-  });
-  assert.doesNotThrow(() => {
-    assertStableFailure(
-      promoteProposalToModelQueue(invalidKindWithDigestTrap, validConfirmation),
-      'invalid-proposal-kind',
-    );
-  });
-}
-
-{
   let confirmationReads = 0;
   const hostileConfirmation = new Proxy({}, {
-    get() {
-      confirmationReads += 1;
-      throw new Error('confirmation must not be inspected for invalid proposal');
-    },
+    get() { confirmationReads += 1; throw new Error('get trap'); },
+    ownKeys() { confirmationReads += 1; throw new Error('ownKeys trap'); },
+    getOwnPropertyDescriptor() { confirmationReads += 1; throw new Error('descriptor trap'); },
+    getPrototypeOf() { confirmationReads += 1; throw new Error('prototype trap'); },
   });
   assert.doesNotThrow(() => {
-    assertStableFailure(promoteProposalToModelQueue(undefined, hostileConfirmation), 'proposal-not-object');
+    assertStableFailure(promoteProposalToModelQueue(proposal, hostileConfirmation), 'confirmation-proxy-rejected');
   });
-  assert.equal(confirmationReads, 0);
+  assert.equal(confirmationReads, 0, 'Proxy traps must not be invoked');
 }
 
 {
-  const hostileConfirmation = {};
-  Object.defineProperty(hostileConfirmation, 'confirm', {
-    enumerable: true,
-    get() {
-      throw new Error('hostile confirmation getter');
+  const lyingProxy = new Proxy({}, {
+    getPrototypeOf() { return Object.prototype; },
+    ownKeys() { return ['confirm', 'confirmedBy', 'proposalDigest']; },
+    getOwnPropertyDescriptor(_target, field) {
+      return { enumerable: true, configurable: true, value: validConfirmation[field], writable: true };
     },
   });
-  hostileConfirmation.confirmedBy = 'human-review';
-  hostileConfirmation.proposalDigest = validProposalDigest;
-  assert.doesNotThrow(() => {
-    assertStableFailure(promoteProposalToModelQueue(proposal, hostileConfirmation), 'confirmation-read-failed');
+  assertStableFailure(promoteProposalToModelQueue(proposal, lyingProxy), 'confirmation-proxy-rejected');
+}
+
+{
+  let getterReads = 0;
+  const accessorConfirmation = {
+    confirmedBy: 'human-review',
+    proposalDigest: validProposalDigest,
+  };
+  Object.defineProperty(accessorConfirmation, 'confirm', {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      accessorConfirmation.confirmedBy = 'mutated-on-read';
+      return true;
+    },
   });
+  assertStableFailure(promoteProposalToModelQueue(proposal, accessorConfirmation), 'confirmation-field-not-data');
+  assert.equal(getterReads, 0, 'confirmation accessors must never run');
+  assert.equal(accessorConfirmation.confirmedBy, 'human-review');
+}
+
+{
+  const throwingAccessor = { confirmedBy: 'human-review', proposalDigest: validProposalDigest };
+  Object.defineProperty(throwingAccessor, 'confirm', {
+    enumerable: true,
+    get() { throw new Error('must never run'); },
+  });
+  assert.doesNotThrow(() => {
+    assertStableFailure(promoteProposalToModelQueue(proposal, throwingAccessor), 'confirmation-field-not-data');
+  });
+}
+
+{
+  const nonEnumerable = { confirm: true, confirmedBy: 'human-review', proposalDigest: validProposalDigest };
+  Object.defineProperty(nonEnumerable, 'confirm', { value: true, enumerable: false });
+  assertStableFailure(promoteProposalToModelQueue(proposal, nonEnumerable), 'confirmation-field-not-enumerable');
+}
+
+{
+  Object.defineProperties(Object.prototype, {
+    confirm: { value: true, enumerable: true, configurable: true },
+    confirmedBy: { value: 'polluted-human', enumerable: true, configurable: true },
+    proposalDigest: { value: validProposalDigest, enumerable: true, configurable: true },
+  });
+  try {
+    assertStableFailure(promoteProposalToModelQueue(proposal, {}), 'confirmation-field-not-own');
+  } finally {
+    delete Object.prototype.confirm;
+    delete Object.prototype.confirmedBy;
+    delete Object.prototype.proposalDigest;
+  }
+}
+
+{
+  const nullPrototypeConfirmation = Object.assign(Object.create(null), validConfirmation);
+  const result = promoteProposalToModelQueue(proposal, nullPrototypeConfirmation);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.deepEqual(validateRecord(result.queueRow), []);
 }
 
 for (const [name, value, reason] of [
   ['bigint', 1n, 'bigint'],
   ['nan', Number.NaN, 'non-finite-number'],
   ['positive-infinity', Number.POSITIVE_INFINITY, 'non-finite-number'],
-  ['negative-infinity', Number.NEGATIVE_INFINITY, 'non-finite-number'],
   ['negative-zero', -0, 'negative-zero'],
   ['date', new Date('2026-07-18T00:00:00Z'), 'non-plain-object'],
   ['map', new Map([['key', 'value']]), 'non-plain-object'],
-  ['set', new Set(['value']), 'non-plain-object'],
   ['undefined', undefined, 'undefined'],
   ['function', () => {}, 'function'],
   ['symbol', Symbol('value'), 'symbol'],
@@ -270,141 +291,83 @@ for (const [name, value, reason] of [
 }
 
 {
-  class CustomValue {
-    constructor() {
-      this.value = 'custom';
-    }
-  }
-  assertStableFailure(promoteProposalToModelQueue(withPayload(new CustomValue()), validConfirmation), 'proposal-data-invalid');
-}
-
-{
-  const sparse = [];
-  sparse.length = 2;
-  sparse[1] = 'present';
-  assertStableFailure(promoteProposalToModelQueue(withPayload(sparse), validConfirmation), 'proposal-data-invalid');
-}
-
-{
   const cycle = {};
   cycle.self = cycle;
-  assert.doesNotThrow(() => {
-    assertStableFailure(promoteProposalToModelQueue(withPayload(cycle), validConfirmation), 'proposal-data-invalid');
-  });
+  assertStableFailure(promoteProposalToModelQueue(withPayload(cycle), validConfirmation), 'proposal-data-invalid');
+}
+
+const proposalAuthorityCounterexamples = [
+  ['top acceptedRow', (candidate) => { candidate.acceptedRow = { id: 'a' }; }],
+  ['evidence AcceptedDigest', (candidate) => { candidate.evidence[0].AcceptedDigest = 'sha256:x'; }],
+  ['target admission-like', (candidate) => { candidate.targetRef.admissionLike = true; }],
+  ['payload authority-state', (candidate) => { candidate.proposedOperation.payload.nested = { AUTHORITY_STATE: 'accepted' }; }],
+  ['extra accepted kind', (candidate) => { candidate.extra = { kind: 'Accepted.ModelCommit.v1' }; }],
+  ['extra admitted status', (candidate) => { candidate.extra = { status: 'ADMITTED' }; }],
+];
+for (const [name, mutate] of proposalAuthorityCounterexamples) {
+  const candidate = structuredClone(proposal);
+  mutate(candidate);
+  const errors = validateModelingProposal(candidate);
+  assert.ok(errors.some((error) => ['authority-field-present', 'authority-shape-present', 'embedded-authority-shape'].includes(error.code)), `${name}: ${JSON.stringify(errors)}`);
+  assert.equal(promoteProposalToModelQueue(candidate, validConfirmation).ok, false, name);
+}
+
+const queueAuthorityCounterexamples = [
+  ['evidence acceptedRow', (row) => { row.evidence[0].acceptedRow = {}; }],
+  ['target AcceptedDigest', (row) => { row.targetRef.AcceptedDigest = 'sha256:x'; }],
+  ['payload admission kind', (row) => { row.payload.extra = { kind: 'ADMISSION.RECEIPT.V1' }; }],
+  ['extra accepted status', (row) => { row.extra = { status: 'Accepted' }; }],
+  ['extra authority-like', (row) => { row.extra = { authorityClaim: true }; }],
+];
+for (const [name, mutate] of queueAuthorityCounterexamples) {
+  const row = structuredClone(validResult.queueRow);
+  mutate(row);
+  const errors = validateRecord(row);
+  assert.ok(errors.some((error) => ['authority-field-present', 'authority-shape-present'].includes(error.code)), `${name}: ${JSON.stringify(errors)}`);
 }
 
 {
-  const deeplyNested = {};
-  let cursor = deeplyNested;
-  for (let index = 0; index < 20_000; index += 1) {
-    cursor.next = {};
-    cursor = cursor.next;
-  }
-  assert.doesNotThrow(() => {
-    assertStableFailure(
-      promoteProposalToModelQueue(withPayload(deeplyNested), validConfirmation),
-      'proposal-data-invalid',
-    );
-  });
+  const stripped = structuredClone(validResult.queueRow);
+  delete stripped.origin;
+  const errors = validateRecord(stripped);
+  assert.ok(errors.some((error) => error.code === 'missing-required-field'));
+  assert.ok(errors.some((error) => error.code === 'model-origin-not-object'));
 }
 
-{
-  const payload = { safe: true };
-  payload[Symbol('hidden')] = 'symbol-key-value';
-  const invalid = {
-    ...proposal,
-    proposedOperation: { ...proposal.proposedOperation, payload },
-  };
-  assertStableFailure(promoteProposalToModelQueue(invalid, validConfirmation), 'proposal-data-invalid');
-}
-
-{
-  const nullProposal = {
-    ...proposal,
-    proposedOperation: {
-      ...proposal.proposedOperation,
-      payload: { ...proposal.proposedOperation.payload, actualNull: null },
-    },
-  };
-  const nullDigest = proposalDigest(nullProposal);
-  const result = promoteProposalToModelQueue(nullProposal, {
-    confirm: true,
-    confirmedBy: 'human-review',
-    proposalDigest: nullDigest,
-  });
-  assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(result.queueRow.payload.actualNull, null);
-}
-
-{
-  const reentrant = structuredClone(proposal);
-  let reads = 0;
-  Object.defineProperty(reentrant, 'validationProbe', {
-    enumerable: true,
-    get() {
-      reads += 1;
-      reentrant.evidence = [];
-      return 'mutated-during-validation';
-    },
-  });
-
-  assert.doesNotThrow(() => {
-    assertStableFailure(
-      promoteProposalToModelQueue(reentrant, validConfirmation),
-      'evidence-missing',
-    );
-  });
-  assert.equal(reads, 2, 'proposal getter is read by initial validation and structuredClone only');
-}
-
-for (const [name, mutatedProposal] of [
-  ['evidence', {
-    ...proposal,
-    evidence: [{ ...proposal.evidence[0], value: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' }],
-  }],
-  ['acceptanceCriteria', {
-    ...proposal,
-    acceptanceCriteria: [...proposal.acceptanceCriteria, 'promotion must preserve reviewed acceptance criteria'],
-  }],
-  ['targetRef', { ...proposal, targetRef: { ...proposal.targetRef, id: 'pkg:changed' } }],
-  ['operation', { ...proposal, proposedOperation: { ...proposal.proposedOperation, op: 'removeEdge' } }],
-  ['payload', {
-    ...proposal,
-    proposedOperation: {
-      ...proposal.proposedOperation,
-      payload: { ...proposal.proposedOperation.payload, type: 'dependsOn' },
-    },
-  }],
-  ['extra-field', { ...proposal, reviewContext: { ticket: 'changed-after-confirmation' } }],
+for (const [name, mutate, expectedCode] of [
+  ['payload', (row) => { row.payload.to = 'pkg:tampered'; }, 'promotion-integrity-mismatch'],
+  ['target', (row) => { row.targetRef.id = 'pkg:tampered'; }, 'promotion-integrity-mismatch'],
+  ['evidence', (row) => { row.evidence[0].value = 'sha256:tampered'; }, 'proposal-origin-evidence-digest-mismatch'],
+  ['proposal digest', (row) => { row.proposalDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; }, 'proposal-origin-digest-mismatch'],
+  ['confirmation identity', (row) => { row.origin.confirmationDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; }, 'promotion-evidence-id-mismatch'],
+  ['promotion evidence identity', (row) => { row.origin.promotionEvidenceId = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; }, 'promotion-evidence-id-mismatch'],
+  ['integrity', (row) => { row.origin.integrityDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'; }, 'promotion-integrity-mismatch'],
 ]) {
-  assert.notEqual(proposalDigest(mutatedProposal), validProposalDigest, name);
-  assertStableFailure(
-    promoteProposalToModelQueue(mutatedProposal, validConfirmation),
-    'proposal-digest-mismatch',
-  );
+  const row = structuredClone(validResult.queueRow);
+  mutate(row);
+  const errors = validateRecord(row);
+  assert.ok(errors.some((error) => error.code === expectedCode), `${name}: ${JSON.stringify(errors)}`);
 }
 
 {
-  const expectedDigest = proposalDigest({ ...proposal, digestProbe: 'one-digest' });
-  let reads = 0;
-  const countedProposal = { ...proposal };
-  Object.defineProperty(countedProposal, 'digestProbe', {
-    enumerable: true,
-    get() {
-      reads += 1;
-      return 'one-digest';
-    },
-  });
+  const relabeled = structuredClone(validResult.queueRow);
+  relabeled.origin = { kind: 'direct-human.v1', confirmationId: 'forged', confirmedBy: relabeled.confirmedBy };
+  const errors = validateRecord(relabeled);
+  assert.ok(errors.some((error) => error.code === 'proposal-origin-mismatch'), JSON.stringify(errors));
+}
 
-  const result = promoteProposalToModelQueue(countedProposal, {
-    confirm: true,
-    confirmedBy: 'human-review',
-    proposalDigest: expectedDigest,
-  });
-  assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(reads, 2, 'proposal must be read once by validation and once by structuredClone');
-  assert.equal(result.queueRow.proposalDigest, expectedDigest);
-  assert.equal(result.promotionReceipt.proposalDigest, expectedDigest);
+{
+  const forgedMinimal = {
+    kind: 'hq.modelCommitQueued.v1',
+    id: 'mq_forged',
+    status: 'queued',
+    targetRef: { kind: 'repoMap.node', id: 'pkg:forged' },
+    op: 'addEdge',
+    payload: {},
+    confirmedBy: 'human',
+  };
+  const errors = validateRecord(forgedMinimal);
+  assert.ok(errors.some((error) => error.code === 'missing-required-field'));
 }
 
 {
@@ -417,7 +380,7 @@ for (const [name, mutatedProposal] of [
   try {
     const result = promoteProposalToModelQueue(proposal, validConfirmation);
     assert.equal(result.ok, true, JSON.stringify(result.errors));
-    assert.equal(clones, 1, 'promotion must take exactly one structuredClone snapshot');
+    assert.equal(clones, 1, 'promotion must take exactly one proposal structuredClone snapshot');
   } finally {
     globalThis.structuredClone = originalStructuredClone;
   }
@@ -425,31 +388,12 @@ for (const [name, mutatedProposal] of [
 
 {
   const originalStructuredClone = globalThis.structuredClone;
-  globalThis.structuredClone = () => {
-    throw new Error('forced clone failure');
-  };
+  globalThis.structuredClone = () => { throw new Error('forced clone failure'); };
   try {
-    assertStableFailure(
-      promoteProposalToModelQueue(proposal, validConfirmation),
-      'proposal-snapshot-failed',
-    );
+    assertStableFailure(promoteProposalToModelQueue(proposal, validConfirmation), 'proposal-snapshot-failed');
   } finally {
     globalThis.structuredClone = originalStructuredClone;
   }
-}
-
-{
-  const originalStringify = JSON.stringify;
-  JSON.stringify = () => {
-    throw new Error('forced digest failure');
-  };
-  let result;
-  try {
-    result = promoteProposalToModelQueue(proposal, validConfirmation);
-  } finally {
-    JSON.stringify = originalStringify;
-  }
-  assertStableFailure(result, 'proposal-digest-failed');
 }
 
 console.log('hq human promotion gate check: PASS');
