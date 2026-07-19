@@ -74,6 +74,9 @@ const allowedAuthorityFieldRules = new Map([
   ['nonAuthority', (value) => value === true],
   ['authoritativeSourceName', (value) => typeof value === 'string' && value.trim().length > 0],
 ]);
+const shadowAliasTokens = new Set(
+  [...allowedAuthorityFieldRules.keys()].map(normalizeBoundaryToken),
+);
 
 function boundaryWords(value) {
   if (typeof value !== 'string') return [];
@@ -302,6 +305,7 @@ function allowedAuthorityField(field, value) {
 function forbiddenFieldConcept(field, value) {
   const token = normalizeBoundaryToken(field);
   if (allowedAuthorityField(field, value)) return null;
+  if (shadowAliasTokens.has(token)) return token;
   if (exactForbiddenFieldTokens.has(token)) return token;
   return authorityConcept(field);
 }
