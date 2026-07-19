@@ -1,8 +1,13 @@
+import { types } from 'node:util';
+
 import { sha256Digest } from './digest.mjs';
-import { findAuthorityBearingShapes } from './queue-schema.mjs';
+import {
+  findAuthorityBearingShapes,
+  snapshotJsonData,
+} from './queue-schema.mjs';
 
 function isPlainObject(value) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (value === null || typeof value !== 'object' || Array.isArray(value) || types.isProxy(value)) return false;
   try {
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
@@ -26,170 +31,26 @@ function pointer(path) {
     .join('/')}`;
 }
 
-function addDataError(errors, path, reason, extra = {}) {
-  const location = pointer(path);
-  if (errors.some((error) => error.code === 'proposal-data-invalid'
-    && error.path === location
-    && error.reason === reason)) return;
-  add(
-    errors,
-    'proposal-data-invalid',
-    `proposal data is not JSON-compatible at ${location}: ${reason}`,
-    { path: location, reason, ...extra },
-  );
-}
-
-function ownKeys(value, errors, path) {
-  try {
-    return Reflect.ownKeys(value);
-  } catch {
-    addDataError(errors, path, 'property-enumeration-failed');
-    return null;
+function addSnapshotErrors(errors, snapshotErrors, line) {
+  for (const error of snapshotErrors) {
+    add(
+      errors,
+      'proposal-data-invalid',
+      `proposal data is not JSON-compatible at ${error.path}: ${error.reason}`,
+      {
+        line,
+        path: error.path,
+        reason: error.reason,
+        detail: error.detail,
+        symbol: error.symbol,
+      },
+    );
   }
 }
 
-function readValue(value, key, errors, path) {
-  try {
-    return { ok: true, value: value[key] };
-  } catch {
-    addDataError(errors, path, 'property-read-failed');
-    return { ok: false, value: undefined };
-  }
-}
-
-function validateArray(value, errors, context, path, ancestors) {
-  let length;
-  try {
-    length = value.length;
-  } catch {
-    addDataError(errors, path, 'array-length-read-failed');
-    return;
-  }
-
-  const keys = ownKeys(value, errors, path);
-  if (keys === null) return;
-
-  const indices = [];
-  for (const key of keys) {
-    if (typeof key === 'symbol') {
-      addDataError(errors, path, 'symbol-key', { symbol: key.description ?? null });
-      continue;
-    }
-    if (key === 'length') continue;
-    const index = Number(key);
-    const canonicalIndex = Number.isInteger(index)
-      && index >= 0
-      && index < length
-      && String(index) === key;
-    if (!canonicalIndex) {
-      addDataError(errors, [...path, key], 'extra-array-property');
-    } else {
-      indices.push(index);
-    }
-  }
-
-  indices.sort((left, right) => left - right);
-  let expectedIndex = 0;
-  for (const index of indices) {
-    if (index !== expectedIndex) break;
-    expectedIndex += 1;
-  }
-  if (expectedIndex !== length) {
-    addDataError(errors, [...path, String(expectedIndex)], 'sparse-array-hole');
-  }
-
-  for (const index of indices) {
-    const nested = readValue(value, index, errors, [...path, String(index)]);
-    if (nested.ok) validateJsonData(nested.value, errors, context, [...path, String(index)], ancestors);
-  }
-}
-
-function validateObject(value, errors, context, path, ancestors) {
-  const keys = ownKeys(value, errors, path);
-  if (keys === null) return;
-
-  for (const key of keys) {
-    if (typeof key === 'symbol') {
-      addDataError(errors, path, 'symbol-key', { symbol: key.description ?? null });
-      continue;
-    }
-
-    let descriptor;
-    try {
-      descriptor = Object.getOwnPropertyDescriptor(value, key);
-    } catch {
-      addDataError(errors, [...path, key], 'property-descriptor-read-failed');
-      continue;
-    }
-    if (!descriptor?.enumerable) {
-      addDataError(errors, [...path, key], 'non-enumerable-property');
-      continue;
-    }
-
-    const fieldPath = [...path, key];
-    const nested = readValue(value, key, errors, fieldPath);
-    if (nested.ok) validateJsonData(nested.value, errors, context, fieldPath, ancestors);
-  }
-}
-
-function validateJsonData(value, errors, context, path = [], ancestors = new Set()) {
-  if (value === null) return;
-
-  const type = typeof value;
-  if (type === 'string' || type === 'boolean') return;
-  if (type === 'number') {
-    if (!Number.isFinite(value)) addDataError(errors, path, 'non-finite-number');
-    else if (Object.is(value, -0)) addDataError(errors, path, 'negative-zero');
-    return;
-  }
-  if (type === 'undefined' || type === 'bigint' || type === 'function' || type === 'symbol') {
-    addDataError(errors, path, type);
-    return;
-  }
-  if (type !== 'object') {
-    addDataError(errors, path, `unsupported-${type}`);
-    return;
-  }
-
-  const array = Array.isArray(value);
-  if (!array && !isPlainObject(value)) {
-    addDataError(errors, path, 'non-plain-object');
-    return;
-  }
-  if (ancestors.has(value)) {
-    addDataError(errors, path, 'cycle');
-    return;
-  }
-
-  ancestors.add(value);
-  if (array) validateArray(value, errors, context, path, ancestors);
-  else validateObject(value, errors, context, path, ancestors);
-  ancestors.delete(value);
-}
-
-function hasOwn(record, field, errors, line) {
-  try {
-    return Object.hasOwn(record, field);
-  } catch {
-    addDataError(errors, [field], 'property-presence-check-failed', { line });
-    return false;
-  }
-}
-
-function readTopLevel(record, field, errors, line) {
-  const result = readValue(record, field, errors, [field]);
-  if (!result.ok) return undefined;
-  return result.value;
-}
-
-function addAuthorityShapeErrors(errors, record, line, id) {
-  let findings;
-  try {
-    findings = findAuthorityBearingShapes(record);
-  } catch {
-    add(errors, 'authority-shape-scan-failed', 'proposal authority-shape scan failed closed', { line, id });
-    return;
-  }
+function addAuthorityShapeErrors(errors, record, line) {
+  const findings = findAuthorityBearingShapes(record);
+  const id = record.id;
   for (const finding of findings) {
     const code = finding.reason === 'forbidden-field'
       ? 'authority-field-present'
@@ -203,98 +64,104 @@ function addAuthorityShapeErrors(errors, record, line, id) {
       path: pointer(segments),
       reason: finding.reason,
       detail: finding.detail,
+      concept: finding.concept,
       normalizedField: finding.normalizedField,
       normalizedValue: finding.normalizedValue,
     });
   }
 }
 
-export function validateModelingProposal(record, { line = 1 } = {}) {
+function validateProposalSnapshot(record, { line = 1 } = {}) {
   const errors = [];
+  addAuthorityShapeErrors(errors, record, line);
+  const id = record.id;
 
-  if (!isPlainObject(record)) {
-    add(errors, 'proposal-not-object', 'proposal must be an object', { line });
-    return errors;
-  }
-
-  const kind = readTopLevel(record, 'kind', errors, line);
-  if (kind !== 'modeling.proposal.v1') {
-    add(errors, 'invalid-proposal-kind', `proposal kind must be modeling.proposal.v1, got ${kind}`, { line, kind });
+  if (record.kind !== 'modeling.proposal.v1') {
+    add(errors, 'invalid-proposal-kind', `proposal kind must be modeling.proposal.v1, got ${record.kind}`, {
+      line,
+      kind: record.kind,
+    });
     return errors;
   }
 
   const required = ['id', 'sourceAgentTaskId', 'targetRef', 'proposedOperation', 'evidence', 'acceptanceCriteria', 'status'];
   for (const field of required) {
-    if (!hasOwn(record, field, errors, line)) {
+    if (!Object.hasOwn(record, field)) {
       add(errors, 'missing-required-field', `missing required field: ${field}`, { line, field });
     }
   }
 
-  const id = readTopLevel(record, 'id', errors, line);
-  const sourceAgentTaskId = readTopLevel(record, 'sourceAgentTaskId', errors, line);
-  const targetRef = readTopLevel(record, 'targetRef', errors, line);
-  const proposedOperation = readTopLevel(record, 'proposedOperation', errors, line);
-  const evidence = readTopLevel(record, 'evidence', errors, line);
-  const acceptanceCriteria = readTopLevel(record, 'acceptanceCriteria', errors, line);
-  const status = readTopLevel(record, 'status', errors, line);
-
-  if (!isNonEmptyString(id)) add(errors, 'invalid-id', 'id must be a non-empty string', { line });
-  if (!isNonEmptyString(sourceAgentTaskId)) {
+  if (!isNonEmptyString(record.id)) add(errors, 'invalid-id', 'id must be a non-empty string', { line });
+  if (!isNonEmptyString(record.sourceAgentTaskId)) {
     add(errors, 'invalid-sourceAgentTaskId', 'sourceAgentTaskId must be a non-empty string', { line, id });
   }
 
-  if (!isPlainObject(targetRef)) {
+  if (!isPlainObject(record.targetRef)) {
     add(errors, 'targetRef-not-object', 'targetRef must be an object', { line, id });
   } else {
-    const targetKind = readValue(targetRef, 'kind', errors, ['targetRef', 'kind']);
-    const targetId = readValue(targetRef, 'id', errors, ['targetRef', 'id']);
-    if (targetKind.ok && !isNonEmptyString(targetKind.value)) {
+    if (!isNonEmptyString(record.targetRef.kind)) {
       add(errors, 'targetRef-missing-kind', 'targetRef.kind must be a non-empty string', { line, id });
     }
-    if (targetId.ok && !isNonEmptyString(targetId.value)) {
+    if (!isNonEmptyString(record.targetRef.id)) {
       add(errors, 'targetRef-missing-id', 'targetRef.id must be a non-empty string', { line, id });
     }
   }
 
-  if (!isPlainObject(proposedOperation)) {
+  if (!isPlainObject(record.proposedOperation)) {
     add(errors, 'proposedOperation-not-object', 'proposedOperation must be an object', { line, id });
   } else {
-    const op = readValue(proposedOperation, 'op', errors, ['proposedOperation', 'op']);
-    const payload = readValue(proposedOperation, 'payload', errors, ['proposedOperation', 'payload']);
-    if (op.ok && !isNonEmptyString(op.value)) {
+    if (!isNonEmptyString(record.proposedOperation.op)) {
       add(errors, 'proposal-op-missing', 'proposedOperation.op must be a non-empty string', { line, id });
     }
-    if (payload.ok && !isPlainObject(payload.value)) {
+    if (!isPlainObject(record.proposedOperation.payload)) {
       add(errors, 'proposal-payload-not-object', 'proposedOperation.payload must be an object', { line, id });
     }
   }
 
-  if (!Array.isArray(evidence) || evidence.length === 0) {
+  if (!Array.isArray(record.evidence) || record.evidence.length === 0) {
     add(errors, 'evidence-missing', 'evidence must be a non-empty array', { line, id });
   }
-  if (!Array.isArray(acceptanceCriteria) || acceptanceCriteria.length === 0) {
+  if (!Array.isArray(record.acceptanceCriteria) || record.acceptanceCriteria.length === 0) {
     add(errors, 'acceptanceCriteria-missing', 'acceptanceCriteria must be a non-empty array', { line, id });
   }
 
-  if (!['proposed', 'rejected', 'promoted'].includes(status)) {
-    add(errors, 'invalid-proposal-status', 'status must be proposed, rejected, or promoted', { line, id, status });
-  }
-
-  try {
-    validateJsonData(record, errors, { line, id });
-  } catch {
-    addDataError(errors, [], 'validation-failed');
-  }
-
-  addAuthorityShapeErrors(errors, record, line, id);
-
-  if (hasOwn(record, 'modelQueueRow', errors, line) || hasOwn(record, 'acceptedRow', errors, line)) {
-    add(errors, 'embedded-authority-shape', 'proposal must not embed modelQueueRow or acceptedRow', { line, id });
+  if (!['proposed', 'rejected', 'promoted'].includes(record.status)) {
+    add(errors, 'invalid-proposal-status', 'status must be proposed, rejected, or promoted', {
+      line,
+      id,
+      status: record.status,
+    });
   }
 
   return errors;
 }
 
+export function snapshotModelingProposal(record, { line = 1 } = {}) {
+  const errors = [];
+  if (!isPlainObject(record)) {
+    add(errors, 'proposal-not-object', 'proposal must be a plain non-Proxy object', { line });
+    return { snapshot: null, errors };
+  }
+
+  const dataSnapshot = snapshotJsonData(record);
+  if (!dataSnapshot.ok) {
+    addSnapshotErrors(errors, dataSnapshot.errors, line);
+    return { snapshot: null, errors };
+  }
+
+  errors.push(...validateProposalSnapshot(dataSnapshot.value, { line }));
+  return { snapshot: dataSnapshot.value, errors };
+}
+
+export function validateModelingProposal(record, { line = 1 } = {}) {
+  return snapshotModelingProposal(record, { line }).errors;
+}
+
 export function proposalDigest(record) {
-  return sha256Digest(record);
+  const snapshot = snapshotJsonData(record);
+  if (!snapshot.ok) {
+    const first = snapshot.errors[0];
+    throw new TypeError(`proposal data is not digestible at ${first?.path ?? '/'}: ${first?.reason ?? 'invalid-data'}`);
+  }
+  return sha256Digest(snapshot.value);
 }
