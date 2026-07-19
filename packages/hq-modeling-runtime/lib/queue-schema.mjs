@@ -11,22 +11,16 @@ export const receiptStatuses = Object.freeze(['processed', 'pending', 'failed'])
 
 export const forbiddenAuthorityFields = Object.freeze([
   'accepted',
-  'acceptedDigest',
   'acceptedLedger',
-  'acceptedRow',
   'admitted',
-  'admission',
   'admissionApproved',
-  'admissionScope',
   'approved',
   'approval',
   'authority',
   'authorityState',
   'ledgerAuthority',
   'ledgerWrite',
-  'localDevOnly',
   'sourceModelAuthority',
-  'sourceQueueId',
   'writesAcceptedLedger',
 ]);
 
@@ -52,7 +46,17 @@ export function normalizeBoundaryToken(value) {
   return typeof value === 'string' ? value.toLowerCase().replaceAll(/[^a-z0-9]/g, '') : '';
 }
 
-const forbiddenFieldTokens = new Set(forbiddenAuthorityFields.map(normalizeBoundaryToken));
+const queueOnlyAuthorityFields = Object.freeze([
+  'acceptedDigest',
+  'acceptedRow',
+  'admission',
+  'admissionScope',
+  'localDevOnly',
+  'sourceQueueId',
+]);
+const forbiddenFieldTokens = new Set(
+  [...forbiddenAuthorityFields, ...queueOnlyAuthorityFields].map(normalizeBoundaryToken),
+);
 const allowedFieldTokens = new Set(['nonauthority']);
 const forbiddenStatusTokens = new Set(['accepted', 'admitted', 'approved']);
 
