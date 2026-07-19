@@ -51,12 +51,21 @@ function promotionFailure(code, message, extra = {}) {
   };
 }
 
+function promotionOutputHints(args) {
+  const supplied = new Set(args.filter((arg) => typeof arg === 'string' && arg.startsWith('--')));
+  return {
+    'queue-jsonl': supplied.has('--queue-jsonl'),
+    'receipt-jsonl': supplied.has('--receipt-jsonl'),
+    json: supplied.has('--json'),
+  };
+}
+
 function printPromotionFailure(result, values = {}) {
   const codes = result.errors.map((error) => error.code).join(',');
-  if (values.json) {
-    console.log(JSON.stringify(result, null, 2));
-  } else if (values['queue-jsonl'] || values['receipt-jsonl']) {
+  if (values['queue-jsonl'] || values['receipt-jsonl']) {
     console.error(`hq proposal promotion: FAIL errors=${result.errors.length} codes=${codes}`);
+  } else if (values.json) {
+    console.log(JSON.stringify(result, null, 2));
   } else {
     console.log(`hq proposal promotion: FAIL errors=${result.errors.length} codes=${codes}`);
   }
@@ -85,6 +94,7 @@ function readPromotionJson(path, label) {
 
 function parsePromotionArgs(args) {
   const usage = 'usage: hq-modeling-runtime promote --input <proposal.json> --confirmation <confirmation.json> [--queue-jsonl|--receipt-jsonl|--json]';
+  const outputHints = promotionOutputHints(args);
   let values;
   try {
     ({ values } = parseArgs({
@@ -102,11 +112,12 @@ function parsePromotionArgs(args) {
     return {
       ok: false,
       exitCode: 2,
-      values: {},
+      values: outputHints,
       result: promotionFailure('promotion-usage-error', error.message, { usage }),
     };
   }
 
+  values = { ...values, ...outputHints };
   if (!values.input) {
     return {
       ok: false,
