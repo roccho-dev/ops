@@ -52,6 +52,14 @@ const bypasses = [
   ['authorized kind', (record) => { record.extra = { kind: 'hq.authorizedRow.v1' }; }],
   ['authorised kind', (record) => { record.extra = { kind: 'hq.authorisedRow.v1' }; }],
   ['broader authoritative name', (record) => { record.extra = { modelAuthoritativeSourceName: 'forged' }; }],
+  ['hyphen authoritative source alias', (record) => { record.extra = { 'authoritative-source-name': 'catalog' }; }],
+  ['dot authoritative source alias', (record) => { record.extra = { 'authoritative.source.name': 'catalog' }; }],
+  ['upper snake authoritative source alias', (record) => { record.extra = { AUTHORITATIVE_SOURCE_NAME: 'catalog' }; }],
+  ['capital camel authoritative source alias', (record) => { record.extra = { AuthoritativeSourceName: 'catalog' }; }],
+  ['hyphen nonAuthority alias', (record) => { record.extra = { 'non-authority': true }; }],
+  ['dot nonAuthority alias', (record) => { record.extra = { 'non.authority': true }; }],
+  ['upper snake nonAuthority alias', (record) => { record.extra = { NON_AUTHORITY: true }; }],
+  ['capital camel nonAuthority alias', (record) => { record.extra = { NonAuthority: true }; }],
 ];
 
 for (const [name, mutate] of bypasses) {
@@ -77,11 +85,13 @@ for (const [name, mutate] of bypasses) {
 const benignProposal = structuredClone(proposal);
 benignProposal.proposedOperation.payload.admittanceOhms = 50;
 benignProposal.proposedOperation.payload.authoritativeSourceName = 'catalog';
+benignProposal.proposedOperation.payload.nonAuthority = true;
 assert.deepEqual(validateModelingProposal(benignProposal), []);
 
 const benignQueue = structuredClone(queueRow);
 benignQueue.payload.admittanceOhms = 50;
 benignQueue.payload.authoritativeSourceName = 'catalog';
+benignQueue.payload.nonAuthority = true;
 assert.deepEqual(validateRecord(benignQueue), []);
 
 const promotedBenign = promoteProposalToModelQueue(benignProposal, {
@@ -92,5 +102,6 @@ const promotedBenign = promoteProposalToModelQueue(benignProposal, {
 assert.equal(promotedBenign.ok, true, JSON.stringify(promotedBenign.errors));
 assert.equal(promotedBenign.queueRow.payload.admittanceOhms, 50);
 assert.equal(promotedBenign.queueRow.payload.authoritativeSourceName, 'catalog');
+assert.equal(promotedBenign.queueRow.payload.nonAuthority, true);
 
 console.log('hq authority vocabulary boundary check: PASS');
