@@ -17,6 +17,7 @@ const model = {
   op: 'addEdge',
   payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' },
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_001', confirmedBy: 'human' },
 };
 
 const agent = {
@@ -78,18 +79,11 @@ function errorCodes(result) {
   assert.ok(errorCodes(result).includes('authority-field-present'));
 }
 
-{
-  const bad = { ...model, payload: { embedded: { kind: 'source.observation.v1', id: 'obs_001', status: 'observed' } } };
-  const result = runAdmissionGateJsonl(JSON.stringify(bad));
-  assert.equal(result.ok, false);
-  assert.equal(result.admitted, 0);
-  assert.equal(result.rejected, 1);
-  assert.ok(errorCodes(result).includes('payload-smuggled-row'));
-  assert.equal(result.acceptedRows.length, 0);
-}
-
-{
-  const bad = { ...model, payload: { embedded: { kind: 'model_source_reconcile.v1', id: 'rec_001', result: 'matched' } } };
+for (const embedded of [
+  { kind: 'source.observation.v1', id: 'obs_001', status: 'observed' },
+  { kind: 'model_source_reconcile.v1', id: 'rec_001', result: 'matched' },
+]) {
+  const bad = { ...model, payload: { embedded } };
   const result = runAdmissionGateJsonl(JSON.stringify(bad));
   assert.equal(result.ok, false);
   assert.equal(result.admitted, 0);
@@ -127,27 +121,22 @@ try {
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const siblingBin = path.join(here, '..', 'bin', 'hq-modeling-runtime.mjs');
-  const cmd = fs.existsSync(siblingBin)
-    ? [process.execPath, siblingBin]
-    : ['hq-modeling-runtime'];
+  const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ['hq-modeling-runtime'];
 
   const jsonOut = execFileSync(cmd[0], [...cmd.slice(1), 'admit', '--input', input, '--json'], {
-    encoding: 'utf8',
-    timeout: 10_000,
+    encoding: 'utf8', timeout: 10_000,
   });
   const parsed = JSON.parse(jsonOut);
   assert.equal(parsed.ok, true, JSON.stringify(parsed.errors));
   assert.equal(parsed.admitted, 1);
 
   const acceptedJsonl = execFileSync(cmd[0], [...cmd.slice(1), 'admit', '--input', input, '--accepted-jsonl'], {
-    encoding: 'utf8',
-    timeout: 10_000,
+    encoding: 'utf8', timeout: 10_000,
   });
   assert.match(acceptedJsonl, /accepted\.modelCommit\.v1/);
 
   const receiptJsonl = execFileSync(cmd[0], [...cmd.slice(1), 'admit', '--input', input, '--receipt-jsonl'], {
-    encoding: 'utf8',
-    timeout: 10_000,
+    encoding: 'utf8', timeout: 10_000,
   });
   assert.match(receiptJsonl, /admission\.receipt\.v1/);
 } finally {
