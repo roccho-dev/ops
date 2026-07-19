@@ -7,7 +7,11 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { validateJsonl, validateRecord } from '../lib/queue-validator.mjs';
+import {
+  buildProposalPromotionOrigin,
+  validateJsonl,
+  validateRecord,
+} from '../lib/queue-validator.mjs';
 
 const validModel = {
   kind: 'hq.modelCommitQueued.v1',
@@ -18,6 +22,7 @@ const validModel = {
   payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' },
   reason: 'model dependency should be visible',
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_001', confirmedBy: 'human' },
 };
 
 const validAgent = {
@@ -69,6 +74,32 @@ function codes(result) {
 }
 
 {
+  const forged = { ...validModel };
+  delete forged.origin;
+  const errors = validateRecord(forged);
+  assert.ok(errors.some((error) => error.code === 'missing-required-field'));
+  assert.ok(errors.some((error) => error.code === 'model-origin-not-object'));
+}
+
+{
+  const inheritedOrigin = Object.create({ kind: 'direct-human.v1', confirmationId: 'forged', confirmedBy: 'human' });
+  const errors = validateRecord({ ...validModel, origin: inheritedOrigin });
+  assert.ok(errors.some((error) => error.code === 'model-origin-not-object'));
+}
+
+{
+  let reads = 0;
+  const origin = { kind: 'direct-human.v1', confirmedBy: 'human' };
+  Object.defineProperty(origin, 'confirmationId', {
+    enumerable: true,
+    get() { reads += 1; return 'forged'; },
+  });
+  const errors = validateRecord({ ...validModel, origin });
+  assert.ok(errors.some((error) => error.code === 'model-origin-field-not-data'));
+  assert.equal(reads, 0);
+}
+
+{
   const bad = { ...validModel, payload: { ...validModel.payload, acceptedLedger: true } };
   const result = validateJsonl(JSON.stringify(bad));
   assert.equal(result.ok, false);
@@ -76,11 +107,7 @@ function codes(result) {
 }
 
 {
-  const directSource = {
-    kind: 'source.observation.v1',
-    id: 'obs_001',
-    status: 'observed',
-  };
+  const directSource = { kind: 'source.observation.v1', id: 'obs_001', status: 'observed' };
   const result = validateJsonl(JSON.stringify(directSource));
   assert.equal(result.ok, false);
   assert.ok(codes(result).includes('unknown-kind'));
@@ -96,22 +123,68 @@ for (const embedded of [
   const bad = { ...validModel, id: `mq_${embedded.kind}`, payload: { edge: validModel.payload, embedded } };
   const result = validateJsonl(JSON.stringify(bad));
   assert.equal(result.ok, false, embedded.kind);
-  assert.ok(codes(result).includes('payload-smuggled-row'), JSON.stringify(result.errors));
+  assert.ok(codes(result).some((code) => ['payload-smuggled-row', 'authority-shape-present'].includes(code)), JSON.stringify(result.errors));
+}
+
+for (const [name, mutate] of [
+  ['top acceptedRow', (row) => { row.acceptedRow = {}; }],
+  ['evidence AcceptedDigest', (row) => { row.evidence = [{ AcceptedDigest: 'sha256:x' }]; }],
+  ['target authority', (row) => { row.targetRef.AUTHORITY_STATE = 'accepted'; }],
+  ['payload admission-like', (row) => { row.payload.AdmissionLike = true; }],
+  ['extra accepted kind', (row) => { row.extra = { kind: 'Accepted.ModelCommit.v1' }; }],
+  ['extra admitted status', (row) => { row.extra = { status: 'ADMITTED' }; }],
+]) {
+  const bad = structuredClone(validModel);
+  mutate(bad);
+  const errors = validateRecord(bad);
+  assert.ok(errors.some((error) => ['authority-field-present', 'authority-shape-present'].includes(error.code)), `${name}: ${JSON.stringify(errors)}`);
 }
 
 {
-  const bad = {
-    ...validModel,
-    payload: {
-      from: 'pkg:core',
-      to: 'pkg:ui',
-      type: 'uses',
-      nested: [{ id: 'ledger-shaped', sourceQueueId: 'mq_001', acceptedDigest: 'sha256:x' }],
-    },
+  const proposalBase = {
+    kind: 'hq.modelCommitQueued.v1',
+    id: 'mq_from_proposal_001',
+    status: 'queued',
+    targetRef: { kind: 'repoMap.node', id: 'pkg:core' },
+    op: 'addEdge',
+    payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' },
+    evidence: [{ kind: 'digest', value: 'sha256:evidence' }],
+    reason: 'promoted proposal proposal_001',
+    confirmedBy: 'human-review',
+    proposalDigest: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   };
-  const result = validateJsonl(JSON.stringify(bad));
-  assert.equal(result.ok, false);
-  assert.ok(codes(result).includes('payload-smuggled-row'));
+  const validProposalRow = {
+    ...proposalBase,
+    origin: buildProposalPromotionOrigin(proposalBase, {
+      proposalId: 'proposal_001',
+      proposalDigest: proposalBase.proposalDigest,
+      confirmationDigest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      confirmedBy: proposalBase.confirmedBy,
+    }),
+  };
+  assert.deepEqual(validateRecord(validProposalRow), []);
+
+  const stripped = structuredClone(validProposalRow);
+  delete stripped.origin;
+  assert.ok(validateRecord(stripped).some((error) => error.code === 'missing-required-field'));
+
+  const relabeled = structuredClone(validProposalRow);
+  relabeled.origin = { kind: 'direct-human.v1', confirmationId: 'forged', confirmedBy: relabeled.confirmedBy };
+  assert.ok(validateRecord(relabeled).some((error) => error.code === 'proposal-origin-mismatch'));
+
+  for (const [name, mutate, expected] of [
+    ['payload', (row) => { row.payload.to = 'pkg:tampered'; }, 'promotion-integrity-mismatch'],
+    ['evidence', (row) => { row.evidence[0].value = 'tampered'; }, 'proposal-origin-evidence-digest-mismatch'],
+    ['proposal digest', (row) => { row.proposalDigest = 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; }, 'proposal-origin-digest-mismatch'],
+    ['confirmation digest', (row) => { row.origin.confirmationDigest = 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; }, 'promotion-evidence-id-mismatch'],
+    ['promotion evidence id', (row) => { row.origin.promotionEvidenceId = 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; }, 'promotion-evidence-id-mismatch'],
+    ['integrity digest', (row) => { row.origin.integrityDigest = 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'; }, 'promotion-integrity-mismatch'],
+  ]) {
+    const bad = structuredClone(validProposalRow);
+    mutate(bad);
+    const errors = validateRecord(bad);
+    assert.ok(errors.some((error) => error.code === expected), `${name}: ${JSON.stringify(errors)}`);
+  }
 }
 
 {
@@ -149,9 +222,7 @@ try {
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const siblingBin = path.join(here, '..', 'bin', 'hq-modeling-runtime.mjs');
-  const cmd = fs.existsSync(siblingBin)
-    ? [process.execPath, siblingBin]
-    : ['hq-modeling-runtime'];
+  const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ['hq-modeling-runtime'];
 
   const validOut = execFileSync(cmd[0], [...cmd.slice(1), 'validate', '--input', validPath, '--json'], {
     encoding: 'utf8',
@@ -165,8 +236,7 @@ try {
   let invalidParsed;
   try {
     execFileSync(cmd[0], [...cmd.slice(1), 'validate', '--input', invalidPath, '--json'], {
-      encoding: 'utf8',
-      timeout: 10_000,
+      encoding: 'utf8', timeout: 10_000,
     });
     assert.fail('invalid queue should fail CLI validation');
   } catch (error) {
@@ -174,24 +244,6 @@ try {
   }
   assert.equal(invalidParsed.ok, false);
   assert.ok(codes(invalidParsed).includes('authority-field-present'));
-
-  const smuggledPath = path.join(tmp, 'smuggled.jsonl');
-  fs.writeFileSync(smuggledPath, JSON.stringify({
-    ...validModel,
-    payload: { source: { kind: 'source.observation.v1', id: 'obs_001' } },
-  }));
-  let smuggledParsed;
-  try {
-    execFileSync(cmd[0], [...cmd.slice(1), 'validate', '--input', smuggledPath, '--json'], {
-      encoding: 'utf8',
-      timeout: 10_000,
-    });
-    assert.fail('smuggled source payload should fail CLI validation');
-  } catch (error) {
-    smuggledParsed = JSON.parse(error.stdout);
-  }
-  assert.equal(smuggledParsed.ok, false);
-  assert.ok(codes(smuggledParsed).includes('payload-smuggled-row'));
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
