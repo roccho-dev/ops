@@ -56,10 +56,14 @@ const bypasses = [
   ['dot authoritative source alias', (record) => { record.extra = { 'authoritative.source.name': 'catalog' }; }],
   ['upper snake authoritative source alias', (record) => { record.extra = { AUTHORITATIVE_SOURCE_NAME: 'catalog' }; }],
   ['capital camel authoritative source alias', (record) => { record.extra = { AuthoritativeSourceName: 'catalog' }; }],
+  ['fused authoritative source alias', (record) => { record.extra = { authoritativesourcename: 'catalog' }; }],
+  ['upper fused authoritative source alias', (record) => { record.extra = { AUTHORITATIVESOURCENAME: 'catalog' }; }],
   ['hyphen nonAuthority alias', (record) => { record.extra = { 'non-authority': true }; }],
   ['dot nonAuthority alias', (record) => { record.extra = { 'non.authority': true }; }],
   ['upper snake nonAuthority alias', (record) => { record.extra = { NON_AUTHORITY: true }; }],
   ['capital camel nonAuthority alias', (record) => { record.extra = { NonAuthority: true }; }],
+  ['fused nonAuthority alias', (record) => { record.extra = { nonauthority: true }; }],
+  ['upper fused nonAuthority alias', (record) => { record.extra = { NONAUTHORITY: true }; }],
 ];
 
 for (const [name, mutate] of bypasses) {
