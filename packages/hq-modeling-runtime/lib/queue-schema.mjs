@@ -71,8 +71,8 @@ const forbiddenConceptWords = new Set([
 ]);
 
 const allowedAuthorityFieldRules = new Map([
-  ['nonauthority', (value) => value === true],
-  ['authoritativesourcename', (value) => typeof value === 'string' && value.trim().length > 0],
+  ['nonAuthority', (value) => value === true],
+  ['authoritativeSourceName', (value) => typeof value === 'string' && value.trim().length > 0],
 ]);
 
 function boundaryWords(value) {
@@ -294,14 +294,14 @@ export function snapshotJsonData(input) {
   };
 }
 
-function allowedAuthorityField(token, value) {
-  const rule = allowedAuthorityFieldRules.get(token);
+function allowedAuthorityField(field, value) {
+  const rule = allowedAuthorityFieldRules.get(field);
   return rule ? rule(value) : false;
 }
 
 function forbiddenFieldConcept(field, value) {
   const token = normalizeBoundaryToken(field);
-  if (allowedAuthorityField(token, value)) return null;
+  if (allowedAuthorityField(field, value)) return null;
   if (exactForbiddenFieldTokens.has(token)) return token;
   return authorityConcept(field);
 }
