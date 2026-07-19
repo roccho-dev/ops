@@ -51,12 +51,18 @@ function promotionFailure(code, message, extra = {}) {
   };
 }
 
+function hasRawBooleanIntent(args, option) {
+  const exact = `--${option}`;
+  const inlinePrefix = `${exact}=`;
+  return args.some((arg) => typeof arg === 'string'
+    && (arg === exact || arg.startsWith(inlinePrefix)));
+}
+
 function promotionOutputHints(args) {
-  const supplied = new Set(args.filter((arg) => typeof arg === 'string' && arg.startsWith('--')));
   return {
-    'queue-jsonl': supplied.has('--queue-jsonl'),
-    'receipt-jsonl': supplied.has('--receipt-jsonl'),
-    json: supplied.has('--json'),
+    'queue-jsonl': hasRawBooleanIntent(args, 'queue-jsonl'),
+    'receipt-jsonl': hasRawBooleanIntent(args, 'receipt-jsonl'),
+    json: hasRawBooleanIntent(args, 'json'),
   };
 }
 
