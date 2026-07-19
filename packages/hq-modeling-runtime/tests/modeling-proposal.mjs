@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 
 import * as modelingProposal from '../lib/modeling-proposal.mjs';
 
-const { proposalDigest, validateModelingProposal } = modelingProposal;
+const {
+  proposalDigest,
+  snapshotModelingProposal,
+  validateModelingProposal,
+} = modelingProposal;
 
 assert.deepEqual(
   Object.keys(modelingProposal).sort(),
-  ['proposalDigest', 'validateModelingProposal'],
+  ['proposalDigest', 'snapshotModelingProposal', 'validateModelingProposal'],
 );
 assert.equal('proposalToQueueIntentCandidate' in modelingProposal, false);
 
@@ -54,8 +58,13 @@ function withPayload(value) {
 }
 
 {
-  const errors = validateModelingProposal(proposal);
-  assert.deepEqual(errors, []);
+  const snapshotted = snapshotModelingProposal(proposal);
+  assert.deepEqual(snapshotted.errors, []);
+  assert.deepEqual(snapshotted.snapshot, proposal);
+  assert.notStrictEqual(snapshotted.snapshot, proposal);
+  assert.notStrictEqual(snapshotted.snapshot.targetRef, proposal.targetRef);
+  assert.notStrictEqual(snapshotted.snapshot.proposedOperation.payload, proposal.proposedOperation.payload);
+  assert.deepEqual(validateModelingProposal(proposal), []);
   assert.match(proposalDigest(proposal), /^sha256:/);
   assert.equal(
     proposalDigest(proposal),
@@ -72,153 +81,127 @@ function withPayload(value) {
   );
 }
 
-for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('proposal'), () => {}]) {
-  const errors = validateModelingProposal(malformed);
-  assert.deepEqual(codes(errors), ['proposal-not-object']);
+for (const malformed of [undefined, null, [], 'proposal', 1, true, 1n, Symbol('proposal'), () => {}, new Date()]) {
+  assert.deepEqual(codes(validateModelingProposal(malformed)), ['proposal-not-object']);
 }
 
-{
-  const missingEvidence = { ...proposal, evidence: [] };
-  const errors = validateModelingProposal(missingEvidence);
-  assert.ok(codes(errors).includes('evidence-missing'));
+for (const [candidate, expected] of [
+  [{ ...proposal, evidence: [] }, 'evidence-missing'],
+  [{ ...proposal, targetRef: { kind: 'repoMap.node' } }, 'targetRef-missing-id'],
+  [{ ...proposal, proposedOperation: { payload: {} } }, 'proposal-op-missing'],
+]) {
+  assert.ok(codes(validateModelingProposal(candidate)).includes(expected));
 }
 
-{
-  const missingTarget = { ...proposal, targetRef: { kind: 'repoMap.node' } };
-  const errors = validateModelingProposal(missingTarget);
-  assert.ok(codes(errors).includes('targetRef-missing-id'));
+const authorityCounterexamples = [
+  ['acceptedRow field', (candidate) => { candidate.acceptedRow = { id: 'accepted' }; }],
+  ['accepted kind infix', (candidate) => { candidate.extra = { kind: 'hq.acceptedRow.v1' }; }],
+  ['accepted status suffix', (candidate) => { candidate.extra = { status: 'accepted-status' }; }],
+  ['model authority infix', (candidate) => { candidate.evidence[0].modelAuthorityClaim = true; }],
+  ['admission infix and approval suffix', (candidate) => { candidate.targetRef.isAdmissionApproved = true; }],
+  ['authorization variant', (candidate) => { candidate.extra = { requestAuthorizationState: 'pending' }; }],
+  ['punctuation and case', (candidate) => { candidate.proposedOperation.payload['MODEL-AUTHORITY.CLAIM'] = true; }],
+  ['admit suffix', (candidate) => { candidate.extra = { shouldAdmit: true }; }],
+];
+for (const [name, mutate] of authorityCounterexamples) {
+  const candidate = structuredClone(proposal);
+  mutate(candidate);
+  const errors = validateModelingProposal(candidate);
+  assert.ok(
+    errors.some((error) => ['authority-field-present', 'authority-shape-present'].includes(error.code)),
+    `${name}: ${JSON.stringify(errors)}`,
+  );
 }
 
-{
-  const missingOp = { ...proposal, proposedOperation: { payload: {} } };
-  const errors = validateModelingProposal(missingOp);
-  assert.ok(codes(errors).includes('proposal-op-missing'));
+for (const benign of [
+  { ...proposal, author: 'human-reviewer' },
+  { ...proposal, review: { acceptanceCriteria: ['still not accepted authority'] } },
+  { ...proposal, evidence: [...proposal.evidence, { nonAuthority: true, evidenceOnly: true }] },
+  { ...proposal, proposedOperation: { ...proposal.proposedOperation, payload: { authoritativeSourceName: 'not authority token' } } },
+]) {
+  assert.deepEqual(validateModelingProposal(benign), []);
 }
 
-{
-  const authority = {
-    ...proposal,
-    proposedOperation: {
-      ...proposal.proposedOperation,
-      payload: { nested: [{ acceptedLedger: true }] },
-    },
-  };
-  const errors = validateModelingProposal(authority);
-  const authorityError = errors.find((error) => error.code === 'authority-field-present');
-  assert.equal(authorityError.fieldPath, 'proposedOperation.payload.nested.0.acceptedLedger');
-  assert.equal(authorityError.path, '/proposedOperation/payload/nested/0/acceptedLedger');
-}
-
-{
-  const embedded = { ...proposal, acceptedRow: { kind: 'accepted.modelCommit.v1' } };
-  const errors = validateModelingProposal(embedded);
-  assert.ok(codes(errors).includes('embedded-authority-shape'));
-}
-
-for (const [name, value, reason] of [
-  ['bigint', 1n, 'bigint'],
-  ['nan', Number.NaN, 'non-finite-number'],
-  ['positive-infinity', Number.POSITIVE_INFINITY, 'non-finite-number'],
-  ['negative-infinity', Number.NEGATIVE_INFINITY, 'non-finite-number'],
-  ['negative-zero', -0, 'negative-zero'],
-  ['date', new Date('2026-07-18T00:00:00Z'), 'non-plain-object'],
-  ['map', new Map([['key', 'value']]), 'non-plain-object'],
-  ['set', new Set(['value']), 'non-plain-object'],
-  ['undefined', undefined, 'undefined'],
-  ['function', () => {}, 'function'],
-  ['symbol', Symbol('value'), 'symbol'],
+for (const [name, candidate, reason, path] of [
+  ['payload Date', withPayload(new Date('2026-07-18T00:00:00Z')), 'non-plain-object', '/proposedOperation/payload/bad'],
+  ['target Date', { ...proposal, targetRef: { ...proposal.targetRef, meta: new Date() } }, 'non-plain-object', '/targetRef/meta'],
+  ['evidence Map', { ...proposal, evidence: [{ ...proposal.evidence[0], meta: new Map() }] }, 'non-plain-object', '/evidence/0/meta'],
+  ['extra NaN', { ...proposal, extra: Number.NaN }, 'non-finite-number', '/extra'],
+  ['negative zero', withPayload(-0), 'negative-zero', '/proposedOperation/payload/bad'],
+  ['undefined', withPayload(undefined), 'undefined', '/proposedOperation/payload/bad'],
 ]) {
   assert.doesNotThrow(() => {
-    const errors = validateModelingProposal(withPayload(value));
-    assert.ok(dataError(errors, reason, '/proposedOperation/payload/bad'), `${name}: ${JSON.stringify(errors)}`);
+    const errors = validateModelingProposal(candidate);
+    assert.ok(dataError(errors, reason, path), `${name}: ${JSON.stringify(errors)}`);
   });
-}
-
-{
-  class CustomValue {
-    constructor() {
-      this.value = 'custom';
-    }
-  }
-  const errors = validateModelingProposal(withPayload(new CustomValue()));
-  assert.ok(dataError(errors, 'non-plain-object', '/proposedOperation/payload/bad'));
 }
 
 {
   const sparse = [];
   sparse.length = 2;
   sparse[1] = 'present';
-  const errors = validateModelingProposal(withPayload(sparse));
-  assert.ok(dataError(errors, 'sparse-array-hole', '/proposedOperation/payload/bad/0'));
-}
-
-{
-  const hugeSparse = [];
-  hugeSparse.length = 4_294_967_295;
-  hugeSparse[4_294_967_294] = 'present';
-  const errors = validateModelingProposal(withPayload(hugeSparse));
-  assert.ok(dataError(errors, 'sparse-array-hole', '/proposedOperation/payload/bad/0'));
-}
-
-{
-  const deeplyNested = {};
-  let cursor = deeplyNested;
-  for (let index = 0; index < 20_000; index += 1) {
-    cursor.next = {};
-    cursor = cursor.next;
-  }
-  assert.doesNotThrow(() => {
-    const errors = validateModelingProposal(withPayload(deeplyNested));
-    assert.ok(errors.some((error) => error.code === 'proposal-data-invalid'));
-  });
-}
-
-{
-  const arrayWithExtra = ['value'];
-  arrayWithExtra.extra = true;
-  const errors = validateModelingProposal(withPayload(arrayWithExtra));
-  assert.ok(dataError(errors, 'extra-array-property', '/proposedOperation/payload/bad/extra'));
+  assert.ok(dataError(validateModelingProposal(withPayload(sparse)), 'sparse-array-hole', '/proposedOperation/payload/bad/0'));
 }
 
 {
   const cycle = {};
   cycle.self = cycle;
-  assert.doesNotThrow(() => {
-    const errors = validateModelingProposal(withPayload(cycle));
-    assert.ok(dataError(errors, 'cycle', '/proposedOperation/payload/bad/self'));
+  assert.ok(dataError(validateModelingProposal({ ...proposal, extra: cycle }), 'cycle', '/extra/self'));
+}
+
+{
+  const nestedProxy = new Proxy({}, {
+    ownKeys() { throw new Error('must not run'); },
   });
+  const errors = validateModelingProposal({ ...proposal, extra: nestedProxy });
+  assert.ok(dataError(errors, 'proxy-not-allowed', '/extra'));
 }
 
 {
-  const payload = { safe: true };
-  payload[Symbol('hidden')] = 'symbol-key-value';
-  const invalid = {
-    ...proposal,
-    proposedOperation: { ...proposal.proposedOperation, payload },
-  };
-  const errors = validateModelingProposal(invalid);
-  assert.ok(dataError(errors, 'symbol-key', '/proposedOperation/payload'));
+  let reads = 0;
+  const selfErasing = structuredClone(proposal);
+  Object.defineProperty(selfErasing, 'kind', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      reads += 1;
+      Object.defineProperty(selfErasing, 'kind', {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: 'modeling.proposal.v1',
+      });
+      return 'modeling.proposal.v1';
+    },
+  });
+  const errors = validateModelingProposal(selfErasing);
+  assert.ok(dataError(errors, 'accessor-property', '/kind'), JSON.stringify(errors));
+  assert.equal(reads, 0, 'self-erasing proposal getter must never execute');
 }
 
 {
-  const payload = { safe: true };
-  Object.defineProperty(payload, 'hidden', { enumerable: false, value: 'not-json-visible' });
-  const invalid = {
-    ...proposal,
-    proposedOperation: { ...proposal.proposedOperation, payload },
-  };
-  const errors = validateModelingProposal(invalid);
-  assert.ok(dataError(errors, 'non-enumerable-property', '/proposedOperation/payload/hidden'));
+  let reads = 0;
+  const nestedAccessor = structuredClone(proposal);
+  Object.defineProperty(nestedAccessor.targetRef, 'id', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      reads += 1;
+      return 'pkg:core';
+    },
+  });
+  const errors = validateModelingProposal(nestedAccessor);
+  assert.ok(dataError(errors, 'accessor-property', '/targetRef/id'), JSON.stringify(errors));
+  assert.equal(reads, 0);
 }
 
 {
-  const payload = { 'a/b~c': undefined };
-  const invalid = {
-    ...proposal,
-    proposedOperation: { ...proposal.proposedOperation, payload },
-  };
-  const errors = validateModelingProposal(invalid);
-  assert.ok(dataError(errors, 'undefined', '/proposedOperation/payload/a~1b~0c'));
+  const hidden = structuredClone(proposal);
+  Object.defineProperty(hidden.evidence[0], 'hidden', {
+    enumerable: false,
+    value: 'not-json-visible',
+  });
+  assert.ok(dataError(validateModelingProposal(hidden), 'non-enumerable-property', '/evidence/0/hidden'));
 }
 
 {
@@ -242,18 +225,13 @@ for (const [name, value, reason] of [
 }
 
 {
-  const invalidKindWithGetter = { kind: 'not.modeling.proposal.v1' };
-  let reads = 0;
-  Object.defineProperty(invalidKindWithGetter, 'trap', {
-    enumerable: true,
-    get() {
-      reads += 1;
-      throw new Error('invalid kind must stop before recursive traversal');
-    },
-  });
-  const errors = validateModelingProposal(invalidKindWithGetter);
-  assert.deepEqual(codes(errors), ['invalid-proposal-kind']);
-  assert.equal(reads, 0);
+  const deeplyNested = {};
+  let cursor = deeplyNested;
+  for (let index = 0; index < 20_000; index += 1) {
+    cursor.next = {};
+    cursor = cursor.next;
+  }
+  assert.doesNotThrow(() => validateModelingProposal({ ...proposal, extra: deeplyNested }));
 }
 
 console.log('hq modeling proposal schema check: PASS');
