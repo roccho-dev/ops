@@ -20,6 +20,7 @@ const modelQueue = {
   op: 'addEdge',
   payload: { from: 'package:ceo', to: 'repo:adrs', type: 'located_in' },
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_package_ceo_repo_adrs', confirmedBy: 'human' },
 };
 
 const modelProjection = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(modelQueue)).projection;
@@ -134,6 +135,7 @@ const missingInAdrs = sourceObservationRow({
   const smuggled = runAdmissionGateJsonl(JSON.stringify({
     ...modelQueue,
     id: 'mq_smuggled_reconcile',
+    origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_smuggled_reconcile', confirmedBy: 'human' },
     payload: { embedded: reconcileRow },
   }));
   assert.equal(smuggled.ok, false);
