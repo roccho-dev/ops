@@ -1,5 +1,5 @@
 import { sha256Digest } from './digest.mjs';
-import { forbiddenAuthorityFields } from './queue-schema.mjs';
+import { findAuthorityBearingShapes } from './queue-schema.mjs';
 
 function isPlainObject(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -127,16 +127,6 @@ function validateObject(value, errors, context, path, ancestors) {
     }
 
     const fieldPath = [...path, key];
-    if (forbiddenAuthorityFields.includes(key)) {
-      const dotPath = fieldPath.join('.');
-      add(errors, 'authority-field-present', `authority field is prohibited: ${dotPath}`, {
-        line: context.line,
-        id: context.id,
-        fieldPath: dotPath,
-        path: pointer(fieldPath),
-      });
-    }
-
     const nested = readValue(value, key, errors, fieldPath);
     if (nested.ok) validateJsonData(nested.value, errors, context, fieldPath, ancestors);
   }
@@ -190,6 +180,33 @@ function readTopLevel(record, field, errors, line) {
   const result = readValue(record, field, errors, [field]);
   if (!result.ok) return undefined;
   return result.value;
+}
+
+function addAuthorityShapeErrors(errors, record, line, id) {
+  let findings;
+  try {
+    findings = findAuthorityBearingShapes(record);
+  } catch {
+    add(errors, 'authority-shape-scan-failed', 'proposal authority-shape scan failed closed', { line, id });
+    return;
+  }
+  for (const finding of findings) {
+    const code = finding.reason === 'forbidden-field'
+      ? 'authority-field-present'
+      : 'authority-shape-present';
+    const segments = finding.segments ?? [];
+    const fieldPath = segments.join('.');
+    add(errors, code, `authority-bearing proposal shape is prohibited: ${fieldPath || '$'}`, {
+      line,
+      id,
+      fieldPath,
+      path: pointer(segments),
+      reason: finding.reason,
+      detail: finding.detail,
+      normalizedField: finding.normalizedField,
+      normalizedValue: finding.normalizedValue,
+    });
+  }
 }
 
 export function validateModelingProposal(record, { line = 1 } = {}) {
@@ -268,6 +285,8 @@ export function validateModelingProposal(record, { line = 1 } = {}) {
   } catch {
     addDataError(errors, [], 'validation-failed');
   }
+
+  addAuthorityShapeErrors(errors, record, line, id);
 
   if (hasOwn(record, 'modelQueueRow', errors, line) || hasOwn(record, 'acceptedRow', errors, line)) {
     add(errors, 'embedded-authority-shape', 'proposal must not embed modelQueueRow or acceptedRow', { line, id });
