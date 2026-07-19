@@ -18,6 +18,7 @@ const validModel = {
   payload: { from: 'pkg:core', to: 'pkg:ui', type: 'uses' },
   reason: 'model dependency should be visible',
   confirmedBy: 'human',
+  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_001', confirmedBy: 'human' },
 };
 
 const validAgent = {
@@ -107,9 +108,7 @@ try {
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const siblingBin = path.join(here, '..', 'bin', 'hq-modeling-runtime.mjs');
-  const cmd = fs.existsSync(siblingBin)
-    ? [process.execPath, siblingBin]
-    : ['hq-modeling-runtime'];
+  const cmd = fs.existsSync(siblingBin) ? [process.execPath, siblingBin] : ['hq-modeling-runtime'];
 
   const out = execFileSync(cmd[0], [...cmd.slice(1), 'work', '--input', input, '--json'], {
     encoding: 'utf8',
