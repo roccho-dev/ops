@@ -25,7 +25,7 @@
 | proposal-promotion downstream validation port | present | requires proposal origin and an expected promotion origin from the caller's trusted boundary |
 | proposal promotion CLI | present | reads proposal and confirmation JSON; stdout/stderr only; no queue or ledger writes |
 | JSONL queue validator | present | pure validation core for explicit direct-human and proposal-promotion rows |
-| whole-object authority smuggling rejection | present | rejects accepted/admission/approval/authority concept families in fields, kinds, and statuses across proposals and queue rows |
+| whole-object authority smuggling rejection | present | rejects a bounded authority-state vocabulary at semantic field, `kind`, and `status` word boundaries across proposals and queue rows |
 | source/reconcile payload smuggling rejection | present | recursively rejects source and reconcile rows inside model payloads |
 | local worker reducer | present | pure local shadow-state core |
 | agent task runtime boundary | present | pending task state + pending receipt only |
@@ -72,7 +72,9 @@
 
 Public proposal and queue validators do not read `kind`, `status`, or any other semantic field from the caller's object first. They first take a descriptor-only deep snapshot and reject any object that cannot be represented as complete JSON data. Validation, authority scanning, digest checks, and promotion output use that snapshot only. A self-erasing getter, mutation-on-read accessor, Proxy, nested `Date`, cycle, sparse array, non-finite number, descriptor failure, or non-enumerable property therefore fails closed.
 
-Field names and `kind`/`status` values are normalized for case and punctuation. Accepted, admission/admit, approval/approve, authority, and authorization concept families are forbidden wherever they appear, including infix and suffix forms such as `modelAuthorityClaim`, `isAdmissionApproved`, `hq.acceptedRow.v1`, and `accepted-status`. Benign `author`, `acceptanceCriteria`, and the exact field `nonAuthority: true` remain allowed; broader authority-like names and `nonAuthority: false` do not.
+Authority vocabulary is matched by semantic words, not unrestricted substrings. Field names and `kind`/`status` values are split at camel-case transitions and punctuation, then compared with the bounded reserved words `accepted`, `admitted`, `admission`, `admit`, `approved`, `approval`, `approve`, `authority`, `authorization`, `authorisation`, `authorized`, `authorised`, and `authoritative`. This rejects `modelAuthoritativeClaim`, `isAuthorized`, `isAuthorised`, `hq.authorizedRow.v1`, and `hq.authorisedRow.v1`, while `admittanceOhms` remains ordinary engineering data rather than an `admit` claim.
+
+Allowances are narrow and exact. `nonAuthority` is allowed only with value `true`. `authoritativeSourceName` is allowed only as that exact field name with a non-empty string value because it records a source label, not authority state. Other names containing an `authoritative` semantic word, such as `modelAuthoritativeSourceName`, remain rejected. Benign `author` and `acceptanceCriteria` fields remain outside the reserved authority-state vocabulary.
 
 ## Model queue origin contract
 
