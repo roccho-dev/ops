@@ -21,7 +21,10 @@ const cat = executable('cat');
 const go = executable('go');
 
 function invoke(root, args, expected = 0) {
-  const result = spawnSync(gosh, ['--root', root, ...args], { encoding: 'utf8', env: process.env });
+  const result = spawnSync(gosh, ['--root', root, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, GOCACHE: join(root, '.gosh', 'cache', 'go-build') },
+  });
   assert.equal(result.status, expected, `${args.join(' ')}\nstdout=${result.stdout}\nstderr=${result.stderr}`);
   const stream = expected === 0 ? result.stdout : result.stderr;
   assert.ok(stream.trim(), `empty JSON output for ${args.join(' ')}`);
