@@ -26,13 +26,32 @@
   };
 
   outputs =
-    inputs@{ nixpkgs, ... }:
+    {
+      self,
+      nixpkgs,
+      governance,
+      adrsRecords,
+      conventionGovernance,
+      ops-build-defs,
+      nodejs-src,
+      ...
+    }:
     let
+      inputs = {
+        inherit self nixpkgs governance adrsRecords conventionGovernance ops-build-defs nodejs-src;
+      };
       original = (import ./flake.base.nix).outputs inputs;
       packages = builtins.mapAttrs (
         system: existing:
         existing
         // {
+          prove-feat = existing.prove-feat;
+          ops-artifact-materialize = existing.ops-artifact-materialize;
+          ops-knowledge-intake = existing.ops-knowledge-intake;
+          ops-runbook-checks = existing.ops-runbook-checks;
+          ops-thread-fsm = existing.ops-thread-fsm;
+          ops-refs-vault = existing.ops-refs-vault;
+          ops-cdp-core = existing.ops-cdp-core;
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -47,6 +66,23 @@
           };
         }
       ) original.packages;
+      checks = builtins.mapAttrs (
+        _: existing:
+        existing
+        // {
+          prove-feat = existing.prove-feat;
+          prove-feat-structure = existing.prove-feat-structure;
+          prove-feat-format = existing.prove-feat-format;
+          prove-feat-deadnix = existing.prove-feat-deadnix;
+          prove-feat-contract-lint = existing.prove-feat-contract-lint;
+          ops-artifact-materialize = existing.ops-artifact-materialize;
+          ops-knowledge-intake = existing.ops-knowledge-intake;
+          ops-runbook-checks = existing.ops-runbook-checks;
+          ops-thread-fsm = existing.ops-thread-fsm;
+          ops-refs-vault = existing.ops-refs-vault;
+          ops-cdp-core = existing.ops-cdp-core;
+        }
+      ) original.checks;
     in
-    original // { inherit packages; };
+    original // { inherit packages checks; };
 }
