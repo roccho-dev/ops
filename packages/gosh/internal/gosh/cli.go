@@ -316,7 +316,9 @@ func (c CLI) snippet(ctx context.Context, cfg cliConfig, a []string) int {
 	if cfg.goBin == "" || !filepath.IsAbs(cfg.goBin) {
 		return c.fail("cli_misuse", errors.New("--go-bin absolute path required"), 2)
 	}
-	build, err := BuildSnippet(ctx, source, SnippetOptions{Root: cfg.root, GoAbs: cfg.goBin, Env: essentialEnv()})
+	buildEnv := essentialEnv()
+	buildEnv["GOCACHE"] = filepath.Join(cfg.root, ".gosh", "cache", "go-build")
+	build, err := BuildSnippet(ctx, source, SnippetOptions{Root: cfg.root, GoAbs: cfg.goBin, Env: buildEnv})
 	if err != nil {
 		return c.failData("snippet_build_failed", err, build, 1)
 	}

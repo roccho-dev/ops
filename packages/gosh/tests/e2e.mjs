@@ -19,11 +19,12 @@ const gosh = executable('gosh');
 const printf = executable('printf');
 const cat = executable('cat');
 const go = executable('go');
+const unrelatedKey = 'GOSH_E2E_UNRELATED';
 
 function invoke(root, args, expected = 0) {
   const result = spawnSync(gosh, ['--root', root, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, GOCACHE: join(root, '.gosh', 'cache', 'go-build') },
+    env: { ...process.env, [unrelatedKey]: 'must-not-inherit' },
   });
   assert.equal(result.status, expected, `${args.join(' ')}\nstdout=${result.stdout}\nstderr=${result.stderr}`);
   const stream = expected === 0 ? result.stdout : result.stderr;
@@ -60,6 +61,10 @@ const source = join(root, 'snippet.go');
 writeFileSync(source, 'package main\nimport "fmt"\nfunc main(){fmt.Print("snippet-ok")}\n');
 response = invoke(root, ['--go-bin', go, 'snippet', 'run', source]);
 assert.equal(response.data.run.stdout.captured, 'snippet-ok');
+assert.equal(statSync(join(root, '.gosh', 'cache', 'go-build')).isDirectory(), true);
+assert.ok(!(response.data.run.environmentKeys ?? []).includes('GOCACHE'));
+assert.ok(!(response.data.run.environmentKeys ?? []).includes(unrelatedKey));
+assert.ok(!(response.data.audit.environmentKeys ?? []).includes(unrelatedKey));
 response = invoke(root, ['--go-bin', go, 'snippet', 'build', source]);
 assert.equal(response.data.cacheHit, true);
 
