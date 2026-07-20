@@ -1,0 +1,2 @@
+{"kind":"gosh.tool.require.v1","id":"print","resolver":"absolute","programAbs":"/bin/true"}
+{"kind":"gosh.tool.require.v1","id":"print","resolver":"bogus"}
