@@ -1,14 +1,12 @@
-let
-  base = import ./flake.base.nix;
-in
-base
-// {
+{
   description = "ops: operational packages implementing governance contracts, including gosh v0";
+
+  inputs = (import ./flake.base.nix).inputs;
 
   outputs =
     inputs@{ nixpkgs, ... }:
     let
-      original = base.outputs inputs;
+      original = (import ./flake.base.nix).outputs inputs;
       packages = builtins.mapAttrs (
         system: existing:
         existing
