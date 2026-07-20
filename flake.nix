@@ -38,7 +38,15 @@
     }:
     let
       inputs = {
-        inherit self nixpkgs governance adrsRecords conventionGovernance ops-build-defs nodejs-src;
+        inherit
+          self
+          nixpkgs
+          governance
+          adrsRecords
+          conventionGovernance
+          ops-build-defs
+          nodejs-src
+          ;
       };
       original = (import ./flake.base.nix).outputs inputs;
       packages = builtins.mapAttrs (
