@@ -1,0 +1,84 @@
+{
+  "baselineSha": "e98c813a8347a16d278363a6827ffd4c97890515",
+  "candidateStatus": "blocked",
+  "classifiedMismatchCount": 12,
+  "databaseIsAuthority": false,
+  "deterministicFailureCaseIds": [],
+  "deterministicParity": true,
+  "differenceEvidence": "sqlite-parity.differences.jsonl",
+  "failClosedParity": true,
+  "failClosedRegressionCaseIds": [],
+  "failClosedRegressionCount": 0,
+  "generatedIsAuthority": false,
+  "inventoryClassificationVersion": "ops-90.v2-owner-reviewed",
+  "kind": "ops.sqliteParitySummary.v1",
+  "matchingCases": 15,
+  "migrationClaimAllowed": false,
+  "mismatchCaseIds": [
+    "array-null",
+    "boolean-string",
+    "candidate-only-span-disposition",
+    "duplicate-id",
+    "empty-jsonl",
+    "malformed-jsonl",
+    "missing-array-field",
+    "missing-nested-source-trace",
+    "provider-workflow-accepted-results",
+    "provider-workflow-incomplete",
+    "unknown-field",
+    "unknown-required-kind"
+  ],
+  "mismatchingCases": 12,
+  "outputParity": false,
+  "providerCaseCount": 2,
+  "providerCaseIds": [
+    "provider-workflow-accepted-results",
+    "provider-workflow-incomplete"
+  ],
+  "providerFixtureFailureCaseIds": [],
+  "strictnessIncreaseCaseIds": [
+    "boolean-string",
+    "duplicate-id",
+    "unknown-field",
+    "unknown-required-kind"
+  ],
+  "strictnessIncreaseCount": 4,
+  "suiteVersion": "ops-90.v2",
+  "totalCases": 27,
+  "unclassifiedMismatchCaseIds": [],
+  "unclassifiedMismatchCount": 0,
+  "unknownUsageReferenceCount": 0,
+  "unresolvedMismatches": 12,
+  "usageInventoryCounts": {
+    "boundary-marker": 18,
+    "build-required": 2,
+    "documentation-only": 32,
+    "evidence-only": 90,
+    "projection-template": 6,
+    "runtime-required": 61,
+    "stale": 23,
+    "test-required": 135
+  },
+  "usageReview": {
+    "counts": {
+      "boundary-marker": 18,
+      "build-required": 2,
+      "documentation-only": 32,
+      "evidence-only": 90,
+      "projection-template": 6,
+      "runtime-required": 61,
+      "stale": 23,
+      "test-required": 135
+    },
+    "missingActiveReviewedPathCount": 0,
+    "missingActiveReviewedPaths": [],
+    "observedPathCount": 60,
+    "reviewFiles": [
+      "evidence/duckdb-usage-review.jsonl",
+      "evidence/duckdb-usage-review-ci.jsonl"
+    ],
+    "reviewedPathCount": 60,
+    "unknownPathCount": 0,
+    "unknownPaths": []
+  }
+}

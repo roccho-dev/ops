@@ -1,0 +1,62 @@
+{
+  "artifact": {
+    "digest": "sha256:1f761437aa149211c0348bf540d874f34af7f75570002da1a200156d824a7c0d",
+    "expiresAt": "2026-10-24T23:12:20Z",
+    "id": 8638237306,
+    "name": "ops-90-sqlite-parity-evidence"
+  },
+  "files": {
+    "duckdb-usage.inventory.jsonl": {
+      "bytes": 220463,
+      "rows": 367,
+      "sha256": "77fa8f32bf5305853b847c3d74b0545b26f0e8a43eb8b7de3b7f7c0f11ce44a5"
+    },
+    "ops-90-sqlite-parity.expected.json": {
+      "bytes": 800,
+      "sha256": "19c95a556e3bdb1dcbf0ab441c57f567e947f91c2eb06551dbf34f4debf5d8e3"
+    },
+    "ops-90-sqlite-parity.expected.sha256": {
+      "bytes": 104,
+      "sha256": "b21de365941b2776f7b17c05ccee5429e73a7b154b885955299eb1774a5f82d1"
+    },
+    "sqlite-parity-classification.stdout.json": {
+      "bytes": 71,
+      "sha256": "c2de6621cf20135bb83dd2c6ff0d61791ad4c9073700f816c96695dd6c586894"
+    },
+    "sqlite-parity.baseline.json": {
+      "bytes": 942,
+      "sha256": "911e2e7b9190f6cf01f93b964e210af44e954a307dfcd9bf53c047848f280ff1"
+    },
+    "sqlite-parity.differences.jsonl": {
+      "bytes": 3810,
+      "rows": 12,
+      "sha256": "121b297b59b3a870171ad3a76e4bc3e6d84550fa80fc62c428ff2c4ed6d8be82"
+    },
+    "sqlite-parity.results.jsonl": {
+      "bytes": 79601,
+      "rows": 54,
+      "sha256": "e2310abe9719bf5647bc27f48c5d2035b16866f4b85064c1b61133e6d1153118"
+    },
+    "sqlite-parity.stdout.json": {
+      "bytes": 1702,
+      "sha256": "cce678010bacf06374ff81290e342d77b2578da8f429bf98809a8c33f9cdf2e6"
+    },
+    "sqlite-parity.summary.json": {
+      "bytes": 2323,
+      "sha256": "4e5ab4cdbbea57289dda375b03c4b1e4ec20d51f7524560e2c500188cfd768d0"
+    }
+  },
+  "generatedIsAuthority": false,
+  "kind": "ops.sqliteParityEvidenceManifest.v1",
+  "retainedBodies": [
+    "sqlite-parity.summary.json",
+    "sqlite-parity.differences.jsonl",
+    "sqlite-parity.baseline.json"
+  ],
+  "suiteVersion": "ops-90.v2",
+  "workflow": {
+    "headSha": "80bb3ce394a7c0c899858478479bf48cf559cb80",
+    "mergeRefSha": "e98c813a8347a16d278363a6827ffd4c97890515",
+    "runId": 30224746969
+  }
+}
