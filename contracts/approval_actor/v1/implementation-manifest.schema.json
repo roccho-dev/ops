@@ -1,0 +1,38 @@
+{
+  "$id": "doc://adrs/approval-actor-v1/implementation-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "component": {"enum": ["ops.github-approval-evidence", "governance.approval-receipt-verifier"]},
+    "kind": {"enum": ["githubApprovalAdapterManifest.v1", "approvalVerifierEngineManifest.v1"]},
+    "package_identity": {"minLength": 1, "type": "string"},
+    "schema_digests": {
+      "additionalProperties": false,
+      "properties": {
+        "approvalReceipt.v1": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "authorityGrant.v1": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "githubApprovalEvidence.v1": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+        "implementationManifest.v1": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+      },
+      "required": ["authorityGrant.v1", "githubApprovalEvidence.v1", "approvalReceipt.v1", "implementationManifest.v1"],
+      "type": "object"
+    },
+    "source_files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {"minLength": 1, "type": "string"},
+          "sha256": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+        },
+        "required": ["path", "sha256"],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "version": {"minLength": 1, "type": "string"}
+  },
+  "required": ["kind", "component", "version", "source_files", "schema_digests", "package_identity"],
+  "title": "implementationManifest.v1",
+  "type": "object"
+}
