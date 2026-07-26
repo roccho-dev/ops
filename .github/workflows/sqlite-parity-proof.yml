@@ -50,9 +50,10 @@ jobs:
           actual="$(sha256sum "$RUNNER_TEMP/sqlite-parity.expected.canonical.json" | cut -d' ' -f1)"
           expected="$(cut -d' ' -f1 evidence/ops-90-sqlite-parity.expected.sha256)"
           test "$actual" = "$expected"
-      - name: Execute reviewed 27-case DuckDB and SQLite proof
+      - name: Execute reviewed 27-case proof
+        id: execute
         run: |
-          set -euo pipefail
+          set +e
           export PATH="${{ steps.runtime.outputs.duckdb_dir }}:$PATH"
           evidence="$RUNNER_TEMP/sqlite-parity-evidence"
           work="$RUNNER_TEMP/sqlite-parity-work"
@@ -65,7 +66,30 @@ jobs:
               --work-dir "$work" \
               --evidence-dir "$evidence" \
               --compiler "${{ steps.runtime.outputs.compiler_path }}/bin/policy-semantic-compiler" \
-              | tee "$RUNNER_TEMP/sqlite-parity.stdout.json"
+              > "$RUNNER_TEMP/sqlite-parity.stdout.json" \
+              2> "$RUNNER_TEMP/sqlite-parity.stderr.log"
+          rc=$?
+          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
+          printf 'proof exit=%s\n' "$rc"
+          cat "$RUNNER_TEMP/sqlite-parity.stdout.json" || true
+          cat "$RUNNER_TEMP/sqlite-parity.stderr.log" >&2 || true
+          exit 0
+      - name: Upload parity diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-90-sqlite-parity-diagnostics
+          path: |
+            ${{ runner.temp }}/sqlite-parity.stdout.json
+            ${{ runner.temp }}/sqlite-parity.stderr.log
+            ${{ runner.temp }}/sqlite-parity-work/provider-fixtures/manifest.json
+            ${{ runner.temp }}/sqlite-parity-evidence
+          if-no-files-found: ignore
+      - name: Classify and enforce exact blocked result
+        run: |
+          set -euo pipefail
+          test "${{ steps.execute.outputs.rc }}" -eq 0
+          evidence="$RUNNER_TEMP/sqlite-parity-evidence"
           PYTHONPATH=packages/policy-semantic-compiler/src \
             python3 -m policy_semantic_compiler.sqlite_parity_classify_v2 \
               --evidence-dir "$evidence" \
