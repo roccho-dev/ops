@@ -34,11 +34,40 @@ jobs:
           grep -q '"status": "PASS"' proof/selftest-a.json
       - name: Enforce read-only and claim ceiling
         run: |
-          set -euo pipefail
-          ! grep -E 'urllib\.request\.(Request|urlopen).*method=.?(POST|PUT|PATCH|DELETE)' tools/github-approval-evidence.py
-          grep -q 'authority_grant_validity_proven.*False' tools/github-approval-evidence.py
-          grep -q 'physical_human_identity_proven.*False' tools/github-approval-evidence.py
-          ! grep -E 'token.*(print|json|artifact)' tools/github-approval-evidence.py
+          python3 - <<'PY'
+          import ast
+          import importlib.util
+          from pathlib import Path
+
+          path = Path('tools/github-approval-evidence.py')
+          source = path.read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          forbidden_modules = {'requests', 'httpx', 'github'}
+          for node in ast.walk(tree):
+              if isinstance(node, ast.Import):
+                  assert not ({alias.name.split('.')[0] for alias in node.names} & forbidden_modules)
+              if isinstance(node, ast.ImportFrom) and node.module:
+                  assert node.module.split('.')[0] not in forbidden_modules
+              if isinstance(node, ast.Call):
+                  for keyword in node.keywords:
+                      if keyword.arg == 'method' and isinstance(keyword.value, ast.Constant):
+                          assert str(keyword.value.value).upper() == 'GET'
+          for forbidden in ('method="POST"', "method='POST'", 'method="PUT"', "method='PUT'", 'method="PATCH"', "method='PATCH'", 'method="DELETE"', "method='DELETE'"):
+              assert forbidden not in source
+
+          spec = importlib.util.spec_from_file_location('adapter', path)
+          module = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          spec.loader.exec_module(module)
+          bundle, request, observed_at, identity = module.fixture()
+          envelope = module.normalize_github_approval_evidence(bundle, request, observed_at, identity)
+          assert envelope['status'] == 'COMPLETE'
+          assert envelope['current_approval'] is True
+          assert all(value is False for value in envelope['claim_ceiling'].values())
+          serialized = module.canonical(envelope)
+          assert 'secret' not in serialized.lower()
+          assert 'token' not in serialized.lower()
+          PY
       - uses: cachix/install-nix-action@v31.10.6
       - name: Run Nix gates with retained diagnostics
         run: |
