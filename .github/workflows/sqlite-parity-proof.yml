@@ -1,0 +1,74 @@
+name: sqlite-parity-proof
+
+on:
+  pull_request:
+    paths:
+      - packages/policy-semantic-compiler/**
+      - build/packages.jsonl
+      - flake.nix
+      - flake.base.nix
+      - .github/workflows/sqlite-parity-proof.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Build current compiler and locate its DuckDB runtime
+        id: runtime
+        run: |
+          set -euo pipefail
+          compiler_path="$(nix build -L --no-link --print-out-paths .#policy-semantic-compiler)"
+          duckdb_bin="$(nix-store -q --requisites "$compiler_path" | while read -r path; do
+            if test -x "$path/bin/duckdb"; then
+              printf '%s\n' "$path/bin/duckdb"
+            fi
+          done | head -n 1)"
+          test -x "$compiler_path/bin/policy-semantic-compiler"
+          test -n "$duckdb_bin"
+          test -x "$duckdb_bin"
+          printf 'compiler_path=%s\n' "$compiler_path" >> "$GITHUB_OUTPUT"
+          printf 'duckdb_dir=%s\n' "$(dirname "$duckdb_bin")" >> "$GITHUB_OUTPUT"
+          "$duckdb_bin" --version
+      - name: Execute 25-case DuckDB and SQLite proof
+        run: |
+          set -euo pipefail
+          export PATH="${{ steps.runtime.outputs.duckdb_dir }}:$PATH"
+          evidence="$RUNNER_TEMP/sqlite-parity-evidence"
+          work="$RUNNER_TEMP/sqlite-parity-work"
+          PYTHONPATH=packages/policy-semantic-compiler/src \
+            python3 -m policy_semantic_compiler.sqlite_parity_proof \
+              --base-fixture packages/policy-semantic-compiler/tests/adrs-projection-duckdb/accepted \
+              --repo-root . \
+              --work-dir "$work" \
+              --evidence-dir "$evidence" \
+              --compiler "${{ steps.runtime.outputs.compiler_path }}/bin/policy-semantic-compiler" \
+              | tee "$RUNNER_TEMP/sqlite-parity.stdout.json"
+          test -s "$evidence/duckdb-usage.inventory.jsonl"
+          test -s "$evidence/sqlite-parity.results.jsonl"
+          test -s "$evidence/sqlite-parity.summary.json"
+          test -s "$evidence/sqlite-parity.baseline.json"
+          test "$(wc -l < "$evidence/sqlite-parity.results.jsonl")" -eq 50
+          jq -e '
+            .totalCases == 25 and
+            (.candidateStatus == "pass" or .candidateStatus == "blocked") and
+            (.migrationClaimAllowed | type) == "boolean" and
+            .generatedIsAuthority == false and
+            .databaseIsAuthority == false
+          ' "$evidence/sqlite-parity.summary.json" >/dev/null
+          cp "$RUNNER_TEMP/sqlite-parity.stdout.json" "$evidence/"
+      - name: Upload parity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-90-sqlite-parity-evidence
+          path: ${{ runner.temp }}/sqlite-parity-evidence
+          if-no-files-found: error
