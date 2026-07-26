@@ -1,0 +1,30 @@
+{
+  "candidateStatus": "blocked",
+  "databaseIsAuthority": false,
+  "expectedMismatchCaseIds": [
+    "array-null",
+    "boolean-string",
+    "candidate-only-span-disposition",
+    "duplicate-id",
+    "empty-jsonl",
+    "malformed-jsonl",
+    "missing-array-field",
+    "missing-nested-source-trace",
+    "provider-workflow-accepted-results",
+    "provider-workflow-incomplete",
+    "unknown-field",
+    "unknown-required-kind"
+  ],
+  "failClosedRegressionCount": 0,
+  "generatedIsAuthority": false,
+  "kind": "ops.sqliteParityExpected.v1",
+  "migrationClaimAllowed": false,
+  "providerCaseIds": [
+    "provider-workflow-accepted-results",
+    "provider-workflow-incomplete"
+  ],
+  "suiteVersion": "ops-90.v2",
+  "totalCases": 27,
+  "unclassifiedMismatchCount": 0,
+  "unknownUsageReferenceCount": 0
+}
