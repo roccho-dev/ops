@@ -6,6 +6,7 @@ on:
     paths:
       - tools/github-approval-evidence.py
       - nix/github-approval-evidence.nix
+      - contracts/approval_actor/v1/**
       - docs/github-approval-evidence/**
       - .github/workflows/github-approval-evidence.yml
       - ci.intent.v1.jsonl
@@ -24,49 +25,74 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - name: Run recorded provider proof twice
+      - name: Run recorded provider proof and manifest twice
         run: |
           set -euo pipefail
           mkdir -p proof
           python3 tools/github-approval-evidence.py selftest > proof/selftest-a.json
           python3 tools/github-approval-evidence.py selftest > proof/selftest-b.json
           cmp proof/selftest-a.json proof/selftest-b.json
-          grep -q '"status": "PASS"' proof/selftest-a.json
-      - name: Enforce read-only and claim ceiling
-        run: |
+          python3 tools/github-approval-evidence.py manifest > proof/manifest-a.json
+          python3 tools/github-approval-evidence.py manifest > proof/manifest-b.json
+          cmp proof/manifest-a.json proof/manifest-b.json
           python3 - <<'PY'
-          import ast
-          import importlib.util
+          import json
+          selftest=json.load(open('proof/selftest-a.json'))
+          manifest=json.load(open('proof/manifest-a.json'))
+          assert selftest['status']=='PASS'
+          assert selftest['destructiveCases']==22
+          assert manifest['kind']=='githubApprovalAdapterManifest.v1'
+          assert selftest['adapterManifestDigest']==manifest['manifest_digest']
+          PY
+      - name: Verify exact ADRS candidate schemas and flat contract
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
           from pathlib import Path
-
-          path = Path('tools/github-approval-evidence.py')
-          source = path.read_text(encoding='utf-8')
-          tree = ast.parse(source)
-          forbidden_modules = {'requests', 'httpx', 'github'}
+          def canonical_digest(path):
+              value=json.loads(Path(path).read_text())
+              return 'sha256:'+hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+          identity=json.load(open('contracts/approval_actor/v1/identity.json'))
+          assert identity['canonicalEvidenceShape']=='githubApprovalEvidence.v1'
+          assert identity['contractDigest']=='sha256:21abaeb0cfb4f76babe7f1f530d14e807ef1c236e891257199490a8c0bb9d03e'
+          assert canonical_digest('contracts/approval_actor/v1/github-approval-evidence.schema.json')==identity['schemaDigests']['githubApprovalEvidence.v1']
+          assert canonical_digest('contracts/approval_actor/v1/implementation-manifest.schema.json')==identity['schemaDigests']['implementationManifest.v1']
+          schema=json.load(open('contracts/approval_actor/v1/github-approval-evidence.schema.json'))
+          assert schema['additionalProperties'] is False
+          assert set(schema['required'])==set(schema['properties'])
+          nested={'repository','pull_request','review','actor','request','observation','current_approval'}
+          assert not (nested & set(schema['properties']))
+          PY
+      - name: Enforce read-only, flat output and source-bound identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,hashlib,importlib.util,json
+          from pathlib import Path
+          path=Path('tools/github-approval-evidence.py')
+          source=path.read_text(encoding='utf-8')
+          tree=ast.parse(source)
+          forbidden_modules={'requests','httpx','github'}
           for node in ast.walk(tree):
-              if isinstance(node, ast.Import):
-                  assert not ({alias.name.split('.')[0] for alias in node.names} & forbidden_modules)
-              if isinstance(node, ast.ImportFrom) and node.module:
-                  assert node.module.split('.')[0] not in forbidden_modules
-              if isinstance(node, ast.Call):
+              if isinstance(node,ast.Import): assert not ({a.name.split('.')[0] for a in node.names}&forbidden_modules)
+              if isinstance(node,ast.ImportFrom) and node.module: assert node.module.split('.')[0] not in forbidden_modules
+              if isinstance(node,ast.Call):
                   for keyword in node.keywords:
-                      if keyword.arg == 'method' and isinstance(keyword.value, ast.Constant):
-                          assert str(keyword.value.value).upper() == 'GET'
-          for forbidden in ('method="POST"', "method='POST'", 'method="PUT"', "method='PUT'", 'method="PATCH"', "method='PATCH'", 'method="DELETE"', "method='DELETE'"):
-              assert forbidden not in source
-
-          spec = importlib.util.spec_from_file_location('adapter', path)
-          module = importlib.util.module_from_spec(spec)
-          assert spec and spec.loader
-          spec.loader.exec_module(module)
-          bundle, request, observed_at, identity = module.fixture()
-          envelope = module.normalize_github_approval_evidence(bundle, request, observed_at, identity)
-          assert envelope['status'] == 'COMPLETE'
-          assert envelope['current_approval'] is True
+                      if keyword.arg=='method' and isinstance(keyword.value,ast.Constant): assert str(keyword.value.value).upper()=='GET'
+          spec=importlib.util.spec_from_file_location('adapter',path)
+          module=importlib.util.module_from_spec(spec); assert spec and spec.loader; spec.loader.exec_module(module)
+          bundle,request,observed=module.fixture()
+          envelope=module.normalize_github_approval_evidence(bundle,request,observed)
+          manifest=module.adapter_manifest()
+          assert envelope['status']=='COMPLETE' and envelope['findings']==[]
+          assert set(envelope)==module.REQUIRED_KEYS
           assert all(value is False for value in envelope['claim_ceiling'].values())
-          serialized = module.canonical(envelope)
-          assert 'secret' not in serialized.lower()
-          assert 'token' not in serialized.lower()
+          assert manifest['source_files'][0]['sha256']=='sha256:'+hashlib.sha256(path.read_bytes()).hexdigest()
+          assert envelope['adapter_manifest_digest']==module.digest(manifest)
+          assert envelope['adapter_manifest_digest']!='sha256:'+hashlib.sha256(module.ADAPTER_VERSION.encode()).hexdigest()
+          serialized=module.canonical(envelope).lower()
+          assert 'secret' not in serialized and 'token' not in serialized
           PY
       - uses: cachix/install-nix-action@v31.10.6
       - name: Run Nix gates with retained diagnostics
@@ -86,8 +112,11 @@ jobs:
           if test -x result-github-approval-evidence/bin/github-approval-evidence; then
             result-github-approval-evidence/bin/github-approval-evidence selftest > proof/nix-selftest.json 2> proof/nix-selftest.stderr
             echo $? > proof/nix-selftest.status
+            result-github-approval-evidence/bin/github-approval-evidence manifest > proof/nix-manifest.json 2> proof/nix-manifest.stderr
+            echo $? > proof/nix-manifest.status
           else
             echo 127 > proof/nix-selftest.status
+            echo 127 > proof/nix-manifest.status
           fi
           exit 0
       - uses: actions/upload-artifact@v4
@@ -100,3 +129,4 @@ jobs:
           test "$(cat proof/nix-build.status)" = 0
           test "$(cat proof/flake-check.status)" = 0
           test "$(cat proof/nix-selftest.status)" = 0
+          test "$(cat proof/nix-manifest.status)" = 0
