@@ -5,6 +5,7 @@ on:
     branches: [proposals]
     paths:
       - tools/github-approval-evidence.py
+      - tools/github-approval-evidence-cli.py
       - nix/github-approval-evidence.nix
       - contracts/approval_actor/v1/**
       - docs/github-approval-evidence/**
@@ -29,11 +30,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p proof
-          python3 tools/github-approval-evidence.py selftest > proof/selftest-a.json
-          python3 tools/github-approval-evidence.py selftest > proof/selftest-b.json
+          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-a.json
+          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-b.json
           cmp proof/selftest-a.json proof/selftest-b.json
-          python3 tools/github-approval-evidence.py manifest > proof/manifest-a.json
-          python3 tools/github-approval-evidence.py manifest > proof/manifest-b.json
+          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-a.json
+          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-b.json
           cmp proof/manifest-a.json proof/manifest-b.json
           python3 - <<'PY'
           import json
@@ -68,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import ast,hashlib,importlib.util,json
+          import ast,hashlib,importlib.util
           from pathlib import Path
           path=Path('tools/github-approval-evidence.py')
           source=path.read_text(encoding='utf-8')
