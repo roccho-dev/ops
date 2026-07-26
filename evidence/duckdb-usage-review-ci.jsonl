@@ -1,0 +1,1 @@
+{"active":true,"authority":false,"class":"test-required","kind":"ops.duckdbUsagePathReview.v1","path":"ci.intent.v1.jsonl","reachabilityEvidence":"declares the executable SQLite/DuckDB parity workflow as a non-authoritative artifact exporter","reviewed":true,"reviewedAt":"2026-07-27","reviewedBy":"ops#90-evidence-review"}
