@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
-MODULE_PATH = Path(__file__).with_name("github-approval-evidence.py")
+MODULE_PATH = Path(os.environ.get("GITHUB_APPROVAL_EVIDENCE_MODULE", Path(__file__).with_name("github-approval-evidence.py")))
 SPEC = importlib.util.spec_from_file_location("github_approval_evidence", MODULE_PATH)
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError(f"cannot load {MODULE_PATH}")
