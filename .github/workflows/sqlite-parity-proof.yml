@@ -53,8 +53,13 @@ jobs:
               --evidence-dir "$evidence" \
               --compiler "${{ steps.runtime.outputs.compiler_path }}/bin/policy-semantic-compiler" \
               | tee "$RUNNER_TEMP/sqlite-parity.stdout.json"
+          PYTHONPATH=packages/policy-semantic-compiler/src \
+            python3 -m policy_semantic_compiler.sqlite_parity_classify \
+              --evidence-dir "$evidence" \
+              | tee "$RUNNER_TEMP/sqlite-parity-classification.stdout.json"
           test -s "$evidence/duckdb-usage.inventory.jsonl"
           test -s "$evidence/sqlite-parity.results.jsonl"
+          test -s "$evidence/sqlite-parity.differences.jsonl"
           test -s "$evidence/sqlite-parity.summary.json"
           test -s "$evidence/sqlite-parity.baseline.json"
           test "$(wc -l < "$evidence/sqlite-parity.results.jsonl")" -eq 50
@@ -62,10 +67,14 @@ jobs:
             .totalCases == 25 and
             (.candidateStatus == "pass" or .candidateStatus == "blocked") and
             (.migrationClaimAllowed | type) == "boolean" and
+            .unknownUsageReferenceCount == 0 and
+            .unclassifiedMismatchCount == 0 and
+            .classifiedMismatchCount == .unresolvedMismatches and
             .generatedIsAuthority == false and
             .databaseIsAuthority == false
           ' "$evidence/sqlite-parity.summary.json" >/dev/null
           cp "$RUNNER_TEMP/sqlite-parity.stdout.json" "$evidence/"
+          cp "$RUNNER_TEMP/sqlite-parity-classification.stdout.json" "$evidence/"
       - name: Upload parity evidence
         uses: actions/upload-artifact@v4
         with:
