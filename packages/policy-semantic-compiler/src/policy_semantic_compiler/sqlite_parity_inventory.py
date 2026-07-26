@@ -8,26 +8,38 @@ from typing import Any
 from .sqlite_parity_contract import write_jsonl
 
 
-def _read_review(path: Path) -> dict[str, dict[str, Any]]:
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+def _read_reviews(paths: list[Path]) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        key = str(row.get("path") or "")
-        if not key or key in result:
-            raise ValueError(f"invalid or duplicate DuckDB usage review path: {key!r}")
-        if row.get("kind") != "ops.duckdbUsagePathReview.v1" or row.get("reviewed") is not True:
-            raise ValueError(f"DuckDB usage review is not accepted for path: {key}")
-        result[key] = row
+    for path in paths:
+        rows = [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        for row in rows:
+            key = str(row.get("path") or "")
+            if not key or key in result:
+                raise ValueError(
+                    f"invalid or duplicate DuckDB usage review path: {key!r}"
+                )
+            if (
+                row.get("kind") != "ops.duckdbUsagePathReview.v1"
+                or row.get("reviewed") is not True
+            ):
+                raise ValueError(
+                    f"DuckDB usage review is not accepted for path: {key}"
+                )
+            result[key] = row
     return result
 
 
 def reviewed_inventory(
     repo_root: Path,
-    review_path: Path,
+    review_paths: list[Path],
     evidence_dir: Path,
     repository_sha: str | None,
 ) -> dict[str, Any]:
-    review = _read_review(review_path)
+    review = _read_reviews(review_paths)
     suffixes = {
         ".py",
         ".sh",
@@ -69,21 +81,31 @@ def reviewed_inventory(
                     "path": rel,
                     "line": line_no,
                     "symbol": None,
-                    "class": owner_review.get("class") if owner_review else "unknown",
+                    "class": owner_review.get("class")
+                    if owner_review
+                    else "unknown",
                     "caller": line.strip()[:500],
-                    "active": owner_review.get("active") if owner_review else None,
+                    "active": owner_review.get("active")
+                    if owner_review
+                    else None,
                     "reason": owner_review.get("reachabilityEvidence")
                     if owner_review
                     else "missing owner-reviewed path classification",
                     "evidence": f"{rel}:{line_no}",
                     "reviewed": owner_review is not None,
-                    "reviewedBy": owner_review.get("reviewedBy") if owner_review else None,
-                    "reviewedAt": owner_review.get("reviewedAt") if owner_review else None,
+                    "reviewedBy": owner_review.get("reviewedBy")
+                    if owner_review
+                    else None,
+                    "reviewedAt": owner_review.get("reviewedAt")
+                    if owner_review
+                    else None,
                 }
             )
     rows.sort(key=lambda row: (row["path"], row["line"]))
     write_jsonl(evidence_dir / "duckdb-usage.inventory.jsonl", rows)
-    unknown_paths = sorted({str(row["path"]) for row in rows if row["class"] == "unknown"})
+    unknown_paths = sorted(
+        {str(row["path"]) for row in rows if row["class"] == "unknown"}
+    )
     missing_reviewed_paths = sorted(
         path
         for path, row in review.items()
@@ -98,5 +120,7 @@ def reviewed_inventory(
         "observedPathCount": len(observed_paths),
         "missingActiveReviewedPathCount": len(missing_reviewed_paths),
         "missingActiveReviewedPaths": missing_reviewed_paths,
-        "reviewFile": review_path.relative_to(repo_root).as_posix(),
+        "reviewFiles": [
+            path.relative_to(repo_root).as_posix() for path in review_paths
+        ],
     }
