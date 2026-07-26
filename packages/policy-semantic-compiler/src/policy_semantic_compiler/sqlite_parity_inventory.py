@@ -35,10 +35,14 @@ def _read_reviews(paths: list[Path]) -> dict[str, dict[str, Any]]:
 
 def reviewed_inventory(
     repo_root: Path,
-    review_paths: list[Path],
+    review_path: Path,
     evidence_dir: Path,
     repository_sha: str | None,
 ) -> dict[str, Any]:
+    review_paths = [review_path]
+    overlay = review_path.with_name("duckdb-usage-review-ci.jsonl")
+    if overlay.exists():
+        review_paths.append(overlay)
     review = _read_reviews(review_paths)
     suffixes = {
         ".py",
