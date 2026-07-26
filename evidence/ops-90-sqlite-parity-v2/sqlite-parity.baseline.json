@@ -1,0 +1,16 @@
+{
+  "baseFixtureHash": "cce926897385bd37ee7fd09dac28bbda080c767067e350f01a81ce2eaef318fa",
+  "candidateFixtureHash": "9bfb43452b76a7efbd4f506b5273a433bffccb9abfe3fef97666ee1a1b27fe85",
+  "compilerPath": "/nix/store/r0gr0ih2125i63c89zn4vkm1s88fca03-policy-semantic-compiler/bin/policy-semantic-compiler",
+  "compilerSourceHash": "71b0b63180ee243cf6f379b24e6845b1d645656de887c69fbfe93d9cf47b52e5",
+  "duckdbExecutable": "/nix/store/n4h91v3p9v5hfgcrmfashil26nsrsrhs-duckdb-1.5.2/bin/duckdb",
+  "duckdbVersion": "v1.5.2 (Variegata) 8a5851971f",
+  "generatedIsAuthority": false,
+  "kind": "ops.sqliteParityBaseline.v1",
+  "pythonExecutable": "/usr/bin/python3",
+  "pythonVersion": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]",
+  "repositorySha": "e98c813a8347a16d278363a6827ffd4c97890515",
+  "sqliteVersion": "3.45.1",
+  "suiteVersion": "ops-90.v2",
+  "usageReviewHash": "d5435801ab08731551d3d742e8e73d076265da5678f7560b988593cc0bd00343"
+}
