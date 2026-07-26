@@ -103,6 +103,21 @@ for (const [ok, field] of checks) {
   if (!ok) throw new Error(`parity expectation failed: ${field}`);
 }
 
+const generatedDifferences = fs.readFileSync(
+  path.join(evidence, "sqlite-parity.differences.jsonl"),
+  "utf8",
+);
+const retainedDifferences = fs.readFileSync(
+  path.join(
+    root,
+    "evidence/ops-90-sqlite-parity-v2/sqlite-parity.differences.jsonl",
+  ),
+  "utf8",
+);
+if (generatedDifferences !== retainedDifferences) {
+  throw new Error("generated differences do not match retained exact evidence");
+}
+
 const resultsPath = path.join(evidence, "sqlite-parity.results.jsonl");
 const results = fs
   .readFileSync(resultsPath, "utf8")
