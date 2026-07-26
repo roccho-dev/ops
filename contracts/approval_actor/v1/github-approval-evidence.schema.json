@@ -1,0 +1,46 @@
+{
+  "$id": "doc://adrs/approval-actor-v1/github-approval-evidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor_account_id": {"minimum": 1, "type": ["integer", "null"]},
+    "actor_login": {"minLength": 1, "type": ["string", "null"]},
+    "actor_type": {"enum": ["User", "Bot", null]},
+    "adapter_manifest_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "candidate_revision": {"pattern": "^[0-9a-f]{40}$", "type": ["string", "null"]},
+    "claim_ceiling": {
+      "additionalProperties": false,
+      "properties": {
+        "account_non_compromise_proven": {"const": false},
+        "authority_grant_validity_proven": {"const": false},
+        "physical_human_identity_proven": {"const": false},
+        "provider_independent_non_repudiation_proven": {"const": false}
+      },
+      "required": ["authority_grant_validity_proven", "physical_human_identity_proven", "account_non_compromise_proven", "provider_independent_non_repudiation_proven"],
+      "type": "object"
+    },
+    "findings": {"items": {"type": "object"}, "type": "array"},
+    "kind": {"const": "githubApprovalEvidence.v1"},
+    "observed_at": {"format": "date-time", "type": ["string", "null"]},
+    "provider": {"const": "github"},
+    "provider_response_digest": {"pattern": "^sha256:[0-9a-f]{64}$", "type": ["string", "null"]},
+    "pull_request_id": {"minimum": 1, "type": ["integer", "null"]},
+    "pull_request_number": {"minimum": 1, "type": ["integer", "null"]},
+    "repository_full_name": {"pattern": "^[^/]+/[^/]+$", "type": ["string", "null"]},
+    "repository_id": {"minimum": 1, "type": ["integer", "null"]},
+    "review_commit_id": {"pattern": "^[0-9a-f]{40}$", "type": ["string", "null"]},
+    "review_dismissed": {"type": ["boolean", "null"]},
+    "review_id": {"minimum": 1, "type": ["integer", "null"]},
+    "review_state": {"enum": ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "UNKNOWN", null]},
+    "review_submitted_at": {"format": "date-time", "type": ["string", "null"]},
+    "status": {"enum": ["COMPLETE", "INCOMPLETE", "ERROR"]}
+  },
+  "required": [
+    "kind", "provider", "repository_id", "repository_full_name", "pull_request_number", "pull_request_id",
+    "candidate_revision", "review_id", "review_commit_id", "review_state", "review_submitted_at", "review_dismissed",
+    "actor_account_id", "actor_login", "actor_type", "observed_at", "provider_response_digest",
+    "adapter_manifest_digest", "status", "findings", "claim_ceiling"
+  ],
+  "title": "githubApprovalEvidence.v1",
+  "type": "object"
+}
