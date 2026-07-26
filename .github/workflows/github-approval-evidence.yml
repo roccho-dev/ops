@@ -1,0 +1,73 @@
+name: GitHub approval evidence proof
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - tools/github-approval-evidence.py
+      - nix/github-approval-evidence.nix
+      - docs/github-approval-evidence/**
+      - .github/workflows/github-approval-evidence.yml
+      - ci.intent.v1.jsonl
+      - flake.nix
+      - flake.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Run recorded provider proof twice
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          python3 tools/github-approval-evidence.py selftest > proof/selftest-a.json
+          python3 tools/github-approval-evidence.py selftest > proof/selftest-b.json
+          cmp proof/selftest-a.json proof/selftest-b.json
+          grep -q '"status": "PASS"' proof/selftest-a.json
+      - name: Enforce read-only and claim ceiling
+        run: |
+          set -euo pipefail
+          ! grep -E 'urllib\.request\.(Request|urlopen).*method=.?(POST|PUT|PATCH|DELETE)' tools/github-approval-evidence.py
+          grep -q 'authority_grant_validity_proven.*False' tools/github-approval-evidence.py
+          grep -q 'physical_human_identity_proven.*False' tools/github-approval-evidence.py
+          ! grep -E 'token.*(print|json|artifact)' tools/github-approval-evidence.py
+      - uses: cachix/install-nix-action@v31.10.6
+      - name: Run Nix gates with retained diagnostics
+        run: |
+          set +e
+          nix-build --impure --expr '
+            let
+              pkgs = (builtins.getFlake "github:NixOS/nixpkgs/1c3fe55ad329cbcb28471bb30f05c9827f724c76").legacyPackages.x86_64-linux;
+            in import ./nix/github-approval-evidence.nix { inherit pkgs; }
+          ' -o result-github-approval-evidence > proof/nix-build.log 2>&1
+          echo $? > proof/nix-build.status
+          nix flake check -L --no-write-lock-file \
+            --override-input governance github:roccho-dev/governance/proposal/182-approval-receipt-verifier \
+            --override-input conventionGovernance github:roccho-dev/governance/proposal/182-approval-receipt-verifier \
+            > proof/flake-check.log 2>&1
+          echo $? > proof/flake-check.status
+          if test -x result-github-approval-evidence/bin/github-approval-evidence; then
+            result-github-approval-evidence/bin/github-approval-evidence selftest > proof/nix-selftest.json 2> proof/nix-selftest.stderr
+            echo $? > proof/nix-selftest.status
+          else
+            echo 127 > proof/nix-selftest.status
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: github-approval-evidence-proof
+          path: proof/
+          if-no-files-found: error
+      - name: Enforce Nix gates
+        run: |
+          test "$(cat proof/nix-build.status)" = 0
+          test "$(cat proof/flake-check.status)" = 0
+          test "$(cat proof/nix-selftest.status)" = 0
