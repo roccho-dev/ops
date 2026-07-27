@@ -1,10 +1,13 @@
 {
-  "adrsCandidateHead": "1bbce6400724a0b0395dc8c5c3d3acb8d4bcade8",
+  "admission": "ALLOW_WITH_ACCEPTED_EXCEPTION",
+  "admissionExceptionDigest": "sha256:748ab4ccc62bc60c6bdc8c38a9d64d121f6fe0340907a935873c98971ca17f91",
+  "adrsAcceptedMerge": "70244fa200d8717c61b514432c54bed4248028d9",
   "adrsIssue": "roccho-dev/adrs#260",
   "adrsPullRequest": "roccho-dev/adrs#263",
   "canonicalEvidenceShape": "githubApprovalEvidence.v1",
-  "contractDigest": "sha256:21abaeb0cfb4f76babe7f1f530d14e807ef1c236e891257199490a8c0bb9d03e",
+  "contractDigest": "sha256:53e9fa1053c8a2f003765c6af2e8a90114f6470b46c9cc28d45eb3562518af0b",
   "decisionId": "01KYF3A0M0P7XJ6B9Q2C4R8T5V",
+  "fullCanonicalGreen": false,
   "kind": "approvalActorContractIdentity.v1",
   "releaseId": "approval-actor-v1.0.0",
   "schemaDigests": {
@@ -13,5 +16,5 @@
     "githubApprovalEvidence.v1": "sha256:afd88be8835b4294195050eb0354fa97361778de2dda07728f36a44587292e80",
     "implementationManifest.v1": "sha256:e264ffc287eb4adcdf4b2ee6e5b2194300dd76963f913fec511e387ac5663957"
   },
-  "status": "PROPOSED_ACCEPTED_CANDIDATE"
+  "status": "ACCEPTED"
 }
