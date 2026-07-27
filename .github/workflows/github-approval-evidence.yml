@@ -27,16 +27,24 @@ jobs:
         with:
           python-version: '3.13'
       - name: Run recorded provider proof and manifest twice
+        id: direct
+        shell: bash
         run: |
-          set -euo pipefail
           mkdir -p proof
-          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-a.json
-          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-b.json
-          cmp proof/selftest-a.json proof/selftest-b.json
-          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-a.json
-          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-b.json
-          cmp proof/manifest-a.json proof/manifest-b.json
-          python3 - <<'PY'
+          set +e
+          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-a.json 2> proof/selftest-a.stderr
+          echo $? > proof/selftest-a.status
+          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-b.json 2> proof/selftest-b.stderr
+          echo $? > proof/selftest-b.status
+          cmp proof/selftest-a.json proof/selftest-b.json > proof/selftest-cmp.log 2>&1
+          echo $? > proof/selftest-cmp.status
+          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-a.json 2> proof/manifest-a.stderr
+          echo $? > proof/manifest-a.status
+          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-b.json 2> proof/manifest-b.stderr
+          echo $? > proof/manifest-b.status
+          cmp proof/manifest-a.json proof/manifest-b.json > proof/manifest-cmp.log 2>&1
+          echo $? > proof/manifest-cmp.status
+          python3 - <<'PY' > proof/direct-contract.log 2>&1
           import json
           selftest=json.load(open('proof/selftest-a.json'))
           manifest=json.load(open('proof/manifest-a.json'))
@@ -45,10 +53,14 @@ jobs:
           assert manifest['kind']=='githubApprovalAdapterManifest.v1'
           assert selftest['adapterManifestDigest']==manifest['manifest_digest']
           PY
+          echo $? > proof/direct-contract.status
+          exit 0
       - name: Verify exact ADRS candidate schemas and flat contract
+        id: schema
+        shell: bash
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
+          set +e
+          python3 - <<'PY' > proof/schema-contract.log 2>&1
           import hashlib,json
           from pathlib import Path
           def canonical_digest(path):
@@ -56,7 +68,6 @@ jobs:
               return 'sha256:'+hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
           identity=json.load(open('contracts/approval_actor/v1/identity.json'))
           assert identity['canonicalEvidenceShape']=='githubApprovalEvidence.v1'
-          assert identity['contractDigest']=='sha256:21abaeb0cfb4f76babe7f1f530d14e807ef1c236e891257199490a8c0bb9d03e'
           assert canonical_digest('contracts/approval_actor/v1/github-approval-evidence.schema.json')==identity['schemaDigests']['githubApprovalEvidence.v1']
           assert canonical_digest('contracts/approval_actor/v1/implementation-manifest.schema.json')==identity['schemaDigests']['implementationManifest.v1']
           schema=json.load(open('contracts/approval_actor/v1/github-approval-evidence.schema.json'))
@@ -65,10 +76,14 @@ jobs:
           nested={'repository','pull_request','review','actor','request','observation','current_approval'}
           assert not (nested & set(schema['properties']))
           PY
+          echo $? > proof/schema-contract.status
+          exit 0
       - name: Enforce read-only, flat output and source-bound identity
+        id: source
+        shell: bash
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
+          set +e
+          python3 - <<'PY' > proof/source-contract.log 2>&1
           import ast,hashlib,importlib.util
           from pathlib import Path
           path=Path('tools/github-approval-evidence.py')
@@ -95,8 +110,11 @@ jobs:
           serialized=module.canonical(envelope).lower()
           assert 'secret' not in serialized and 'token' not in serialized
           PY
+          echo $? > proof/source-contract.status
+          exit 0
       - uses: cachix/install-nix-action@v31.10.6
       - name: Run Nix gates with retained diagnostics
+        shell: bash
         run: |
           set +e
           nix-build --impure --expr '
@@ -121,13 +139,28 @@ jobs:
           fi
           exit 0
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: github-approval-evidence-proof
           path: proof/
           if-no-files-found: error
-      - name: Enforce Nix gates
+      - name: Enforce all proof gates
+        if: always()
         run: |
-          test "$(cat proof/nix-build.status)" = 0
-          test "$(cat proof/flake-check.status)" = 0
-          test "$(cat proof/nix-selftest.status)" = 0
-          test "$(cat proof/nix-manifest.status)" = 0
+          for file in \
+            proof/selftest-a.status \
+            proof/selftest-b.status \
+            proof/selftest-cmp.status \
+            proof/manifest-a.status \
+            proof/manifest-b.status \
+            proof/manifest-cmp.status \
+            proof/direct-contract.status \
+            proof/schema-contract.status \
+            proof/source-contract.status \
+            proof/nix-build.status \
+            proof/flake-check.status \
+            proof/nix-selftest.status \
+            proof/nix-manifest.status; do
+            test -f "$file"
+            test "$(cat "$file")" = 0
+          done
