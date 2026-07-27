@@ -1,0 +1,172 @@
+name: GitHub approval evidence proof
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - tools/github-approval-evidence.py
+      - tools/github-approval-evidence-cli.py
+      - nix/github-approval-evidence.nix
+      - contracts/approval_actor/v1/**
+      - docs/github-approval-evidence/**
+      - .github/workflows/github-approval-evidence.yml
+      - ci.intent.v1.jsonl
+      - flake.nix
+      - flake.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Run recorded provider proof and manifest twice
+        id: direct
+        shell: bash
+        run: |
+          mkdir -p proof
+          set +e
+          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-a.json 2> proof/selftest-a.stderr
+          echo $? > proof/selftest-a.status
+          python3 tools/github-approval-evidence-cli.py selftest > proof/selftest-b.json 2> proof/selftest-b.stderr
+          echo $? > proof/selftest-b.status
+          cmp proof/selftest-a.json proof/selftest-b.json > proof/selftest-cmp.log 2>&1
+          echo $? > proof/selftest-cmp.status
+          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-a.json 2> proof/manifest-a.stderr
+          echo $? > proof/manifest-a.status
+          python3 tools/github-approval-evidence-cli.py manifest > proof/manifest-b.json 2> proof/manifest-b.stderr
+          echo $? > proof/manifest-b.status
+          cmp proof/manifest-a.json proof/manifest-b.json > proof/manifest-cmp.log 2>&1
+          echo $? > proof/manifest-cmp.status
+          python3 - <<'PY' > proof/direct-contract.log 2>&1
+          import json
+          selftest=json.load(open('proof/selftest-a.json'))
+          manifest=json.load(open('proof/manifest-a.json'))
+          assert selftest['status']=='PASS'
+          assert selftest['destructiveCases']==22
+          assert manifest['kind']=='githubApprovalAdapterManifest.v1'
+          assert selftest['adapterManifestDigest']==manifest['manifest_digest']
+          PY
+          echo $? > proof/direct-contract.status
+          exit 0
+      - name: Verify exact Accepted ADRS schemas and flat contract
+        id: schema
+        shell: bash
+        run: |
+          set +e
+          python3 - <<'PY' > proof/schema-contract.log 2>&1
+          import hashlib,json
+          from pathlib import Path
+          def canonical_digest(path):
+              value=json.loads(Path(path).read_text())
+              return 'sha256:'+hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
+          identity=json.load(open('contracts/approval_actor/v1/identity.json'))
+          assert identity['status']=='ACCEPTED'
+          assert identity['adrsAcceptedMerge']=='70244fa200d8717c61b514432c54bed4248028d9'
+          assert identity['admission']=='ALLOW_WITH_ACCEPTED_EXCEPTION'
+          assert identity['admissionExceptionDigest']=='sha256:748ab4ccc62bc60c6bdc8c38a9d64d121f6fe0340907a935873c98971ca17f91'
+          assert identity['contractDigest']=='sha256:53e9fa1053c8a2f003765c6af2e8a90114f6470b46c9cc28d45eb3562518af0b'
+          assert identity['fullCanonicalGreen'] is False
+          assert identity['canonicalEvidenceShape']=='githubApprovalEvidence.v1'
+          assert canonical_digest('contracts/approval_actor/v1/github-approval-evidence.schema.json')==identity['schemaDigests']['githubApprovalEvidence.v1']
+          assert canonical_digest('contracts/approval_actor/v1/implementation-manifest.schema.json')==identity['schemaDigests']['implementationManifest.v1']
+          schema=json.load(open('contracts/approval_actor/v1/github-approval-evidence.schema.json'))
+          assert schema['additionalProperties'] is False
+          assert set(schema['required'])==set(schema['properties'])
+          nested={'repository','pull_request','review','actor','request','observation','current_approval'}
+          assert not (nested & set(schema['properties']))
+          PY
+          echo $? > proof/schema-contract.status
+          exit 0
+      - name: Enforce read-only, flat output and source-bound identity
+        id: source
+        shell: bash
+        run: |
+          set +e
+          python3 - <<'PY' > proof/source-contract.log 2>&1
+          import ast,hashlib,importlib.util
+          from pathlib import Path
+          path=Path('tools/github-approval-evidence.py')
+          source=path.read_text(encoding='utf-8')
+          tree=ast.parse(source)
+          forbidden_modules={'requests','httpx','github'}
+          for node in ast.walk(tree):
+              if isinstance(node,ast.Import): assert not ({a.name.split('.')[0] for a in node.names}&forbidden_modules)
+              if isinstance(node,ast.ImportFrom) and node.module: assert node.module.split('.')[0] not in forbidden_modules
+              if isinstance(node,ast.Call):
+                  for keyword in node.keywords:
+                      if keyword.arg=='method' and isinstance(keyword.value,ast.Constant): assert str(keyword.value.value).upper()=='GET'
+          spec=importlib.util.spec_from_file_location('adapter',path)
+          module=importlib.util.module_from_spec(spec); assert spec and spec.loader; spec.loader.exec_module(module)
+          bundle,request,observed=module.fixture()
+          envelope=module.normalize_github_approval_evidence(bundle,request,observed)
+          manifest=module.adapter_manifest()
+          assert envelope['status']=='COMPLETE' and envelope['findings']==[]
+          assert set(envelope)==module.REQUIRED_KEYS
+          assert all(value is False for value in envelope['claim_ceiling'].values())
+          assert manifest['source_files'][0]['sha256']=='sha256:'+hashlib.sha256(path.read_bytes()).hexdigest()
+          assert envelope['adapter_manifest_digest']==module.digest(manifest)
+          assert envelope['adapter_manifest_digest']!='sha256:'+hashlib.sha256(module.ADAPTER_VERSION.encode()).hexdigest()
+          serialized=module.canonical(envelope).lower()
+          assert 'secret' not in serialized and 'token' not in serialized
+          PY
+          echo $? > proof/source-contract.status
+          exit 0
+      - uses: cachix/install-nix-action@v31.10.6
+      - name: Run Nix gates with retained diagnostics
+        shell: bash
+        run: |
+          set +e
+          nix-build --impure --expr '
+            let
+              pkgs = (builtins.getFlake "github:NixOS/nixpkgs/1c3fe55ad329cbcb28471bb30f05c9827f724c76").legacyPackages.x86_64-linux;
+            in import ./nix/github-approval-evidence.nix { inherit pkgs; }
+          ' -o result-github-approval-evidence > proof/nix-build.log 2>&1
+          echo $? > proof/nix-build.status
+          nix flake check -L --no-write-lock-file \
+            --override-input governance github:roccho-dev/governance/proposal/182-approval-receipt-verifier \
+            --override-input conventionGovernance github:roccho-dev/governance/proposal/182-approval-receipt-verifier \
+            > proof/flake-check.log 2>&1
+          echo $? > proof/flake-check.status
+          if test -x result-github-approval-evidence/bin/github-approval-evidence; then
+            result-github-approval-evidence/bin/github-approval-evidence selftest > proof/nix-selftest.json 2> proof/nix-selftest.stderr
+            echo $? > proof/nix-selftest.status
+            result-github-approval-evidence/bin/github-approval-evidence manifest > proof/nix-manifest.json 2> proof/nix-manifest.stderr
+            echo $? > proof/nix-manifest.status
+          else
+            echo 127 > proof/nix-selftest.status
+            echo 127 > proof/nix-manifest.status
+          fi
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: github-approval-evidence-proof
+          path: proof/
+          if-no-files-found: error
+      - name: Enforce all proof gates
+        if: always()
+        run: |
+          for file in \
+            proof/selftest-a.status \
+            proof/selftest-b.status \
+            proof/selftest-cmp.status \
+            proof/manifest-a.status \
+            proof/manifest-b.status \
+            proof/manifest-cmp.status \
+            proof/direct-contract.status \
+            proof/schema-contract.status \
+            proof/source-contract.status \
+            proof/nix-build.status \
+            proof/flake-check.status \
+            proof/nix-selftest.status \
+            proof/nix-manifest.status; do
+            test -f "$file"
+            test "$(cat "$file")" = 0
+          done
