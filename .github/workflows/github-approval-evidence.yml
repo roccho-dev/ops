@@ -55,7 +55,7 @@ jobs:
           PY
           echo $? > proof/direct-contract.status
           exit 0
-      - name: Verify exact ADRS candidate schemas and flat contract
+      - name: Verify exact Accepted ADRS schemas and flat contract
         id: schema
         shell: bash
         run: |
@@ -67,6 +67,12 @@ jobs:
               value=json.loads(Path(path).read_text())
               return 'sha256:'+hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
           identity=json.load(open('contracts/approval_actor/v1/identity.json'))
+          assert identity['status']=='ACCEPTED'
+          assert identity['adrsAcceptedMerge']=='70244fa200d8717c61b514432c54bed4248028d9'
+          assert identity['admission']=='ALLOW_WITH_ACCEPTED_EXCEPTION'
+          assert identity['admissionExceptionDigest']=='sha256:748ab4ccc62bc60c6bdc8c38a9d64d121f6fe0340907a935873c98971ca17f91'
+          assert identity['contractDigest']=='sha256:53e9fa1053c8a2f003765c6af2e8a90114f6470b46c9cc28d45eb3562518af0b'
+          assert identity['fullCanonicalGreen'] is False
           assert identity['canonicalEvidenceShape']=='githubApprovalEvidence.v1'
           assert canonical_digest('contracts/approval_actor/v1/github-approval-evidence.schema.json')==identity['schemaDigests']['githubApprovalEvidence.v1']
           assert canonical_digest('contracts/approval_actor/v1/implementation-manifest.schema.json')==identity['schemaDigests']['implementationManifest.v1']
