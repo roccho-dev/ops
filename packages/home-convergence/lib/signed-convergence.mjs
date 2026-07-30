@@ -15,10 +15,12 @@ const fail = (code, message, detail = {}) => {
   throw error;
 };
 
+const compareStrings = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
+
 const requireExactKeys = (value, keys, path) => {
   if (!isObject(value)) fail("invalid-object", `${path} must be an object`, { path });
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
+  const actual = Object.keys(value).sort(compareStrings);
+  const expected = [...keys].sort(compareStrings);
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     fail("invalid-fields", `${path} fields do not match the closed contract`, {
       path,
@@ -124,7 +126,7 @@ const stripEnvelope = (envelope) => {
 const normalizedRequests = (requests) => {
   if (!Array.isArray(requests)) fail("invalid-requests", "requests must be an array");
   return [...requests].sort((left, right) =>
-    String(left?.target_class).localeCompare(String(right?.target_class)),
+    compareStrings(String(left?.target_class), String(right?.target_class)),
   );
 };
 
@@ -180,6 +182,86 @@ const validateRequestAttestation = (
     fail("request-attestation-mismatch", "requestAttestation requests_digest does not match requests");
   }
   return digest(unsignedEnvelope(attestation));
+};
+
+const validateIndependentReview = (
+  review,
+  {
+    exactOpsRevision,
+    exactEnvsRevision,
+    exactFlakesRevision,
+    targetSetDigest,
+    requestAttestationDigest,
+    wrapperDigest,
+    targetResults,
+    sourceAuditEvidenceDigest,
+  },
+) => {
+  const payload = stripEnvelope(review);
+  requireExactKeys(
+    payload,
+    [
+      "evidence_digest",
+      "exact_envs_revision",
+      "exact_flakes_revision",
+      "exact_ops_revision",
+      "request_attestation_digest",
+      "source_audit_evidence_digest",
+      "status",
+      "target_result_identities",
+      "target_set_digest",
+      "wrapper_digest",
+    ],
+    "independentReview",
+  );
+  if (payload.status !== "pass") {
+    fail("review-not-pass", "independentReview.status must be pass");
+  }
+  requireDigest(payload.evidence_digest, "independentReview.evidence_digest");
+  requireRevision(payload.exact_ops_revision, "independentReview.exact_ops_revision");
+  requireRevision(payload.exact_envs_revision, "independentReview.exact_envs_revision");
+  requireRevision(payload.exact_flakes_revision, "independentReview.exact_flakes_revision");
+  requireDigest(payload.target_set_digest, "independentReview.target_set_digest");
+  requireDigest(payload.request_attestation_digest, "independentReview.request_attestation_digest");
+  requireDigest(payload.wrapper_digest, "independentReview.wrapper_digest");
+  requireDigest(payload.source_audit_evidence_digest, "independentReview.source_audit_evidence_digest");
+  if (
+    payload.exact_ops_revision !== exactOpsRevision ||
+    payload.exact_envs_revision !== exactEnvsRevision ||
+    payload.exact_flakes_revision !== exactFlakesRevision
+  ) {
+    fail("review-revision-mismatch", "independentReview revisions do not match evidence");
+  }
+  if (payload.target_set_digest !== targetSetDigest) {
+    fail("target-set-mismatch", "independentReview target set mismatch");
+  }
+  if (payload.request_attestation_digest !== requestAttestationDigest) {
+    fail("review-binding-mismatch", "independentReview request attestation mismatch");
+  }
+  if (payload.wrapper_digest !== wrapperDigest) {
+    fail("review-binding-mismatch", "independentReview wrapper mismatch");
+  }
+  if (payload.source_audit_evidence_digest !== sourceAuditEvidenceDigest) {
+    fail("review-binding-mismatch", "independentReview source audit mismatch");
+  }
+  const expectedTargets = targetClasses();
+  requireExactKeys(payload.target_result_identities, expectedTargets, "independentReview.target_result_identities");
+  for (const targetClass of expectedTargets) {
+    requireDigest(
+      payload.target_result_identities[targetClass],
+      `independentReview.target_result_identities.${targetClass}`,
+    );
+    if (payload.target_result_identities[targetClass] !== targetResults[targetClass].result_identity) {
+      fail("review-binding-mismatch", `independentReview result mismatch for ${targetClass}`);
+    }
+  }
+  return {
+    core: {
+      status: payload.status,
+      evidence_digest: payload.evidence_digest,
+    },
+    attestationDigest: digest(unsignedEnvelope(review)),
+  };
 };
 
 export const buildSignedConvergenceReceipt = ({
@@ -241,25 +323,42 @@ export const buildSignedConvergenceReceipt = ({
     fail("invalid-target-results", "targetResults must be an object");
   }
   const expectedTargets = targetClasses();
-  const actualTargets = Object.keys(targetResults).sort();
-  const sortedExpected = [...expectedTargets].sort();
+  const actualTargets = Object.keys(targetResults).sort(compareStrings);
+  const sortedExpected = [...expectedTargets].sort(compareStrings);
   if (
     actualTargets.length !== sortedExpected.length ||
     actualTargets.some((target, index) => target !== sortedExpected[index])
   ) {
     fail("invalid-target-results", "targetResults must contain exactly the canonical targets");
   }
+  const targetCore = {};
+  const targetAttestationDigests = {};
   for (const targetClass of expectedTargets) {
     verifyEnvelope(targetResults[targetClass], {
       authority: executionAuthority,
       publicKey: executionKey,
       path: `targetResults.${targetClass}`,
     });
+    targetCore[targetClass] = stripEnvelope(targetResults[targetClass]);
+    targetAttestationDigests[targetClass] = digest(unsignedEnvelope(targetResults[targetClass]));
   }
   verifyEnvelope(independentReview, {
     authority: reviewAuthority,
     publicKey: reviewKey,
     path: "independentReview",
+  });
+
+  const wrapperCore = stripEnvelope(wrapperReceipt);
+  const sourceAuditCore = stripEnvelope(sourceAudit);
+  const reviewValidation = validateIndependentReview(independentReview, {
+    exactOpsRevision,
+    exactEnvsRevision,
+    exactFlakesRevision,
+    targetSetDigest,
+    requestAttestationDigest,
+    wrapperDigest: wrapperCore.wrapper_digest,
+    targetResults: targetCore,
+    sourceAuditEvidenceDigest: sourceAuditCore.evidence_digest,
   });
 
   const baseReceipt = buildConvergenceReceipt({
@@ -268,16 +367,21 @@ export const buildSignedConvergenceReceipt = ({
     exactFlakesRevision,
     targetSetDigest,
     requests,
-    wrapperReceipt: stripEnvelope(wrapperReceipt),
-    targetResults: Object.fromEntries(
-      expectedTargets.map((targetClass) => [targetClass, stripEnvelope(targetResults[targetClass])]),
-    ),
-    sourceAudit: stripEnvelope(sourceAudit),
-    independentReview: stripEnvelope(independentReview),
+    wrapperReceipt: wrapperCore,
+    targetResults: targetCore,
+    sourceAudit: sourceAuditCore,
+    independentReview: reviewValidation.core,
   });
   const payload = {
     ...baseReceipt,
     request_attestation_digest: requestAttestationDigest,
+    wrapper_receipt_attestation_digest: digest(unsignedEnvelope(wrapperReceipt)),
+    source_audit_attestation_digest: digest(unsignedEnvelope(sourceAudit)),
+    review_attestation_digest: reviewValidation.attestationDigest,
+    per_target_results: baseReceipt.per_target_results.map((result) => ({
+      ...result,
+      private_evidence_digest: targetAttestationDigests[result.target_class],
+    })),
     execution_authority_identity: executionAuthority.authority_identity,
     execution_authority_key_id: executionAuthority.authority_key_id,
     review_authority_identity: reviewAuthority.authority_identity,
