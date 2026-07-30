@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import process from "node:process";
 import { parseArgs } from "node:util";
-import { buildConvergenceReceipt } from "../lib/home-convergence.mjs";
+import { buildSignedConvergenceReceipt } from "../lib/signed-convergence.mjs";
 import { auditRuntimeSource } from "../lib/source-audit.mjs";
 
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -55,6 +55,10 @@ const { values } = parseArgs({
     results: { type: "string" },
     "source-audit": { type: "string" },
     review: { type: "string" },
+    "execution-authority": { type: "string" },
+    "execution-authority-digest": { type: "string" },
+    "review-authority": { type: "string" },
+    "review-authority-digest": { type: "string" },
     "ops-revision": { type: "string" },
     "envs-revision": { type: "string" },
     "flakes-revision": { type: "string" },
@@ -69,6 +73,10 @@ for (const key of [
   "results",
   "source-audit",
   "review",
+  "execution-authority",
+  "execution-authority-digest",
+  "review-authority",
+  "review-authority-digest",
   "ops-revision",
   "envs-revision",
   "flakes-revision",
@@ -78,7 +86,7 @@ for (const key of [
 }
 
 try {
-  const receipt = buildConvergenceReceipt({
+  const receipt = buildSignedConvergenceReceipt({
     exactOpsRevision: values["ops-revision"],
     exactEnvsRevision: values["envs-revision"],
     exactFlakesRevision: values["flakes-revision"],
@@ -88,6 +96,10 @@ try {
     targetResults: readJson(values.results),
     sourceAudit: readJson(values["source-audit"]),
     independentReview: readJson(values.review),
+    executionAuthority: readJson(values["execution-authority"]),
+    expectedExecutionAuthorityDigest: values["execution-authority-digest"],
+    reviewAuthority: readJson(values["review-authority"]),
+    expectedReviewAuthorityDigest: values["review-authority-digest"],
   });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
 } catch (error) {
