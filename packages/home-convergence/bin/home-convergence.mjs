@@ -11,7 +11,11 @@ const failUsage = (message) => {
   process.exit(2);
 };
 
-const [command, ...argv] = process.argv.slice(2);
+let [command, ...argv] = process.argv.slice(2);
+if (command?.startsWith("--")) {
+  argv = [command, ...argv];
+  command = "receipt";
+}
 
 if (command === "source-audit") {
   const { values } = parseArgs({
