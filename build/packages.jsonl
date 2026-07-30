@@ -27,3 +27,4 @@
 {"kind":"package","name":"hq-source-evidence-runtime","runtime":"node","entry":"packages/hq-source-evidence-runtime/bin/hq-source-evidence-runtime.mjs","bin":"hq-source-evidence-runtime","deps":["node"],"env":[]}
 {"kind":"package","name":"model-source-reconcile","runtime":"node","entry":"packages/model-source-reconcile/bin/model-source-reconcile.mjs","bin":"model-source-reconcile","deps":["node"],"env":[]}
 {"kind":"package","name":"gosh","runtime":"go","entry":"packages/gosh/cmd/gosh","bin":"gosh","deps":[],"env":[]}
+{"kind":"package","name":"home-convergence","runtime":"node","entry":"packages/home-convergence/bin/home-convergence.mjs","bin":"home-convergence","deps":["node"],"env":[]}
