@@ -1,9 +1,19 @@
 import crypto from "node:crypto";
 import { buildConvergenceReceipt, digest, targetClasses } from "./home-convergence.mjs";
 
+const SCOPE = "OPS_HOMELESS_CONVERGENCE_001";
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 const REVISION_RE = /^[0-9a-f]{40}$/;
 const SIGNATURE_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+const TARGET_EVIDENCE_FIELDS = [
+  "anonymous_readback_digest",
+  "credential_reference_private_authority_only",
+  "fresh_reconstruction",
+  "legacy_permissive_access_state_present",
+  "network_safe",
+  "plaintext_initial_credential_present",
+  "private_evidence_locator_digest",
+];
 
 const isObject = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -27,6 +37,21 @@ const requireExactKeys = (value, keys, path) => {
       expected,
       actual,
     });
+  }
+};
+
+const requireAllowedKeys = (value, required, allowed, path) => {
+  if (!isObject(value)) fail("invalid-object", `${path} must be an object`, { path });
+  for (const key of required) {
+    if (!(key in value)) fail("missing-field", `${path}.${key} is required`, { path, key });
+  }
+  const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (unknown.length > 0) fail("invalid-fields", `${path} contains unknown fields`, { path, unknown });
+};
+
+const requireString = (value, path) => {
+  if (typeof value !== "string" || value.length === 0) {
+    fail("invalid-string", `${path} must be a non-empty string`, { path });
   }
 };
 
@@ -57,21 +82,21 @@ export const validateAuthorityRecord = (record, { expectedDigest, expectedRole, 
       "kind",
       "public_key_pem",
       "role",
+      "scope",
     ],
     path,
   );
   if (record.kind !== "ops.homeEvidenceAuthority.v1") {
     fail("invalid-authority-kind", `${path}.kind is invalid`, { path });
   }
+  if (record.scope !== SCOPE) {
+    fail("wrong-authority-scope", `${path}.scope must be ${SCOPE}`, { path });
+  }
   if (record.role !== expectedRole) {
     fail("wrong-authority-role", `${path}.role must be ${expectedRole}`, { path });
   }
-  if (typeof record.authority_key_id !== "string" || record.authority_key_id.length === 0) {
-    fail("invalid-authority-key-id", `${path}.authority_key_id must be non-empty`, { path });
-  }
-  if (typeof record.public_key_pem !== "string" || record.public_key_pem.length === 0) {
-    fail("invalid-authority-public-key", `${path}.public_key_pem must be non-empty`, { path });
-  }
+  requireString(record.authority_key_id, `${path}.authority_key_id`);
+  requireString(record.public_key_pem, `${path}.public_key_pem`);
   requireDigest(record.authority_identity, `${path}.authority_identity`);
   requireDigest(expectedDigest, `${path}.expectedDigest`);
   if (digest(authorityPayload(record)) !== record.authority_identity) {
@@ -98,6 +123,12 @@ const unsignedEnvelope = (envelope) => {
   return payload;
 };
 
+const stripEnvelope = (envelope) => {
+  const payload = unsignedEnvelope(envelope);
+  delete payload.authority_key_id;
+  return payload;
+};
+
 const verifyEnvelope = (envelope, { authority, publicKey, path }) => {
   if (!isObject(envelope)) fail("invalid-object", `${path} must be an object`, { path });
   if (envelope.authority_key_id !== authority.authority_key_id) {
@@ -114,13 +145,6 @@ const verifyEnvelope = (envelope, { authority, publicKey, path }) => {
   if (!crypto.verify(null, message, publicKey, signature)) {
     fail("signature-verification-failed", `${path}.signature is invalid`, { path });
   }
-};
-
-const stripEnvelope = (envelope) => {
-  const payload = { ...envelope };
-  delete payload.authority_key_id;
-  delete payload.signature;
-  return payload;
 };
 
 const normalizedRequests = (requests) => {
@@ -184,6 +208,106 @@ const validateRequestAttestation = (
   return digest(unsignedEnvelope(attestation));
 };
 
+const validatePrimitive = (primitive, path) => {
+  const required = ["id", "kind", "mainProgram", "version"];
+  const allowed = [...required, "layout", "target"];
+  requireAllowedKeys(primitive, required, allowed, path);
+  if (primitive.kind !== "flakes.packagePrimitive.v1") {
+    fail("invalid-package-primitive-kind", `${path}.kind is invalid`, { path });
+  }
+  requireString(primitive.id, `${path}.id`);
+  requireString(primitive.version, `${path}.version`);
+  requireString(primitive.mainProgram, `${path}.mainProgram`);
+  if ("layout" in primitive) requireString(primitive.layout, `${path}.layout`);
+  if ("target" in primitive) requireString(primitive.target, `${path}.target`);
+};
+
+const validatePackagePrimitiveAttestation = (
+  attestation,
+  { requests, exactFlakesRevision },
+) => {
+  const payload = stripEnvelope(attestation);
+  requireExactKeys(
+    payload,
+    [
+      "exact_flakes_revision",
+      "kind",
+      "primitive",
+      "producer_output",
+      "producer_repository",
+      "status",
+    ],
+    "packagePrimitiveAttestation",
+  );
+  if (payload.kind !== "ops.homePackagePrimitiveAttestation.v1") {
+    fail("invalid-package-primitive-attestation-kind", "packagePrimitiveAttestation.kind is invalid");
+  }
+  if (payload.status !== "pass") {
+    fail("package-primitive-attestation-not-pass", "packagePrimitiveAttestation.status must be pass");
+  }
+  requireRevision(payload.exact_flakes_revision, "packagePrimitiveAttestation.exact_flakes_revision");
+  requireString(payload.producer_repository, "packagePrimitiveAttestation.producer_repository");
+  requireString(payload.producer_output, "packagePrimitiveAttestation.producer_output");
+  validatePrimitive(payload.primitive, "packagePrimitiveAttestation.primitive");
+  if (payload.exact_flakes_revision !== exactFlakesRevision) {
+    fail("stale-flakes-revision", "packagePrimitiveAttestation flakes revision mismatch");
+  }
+  if (payload.producer_repository !== "roccho-dev/flakes") {
+    fail("wrong-package-producer", "packagePrimitiveAttestation producer must be roccho-dev/flakes");
+  }
+  const flakesBindings = normalizedRequests(requests)
+    .flatMap((request) => request.changes ?? [])
+    .filter((change) => change.producer_repository === "roccho-dev/flakes");
+  if (flakesBindings.length !== 1) {
+    fail("required-package-binding-count", "exactly one required flakes package binding is expected");
+  }
+  const binding = flakesBindings[0];
+  if (
+    binding.producer_exact_revision !== payload.exact_flakes_revision ||
+    binding.producer_output !== payload.producer_output ||
+    binding.resource_identity?.package_id !== payload.primitive.id
+  ) {
+    fail("package-primitive-binding-mismatch", "package primitive does not match the envs binding");
+  }
+  return {
+    payload,
+    attestationDigest: digest(unsignedEnvelope(attestation)),
+  };
+};
+
+const validateEvidencePhase = (phase, path) => {
+  requireExactKeys(phase, ["evidence_digest", "status"], path);
+  if (phase.status !== "pass") fail("phase-failed", `${path}.status must be pass`, { path });
+  requireDigest(phase.evidence_digest, `${path}.evidence_digest`);
+};
+
+const validateTargetExecutionEnvelope = (envelope, path) => {
+  const payload = stripEnvelope(envelope);
+  for (const field of TARGET_EVIDENCE_FIELDS) {
+    if (!(field in payload)) fail("missing-field", `${path}.${field} is required`, { path, field });
+  }
+  validateEvidencePhase(payload.fresh_reconstruction, `${path}.fresh_reconstruction`);
+  validateEvidencePhase(payload.network_safe, `${path}.network_safe`);
+  requireDigest(payload.private_evidence_locator_digest, `${path}.private_evidence_locator_digest`);
+  requireDigest(payload.anonymous_readback_digest, `${path}.anonymous_readback_digest`);
+  if (payload.plaintext_initial_credential_present !== false) {
+    fail("plaintext-credential-present", `${path}.plaintext_initial_credential_present must be false`, { path });
+  }
+  if (payload.legacy_permissive_access_state_present !== false) {
+    fail("legacy-access-present", `${path}.legacy_permissive_access_state_present must be false`, { path });
+  }
+  if (payload.credential_reference_private_authority_only !== true) {
+    fail("credential-authority-invalid", `${path}.credential_reference_private_authority_only must be true`, { path });
+  }
+  const core = { ...payload };
+  for (const field of TARGET_EVIDENCE_FIELDS) delete core[field];
+  return {
+    core,
+    metadata: Object.fromEntries(TARGET_EVIDENCE_FIELDS.map((field) => [field, payload[field]])),
+    attestationDigest: digest(unsignedEnvelope(envelope)),
+  };
+};
+
 const validateIndependentReview = (
   review,
   {
@@ -192,9 +316,10 @@ const validateIndependentReview = (
     exactFlakesRevision,
     targetSetDigest,
     requestAttestationDigest,
-    wrapperDigest,
-    targetResults,
-    sourceAuditEvidenceDigest,
+    packagePrimitiveAttestationDigest,
+    wrapperReceiptAttestationDigest,
+    targetResultAttestationDigests,
+    sourceAuditAttestationDigest,
   },
 ) => {
   const payload = stripEnvelope(review);
@@ -205,26 +330,26 @@ const validateIndependentReview = (
       "exact_envs_revision",
       "exact_flakes_revision",
       "exact_ops_revision",
+      "package_primitive_attestation_digest",
       "request_attestation_digest",
-      "source_audit_evidence_digest",
+      "source_audit_attestation_digest",
       "status",
-      "target_result_identities",
+      "target_result_attestation_digests",
       "target_set_digest",
-      "wrapper_digest",
+      "wrapper_receipt_attestation_digest",
     ],
     "independentReview",
   );
-  if (payload.status !== "pass") {
-    fail("review-not-pass", "independentReview.status must be pass");
-  }
+  if (payload.status !== "pass") fail("review-not-pass", "independentReview.status must be pass");
   requireDigest(payload.evidence_digest, "independentReview.evidence_digest");
   requireRevision(payload.exact_ops_revision, "independentReview.exact_ops_revision");
   requireRevision(payload.exact_envs_revision, "independentReview.exact_envs_revision");
   requireRevision(payload.exact_flakes_revision, "independentReview.exact_flakes_revision");
   requireDigest(payload.target_set_digest, "independentReview.target_set_digest");
   requireDigest(payload.request_attestation_digest, "independentReview.request_attestation_digest");
-  requireDigest(payload.wrapper_digest, "independentReview.wrapper_digest");
-  requireDigest(payload.source_audit_evidence_digest, "independentReview.source_audit_evidence_digest");
+  requireDigest(payload.package_primitive_attestation_digest, "independentReview.package_primitive_attestation_digest");
+  requireDigest(payload.wrapper_receipt_attestation_digest, "independentReview.wrapper_receipt_attestation_digest");
+  requireDigest(payload.source_audit_attestation_digest, "independentReview.source_audit_attestation_digest");
   if (
     payload.exact_ops_revision !== exactOpsRevision ||
     payload.exact_envs_revision !== exactEnvsRevision ||
@@ -235,31 +360,34 @@ const validateIndependentReview = (
   if (payload.target_set_digest !== targetSetDigest) {
     fail("target-set-mismatch", "independentReview target set mismatch");
   }
-  if (payload.request_attestation_digest !== requestAttestationDigest) {
-    fail("review-binding-mismatch", "independentReview request attestation mismatch");
-  }
-  if (payload.wrapper_digest !== wrapperDigest) {
-    fail("review-binding-mismatch", "independentReview wrapper mismatch");
-  }
-  if (payload.source_audit_evidence_digest !== sourceAuditEvidenceDigest) {
-    fail("review-binding-mismatch", "independentReview source audit mismatch");
+  if (
+    payload.request_attestation_digest !== requestAttestationDigest ||
+    payload.package_primitive_attestation_digest !== packagePrimitiveAttestationDigest ||
+    payload.wrapper_receipt_attestation_digest !== wrapperReceiptAttestationDigest ||
+    payload.source_audit_attestation_digest !== sourceAuditAttestationDigest
+  ) {
+    fail("review-binding-mismatch", "independentReview evidence-set binding is stale or unrelated");
   }
   const expectedTargets = targetClasses();
-  requireExactKeys(payload.target_result_identities, expectedTargets, "independentReview.target_result_identities");
+  requireExactKeys(
+    payload.target_result_attestation_digests,
+    expectedTargets,
+    "independentReview.target_result_attestation_digests",
+  );
   for (const targetClass of expectedTargets) {
     requireDigest(
-      payload.target_result_identities[targetClass],
-      `independentReview.target_result_identities.${targetClass}`,
+      payload.target_result_attestation_digests[targetClass],
+      `independentReview.target_result_attestation_digests.${targetClass}`,
     );
-    if (payload.target_result_identities[targetClass] !== targetResults[targetClass].result_identity) {
+    if (
+      payload.target_result_attestation_digests[targetClass] !==
+      targetResultAttestationDigests[targetClass]
+    ) {
       fail("review-binding-mismatch", `independentReview result mismatch for ${targetClass}`);
     }
   }
   return {
-    core: {
-      status: payload.status,
-      evidence_digest: payload.evidence_digest,
-    },
+    core: { status: payload.status, evidence_digest: payload.evidence_digest },
     attestationDigest: digest(unsignedEnvelope(review)),
   };
 };
@@ -271,6 +399,7 @@ export const buildSignedConvergenceReceipt = ({
   targetSetDigest,
   requests,
   requestAttestation,
+  packagePrimitiveAttestation,
   wrapperReceipt,
   targetResults,
   sourceAudit,
@@ -290,11 +419,11 @@ export const buildSignedConvergenceReceipt = ({
     expectedRole: "independent-review",
     path: "reviewAuthority",
   });
-  if (executionAuthority.authority_key_id === reviewAuthority.authority_key_id) {
-    fail("review-not-independent", "execution and review authority keys must differ");
-  }
-  if (executionAuthority.public_key_pem === reviewAuthority.public_key_pem) {
-    fail("review-not-independent", "execution and review public keys must differ");
+  if (
+    executionAuthority.authority_key_id === reviewAuthority.authority_key_id ||
+    executionAuthority.public_key_pem === reviewAuthority.public_key_pem
+  ) {
+    fail("review-not-independent", "execution and review authorities must use distinct keys");
   }
 
   verifyEnvelope(requestAttestation, {
@@ -308,6 +437,15 @@ export const buildSignedConvergenceReceipt = ({
     exactFlakesRevision,
     targetSetDigest,
   });
+  verifyEnvelope(packagePrimitiveAttestation, {
+    authority: executionAuthority,
+    publicKey: executionKey,
+    path: "packagePrimitiveAttestation",
+  });
+  const primitiveValidation = validatePackagePrimitiveAttestation(
+    packagePrimitiveAttestation,
+    { requests, exactFlakesRevision },
+  );
   verifyEnvelope(wrapperReceipt, {
     authority: executionAuthority,
     publicKey: executionKey,
@@ -319,19 +457,11 @@ export const buildSignedConvergenceReceipt = ({
     path: "sourceAudit",
   });
 
-  if (!isObject(targetResults)) {
-    fail("invalid-target-results", "targetResults must be an object");
-  }
+  if (!isObject(targetResults)) fail("invalid-target-results", "targetResults must be an object");
   const expectedTargets = targetClasses();
-  const actualTargets = Object.keys(targetResults).sort(compareStrings);
-  const sortedExpected = [...expectedTargets].sort(compareStrings);
-  if (
-    actualTargets.length !== sortedExpected.length ||
-    actualTargets.some((target, index) => target !== sortedExpected[index])
-  ) {
-    fail("invalid-target-results", "targetResults must contain exactly the canonical targets");
-  }
+  requireExactKeys(targetResults, expectedTargets, "targetResults");
   const targetCore = {};
+  const targetMetadata = {};
   const targetAttestationDigests = {};
   for (const targetClass of expectedTargets) {
     verifyEnvelope(targetResults[targetClass], {
@@ -339,8 +469,13 @@ export const buildSignedConvergenceReceipt = ({
       publicKey: executionKey,
       path: `targetResults.${targetClass}`,
     });
-    targetCore[targetClass] = stripEnvelope(targetResults[targetClass]);
-    targetAttestationDigests[targetClass] = digest(unsignedEnvelope(targetResults[targetClass]));
+    const validation = validateTargetExecutionEnvelope(
+      targetResults[targetClass],
+      `targetResults.${targetClass}`,
+    );
+    targetCore[targetClass] = validation.core;
+    targetMetadata[targetClass] = validation.metadata;
+    targetAttestationDigests[targetClass] = validation.attestationDigest;
   }
   verifyEnvelope(independentReview, {
     authority: reviewAuthority,
@@ -350,15 +485,18 @@ export const buildSignedConvergenceReceipt = ({
 
   const wrapperCore = stripEnvelope(wrapperReceipt);
   const sourceAuditCore = stripEnvelope(sourceAudit);
+  const wrapperReceiptAttestationDigest = digest(unsignedEnvelope(wrapperReceipt));
+  const sourceAuditAttestationDigest = digest(unsignedEnvelope(sourceAudit));
   const reviewValidation = validateIndependentReview(independentReview, {
     exactOpsRevision,
     exactEnvsRevision,
     exactFlakesRevision,
     targetSetDigest,
     requestAttestationDigest,
-    wrapperDigest: wrapperCore.wrapper_digest,
-    targetResults: targetCore,
-    sourceAuditEvidenceDigest: sourceAuditCore.evidence_digest,
+    packagePrimitiveAttestationDigest: primitiveValidation.attestationDigest,
+    wrapperReceiptAttestationDigest,
+    targetResultAttestationDigests: targetAttestationDigests,
+    sourceAuditAttestationDigest,
   });
 
   const baseReceipt = buildConvergenceReceipt({
@@ -372,15 +510,34 @@ export const buildSignedConvergenceReceipt = ({
     sourceAudit: sourceAuditCore,
     independentReview: reviewValidation.core,
   });
+  const primitive = primitiveValidation.payload.primitive;
   const payload = {
     ...baseReceipt,
     request_attestation_digest: requestAttestationDigest,
-    wrapper_receipt_attestation_digest: digest(unsignedEnvelope(wrapperReceipt)),
-    source_audit_attestation_digest: digest(unsignedEnvelope(sourceAudit)),
+    package_primitive_attestation_digest: primitiveValidation.attestationDigest,
+    wrapper_receipt_attestation_digest: wrapperReceiptAttestationDigest,
+    source_audit_attestation_digest: sourceAuditAttestationDigest,
     review_attestation_digest: reviewValidation.attestationDigest,
+    required_package_primitive: {
+      id: primitive.id,
+      version: primitive.version,
+      main_program: primitive.mainProgram,
+      target: primitive.target ?? null,
+      layout: primitive.layout ?? null,
+      producer_output: primitiveValidation.payload.producer_output,
+    },
     per_target_results: baseReceipt.per_target_results.map((result) => ({
       ...result,
       private_evidence_digest: targetAttestationDigests[result.target_class],
+      private_evidence_locator_digest:
+        targetMetadata[result.target_class].private_evidence_locator_digest,
+      anonymous_readback_digest:
+        targetMetadata[result.target_class].anonymous_readback_digest,
+      fresh_reconstruction: "PASS",
+      network_safe: "PASS",
+      plaintext_initial_credential_present: false,
+      legacy_permissive_access_state_present: false,
+      credential_reference_private_authority_only: true,
     })),
     execution_authority_identity: executionAuthority.authority_identity,
     execution_authority_key_id: executionAuthority.authority_key_id,
