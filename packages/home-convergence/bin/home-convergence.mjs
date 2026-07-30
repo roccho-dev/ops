@@ -3,10 +3,48 @@ import fs from "node:fs";
 import process from "node:process";
 import { parseArgs } from "node:util";
 import { buildConvergenceReceipt } from "../lib/home-convergence.mjs";
+import { auditRuntimeSource } from "../lib/source-audit.mjs";
 
-const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
+const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, "utf8"));
+const failUsage = (message) => {
+  process.stderr.write(`${message}\n`);
+  process.exit(2);
+};
+
+const [command, ...argv] = process.argv.slice(2);
+
+if (command === "source-audit") {
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      root: { type: "string" },
+      "ops-revision": { type: "string" },
+      details: { type: "boolean", default: false },
+    },
+    strict: true,
+  });
+  if (!values.root || !values["ops-revision"]) {
+    failUsage("usage: home-convergence source-audit --root <package-dir> --ops-revision <sha> [--details]");
+  }
+  try {
+    const audit = auditRuntimeSource({
+      root: values.root,
+      exactOpsRevision: values["ops-revision"],
+    });
+    process.stdout.write(`${JSON.stringify(values.details ? audit : audit.summary)}\n`);
+    process.exit(audit.summary.status === "pass" ? 0 : 1);
+  } catch (error) {
+    process.stderr.write(`${JSON.stringify({ ok: false, code: "source-audit-error", message: error.message })}\n`);
+    process.exit(1);
+  }
+}
+
+if (command !== "receipt") {
+  failUsage("usage: home-convergence <source-audit|receipt> ...");
+}
 
 const { values } = parseArgs({
+  args: argv,
   options: {
     requests: { type: "string" },
     wrapper: { type: "string" },
@@ -21,7 +59,7 @@ const { values } = parseArgs({
   strict: true,
 });
 
-const required = [
+for (const key of [
   "requests",
   "wrapper",
   "results",
@@ -31,13 +69,8 @@ const required = [
   "envs-revision",
   "flakes-revision",
   "target-set-digest",
-];
-
-for (const key of required) {
-  if (!values[key]) {
-    console.error(`missing required option --${key}`);
-    process.exit(2);
-  }
+]) {
+  if (!values[key]) failUsage(`missing required option --${key}`);
 }
 
 try {
