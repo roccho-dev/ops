@@ -9,7 +9,7 @@ It does not define desired state, package recipes, host identity, credentials, a
 ```text
 merged envs ops requests
 + signed request attestation
-+ merged flakes identity
++ signed exact flakes PackagePrimitive attestation
 + signed private-wrapper PASS projection
 + signed per-target execution results
 + signed exact Ops source audit
@@ -30,12 +30,13 @@ execution-evidence
 independent-review
 ```
 
-Each record is self-digested as `ops.homeEvidenceAuthority.v1`. The expected record digests must come from the accepted authority source used by ADRS #269. Supplying an arbitrary public key and its matching digest is not sufficient for final admission; the emitted receipt retains both authority identities so ADRS can reject an unaccepted or superseded record.
+Both records are scoped to `OPS_HOMELESS_CONVERGENCE_001` and self-digested as `ops.homeEvidenceAuthority.v1`. Their expected digests must come from the accepted authority source used by ADRS #269. Supplying an arbitrary public key and its matching digest is not sufficient for final admission; the emitted receipt retains both identities so ADRS can reject an unaccepted or superseded record.
 
 The execution key signs:
 
 ```text
 request attestation
+PackagePrimitive attestation
 private-wrapper receipt
 source audit
 all three target results
@@ -47,10 +48,29 @@ The review key must be different and signs a review bound to:
 exact Ops / Envs / Flakes revisions
 target-set digest
 request-attestation digest
-wrapper digest
-all three target-result identities
-source-audit evidence digest
+PackagePrimitive-attestation digest
+wrapper-receipt attestation digest
+all three target-result attestation digests
+source-audit attestation digest
 ```
+
+A valid review of another run or an older evidence set is rejected.
+
+## Package identity
+
+The current target set contains one required `roccho-dev/flakes` product binding. The signed primitive attestation must provide the complete `flakes.packagePrimitive.v1` identity:
+
+```text
+id
+version
+mainProgram
+target, when present
+layout, when present
+exact flakes revision
+exact producer output
+```
+
+The validator joins this to the exact `envs` binding by producer repository, revision, output, and package ID. Ops does not recreate the package recipe.
 
 ## Required targets
 
@@ -65,6 +85,7 @@ wsl-user
 A target cannot pass without signed evidence for:
 
 ```text
+fresh reconstruction
 prepare
 apply
 native observe
@@ -75,10 +96,16 @@ bounded failure observed
 rollback
 post-rollback observe
 post-rollback safe-state match
+NETWORK_SAFE
 home reference count = 0
 ambient PATH dependency count = 0
 raw secret output count = 0
 unclassified effect count = 0
+plaintext initial credential present = false
+legacy permissive access state present = false
+credential reference resolved only through private authority = true
+private evidence locator digest
+anonymous readback digest
 ```
 
 Each result is bound to the exact Ops, Envs, and Flakes revisions, target-set digest, private-wrapper digest, pre-effect plan digest, and request identity.
@@ -104,6 +131,7 @@ The audit hashes all four public runtime/audit files and scans the three executi
 home-convergence receipt \
   --requests ops-requests.json \
   --request-attestation request-attestation.json \
+  --package-primitive-attestation package-primitive-attestation.json \
   --wrapper private-wrapper-receipt.json \
   --results target-results.json \
   --source-audit source-audit.json \
@@ -118,11 +146,11 @@ home-convergence receipt \
   --target-set-digest <sha256:...>
 ```
 
-Successful stdout is one compact JSON object. Invalid signatures, unaccepted authority digests, same-key review, unrelated review, stale inputs, or incomplete evidence are rejected on stderr with a stable error code.
+Successful stdout is one compact JSON object. Invalid signatures, unaccepted authority digests, wrong scope, same-key review, unrelated review, stale inputs, package mismatch, unsafe credential state, or incomplete evidence are rejected on stderr with a stable error code.
 
 ## Public disclosure ceiling
 
-Public inputs and output may contain only public verification keys, opaque target IDs, exact public revisions, self-digests, signatures, counters, statuses, and private evidence digests.
+Public inputs and output may contain only public verification keys, opaque target IDs, exact public revisions, package identity, self-digests, signatures, counters, statuses, and private evidence locator/digests.
 
 They must not contain:
 
