@@ -51,6 +51,7 @@ const { values } = parseArgs({
   args: argv,
   options: {
     requests: { type: "string" },
+    "request-attestation": { type: "string" },
     wrapper: { type: "string" },
     results: { type: "string" },
     "source-audit": { type: "string" },
@@ -69,6 +70,7 @@ const { values } = parseArgs({
 
 for (const key of [
   "requests",
+  "request-attestation",
   "wrapper",
   "results",
   "source-audit",
@@ -92,6 +94,7 @@ try {
     exactFlakesRevision: values["flakes-revision"],
     targetSetDigest: values["target-set-digest"],
     requests: readJson(values.requests),
+    requestAttestation: readJson(values["request-attestation"]),
     wrapperReceipt: readJson(values.wrapper),
     targetResults: readJson(values.results),
     sourceAudit: readJson(values["source-audit"]),
