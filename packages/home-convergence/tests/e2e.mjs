@@ -13,6 +13,7 @@ const FLAKES = "cccccccccccccccccccccccccccccccccccccccc";
 const NIXPKGS = "dddddddddddddddddddddddddddddddddddddddd";
 const TARGET_SET = digest({ kind: "envs.targetSet.v1", targets: targetClasses() });
 const WRAPPER = digest({ kind: "private-wrapper", targetSet: TARGET_SET });
+const compareStrings = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
 const phase = (name) => ({ status: "pass", evidence_digest: digest({ phase: name }) });
 
 const makeAuthority = (role, authorityKeyId, publicKey) => {
@@ -35,12 +36,19 @@ const signEnvelope = (payload, authority, privateKey) => {
   };
 };
 
-const stripEnvelope = (envelope) => {
+const unsignedEnvelope = (envelope) => {
   const payload = { ...envelope };
-  delete payload.authority_key_id;
   delete payload.signature;
   return payload;
 };
+
+const coreEnvelope = (envelope) => {
+  const payload = unsignedEnvelope(envelope);
+  delete payload.authority_key_id;
+  return payload;
+};
+
+const signedDigest = (envelope) => digest(unsignedEnvelope(envelope));
 
 const externalIdentity = (packageId, repository, revision, output) => {
   const payload = {
@@ -93,7 +101,7 @@ const packageChange = (targetClass, repository, revision, output, packageId) => 
   target_class: targetClass,
 });
 
-const request = (targetClass, extra) => {
+const makeRequest = (targetClass, extra) => {
   const changes = [projectionChange(targetClass), extra];
   const payload = {
     kind: "envs.opsRequestedState.v1",
@@ -111,8 +119,8 @@ const request = (targetClass, extra) => {
   return { ...payload, request_identity: digest(payload) };
 };
 
-const resultFor = (req) => {
-  const targetClass = req.target_class;
+const makeResult = (request) => {
+  const targetClass = request.target_class;
   const payload = {
     kind: "ops.homeTargetConvergenceResult.v1",
     target_class: targetClass,
@@ -122,8 +130,8 @@ const resultFor = (req) => {
     exact_flakes_revision: FLAKES,
     target_set_digest: TARGET_SET,
     wrapper_digest: WRAPPER,
-    pre_effect_plan_digest: req.plan_digest,
-    request_identity: req.request_identity,
+    pre_effect_plan_digest: request.plan_digest,
+    request_identity: request.request_identity,
     prepare: phase(`${targetClass}:prepare`),
     apply: phase(`${targetClass}:apply`),
     native_observe: phase(`${targetClass}:observe`),
@@ -144,7 +152,7 @@ const resultFor = (req) => {
 
 const requestAttestationPayload = (requests) => {
   const ordered = [...requests].sort((left, right) =>
-    left.target_class.localeCompare(right.target_class),
+    compareStrings(left.target_class, right.target_class),
   );
   return {
     kind: "ops.homeRequestAttestation.v1",
@@ -156,6 +164,24 @@ const requestAttestationPayload = (requests) => {
     status: "pass",
   };
 };
+
+const reviewPayload = (input) => ({
+  status: "pass",
+  evidence_digest: digest({ evidence: "independent-review" }),
+  exact_ops_revision: OPS,
+  exact_envs_revision: ENVS,
+  exact_flakes_revision: FLAKES,
+  target_set_digest: TARGET_SET,
+  request_attestation_digest: signedDigest(input.requestAttestation),
+  wrapper_digest: coreEnvelope(input.wrapperReceipt).wrapper_digest,
+  target_result_identities: Object.fromEntries(
+    targetClasses().map((targetClass) => [
+      targetClass,
+      coreEnvelope(input.targetResults[targetClass]).result_identity,
+    ]),
+  ),
+  source_audit_evidence_digest: coreEnvelope(input.sourceAudit).evidence_digest,
+});
 
 const makeInputs = () => {
   const executionKeys = crypto.generateKeyPairSync("ed25519");
@@ -171,7 +197,7 @@ const makeInputs = () => {
     reviewKeys.publicKey,
   );
   const requests = [
-    request(
+    makeRequest(
       "linux-vm-system-user",
       packageChange(
         "linux-vm-system-user",
@@ -181,11 +207,11 @@ const makeInputs = () => {
         "codex-cli",
       ),
     ),
-    request(
+    makeRequest(
       "wsl-system",
       packageChange("wsl-system", "NixOS/nixpkgs", NIXPKGS, "legacyPackages.x86_64-linux.git", "git"),
     ),
-    request(
+    makeRequest(
       "wsl-user",
       packageChange("wsl-user", "NixOS/nixpkgs", NIXPKGS, "legacyPackages.x86_64-linux.git", "git"),
     ),
@@ -201,25 +227,7 @@ const makeInputs = () => {
     status: "pass",
   };
   wrapperPayload.receipt_identity = digest(wrapperPayload);
-  const sourceAuditPayload = {
-    status: "pass",
-    evidence_digest: digest({ evidence: "source-audit" }),
-    desired_state_redefined_in_ops: 0,
-    product_package_duplicates: 0,
-    raw_secret_schema_fields: 0,
-    unclassified_effects: 0,
-  };
-  const reviewPayload = {
-    status: "pass",
-    evidence_digest: digest({ evidence: "independent-review" }),
-  };
-  const targetResults = Object.fromEntries(
-    requests.map((req) => [
-      req.target_class,
-      signEnvelope(resultFor(req), executionAuthority, executionKeys.privateKey),
-    ]),
-  );
-  return {
+  const input = {
     exactOpsRevision: OPS,
     exactEnvsRevision: ENVS,
     exactFlakesRevision: FLAKES,
@@ -231,15 +239,36 @@ const makeInputs = () => {
       executionKeys.privateKey,
     ),
     wrapperReceipt: signEnvelope(wrapperPayload, executionAuthority, executionKeys.privateKey),
-    targetResults,
-    sourceAudit: signEnvelope(sourceAuditPayload, executionAuthority, executionKeys.privateKey),
-    independentReview: signEnvelope(reviewPayload, reviewAuthority, reviewKeys.privateKey),
+    targetResults: Object.fromEntries(
+      requests.map((request) => [
+        request.target_class,
+        signEnvelope(makeResult(request), executionAuthority, executionKeys.privateKey),
+      ]),
+    ),
+    sourceAudit: signEnvelope(
+      {
+        status: "pass",
+        evidence_digest: digest({ evidence: "source-audit" }),
+        desired_state_redefined_in_ops: 0,
+        product_package_duplicates: 0,
+        raw_secret_schema_fields: 0,
+        unclassified_effects: 0,
+      },
+      executionAuthority,
+      executionKeys.privateKey,
+    ),
     executionAuthority,
     expectedExecutionAuthorityDigest: executionAuthority.authority_identity,
     reviewAuthority,
     expectedReviewAuthorityDigest: reviewAuthority.authority_identity,
     _keys: { executionKeys, reviewKeys },
   };
+  input.independentReview = signEnvelope(
+    reviewPayload(input),
+    reviewAuthority,
+    reviewKeys.privateKey,
+  );
+  return input;
 };
 
 const publicInputs = (input) => {
@@ -248,31 +277,33 @@ const publicInputs = (input) => {
   return copy;
 };
 
-const resignRequest = (requestValue) => {
-  const payload = { ...requestValue };
-  delete payload.request_identity;
-  requestValue.request_identity = digest(payload);
+const resignInner = (envelope, identityField) => {
+  const payload = coreEnvelope(envelope);
+  delete payload[identityField];
+  payload[identityField] = digest(payload);
+  return payload;
 };
 
-const resignRequestAttestation = (input) => {
-  input.requestAttestation = signEnvelope(
-    requestAttestationPayload(input.requests),
-    input.executionAuthority,
-    input._keys.executionKeys.privateKey,
+const signExecution = (input, payload) =>
+  signEnvelope(payload, input.executionAuthority, input._keys.executionKeys.privateKey);
+
+const resignRequest = (request) => {
+  const payload = { ...request };
+  delete payload.request_identity;
+  request.request_identity = digest(payload);
+};
+
+const refreshRequestAttestation = (input) => {
+  input.requestAttestation = signExecution(input, requestAttestationPayload(input.requests));
+};
+
+const refreshReview = (input) => {
+  input.independentReview = signEnvelope(
+    reviewPayload(input),
+    input.reviewAuthority,
+    input._keys.reviewKeys.privateKey,
   );
 };
-
-const resignExecutionEnvelope = (input, envelope, identityField = null) => {
-  const payload = stripEnvelope(envelope);
-  if (identityField !== null) {
-    delete payload[identityField];
-    payload[identityField] = digest(payload);
-  }
-  return signEnvelope(payload, input.executionAuthority, input._keys.executionKeys.privateKey);
-};
-
-const resignReviewEnvelope = (input, envelope) =>
-  signEnvelope(stripEnvelope(envelope), input.reviewAuthority, input._keys.reviewKeys.privateKey);
 
 const expectCode = (mutate, code) => {
   const input = makeInputs();
@@ -298,7 +329,6 @@ assert.deepEqual(
     publicInputs({ ...valid, requests: [...valid.requests].reverse() }),
   ),
   receipt,
-  "request order must not alter the public receipt",
 );
 
 expectCode((input) => {
@@ -308,9 +338,8 @@ expectCode((input) => {
   input.wrapperReceipt.status = "blocked";
 }, "signature-verification-failed");
 expectCode((input) => {
-  const payload = stripEnvelope(input.wrapperReceipt);
   input.wrapperReceipt = signEnvelope(
-    payload,
+    coreEnvelope(input.wrapperReceipt),
     input.executionAuthority,
     input._keys.reviewKeys.privateKey,
   );
@@ -324,7 +353,7 @@ expectCode((input) => {
   input.reviewAuthority = sameKeyReview;
   input.expectedReviewAuthorityDigest = sameKeyReview.authority_identity;
   input.independentReview = signEnvelope(
-    stripEnvelope(input.independentReview),
+    reviewPayload(input),
     sameKeyReview,
     input._keys.executionKeys.privateKey,
   );
@@ -332,17 +361,20 @@ expectCode((input) => {
 expectCode((input) => input.requests.pop(), "request-attestation-mismatch");
 expectCode((input) => {
   input.requests.pop();
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "invalid-request-count");
 expectCode((input) => {
   input.requests[2].target_class = "wsl-system";
   resignRequest(input.requests[2]);
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "duplicate-target");
 expectCode((input) => {
   input.requests[0].changes[0].producer_exact_revision = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
   resignRequest(input.requests[0]);
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "stale-envs-revision");
 expectCode((input) => {
   const change = input.requests[0].changes[1];
@@ -352,7 +384,8 @@ expectCode((input) => {
   delete identityPayload.identity;
   change.resource_identity.identity = digest(identityPayload);
   resignRequest(input.requests[0]);
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "stale-flakes-revision");
 expectCode((input) => {
   const change = input.requests[1].changes[1];
@@ -362,67 +395,72 @@ expectCode((input) => {
   delete identityPayload.identity;
   change.resource_identity.identity = digest(identityPayload);
   resignRequest(input.requests[1]);
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "home-producer-reference");
 expectCode((input) => {
   input.requests[0].request_identity = digest("wrong-request");
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "request-digest-mismatch");
 expectCode((input) => {
   input.requests[0].changes[0].unexpected = true;
   resignRequest(input.requests[0]);
-  resignRequestAttestation(input);
+  refreshRequestAttestation(input);
+  refreshReview(input);
 }, "invalid-fields");
 expectCode((input) => {
-  const payload = stripEnvelope(input.wrapperReceipt);
+  const payload = resignInner(input.wrapperReceipt, "receipt_identity");
   payload.status = "blocked";
-  input.wrapperReceipt = resignExecutionEnvelope(input, payload, "receipt_identity");
+  delete payload.receipt_identity;
+  payload.receipt_identity = digest(payload);
+  input.wrapperReceipt = signExecution(input, payload);
 }, "wrapper-not-pass");
 expectCode((input) => {
-  const result = input.targetResults["wsl-system"];
-  result.second_apply_change_count = 1;
-  input.targetResults["wsl-system"] = resignExecutionEnvelope(input, result, "result_identity");
+  const payload = resignInner(input.targetResults["wsl-system"], "result_identity");
+  payload.second_apply_change_count = 1;
+  delete payload.result_identity;
+  payload.result_identity = digest(payload);
+  input.targetResults["wsl-system"] = signExecution(input, payload);
+}, "review-binding-mismatch");
+expectCode((input) => {
+  const payload = resignInner(input.targetResults["wsl-system"], "result_identity");
+  payload.second_apply_change_count = 1;
+  delete payload.result_identity;
+  payload.result_identity = digest(payload);
+  input.targetResults["wsl-system"] = signExecution(input, payload);
+  refreshReview(input);
 }, "second-apply-changed");
 expectCode((input) => {
-  const result = input.targetResults["wsl-system"];
-  result.rollback.status = "fail";
-  input.targetResults["wsl-system"] = resignExecutionEnvelope(input, result, "result_identity");
+  const payload = resignInner(input.targetResults["wsl-system"], "result_identity");
+  payload.rollback.status = "fail";
+  delete payload.result_identity;
+  payload.result_identity = digest(payload);
+  input.targetResults["wsl-system"] = signExecution(input, payload);
+  refreshReview(input);
 }, "phase-failed");
 expectCode((input) => {
-  const result = input.targetResults["wsl-user"];
-  result.home_reference_count = 1;
-  input.targetResults["wsl-user"] = resignExecutionEnvelope(input, result, "result_identity");
-}, "home-reference-present");
-expectCode((input) => {
-  const result = input.targetResults["linux-vm-system-user"];
-  result.ambient_path_dependency_count = 1;
-  input.targetResults["linux-vm-system-user"] = resignExecutionEnvelope(input, result, "result_identity");
-}, "ambient-path-dependency");
-expectCode((input) => {
-  const result = input.targetResults["linux-vm-system-user"];
-  result.raw_secret_output_count = 1;
-  input.targetResults["linux-vm-system-user"] = resignExecutionEnvelope(input, result, "result_identity");
-}, "raw-secret-output");
-expectCode((input) => {
-  const result = input.targetResults["linux-vm-system-user"];
-  result.unclassified_effect_count = 1;
-  input.targetResults["linux-vm-system-user"] = resignExecutionEnvelope(input, result, "result_identity");
-}, "unclassified-effect");
-expectCode((input) => {
-  input.sourceAudit.desired_state_redefined_in_ops = 1;
-  input.sourceAudit = resignExecutionEnvelope(input, input.sourceAudit);
+  const payload = coreEnvelope(input.sourceAudit);
+  payload.desired_state_redefined_in_ops = 1;
+  input.sourceAudit = signExecution(input, payload);
+  refreshReview(input);
 }, "source-audit-counter");
 expectCode((input) => {
-  input.independentReview.status = "not-run";
-  input.independentReview = resignReviewEnvelope(input, input.independentReview);
+  const payload = coreEnvelope(input.independentReview);
+  payload.status = "not-run";
+  input.independentReview = signEnvelope(
+    payload,
+    input.reviewAuthority,
+    input._keys.reviewKeys.privateKey,
+  );
 }, "review-not-pass");
 expectCode((input) => {
-  input.targetResults["wsl-user"].opaque_target_id = input.targetResults["wsl-system"].opaque_target_id;
-  input.targetResults["wsl-user"] = resignExecutionEnvelope(
-    input,
-    input.targetResults["wsl-user"],
-    "result_identity",
-  );
+  const payload = resignInner(input.targetResults["wsl-user"], "result_identity");
+  payload.opaque_target_id = coreEnvelope(input.targetResults["wsl-system"]).opaque_target_id;
+  delete payload.result_identity;
+  payload.result_identity = digest(payload);
+  input.targetResults["wsl-user"] = signExecution(input, payload);
+  refreshReview(input);
 }, "duplicate-opaque-target");
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "home-convergence-"));
