@@ -3,9 +3,11 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { digest } from "./home-convergence.mjs";
 
-const RUNTIME_FILES = [
-  "bin/home-convergence.mjs",
-  "lib/home-convergence.mjs",
+const SOURCE_FILES = [
+  { path: "bin/home-convergence.mjs", scan: true },
+  { path: "lib/home-convergence.mjs", scan: true },
+  { path: "lib/signed-convergence.mjs", scan: true },
+  { path: "lib/source-audit.mjs", scan: false },
 ];
 
 const sha256 = (bytes) =>
@@ -19,16 +21,19 @@ export const auditRuntimeSource = ({ root, exactOpsRevision }) => {
     throw new Error("exactOpsRevision must be a 40-character lowercase git revision");
   }
 
-  const runtimeFiles = RUNTIME_FILES.map((relativePath) => {
-    const absolutePath = path.join(root, relativePath);
+  const sourceFiles = SOURCE_FILES.map((source) => {
+    const absolutePath = path.join(root, source.path);
     const bytes = fs.readFileSync(absolutePath);
     return {
-      path: relativePath,
+      ...source,
       sha256: sha256(bytes),
       text: bytes.toString("utf8"),
     };
   });
-  const runtimeText = runtimeFiles.map((file) => file.text).join("\n");
+  const runtimeText = sourceFiles
+    .filter((file) => file.scan)
+    .map((file) => file.text)
+    .join("\n");
 
   const desiredStateRedefinitions = countMatches(runtimeText, [
     /\bdesired_state_id\s*:/g,
@@ -66,15 +71,16 @@ export const auditRuntimeSource = ({ root, exactOpsRevision }) => {
     raw_secret_schema_fields: rawSecretSchemaFields,
     unclassified_effects: unclassifiedEffects,
   };
-  const files = runtimeFiles.map(({ path: filePath, sha256: fileDigest }) => ({
+  const files = sourceFiles.map(({ path: filePath, scan, sha256: fileDigest }) => ({
     path: filePath,
+    scan,
     sha256: fileDigest,
   }));
   const evidence = {
     kind: "ops.homeConvergenceSourceAuditEvidence.v1",
     exact_ops_revision: exactOpsRevision,
-    runtime_files: files,
-    runtime_files_digest: digest(files),
+    source_files: files,
+    source_files_digest: digest(files),
     counters,
   };
   const status = Object.values(counters).every((value) => value === 0) ? "pass" : "fail";
