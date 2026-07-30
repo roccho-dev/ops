@@ -52,6 +52,7 @@ const { values } = parseArgs({
   options: {
     requests: { type: "string" },
     "request-attestation": { type: "string" },
+    "package-primitive-attestation": { type: "string" },
     wrapper: { type: "string" },
     results: { type: "string" },
     "source-audit": { type: "string" },
@@ -71,6 +72,7 @@ const { values } = parseArgs({
 for (const key of [
   "requests",
   "request-attestation",
+  "package-primitive-attestation",
   "wrapper",
   "results",
   "source-audit",
@@ -95,6 +97,7 @@ try {
     targetSetDigest: values["target-set-digest"],
     requests: readJson(values.requests),
     requestAttestation: readJson(values["request-attestation"]),
+    packagePrimitiveAttestation: readJson(values["package-primitive-attestation"]),
     wrapperReceipt: readJson(values.wrapper),
     targetResults: readJson(values.results),
     sourceAudit: readJson(values["source-audit"]),
