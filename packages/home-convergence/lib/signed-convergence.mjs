@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { buildConvergenceReceipt, digest, targetClasses } from "./home-convergence.mjs";
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
+const REVISION_RE = /^[0-9a-f]{40}$/;
 const SIGNATURE_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 
 const isObject = (value) =>
@@ -30,6 +31,12 @@ const requireExactKeys = (value, keys, path) => {
 const requireDigest = (value, path) => {
   if (typeof value !== "string" || !DIGEST_RE.test(value)) {
     fail("invalid-digest", `${path} must be sha256:<64 lowercase hex>`, { path });
+  }
+};
+
+const requireRevision = (value, path) => {
+  if (typeof value !== "string" || !REVISION_RE.test(value)) {
+    fail("invalid-revision", `${path} must be a 40-character lowercase git revision`, { path });
   }
 };
 
@@ -97,12 +104,7 @@ const verifyEnvelope = (envelope, { authority, publicKey, path }) => {
   if (typeof envelope.signature !== "string" || !SIGNATURE_RE.test(envelope.signature)) {
     fail("invalid-signature", `${path}.signature must be base64`, { path });
   }
-  let signature;
-  try {
-    signature = Buffer.from(envelope.signature, "base64");
-  } catch {
-    fail("invalid-signature", `${path}.signature cannot be decoded`, { path });
-  }
+  const signature = Buffer.from(envelope.signature, "base64");
   if (signature.length !== 64) {
     fail("invalid-signature", `${path}.signature must be a 64-byte Ed25519 signature`, { path });
   }
@@ -119,12 +121,65 @@ const stripEnvelope = (envelope) => {
   return payload;
 };
 
-export const signEnvelopeForTest = (payload, { authorityKeyId, privateKey }) => {
-  const unsigned = { ...payload, authority_key_id: authorityKeyId };
-  const signature = crypto
-    .sign(null, Buffer.from(digest(unsigned), "utf8"), privateKey)
-    .toString("base64");
-  return { ...unsigned, signature };
+const normalizedRequests = (requests) => {
+  if (!Array.isArray(requests)) fail("invalid-requests", "requests must be an array");
+  return [...requests].sort((left, right) =>
+    String(left?.target_class).localeCompare(String(right?.target_class)),
+  );
+};
+
+const validateRequestAttestation = (
+  attestation,
+  { requests, exactEnvsRevision, exactFlakesRevision, targetSetDigest },
+) => {
+  const payload = stripEnvelope(attestation);
+  requireExactKeys(
+    payload,
+    [
+      "exact_envs_revision",
+      "exact_flakes_revision",
+      "kind",
+      "request_identities",
+      "requests_digest",
+      "status",
+      "target_set_digest",
+    ],
+    "requestAttestation",
+  );
+  if (payload.kind !== "ops.homeRequestAttestation.v1") {
+    fail("invalid-request-attestation-kind", "requestAttestation.kind is invalid");
+  }
+  if (payload.status !== "pass") {
+    fail("request-attestation-not-pass", "requestAttestation.status must be pass");
+  }
+  requireRevision(payload.exact_envs_revision, "requestAttestation.exact_envs_revision");
+  requireRevision(payload.exact_flakes_revision, "requestAttestation.exact_flakes_revision");
+  requireDigest(payload.target_set_digest, "requestAttestation.target_set_digest");
+  requireDigest(payload.requests_digest, "requestAttestation.requests_digest");
+  if (payload.exact_envs_revision !== exactEnvsRevision) {
+    fail("stale-envs-revision", "requestAttestation envs revision mismatch");
+  }
+  if (payload.exact_flakes_revision !== exactFlakesRevision) {
+    fail("stale-flakes-revision", "requestAttestation flakes revision mismatch");
+  }
+  if (payload.target_set_digest !== targetSetDigest) {
+    fail("target-set-mismatch", "requestAttestation target set mismatch");
+  }
+  const ordered = normalizedRequests(requests);
+  const identities = ordered.map((request) => request.request_identity);
+  if (!Array.isArray(payload.request_identities)) {
+    fail("invalid-request-identities", "requestAttestation.request_identities must be an array");
+  }
+  if (
+    payload.request_identities.length !== identities.length ||
+    payload.request_identities.some((identity, index) => identity !== identities[index])
+  ) {
+    fail("request-attestation-mismatch", "requestAttestation identities do not match requests");
+  }
+  if (payload.requests_digest !== digest(ordered)) {
+    fail("request-attestation-mismatch", "requestAttestation requests_digest does not match requests");
+  }
+  return digest(unsignedEnvelope(attestation));
 };
 
 export const buildSignedConvergenceReceipt = ({
@@ -133,6 +188,7 @@ export const buildSignedConvergenceReceipt = ({
   exactFlakesRevision,
   targetSetDigest,
   requests,
+  requestAttestation,
   wrapperReceipt,
   targetResults,
   sourceAudit,
@@ -159,6 +215,17 @@ export const buildSignedConvergenceReceipt = ({
     fail("review-not-independent", "execution and review public keys must differ");
   }
 
+  verifyEnvelope(requestAttestation, {
+    authority: executionAuthority,
+    publicKey: executionKey,
+    path: "requestAttestation",
+  });
+  const requestAttestationDigest = validateRequestAttestation(requestAttestation, {
+    requests,
+    exactEnvsRevision,
+    exactFlakesRevision,
+    targetSetDigest,
+  });
   verifyEnvelope(wrapperReceipt, {
     authority: executionAuthority,
     publicKey: executionKey,
@@ -210,6 +277,7 @@ export const buildSignedConvergenceReceipt = ({
   });
   const payload = {
     ...baseReceipt,
+    request_attestation_digest: requestAttestationDigest,
     execution_authority_identity: executionAuthority.authority_identity,
     execution_authority_key_id: executionAuthority.authority_key_id,
     review_authority_identity: reviewAuthority.authority_identity,
