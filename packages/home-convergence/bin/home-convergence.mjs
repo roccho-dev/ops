@@ -11,6 +11,7 @@ const { values } = parseArgs({
     requests: { type: "string" },
     wrapper: { type: "string" },
     results: { type: "string" },
+    "source-audit": { type: "string" },
     review: { type: "string" },
     "ops-revision": { type: "string" },
     "envs-revision": { type: "string" },
@@ -24,6 +25,7 @@ const required = [
   "requests",
   "wrapper",
   "results",
+  "source-audit",
   "review",
   "ops-revision",
   "envs-revision",
@@ -47,6 +49,7 @@ try {
     requests: readJson(values.requests),
     wrapperReceipt: readJson(values.wrapper),
     targetResults: readJson(values.results),
+    sourceAudit: readJson(values["source-audit"]),
     independentReview: readJson(values.review),
   });
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
