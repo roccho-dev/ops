@@ -76,12 +76,11 @@ export const auditRuntimeSource = ({ root, exactOpsRevision }) => {
     scan,
     sha256: fileDigest,
   }));
-  const sourceFilesDigest = digest(files);
   const evidence = {
     kind: "ops.homeConvergenceSourceAuditEvidence.v1",
     exact_ops_revision: exactOpsRevision,
     source_files: files,
-    source_files_digest: sourceFilesDigest,
+    source_files_digest: digest(files),
     counters,
   };
   const status = Object.values(counters).every((value) => value === 0) ? "pass" : "fail";
@@ -89,8 +88,6 @@ export const auditRuntimeSource = ({ root, exactOpsRevision }) => {
     summary: {
       status,
       evidence_digest: digest(evidence),
-      exact_ops_revision: exactOpsRevision,
-      source_files_digest: sourceFilesDigest,
       ...counters,
     },
     evidence,
