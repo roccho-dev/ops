@@ -1,0 +1,88 @@
+{
+  "baseCommit": "ca0cb4c1c7f34f97cce6f368d66e9bc9779553e5",
+  "branch": "feat/python-dist-proof-20260803",
+  "build": {
+    "artifactBytes": 8686,
+    "builder": "python standard zipapp",
+    "byteEqual": true,
+    "customBundler": false,
+    "firstSha256": "0f56885603ac1a5cadee455a7a6bd2153a44296c478b9f28fbc096d3883e4976",
+    "pycacheIncluded": false,
+    "secondSha256": "0f56885603ac1a5cadee455a7a6bd2153a44296c478b9f28fbc096d3883e4976",
+    "sourceSha256": "edda97332023d8d9a2c64a512be9e875133c2b579154c2f6b31032b2b608cc78"
+  },
+  "distribution": {
+    "artifactSha256": "0f56885603ac1a5cadee455a7a6bd2153a44296c478b9f28fbc096d3883e4976",
+    "connectorEncoding": "base64",
+    "distPath": "dist/jsonl-inspect/jsonl-inspect.pyz",
+    "exactCommitReadback": "PASS",
+    "gitBlobSha1": "acf609a0c0d4fcf9b3948471e95707c9737257fd",
+    "manifestPath": "dist/jsonl-inspect/manifest.json",
+    "noBuildWorkflowAdded": true,
+    "readbackCommit": "7ad25a2122c2361a8f92fb593493d846c6161162",
+    "readbackPath": "dist/jsonl-inspect/jsonl-inspect.pyz",
+    "sourceAndDistSameCommit": true,
+    "sourceDistCommit": "7ad25a2122c2361a8f92fb593493d846c6161162"
+  },
+  "environment": {
+    "networkInstallRequired": false,
+    "platform": "Linux-6.12.13-x86_64-with-glibc2.41",
+    "pypiRequired": false,
+    "python": "3.13.5"
+  },
+  "issue": "roccho-dev/ops#99",
+  "pass": true,
+  "pr98Modified": false,
+  "purpose": "multi-module Python source to committed deterministic pyz for immediate ChatGPT reuse",
+  "schemaVersion": "ops.python-dist-proof.v1",
+  "tests": {
+    "malformedJsonBlocked": true,
+    "manifest": {
+      "entrypoints": [
+        "manifest",
+        "run",
+        "selftest"
+      ],
+      "externalDependencies": [],
+      "generatedIsAuthority": false,
+      "hostCommands": [],
+      "id": "urn:roccho-dev:ops:dist:jsonl-inspect",
+      "kind": "ops.pythonDist.manifest.v1",
+      "runtime": "python>=3.11",
+      "stdlibOnly": true,
+      "version": "0.1.0"
+    },
+    "nonStandardNanBlocked": true,
+    "run": {
+      "canonicalRowsSha256": "f7e8950ac81f03c691b4fc32ef7f84b1d4fb797f7183f6ddc949bb63cebf7570",
+      "duplicateIds": [
+        "a"
+      ],
+      "generatedIsAuthority": false,
+      "idCount": 3,
+      "idKey": "id",
+      "inputSha256": "367698a5f207475ced583f953ffa4c3095909b91bfab540c5977f0f8126835b9",
+      "keys": [
+        "id",
+        "x"
+      ],
+      "kind": "jsonlInspect.result.v1",
+      "ok": true,
+      "rowCount": 3
+    },
+    "selftest": {
+      "deterministic": true,
+      "duplicateIds": [
+        "a"
+      ],
+      "generatedIsAuthority": false,
+      "kind": "jsonlInspect.selftest.v1",
+      "malformedInputBlocked": true,
+      "ok": true,
+      "rowCount": 3
+    },
+    "unittestFailed": 0,
+    "unittestPassed": 4,
+    "unknownRequestKeysBlocked": true
+  }
+}
