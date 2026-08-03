@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "ops.mjsBundlerLocalHandoff.v2",
+  "status": "PASS",
+  "handoff": {
+    "runId": 30777418599,
+    "runAttempt": 1,
+    "artifactId": 8842496397,
+    "artifactName": "rollup-local-handoff-30777418599",
+    "artifactDigest": "sha256:fff4548b5651592d43bb24eb618f9c28aae83cec542dc803075156dfad78e4f7",
+    "sourceCommit": "33ff47f7d606be2f10acf782b23853f84a58b3ba",
+    "temporaryWorkflowRemoved": true
+  },
+  "bundler": {
+    "path": "dist/mjs-bundler/bundle.mjs",
+    "gitBlobSha1": "cd70d93dee5a885f382ae3f9209d9e0a23418e0d",
+    "bytes": 401149,
+    "sha256": "d89aba96e8311285a141faceac56665ccea4a228e15a0522edc2e3e70de39b05"
+  },
+  "directExecution": {
+    "environment": "ChatGPT container",
+    "runtime": "node v22.16.0",
+    "networkUsedAfterArtifactDownload": false,
+    "nodeModulesUsed": false,
+    "sideAssetsUsed": false,
+    "fixtureModuleCount": 2,
+    "generatedBytes": 113,
+    "generatedSha256": "784a60073e88681c3268652988c1a4768f1fd1170cbd3e006dceadb29f507d64",
+    "byteDeterministic": true,
+    "externalImportCount": 0,
+    "treeShakingPass": true,
+    "generatedSyntaxCheckPass": true,
+    "result": 41,
+    "status": "PASS"
+  }
+}
