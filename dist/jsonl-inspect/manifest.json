@@ -1,0 +1,54 @@
+{
+  "artifact": {
+    "archiveFiles": [
+      "__main__.py",
+      "jsonl_inspect/",
+      "jsonl_inspect/__init__.py",
+      "jsonl_inspect/__main__.py",
+      "jsonl_inspect/canonical.py",
+      "jsonl_inspect/cli.py",
+      "jsonl_inspect/core.py",
+      "jsonl_inspect/manifest.py"
+    ],
+    "bytes": 8686,
+    "interpreter": "/usr/bin/env python3",
+    "path": "dist/jsonl-inspect/jsonl-inspect.pyz",
+    "sha256": "0f56885603ac1a5cadee455a7a6bd2153a44296c478b9f28fbc096d3883e4976"
+  },
+  "builder": {
+    "buildScript": "packages/jsonl-inspect/build.sh",
+    "buildScriptSha256": "554257ffb800a69e2caa03b521361a67df603e19dff91861b0095daf3ae6c123",
+    "command": "python3 -m zipapp",
+    "compressed": false,
+    "customBundler": false,
+    "kind": "python-stdlib-zipapp",
+    "normalizedTimestamp": "1980-01-01T00:00:00Z"
+  },
+  "entrypoints": [
+    "manifest",
+    "run",
+    "selftest"
+  ],
+  "generatedIsAuthority": false,
+  "id": "urn:roccho-dev:ops:dist:jsonl-inspect",
+  "runtime": {
+    "externalDependencies": [],
+    "hostCommands": [],
+    "requires": "python>=3.11",
+    "stdlibOnly": true
+  },
+  "schemaVersion": "ops.python-dist.v1",
+  "source": {
+    "files": {
+      "packages/jsonl-inspect/src/__main__.py": "1553171b7b4f6eb87dbbdc18bc4f4699994f7850b023cfc816c6aeef2441bc2f",
+      "packages/jsonl-inspect/src/jsonl_inspect/__init__.py": "164fa9e42b7076a961209b188efefeb16ae3080a76b5ec4b78e52ed61e9ba49f",
+      "packages/jsonl-inspect/src/jsonl_inspect/__main__.py": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d",
+      "packages/jsonl-inspect/src/jsonl_inspect/canonical.py": "c9de22e3d1337133a21c1c971beabc71ea8a3fdae27afcd1a5f626d3f0126a92",
+      "packages/jsonl-inspect/src/jsonl_inspect/cli.py": "c106f352ffd292247eb11a851d5b896f99ba87df811435c673757ed5cd2c72b2",
+      "packages/jsonl-inspect/src/jsonl_inspect/core.py": "b4df34af463dff6aca8ef6914556b2cbb41c002d851a8f3e9d92213d41451a19",
+      "packages/jsonl-inspect/src/jsonl_inspect/manifest.py": "5834ddc881ca5ae5e4a73bf83b44b8b517ffb72820d962380e2054b2a6879d4d"
+    },
+    "root": "packages/jsonl-inspect/src",
+    "sha256": "edda97332023d8d9a2c64a512be9e875133c2b579154c2f6b31032b2b608cc78"
+  }
+}
