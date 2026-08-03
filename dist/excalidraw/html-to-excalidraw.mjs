@@ -1,26 +1,3 @@
-/**
- * Browser-only, dependency-free HTML -> Excalidraw projection and viewer URL helper.
- * Distribution contract: one bundled MJS, no external import/fetch/worker/wasm.
- */
-
-export const manifest = Object.freeze({
-  id: "urn:roccho-dev:ops:dist:excalidraw:tools",
-  version: "0.1.0",
-  runtime: "browser",
-  entrypoints: ["run", "htmlToExcalidraw", "makeExcalidrawUrl", "serializeExcalidraw"],
-  externalDependencies: [],
-});
-
-const DEFAULTS = Object.freeze({
-  selector: ".slide",
-  pageGap: 80,
-  viewportWidth: 1700,
-  viewportHeight: 1000,
-  fontFamily: 2,
-  backgroundColor: "#e7ebee",
-  source: "roccho-dev/ops/dist/excalidraw/excalidraw-tools.mjs",
-});
-
 function number(value, fallback = 0) {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -73,99 +50,6 @@ function rgbToHex(value, whiteBlend = true) {
   return `#${[red, green, blue]
     .map((component) => clamp(component, 0, 255).toString(16).padStart(2, "0"))
     .join("")}`;
-}
-
-function baseElement(type, id, x, y, width, height, order) {
-  return {
-    id,
-    type,
-    x: roundHalfEven(x, 2),
-    y: roundHalfEven(y, 2),
-    width: roundHalfEven(Math.max(0.01, width), 2),
-    height: roundHalfEven(Math.max(0.01, height), 2),
-    angle: 0,
-    strokeColor: "#1e1e1e",
-    backgroundColor: "transparent",
-    fillStyle: "solid",
-    strokeWidth: 1,
-    strokeStyle: "solid",
-    roughness: 0,
-    opacity: 100,
-    groupIds: [],
-    frameId: null,
-    index: null,
-    roundness: null,
-    seed: 100000 + order,
-    version: 1,
-    versionNonce: 1000000 + order,
-    isDeleted: false,
-    boundElements: null,
-    updated: 1,
-    link: null,
-    locked: false,
-  };
-}
-
-function rectangleElement(id, box, order, fill, stroke, strokeWidth, rounded, link) {
-  return {
-    ...baseElement("rectangle", id, box.x, box.y, box.width, box.height, order),
-    backgroundColor: fill ?? "transparent",
-    strokeColor: stroke ?? "transparent",
-    strokeWidth: clamp(roundHalfEven(strokeWidth), 1, 4),
-    roundness: rounded ? { type: 3 } : null,
-    link: link ?? null,
-  };
-}
-
-function lineElement(id, x, y, dx, dy, order, color, width) {
-  return {
-    ...baseElement("line", id, x, y, Math.abs(dx), Math.abs(dy), order),
-    strokeColor: color,
-    strokeWidth: clamp(roundHalfEven(width), 1, 4),
-    points: [
-      [0, 0],
-      [roundHalfEven(dx, 2), roundHalfEven(dy, 2)],
-    ],
-    lastCommittedPoint: null,
-    startBinding: null,
-    endBinding: null,
-    startArrowhead: null,
-    endArrowhead: null,
-  };
-}
-
-function textElement(id, item, order, fontFamily) {
-  const size = Math.max(8, roundHalfEven(item.fontSize, 1));
-  let align = item.textAlign;
-  if (align === "start" || align === "-webkit-auto") align = "left";
-  if (align === "end") align = "right";
-  if (!["left", "center", "right"].includes(align)) align = "left";
-
-  const lineHeight = clamp((item.lineHeight || size * 1.25) / size, 1, 2);
-  return {
-    ...baseElement(
-      "text",
-      id,
-      item.box.x,
-      item.box.y,
-      item.box.width,
-      item.box.height,
-      order,
-    ),
-    strokeColor: rgbToHex(item.color) ?? "#1e1e1e",
-    fontSize: size,
-    fontFamily,
-    text: item.text,
-    textAlign: align,
-    verticalAlign: "top",
-    containerId: null,
-    originalText: item.text,
-    autoResize: false,
-    lineHeight: roundHalfEven(lineHeight, 3),
-    link: item.link ?? null,
-    strokeWidth: 1,
-    opacity: roundHalfEven(item.opacity * 100),
-  };
 }
 
 function directText(element) {
@@ -315,6 +199,99 @@ function extractRenderedPages(documentObject, options) {
   });
 }
 
+function baseElement(type, id, x, y, width, height, order) {
+  return {
+    id,
+    type,
+    x: roundHalfEven(x, 2),
+    y: roundHalfEven(y, 2),
+    width: roundHalfEven(Math.max(0.01, width), 2),
+    height: roundHalfEven(Math.max(0.01, height), 2),
+    angle: 0,
+    strokeColor: "#1e1e1e",
+    backgroundColor: "transparent",
+    fillStyle: "solid",
+    strokeWidth: 1,
+    strokeStyle: "solid",
+    roughness: 0,
+    opacity: 100,
+    groupIds: [],
+    frameId: null,
+    index: null,
+    roundness: null,
+    seed: 100000 + order,
+    version: 1,
+    versionNonce: 1000000 + order,
+    isDeleted: false,
+    boundElements: null,
+    updated: 1,
+    link: null,
+    locked: false,
+  };
+}
+
+function rectangleElement(id, box, order, fill, stroke, strokeWidth, rounded, link) {
+  return {
+    ...baseElement("rectangle", id, box.x, box.y, box.width, box.height, order),
+    backgroundColor: fill ?? "transparent",
+    strokeColor: stroke ?? "transparent",
+    strokeWidth: clamp(roundHalfEven(strokeWidth), 1, 4),
+    roundness: rounded ? { type: 3 } : null,
+    link: link ?? null,
+  };
+}
+
+function lineElement(id, x, y, dx, dy, order, color, width) {
+  return {
+    ...baseElement("line", id, x, y, Math.abs(dx), Math.abs(dy), order),
+    strokeColor: color,
+    strokeWidth: clamp(roundHalfEven(width), 1, 4),
+    points: [
+      [0, 0],
+      [roundHalfEven(dx, 2), roundHalfEven(dy, 2)],
+    ],
+    lastCommittedPoint: null,
+    startBinding: null,
+    endBinding: null,
+    startArrowhead: null,
+    endArrowhead: null,
+  };
+}
+
+function textElement(id, item, order, fontFamily) {
+  const size = Math.max(8, roundHalfEven(item.fontSize, 1));
+  let align = item.textAlign;
+  if (align === "start" || align === "-webkit-auto") align = "left";
+  if (align === "end") align = "right";
+  if (!["left", "center", "right"].includes(align)) align = "left";
+
+  const lineHeight = clamp((item.lineHeight || size * 1.25) / size, 1, 2);
+  return {
+    ...baseElement(
+      "text",
+      id,
+      item.box.x,
+      item.box.y,
+      item.box.width,
+      item.box.height,
+      order,
+    ),
+    strokeColor: rgbToHex(item.color) ?? "#1e1e1e",
+    fontSize: size,
+    fontFamily,
+    text: item.text,
+    textAlign: align,
+    verticalAlign: "top",
+    containerId: null,
+    originalText: item.text,
+    autoResize: false,
+    lineHeight: roundHalfEven(lineHeight, 3),
+    link: item.link ?? null,
+    strokeWidth: 1,
+    opacity: roundHalfEven(item.opacity * 100),
+  };
+}
+
 function pagesToScene(pages, options) {
   const shapeElements = [];
   const textElements = [];
@@ -397,6 +374,26 @@ function pagesToScene(pages, options) {
   };
 }
 
+/** Browser-only static HTML -> editable Excalidraw projection. */
+
+const manifest = Object.freeze({
+  id: "urn:roccho-dev:ops:dist:excalidraw:html-to-excalidraw",
+  version: "0.2.0",
+  runtime: "browser",
+  entrypoints: ["run", "htmlToExcalidraw", "serializeExcalidraw"],
+  externalDependencies: [],
+});
+
+const DEFAULTS = Object.freeze({
+  selector: ".slide",
+  pageGap: 80,
+  viewportWidth: 1700,
+  viewportHeight: 1000,
+  fontFamily: 2,
+  backgroundColor: "#e7ebee",
+  source: "roccho-dev/ops/dist/excalidraw/html-to-excalidraw.mjs",
+});
+
 function withBaseUrl(html, baseUrl) {
   if (!baseUrl) return html;
   const escaped = String(baseUrl).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
@@ -430,7 +427,7 @@ async function waitForFrame(frame, timeoutMs) {
  * Renders static HTML in an isolated same-origin iframe and projects visible
  * boxes, borders, pseudo fills and direct text into editable Excalidraw elements.
  */
-export async function htmlToExcalidraw(html, userOptions = {}) {
+async function htmlToExcalidraw(html, userOptions = {}) {
   if (typeof document === "undefined") {
     throw new Error("htmlToExcalidraw requires a browser DOM runtime");
   }
@@ -468,38 +465,24 @@ export async function htmlToExcalidraw(html, userOptions = {}) {
   }
 }
 
-export function makeExcalidrawUrl(publicSceneUrl, userOptions = {}) {
-  if (typeof publicSceneUrl !== "string" || !publicSceneUrl.trim()) {
-    throw new TypeError("publicSceneUrl must be a non-empty string");
-  }
-  const baseUrl = userOptions.baseUrl ?? "https://excalidraw.com/";
-  const cleanBase = String(baseUrl).replace(/#.*$/, "");
-  return `${cleanBase}#url=${encodeURIComponent(publicSceneUrl)}`;
-}
-
-export function serializeExcalidraw(scene, userOptions = {}) {
+function serializeExcalidraw(scene, userOptions = {}) {
   if (!scene || scene.type !== "excalidraw" || !Array.isArray(scene.elements)) {
     throw new TypeError("scene must be an Excalidraw scene object");
   }
   return JSON.stringify(scene, null, userOptions.pretty ? 2 : 0);
 }
 
-/** Common adapter entrypoint for connector/CDP/Node wrappers. */
-export async function run(request) {
+async function run(request) {
   if (!request || typeof request !== "object") {
     throw new TypeError("request must be an object");
   }
-
-  switch (request.operation) {
-    case "html-to-excalidraw": {
-      const scene = await htmlToExcalidraw(request.html, request.options);
-      return request.serialize
-        ? serializeExcalidraw(scene, { pretty: Boolean(request.pretty) })
-        : scene;
-    }
-    case "make-excalidraw-url":
-      return makeExcalidrawUrl(request.publicSceneUrl, request.options);
-    default:
-      throw new Error(`unsupported operation: ${String(request.operation)}`);
+  if (request.operation != null && request.operation !== "html-to-excalidraw") {
+    throw new Error(`unsupported operation: ${String(request.operation)}`);
   }
+  const scene = await htmlToExcalidraw(request.html, request.options);
+  return request.serialize
+    ? serializeExcalidraw(scene, { pretty: Boolean(request.pretty) })
+    : scene;
 }
+
+export { htmlToExcalidraw, manifest, run, serializeExcalidraw };
