@@ -1,0 +1,1 @@
+{"artifacts":[{"aliases":["excalidraw-html"],"executor":"browser-esm","indexed":true,"name":"html-to-excalidraw","path":"dist/excalidraw/html-to-excalidraw.mjs"},{"aliases":["excalidraw-url"],"executor":"node-esm","indexed":true,"name":"make-excalidraw-url","path":"dist/excalidraw/make-excalidraw-url.mjs"}],"kind":"ops.distDeclaration.v1"}
