@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "ops.mjsBundlerBootstrapReceipt.v1",
+  "status": "PASS",
+  "generatedAt": "2026-08-03T01:31:31.657Z",
+  "vendor": {
+    "schemaVersion": "ops.mjsBundlerVendor.v1",
+    "engine": "rollup",
+    "version": "2.80.0",
+    "source": "npm:rollup@2.80.0",
+    "npmIntegrity": "sha512-cIFJOD1DESzpjOBl763Kp1AH7UE/0fcdHe6rZXUdQ9c50uvgigvW97u3IcSeBwOkgqL/PXPBktBCh0KEu5L8XQ==",
+    "packageTarballSha256": "e5b5614931b69ae15881b6da35a250eef26c85011eb9e48b8e1a2cfe67e7bf25",
+    "browserBuildPath": "dist/rollup.browser.js",
+    "browserBuildSha256": "acbd76c386fed0f4b3927711d09ae216e26e7a314b3e0915571667a5b4f3b6d2",
+    "license": "MIT",
+    "standaloneOutput": "dist/mjs-bundler/bundle.mjs"
+  },
+  "standalone": {
+    "path": "dist/mjs-bundler/bundle.mjs",
+    "bytes": 401149,
+    "sha256": "d89aba96e8311285a141faceac56665ccea4a228e15a0522edc2e3e70de39b05"
+  },
+  "selftest": {
+    "status": "PASS",
+    "engine": "rollup",
+    "engineVersion": "2.80.0",
+    "bundledBytes": 140,
+    "bundledSha256": "ef73e961396bf4e543bb0c88e1924e981cc8dc684994c4b3fac33d0f65e2ef3a",
+    "result": 41
+  }
+}
