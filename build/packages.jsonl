@@ -28,3 +28,4 @@
 {"bin":"model-source-reconcile","deps":["node"],"entry":"packages/model-source-reconcile/bin/model-source-reconcile.mjs","env":[],"kind":"package","name":"model-source-reconcile","runtime":"node"}
 {"bin":"gosh","deps":[],"entry":"packages/gosh/cmd/gosh","env":[],"kind":"package","name":"gosh","runtime":"go"}
 {"bin":"jsonl-inspect","deps":["python"],"entry":"packages/jsonl-inspect/bin/jsonl-inspect","env":[],"kind":"package","name":"jsonl-inspect","pythonModule":"jsonl_inspect","pythonPath":"src","runtime":"python"}
+{"bin":"dist-runner","deps":["python"],"entry":"packages/dist-runner/src/__main__.py","env":[],"kind":"package","name":"dist-runner","runtime":"python"}

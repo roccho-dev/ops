@@ -33,3 +33,4 @@
 {"deps":["nodejs","model-source-reconcile","hq-modeling-runtime","hq-source-evidence-runtime"],"kind":"check","name":"model-source-reconcile-projection","script":"packages/model-source-reconcile/tests/reconcile-projection.mjs"}
 {"deps":["nodejs","go","coreutils","gosh"],"kind":"check","name":"gosh-v0","script":"packages/gosh/tests/e2e.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"excalidraw-dist-current","script":"packages/excalidraw/tests/dist-current.mjs"}
+{"deps":["nodejs","python3","dist-runner"],"kind":"check","name":"dist-runner","script":"packages/dist-runner/tests/e2e.mjs"}
