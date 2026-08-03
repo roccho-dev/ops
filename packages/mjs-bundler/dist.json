@@ -1,0 +1,1 @@
+{"artifacts":[{"aliases":["mjs"],"executor":"node-esm","indexed":true,"name":"mjs-bundler","path":"dist/mjs-bundler/bundle.mjs"}],"kind":"ops.distDeclaration.v1"}

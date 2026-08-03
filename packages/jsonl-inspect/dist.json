@@ -1,0 +1,1 @@
+{"artifacts":[{"aliases":["jsonl"],"executor":"python-zipapp","indexed":true,"name":"jsonl-inspect","path":"dist/jsonl-inspect/jsonl-inspect.pyz"}],"kind":"ops.distDeclaration.v1"}

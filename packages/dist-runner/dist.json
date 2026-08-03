@@ -1,0 +1,1 @@
+{"artifacts":[{"aliases":[],"executor":"python-zipapp","indexed":false,"name":"dist-runner","path":"dist/dist-runner/dist-runner.pyz"}],"kind":"ops.distDeclaration.v1"}
