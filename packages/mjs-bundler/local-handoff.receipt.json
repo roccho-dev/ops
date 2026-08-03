@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "ops.mjsBundlerLocalHandoff.v1",
+  "status": "PASS",
+  "runId": 30777418599,
+  "runAttempt": 1,
+  "artifactName": "rollup-local-handoff-30777418599",
+  "sourceCommit": "33ff47f7d606be2f10acf782b23853f84a58b3ba",
+  "path": "dist/mjs-bundler/bundle.mjs",
+  "bytes": 401149,
+  "sha256": "d89aba96e8311285a141faceac56665ccea4a228e15a0522edc2e3e70de39b05",
+  "temporaryWorkflowRemoved": true
+}
