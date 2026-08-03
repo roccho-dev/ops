@@ -32,3 +32,5 @@
 {"kind":"check","name":"model-source-reconcile-checker","script":"packages/model-source-reconcile/tests/reconcile-checker.mjs","deps":["nodejs","model-source-reconcile","hq-modeling-runtime","hq-source-evidence-runtime"]}
 {"kind":"check","name":"model-source-reconcile-projection","script":"packages/model-source-reconcile/tests/reconcile-projection.mjs","deps":["nodejs","model-source-reconcile","hq-modeling-runtime","hq-source-evidence-runtime"]}
 {"kind":"check","name":"gosh-v0","script":"packages/gosh/tests/e2e.mjs","deps":["nodejs","go","coreutils","gosh"]}
+{"kind":"check","name":"home-convergence","script":"packages/home-convergence/tests/e2e.mjs","deps":["nodejs","home-convergence"]}
+{"kind":"check","name":"home-convergence-source-audit","script":"packages/home-convergence/tests/source-audit.mjs","deps":["nodejs","home-convergence"]}
