@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>ADRS UI</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b1020; color: #f4f7ff; }
+    main { width: min(42rem, calc(100% - 2rem)); padding: 2rem; border: 1px solid #33405f; border-radius: 1rem; background: #121a2d; }
+    h1 { margin-top: 0; }
+    p { line-height: 1.7; color: #bdc9e3; }
+    code { color: #dce7ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ADRS UI</h1>
+    <p>Cloudflare Pagesへの最小デプロイ経路です。</p>
+    <p>アプリ、固定データ、ビルド処理は、分離条件が生まれるまで <code>ops/apps/adrs-ui</code> に置きます。</p>
+  </main>
+</body>
+</html>
