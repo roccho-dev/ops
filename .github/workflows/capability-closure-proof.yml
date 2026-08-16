@@ -44,58 +44,63 @@ jobs:
           curl --fail --location --retry 3 --retry-all-errors \
             "$SOURCE_BASE_URL/.well-known/bootstrap.json" -o "$work/bootstrap.json"
 
-          python3 - "$work/bootstrap.json" "$work" <<'PY'
-          import base64, hashlib, json, pathlib, sys, urllib.request, zipfile
-          bootstrap_path, work_s = sys.argv[1:]
-          work = pathlib.Path(work_s)
-          boot = json.loads(pathlib.Path(bootstrap_path).read_text())
-          base = "https://stg-cap02.roccho.workers.dev/"
+          mapfile -t refs < <(python3 - "$work/bootstrap.json" <<'PY'
+          import json, pathlib, sys
+          boot=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          print(boot["capforge"]["carrierPath"].removeprefix("./"))
+          print(boot["capforge"]["payloadSha256"])
+          print(boot["sourceKit"]["carrierPath"].removeprefix("./"))
+          print(boot["sourceKit"]["sha256"])
+          PY
+          )
+          cap_rel="${refs[0]}"
+          cap_sha="${refs[1]}"
+          kit_rel="${refs[2]}"
+          kit_sha="${refs[3]}"
 
-          def fetch_rel(rel, out):
-              rel = rel.removeprefix("./")
-              url = base + rel
-              with urllib.request.urlopen(url, timeout=60) as r:
-                  data = r.read()
-              pathlib.Path(out).write_bytes(data)
-              return url, data
+          curl --fail --location --retry 3 --retry-all-errors \
+            "$SOURCE_BASE_URL/$cap_rel" -o "$work/capforge.b64.txt"
+          curl --fail --location --retry 3 --retry-all-errors \
+            "$SOURCE_BASE_URL/$kit_rel" -o "$work/source-kit.b64.txt"
 
-          def strict_decode(text):
-              raw = text.decode("ascii")
+          python3 - "$work" "$cap_sha" "$kit_sha" "$SOURCE_BASE_URL/$cap_rel" "$SOURCE_BASE_URL/$kit_rel" <<'PY'
+          import base64, hashlib, json, pathlib, sys, zipfile
+          work=pathlib.Path(sys.argv[1])
+          cap_sha, kit_sha, cap_url, kit_url=sys.argv[2:]
+
+          def strict_decode(path):
+              raw=path.read_text()
               if any(c.isspace() for c in raw):
-                  raise SystemExit("carrier whitespace forbidden")
-              decoded = base64.b64decode(raw, validate=True)
+                  raise SystemExit(f"carrier whitespace forbidden: {path}")
+              decoded=base64.b64decode(raw, validate=True)
               if base64.b64encode(decoded).decode("ascii") != raw:
-                  raise SystemExit("carrier is not canonical standard Base64")
+                  raise SystemExit(f"carrier is not canonical standard Base64: {path}")
               return decoded
 
-          cap = boot["capforge"]
-          kit = boot["sourceKit"]
-          cap_url, cap_carrier = fetch_rel(cap["carrierPath"], work / "capforge.b64.txt")
-          cap_bytes = strict_decode(cap_carrier)
-          if hashlib.sha256(cap_bytes).hexdigest() != cap["payloadSha256"]:
+          cap_bytes=strict_decode(work/"capforge.b64.txt")
+          if hashlib.sha256(cap_bytes).hexdigest()!=cap_sha:
               raise SystemExit("capforge payload sha mismatch")
-          (work / "capforge").write_bytes(cap_bytes)
+          (work/"capforge").write_bytes(cap_bytes)
 
-          kit_url, kit_carrier = fetch_rel(kit["carrierPath"], work / "source-kit.b64.txt")
-          kit_bytes = strict_decode(kit_carrier)
-          if hashlib.sha256(kit_bytes).hexdigest() != kit["sha256"]:
+          kit_bytes=strict_decode(work/"source-kit.b64.txt")
+          if hashlib.sha256(kit_bytes).hexdigest()!=kit_sha:
               raise SystemExit("source kit sha mismatch")
-          (work / "source.zip").write_bytes(kit_bytes)
+          (work/"source.zip").write_bytes(kit_bytes)
 
-          dest = work / "source"
-          with zipfile.ZipFile(work / "source.zip") as z:
+          dest=work/"source"
+          with zipfile.ZipFile(work/"source.zip") as z:
               for info in z.infolist():
-                  p = pathlib.PurePosixPath(info.filename)
+                  p=pathlib.PurePosixPath(info.filename)
                   if p.is_absolute() or ".." in p.parts:
                       raise SystemExit(f"unsafe zip path: {info.filename}")
               z.extractall(dest)
 
-          receipt = {
-              "schema": "chatgpt-capability-ingress/1",
-              "capforge": {"url": cap_url, "sha256": cap["payloadSha256"], "bytes": len(cap_bytes)},
-              "sourceKit": {"url": kit_url, "sha256": kit["sha256"], "bytes": len(kit_bytes)},
+          receipt={
+              "schema":"chatgpt-capability-ingress/1",
+              "capforge":{"url":cap_url,"sha256":cap_sha,"bytes":len(cap_bytes)},
+              "sourceKit":{"url":kit_url,"sha256":kit_sha,"bytes":len(kit_bytes)},
           }
-          (work / "proof" / "ingress.json").write_text(json.dumps(receipt, indent=2) + "\n")
+          (work/"proof"/"ingress.json").write_text(json.dumps(receipt,indent=2)+"\n")
           PY
           chmod +x "$work/capforge"
 
