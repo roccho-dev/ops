@@ -1,0 +1,75 @@
+name: Release carrier consume proof
+
+on:
+  push:
+    branches:
+      - proof/chatgpt-capability-closure-2608170736
+    paths:
+      - .github/workflows/release-carrier-consume-proof.yml
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: cap-260817075559-6a819b1d-0d40-83e8-855a-00e20dd48e56
+  SELF: .github/workflows/release-carrier-consume-proof.yml
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch public Release bootstrap and capforge carrier
+        id: fetch
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release-carrier"
+          mkdir -p "$out"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$base/bootstrap.json" -o "$out/bootstrap.json"
+          mapfile -t cap < <(python3 - "$out/bootstrap.json" <<'PY'
+          import json,sys
+          b=json.load(open(sys.argv[1])); c=b['capforge']
+          print(c['kind']); print(c['target']); print(c['payloadSha256'])
+          PY
+          )
+          name="carrier.${cap[0]}.${cap[1]}.${cap[2]}.b64.txt"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$out/$name"
+          python3 - "$out/$name" "${cap[2]}" "$out/materialize-receipt.json" "$RELEASE_TAG" <<'PY'
+          import base64,hashlib,json,pathlib,sys
+          p=pathlib.Path(sys.argv[1]); expected=sys.argv[2]; receipt=pathlib.Path(sys.argv[3]); tag=sys.argv[4]
+          text=p.read_text()
+          if any(c.isspace() for c in text): raise SystemExit('carrier whitespace')
+          data=base64.b64decode(text,validate=True)
+          if base64.b64encode(data).decode()!=text: raise SystemExit('noncanonical base64')
+          actual=hashlib.sha256(data).hexdigest()
+          if actual!=expected: raise SystemExit((actual,expected))
+          receipt.write_text(json.dumps({'schema':'release-carrier-materialize/1','status':'PASS','releaseTag':tag,'carrier':p.name,'carrierBytes':p.stat().st_size,'payloadBytes':len(data),'payloadSha256':actual},indent=2)+"\n")
+          PY
+          echo "carrier=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Erase one-shot workflow from PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm "$SELF"
+          git commit -m "ci: erase release carrier consume proof"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Upload exact Release carrier for Pro connector
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-capforge-carrier-${{ env.RELEASE_TAG }}
+          path: |
+            ${{ runner.temp }}/release-carrier/bootstrap.json
+            ${{ runner.temp }}/release-carrier/${{ steps.fetch.outputs.carrier }}
+            ${{ runner.temp }}/release-carrier/materialize-receipt.json
+          if-no-files-found: error
+          retention-days: 30
