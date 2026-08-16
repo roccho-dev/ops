@@ -1,0 +1,474 @@
+name: ChatGPT capability closure proof
+
+on:
+  push:
+    branches:
+      - proof/chatgpt-capability-closure-2608170736
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chatgpt-capability-closure-2608170736
+  cancel-in-progress: false
+
+env:
+  SOURCE_BASE_URL: https://stg-cap02.roccho.workers.dev
+  EXPECTED_SOURCE_TREE: 9b505413965f7686d451534528de5a3576660016
+  EXPECTED_SOURCE_HEAD: d9140b5fbea53f4c708c770beefa2a8febb2371c
+  INTAKE_BUNDLE_SHA256: fb3561680cc67596c52b672441ad031f982cc9d5daa5577ad9baa6a8df606e22
+  INTAKE_BUNDLE_BYTES: "1442630"
+  RELEASE_ID: 6a819b1d-0d40-83e8-855a-00e20dd48e56
+  PACKAGE_PATH: packages/chatgpt-capability
+  SELF_WORKFLOW: .github/workflows/capability-closure-proof.yml
+
+jobs:
+  close-loop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch, decode, and verify deployed source kit
+        id: ingress
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          src="$work/source"
+          proof="$work/proof"
+          mkdir -p "$src" "$proof"
+
+          curl --fail --location --retry 3 --retry-all-errors \
+            "$SOURCE_BASE_URL/.well-known/bootstrap.json" -o "$work/bootstrap.json"
+
+          python3 - "$work/bootstrap.json" "$work" <<'PY'
+          import base64, hashlib, json, pathlib, sys, urllib.request, zipfile
+          bootstrap_path, work_s = sys.argv[1:]
+          work = pathlib.Path(work_s)
+          boot = json.loads(pathlib.Path(bootstrap_path).read_text())
+          base = "https://stg-cap02.roccho.workers.dev/"
+
+          def fetch_rel(rel, out):
+              rel = rel.removeprefix("./")
+              url = base + rel
+              with urllib.request.urlopen(url, timeout=60) as r:
+                  data = r.read()
+              pathlib.Path(out).write_bytes(data)
+              return url, data
+
+          def strict_decode(text):
+              raw = text.decode("ascii")
+              if any(c.isspace() for c in raw):
+                  raise SystemExit("carrier whitespace forbidden")
+              decoded = base64.b64decode(raw, validate=True)
+              if base64.b64encode(decoded).decode("ascii") != raw:
+                  raise SystemExit("carrier is not canonical standard Base64")
+              return decoded
+
+          cap = boot["capforge"]
+          kit = boot["sourceKit"]
+          cap_url, cap_carrier = fetch_rel(cap["carrierPath"], work / "capforge.b64.txt")
+          cap_bytes = strict_decode(cap_carrier)
+          if hashlib.sha256(cap_bytes).hexdigest() != cap["payloadSha256"]:
+              raise SystemExit("capforge payload sha mismatch")
+          (work / "capforge").write_bytes(cap_bytes)
+
+          kit_url, kit_carrier = fetch_rel(kit["carrierPath"], work / "source-kit.b64.txt")
+          kit_bytes = strict_decode(kit_carrier)
+          if hashlib.sha256(kit_bytes).hexdigest() != kit["sha256"]:
+              raise SystemExit("source kit sha mismatch")
+          (work / "source.zip").write_bytes(kit_bytes)
+
+          dest = work / "source"
+          with zipfile.ZipFile(work / "source.zip") as z:
+              for info in z.infolist():
+                  p = pathlib.PurePosixPath(info.filename)
+                  if p.is_absolute() or ".." in p.parts:
+                      raise SystemExit(f"unsafe zip path: {info.filename}")
+              z.extractall(dest)
+
+          receipt = {
+              "schema": "chatgpt-capability-ingress/1",
+              "capforge": {"url": cap_url, "sha256": cap["payloadSha256"], "bytes": len(cap_bytes)},
+              "sourceKit": {"url": kit_url, "sha256": kit["sha256"], "bytes": len(kit_bytes)},
+          }
+          (work / "proof" / "ingress.json").write_text(json.dumps(receipt, indent=2) + "\n")
+          PY
+          chmod +x "$work/capforge"
+
+          git -C "$src" init -q
+          git -C "$src" config core.autocrlf false
+          git -C "$src" add -A
+          remote_tree="$(git -C "$src" write-tree)"
+          echo "$remote_tree" > "$proof/source-tree.txt"
+          echo "remote_tree=$remote_tree" >> "$GITHUB_OUTPUT"
+
+          if [[ "$remote_tree" != "$EXPECTED_SOURCE_TREE" ]]; then
+            cp "$work/source.zip" "$proof/remote-source.zip"
+            echo MISMATCH > "$proof/status.txt"
+            echo "source_tree_match=false" >> "$GITHUB_OUTPUT"
+          else
+            echo PASS > "$proof/status.txt"
+            echo "source_tree_match=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Preserve ingress evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-capability-ingress-proof
+          path: ${{ runner.temp }}/capability-closure/proof/
+          if-no-files-found: error
+
+      - name: Fail closed on stale deployed source
+        if: steps.ingress.outputs.source_tree_match != 'true'
+        shell: bash
+        run: |
+          echo "Expected source tree: $EXPECTED_SOURCE_TREE"
+          echo "Observed source tree: ${{ steps.ingress.outputs.remote_tree }}"
+          exit 42
+
+      - name: Import exact source tree and remove bootstrap workflow
+        id: repoize
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          src="$work/source"
+
+          rm -rf "$PACKAGE_PATH"
+          mkdir -p "$PACKAGE_PATH"
+          git -C "$src" checkout-index -a --prefix="$GITHUB_WORKSPACE/$PACKAGE_PATH/"
+          mkdir -p "$PACKAGE_PATH/.capforge"
+          if [[ -d "$src/.capforge/cache" ]]; then
+            cp -a "$src/.capforge/cache" "$PACKAGE_PATH/.capforge/cache"
+          fi
+
+          rm -f "$SELF_WORKFLOW"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A -- "$PACKAGE_PATH" "$SELF_WORKFLOW"
+          git commit -m "feat: import chatgpt capability source authority"
+
+          source_commit="$(git rev-parse HEAD)"
+          subtree="$(git rev-parse HEAD:"$PACKAGE_PATH")"
+          [[ "$subtree" == "$EXPECTED_SOURCE_TREE" ]]
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
+          echo "subtree=$subtree" >> "$GITHUB_OUTPUT"
+
+      - name: Build release projections from repoized source
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          release_src="$work/release-src"
+          release_out="$work/release-out"
+          assets="$work/assets"
+          rm -rf "$release_src" "$release_out" "$assets"
+          mkdir -p "$release_src" "$release_out" "$assets"
+
+          git archive "${{ steps.repoize.outputs.source_commit }}:$PACKAGE_PATH" | tar -x -C "$release_src"
+          mkdir -p "$release_src/.capforge"
+          if [[ -d "$PACKAGE_PATH/.capforge/cache" ]]; then
+            cp -a "$PACKAGE_PATH/.capforge/cache" "$release_src/.capforge/cache"
+          fi
+
+          timestamp="$(TZ=Asia/Tokyo date +%y%m%d%H%M%S)"
+          "$work/capforge" publish \
+            --root "$release_src" \
+            --dist "$release_src/dist" \
+            --out "$release_out" \
+            --timestamp "$timestamp" \
+            > "$work/publish.json"
+
+          python3 - "$work/publish.json" <<'PY'
+          import json, sys
+          x=json.load(open(sys.argv[1]))
+          assert x["project"]["status"] == "PASS", x
+          assert x["verify"]["status"] == "PASS", x
+          assert x["release"]["status"] == "PASS", x
+          PY
+
+          python3 - \
+            "$release_src/dist" "$release_out" "$assets" "$work/publish.json" \
+            "${{ steps.repoize.outputs.source_commit }}" "$EXPECTED_SOURCE_TREE" \
+            "$EXPECTED_SOURCE_HEAD" "$INTAKE_BUNDLE_SHA256" "$INTAKE_BUNDLE_BYTES" <<'PY'
+          import hashlib, json, pathlib, shutil, sys
+          dist = pathlib.Path(sys.argv[1])
+          out = pathlib.Path(sys.argv[2])
+          assets = pathlib.Path(sys.argv[3])
+          publish_path = pathlib.Path(sys.argv[4])
+          source_commit, source_tree, source_head, intake_sha, intake_bytes = sys.argv[5:]
+          assets.mkdir(parents=True, exist_ok=True)
+          publish = json.loads(publish_path.read_text())
+          boot = json.loads((dist / ".well-known/bootstrap.json").read_text())
+
+          def sha(path):
+              h=hashlib.sha256()
+              with path.open("rb") as f:
+                  for chunk in iter(lambda: f.read(1024*1024), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          def copy(src, name):
+              dst=assets / name
+              shutil.copyfile(src, dst)
+              return dst
+
+          copied=[]
+          rel=publish["release"]
+          for key, ctype in (("bundle", "application/octet-stream"), ("distZip", "application/zip")):
+              p=copy(out / rel[key], rel[key])
+              copied.append((p, ctype, None))
+
+          for src, name, ctype in (
+              (dist / ".well-known/bootstrap.json", "bootstrap.json", "application/json"),
+              (dist / ".well-known/registry.jsonl", "registry.jsonl", "application/x-ndjson"),
+              (dist / ".well-known/verify.json", "verify.json", "application/json"),
+          ):
+              p=copy(src, name)
+              copied.append((p, ctype, None))
+
+          for p in sorted((dist / "cap/v1").glob("*/*/*.b64.txt")):
+              relp=p.relative_to(dist).parts
+              kind, target, filename=relp[2], relp[3], relp[4]
+              payload_sha=filename.removesuffix(".b64.txt")
+              dst=copy(p, f"carrier.{kind}.{target}.{filename}")
+              copied.append((dst, "text/plain", payload_sha))
+
+          kit_sha=boot["sourceKit"]["sha256"]
+          kit_src=dist / boot["sourceKit"]["carrierPath"].removeprefix("./")
+          kit_dst=copy(kit_src, f"source-kit.{kit_sha}.b64.txt")
+          copied.append((kit_dst, "text/plain", kit_sha))
+
+          manifest={
+              "schema":"chatgpt-capability-release/1",
+              "source":{
+                  "opsCommit":source_commit,
+                  "subtree":source_tree,
+                  "intakeBundleHead":source_head,
+                  "intakeBundleSha256":intake_sha,
+                  "intakeBundleBytes":int(intake_bytes),
+              },
+              "build":publish,
+              "assets":[],
+          }
+          for p, ctype, payload_sha in copied:
+              manifest["assets"].append({
+                  "name":p.name,
+                  "bytes":p.stat().st_size,
+                  "sha256":sha(p),
+                  "contentType":ctype,
+                  **({"payloadSha256":payload_sha} if payload_sha else {}),
+              })
+          m=assets / "release-manifest.json"
+          m.write_text(json.dumps(manifest, indent=2, sort_keys=True)+"\n")
+          PY
+
+          tag="cap-${timestamp}-${RELEASE_ID}"
+          echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "assets=$assets" >> "$GITHUB_OUTPUT"
+          echo "release_src=$release_src" >> "$GITHUB_OUTPUT"
+
+      - name: Create public immutable-input release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ steps.repoize.outputs.source_commit }}
+          TAG: ${{ steps.build.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          python3 - "$TAG" "$SOURCE_COMMIT" "$EXPECTED_SOURCE_TREE" > "$work/release-request.json" <<'PY'
+          import json, sys
+          tag, commit, tree=sys.argv[1:]
+          print(json.dumps({
+              "tag_name":tag,
+              "target_commitish":commit,
+              "name":tag,
+              "body":f"ChatGPT capability closure proof. source commit={commit}; source subtree={tree}.",
+              "draft":False,
+              "prerelease":True,
+              "make_latest":"false",
+          }))
+          PY
+          curl --fail-with-body --silent --show-error --location \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
+            --data-binary @"$work/release-request.json" \
+            -o "$work/release.json"
+
+          python3 - "$work/release.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          print(f"release_id={r['id']}")
+          print(f"release_url={r['html_url']}")
+          print(f"upload_url={r['upload_url'].split('{')[0]}")
+          PY
+
+      - name: Upload build and carrier assets with explicit media types
+        id: upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPLOAD_URL: ${{ steps.release.outputs.upload_url }}
+          ASSETS_DIR: ${{ steps.build.outputs.assets }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          : > "$work/uploaded.jsonl"
+          for file in "$ASSETS_DIR"/*; do
+            name="$(basename "$file")"
+            case "$name" in
+              *.b64.txt) ctype='text/plain' ;;
+              *.json) ctype='application/json' ;;
+              *.jsonl) ctype='application/x-ndjson' ;;
+              *.dist.zip) ctype='application/zip' ;;
+              *.bundle) ctype='application/octet-stream' ;;
+              *) ctype='application/octet-stream' ;;
+            esac
+            qname="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$name")"
+            response="$work/upload-${name}.json"
+            curl --fail-with-body --silent --show-error --location \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              -H "Content-Type: $ctype" \
+              "$UPLOAD_URL?name=$qname" \
+              --data-binary @"$file" \
+              -o "$response"
+            python3 - "$response" >> "$work/uploaded.jsonl" <<'PY'
+            import json, sys
+            r=json.load(open(sys.argv[1]))
+            assert r["state"] == "uploaded", r
+            print(json.dumps({k:r.get(k) for k in ("id","name","content_type","size","digest","browser_download_url")}, sort_keys=True))
+            PY
+          done
+
+      - name: Prove public unauthenticated Release readback and materialization
+        id: public
+        env:
+          ASSETS_DIR: ${{ steps.build.outputs.assets }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          readback="$work/readback"
+          mkdir -p "$readback"
+
+          python3 - "$work/uploaded.jsonl" "$work/public-assets.tsv" <<'PY'
+          import json, pathlib, sys
+          rows=[]
+          for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+              r=json.loads(line)
+              rows.append((r["name"], r["browser_download_url"], r.get("content_type") or "", r.get("digest") or ""))
+          pathlib.Path(sys.argv[2]).write_text("".join("\t".join(x)+"\n" for x in rows))
+          PY
+
+          while IFS=$'\t' read -r name url ctype digest; do
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+              "$url" -o "$readback/$name"
+            cmp "$ASSETS_DIR/$name" "$readback/$name"
+          done < "$work/public-assets.tsv"
+
+          python3 - "$readback/bootstrap.json" "$readback" "$EXPECTED_SOURCE_TREE" <<'PY'
+          import base64, hashlib, json, pathlib, sys, zipfile, subprocess
+          boot=json.load(open(sys.argv[1]))
+          root=pathlib.Path(sys.argv[2])
+          expected_tree=sys.argv[3]
+
+          cap=boot["capforge"]
+          cap_name=f"carrier.{cap['kind']}.{cap['target']}.{cap['payloadSha256']}.b64.txt"
+          cap_text=(root/cap_name).read_text()
+          if any(c.isspace() for c in cap_text): raise SystemExit("cap carrier whitespace")
+          cap_bytes=base64.b64decode(cap_text, validate=True)
+          if hashlib.sha256(cap_bytes).hexdigest()!=cap["payloadSha256"]: raise SystemExit("cap payload sha")
+          cap_path=root/"capforge"
+          cap_path.write_bytes(cap_bytes)
+          cap_path.chmod(0o755)
+          version=subprocess.check_output([str(cap_path),"version"], text=True).strip()
+          (root/"capforge-version.txt").write_text(version+"\n")
+
+          kit=boot["sourceKit"]
+          kit_name=f"source-kit.{kit['sha256']}.b64.txt"
+          kit_text=(root/kit_name).read_text()
+          if any(c.isspace() for c in kit_text): raise SystemExit("kit carrier whitespace")
+          kit_bytes=base64.b64decode(kit_text, validate=True)
+          if hashlib.sha256(kit_bytes).hexdigest()!=kit["sha256"]: raise SystemExit("kit payload sha")
+          zpath=root/"source.zip"
+          zpath.write_bytes(kit_bytes)
+          src=root/"source"
+          src.mkdir()
+          with zipfile.ZipFile(zpath) as z:
+              for info in z.infolist():
+                  p=pathlib.PurePosixPath(info.filename)
+                  if p.is_absolute() or ".." in p.parts: raise SystemExit("unsafe release source kit")
+              z.extractall(src)
+          subprocess.run(["git","-C",str(src),"init","-q"],check=True)
+          subprocess.run(["git","-C",str(src),"config","core.autocrlf","false"],check=True)
+          subprocess.run(["git","-C",str(src),"add","-A"],check=True)
+          tree=subprocess.check_output(["git","-C",str(src),"write-tree"],text=True).strip()
+          if tree!=expected_tree: raise SystemExit(f"release source tree mismatch: {tree}")
+          (root/"release-source-tree.txt").write_text(tree+"\n")
+          PY
+
+          echo "public_readback=PASS" >> "$GITHUB_OUTPUT"
+
+      - name: Publish closure receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPLOAD_URL: ${{ steps.release.outputs.upload_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/capability-closure"
+          receipt="$work/closure-receipt.json"
+          python3 - \
+            "$receipt" "${{ steps.repoize.outputs.source_commit }}" "${{ steps.repoize.outputs.subtree }}" \
+            "${{ steps.build.outputs.tag }}" "${{ steps.release.outputs.release_url }}" \
+            "$work/uploaded.jsonl" "$work/readback/capforge-version.txt" \
+            "$INTAKE_BUNDLE_SHA256" "$INTAKE_BUNDLE_BYTES" "$EXPECTED_SOURCE_HEAD" <<'PY'
+          import json, pathlib, sys, os
+          out, commit, subtree, tag, release_url, uploaded, version_path, intake_sha, intake_bytes, intake_head = sys.argv[1:]
+          assets=[json.loads(x) for x in pathlib.Path(uploaded).read_text().splitlines() if x]
+          receipt={
+              "schema":"chatgpt-capability-closure/1",
+              "status":"PASS",
+              "intake":{"bundleSha256":intake_sha,"bundleBytes":int(intake_bytes),"head":intake_head,"tree":subtree},
+              "repo":{"repository":"roccho-dev/ops","base":"proposals","branch":os.environ['GITHUB_REF_NAME'],"commit":commit,"package":"packages/chatgpt-capability"},
+              "release":{"tag":tag,"url":release_url,"assets":assets},
+              "publicReadback":{"status":"PASS","capforgeVersion":pathlib.Path(version_path).read_text().strip(),"sourceTree":subtree},
+          }
+          pathlib.Path(out).write_text(json.dumps(receipt,indent=2,sort_keys=True)+"\n")
+          PY
+
+          qname='closure-receipt.json'
+          curl --fail-with-body --silent --show-error --location \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            -H "Content-Type: application/json" \
+            "$UPLOAD_URL?name=$qname" \
+            --data-binary @"$receipt" \
+            -o "$work/upload-receipt.json"
+
+      - name: Preserve closure receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-capability-closure-receipt
+          path: ${{ runner.temp }}/capability-closure/closure-receipt.json
+          if-no-files-found: warn
