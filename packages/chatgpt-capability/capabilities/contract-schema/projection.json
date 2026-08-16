@@ -1,0 +1,23 @@
+{
+  "schema": "capability-projection/1",
+  "inputs": [
+    "ledgers/model.contract.jsonl"
+  ],
+  "args": [
+    "project",
+    "--ledger",
+    "capabilities/contract-schema/ledgers/model.contract.jsonl",
+    "--out",
+    "{dist}/contracts/contract-schema"
+  ],
+  "outputs": [
+    "contracts/contract-schema/events.jsonl",
+    "contracts/contract-schema/meta.cue",
+    "contracts/contract-schema/validation-report.json",
+    "contracts/contract-schema/jsonschema/contract-event.schema.json",
+    "contracts/contract-schema/jsonschema/schema-catalog.json",
+    "contracts/contract-schema/indexes/contract-index.json",
+    "contracts/contract-schema/manifest.json"
+  ],
+  "timeoutMs": 5000
+}

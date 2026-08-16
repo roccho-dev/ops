@@ -1,0 +1,1 @@
+{"schema":"capability-decision/1","id":"capforge","action":"adopt","title":"Capforge","purpose":"意思決定主張とGo実装を突合し、carrier・Registry・人向けUI・agent入口を生成する","at":"system://capforge","execution":"local","effects":["filesystem","process"],"tags":["platform","projector","registry"]}

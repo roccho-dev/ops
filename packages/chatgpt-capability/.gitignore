@@ -1,0 +1,5 @@
+/build/
+/dist/
+/.capforge/cache/
+/*.bundle
+/*.dist.zip

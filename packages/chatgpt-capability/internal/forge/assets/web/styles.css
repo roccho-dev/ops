@@ -1,0 +1,29 @@
+:root { font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.5; color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 80px; }
+header { border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent); padding-bottom: 24px; }
+h1 { margin: 0 0 8px; font-size: clamp(2rem, 7vw, 4rem); line-height: 1; }
+h2 { margin-top: 2rem; }
+.eyebrow { margin: 0 0 10px; letter-spacing: .08em; text-transform: uppercase; opacity: .65; font-size: .8rem; }
+nav { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+a { color: inherit; }
+#summary { font-weight: 700; }
+.controls { display: grid; grid-template-columns: 1fr minmax(150px, 220px); gap: 12px; margin: 28px 0; }
+label { display: grid; gap: 6px; font-size: .85rem; }
+input, select { width: 100%; padding: 11px 12px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 8px; background: transparent; color: inherit; }
+.records { display: grid; gap: 12px; }
+.record { border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: 12px; padding: 16px; }
+.record h3 { margin: 0 0 6px; }
+.record p { margin: 6px 0; }
+.meta { display: grid; grid-template-columns: 110px 1fr; gap: 5px 12px; margin-top: 12px; font-size: .9rem; }
+.meta dt { opacity: .65; }
+.meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.status { display: inline-block; padding: 2px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+.status-active { color: #16803a; }
+.status-drift, .status-unobserved { color: #b64900; }
+.status-planned, .status-unadopted { color: #725c00; }
+.status-retired { opacity: .6; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; border-radius: 10px; background: color-mix(in srgb, currentColor 7%, transparent); }
+@media (max-width: 680px) { .controls { grid-template-columns: 1fr; } .meta { grid-template-columns: 90px 1fr; } }

@@ -1,0 +1,1 @@
+{"schema":"go-stdout-fixture/1","args":[],"stdin":"","stdout":"Hello from Go capability\n","stderr":"","exitCode":0,"timeoutMs":2000}

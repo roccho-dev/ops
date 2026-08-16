@@ -1,0 +1,1 @@
+{"schema":"capability-decision/1","id":"go-hello","action":"adopt","title":"Go Hello","purpose":"公開carrierから復元したGo native capabilityをPro localで実行する最小例","execution":"local","effects":["stdout"],"tags":["example","go","native"]}

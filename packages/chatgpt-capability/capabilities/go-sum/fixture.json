@@ -1,0 +1,1 @@
+{"schema":"go-stdout-fixture/1","args":["17","25"],"stdin":"","stdout":"42\n","stderr":"","exitCode":0,"timeoutMs":2000}

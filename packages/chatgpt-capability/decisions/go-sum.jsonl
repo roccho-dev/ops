@@ -1,0 +1,1 @@
+{"schema":"capability-decision/1","id":"go-sum","action":"adopt","title":"Go Sum","purpose":"引数を加算するGo native capabilityをdirectory追加だけで公開する例","execution":"local","effects":["stdout"],"tags":["example","go","native","math"]}
