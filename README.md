@@ -31,6 +31,8 @@ decisions remain outside this README and outside GitHub provider workflows.
 - operational package outputs.
 - check outputs from `nix flake check`.
 - provider CI adapter receipts from GitHub Actions.
+- repo-head Release Carrier retrieval and verification runbook:
+  [`runbooks/repo-head-carrier.md`](runbooks/repo-head-carrier.md).
 - package response packet emitted by `ops-package-responses`, including responses,
   evidence, receipts, residuals, and a non-authority manifest.
 
