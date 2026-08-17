@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - ".github/workflows/duckdb-carrier-release.yml"
+  pull_request:
+    paths:
+      - ".github/workflows/duckdb-carrier-release.yml"
   workflow_dispatch:
 
 permissions:
