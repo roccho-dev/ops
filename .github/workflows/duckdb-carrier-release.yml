@@ -40,6 +40,8 @@ jobs:
           printf '%s  %s\n' "$DUCKDB_UPSTREAM_SHA256" "$upstream" | sha256sum --check --strict -
           gzip --decompress --stdout "$upstream" > "$duckdb"
           chmod 0755 "$duckdb"
+          mkdir -p "$work/extensions"
+          guard="SET extension_directory='${work}/extensions'; SET autoinstall_known_extensions=false; SET allow_community_extensions=false;"
 
           file "$duckdb"
           version="$($duckdb -version)"
@@ -48,11 +50,12 @@ jobs:
           hot="$work/hot.jsonl"
           cold="$work/cold.parquet"
           printf '%s\n' '{"id":1,"value":10}' '{"id":2,"value":20}' > "$hot"
-          hot_result="$($duckdb -csv -noheader -c "SELECT count(*), sum(value) FROM read_ndjson('$hot');")"
+          hot_result="$($duckdb -csv -noheader -c "$guard SELECT count(*), sum(value) FROM read_ndjson('$hot');")"
           [[ "$hot_result" == "2,30" ]]
-          "$duckdb" -c "COPY (SELECT * FROM read_ndjson('$hot')) TO '$cold' (FORMAT parquet);"
-          cold_result="$($duckdb -csv -noheader -c "SELECT count(*), sum(value) FROM read_parquet('$cold');")"
+          "$duckdb" -c "$guard COPY (SELECT * FROM read_ndjson('$hot')) TO '$cold' (FORMAT parquet);"
+          cold_result="$($duckdb -csv -noheader -c "$guard SELECT count(*), sum(value) FROM read_parquet('$cold');")"
           [[ "$cold_result" == "2,30" ]]
+          [[ -z "$(find "$work/extensions" -type f -print -quit)" ]]
 
           payload_sha="$(sha256sum "$duckdb" | awk '{print $1}')"
           payload_bytes="$(stat -c %s "$duckdb")"
@@ -90,7 +93,7 @@ jobs:
               'source':{'url':source_url,'version':version,'asset':asset,'sha256':upstream_sha},
               'payload':{'kind':'native','target':'linux-amd64-musl','sha256':payload_sha,'bytes':int(payload_bytes),'version':observed},
               'carrier':{'codec':'base64-standard','whitespace':'forbidden','name':pathlib.Path(carrier).name,'sha256':carrier_sha,'bytes':int(carrier_bytes),'decodedSha256':payload_sha},
-              'fixture':{'hot':'jsonl','cold':'parquet','rows':2,'sumValue':30,'status':'PASS'},
+              'fixture':{'hot':'jsonl','cold':'parquet','rows':2,'sumValue':30,'status':'PASS','networkExtensionInstall':False},
               'release':{'tag':tag,'prerelease':prerelease=='true'},
           },sort_keys=True,indent=2)+'\n')
           PY
@@ -131,7 +134,7 @@ jobs:
               'tag_name':tag,
               'target_commitish':sha,
               'name':tag,
-              'body':'Pinned DuckDB CLI as canonical Base64 Carrier. Proof: JSONL is queried directly as hot data, copied to Parquet as cold data, read back, then the public Release Carrier is decoded and re-verified.',
+              'body':'Pinned DuckDB CLI as canonical Base64 Carrier. Proof: JSONL is queried directly as hot data, copied to Parquet as cold data, read back without extension installation, then the public Release Carrier is decoded and re-verified.',
               'draft':False,
               'prerelease':prerelease=='true',
               'make_latest':'false',
@@ -183,7 +186,10 @@ jobs:
           chmod 0755 "$rb/duckdb"
           "$rb/duckdb" -version
 
+          mkdir -p "$rb/extensions"
+          guard="SET extension_directory='${rb}/extensions'; SET autoinstall_known_extensions=false; SET allow_community_extensions=false;"
           printf '%s\n' '{"id":1,"value":10}' '{"id":2,"value":20}' > "$rb/hot.jsonl"
-          [[ "$("$rb/duckdb" -csv -noheader -c "SELECT count(*), sum(value) FROM read_ndjson('$rb/hot.jsonl');")" == "2,30" ]]
-          "$rb/duckdb" -c "COPY (SELECT * FROM read_ndjson('$rb/hot.jsonl')) TO '$rb/cold.parquet' (FORMAT parquet);"
-          [[ "$("$rb/duckdb" -csv -noheader -c "SELECT count(*), sum(value) FROM read_parquet('$rb/cold.parquet');")" == "2,30" ]]
+          [[ "$("$rb/duckdb" -csv -noheader -c "$guard SELECT count(*), sum(value) FROM read_ndjson('$rb/hot.jsonl');")" == "2,30" ]]
+          "$rb/duckdb" -c "$guard COPY (SELECT * FROM read_ndjson('$rb/hot.jsonl')) TO '$rb/cold.parquet' (FORMAT parquet);"
+          [[ "$("$rb/duckdb" -csv -noheader -c "$guard SELECT count(*), sum(value) FROM read_parquet('$rb/cold.parquet');")" == "2,30" ]]
+          [[ -z "$(find "$rb/extensions" -type f -print -quit)" ]]
