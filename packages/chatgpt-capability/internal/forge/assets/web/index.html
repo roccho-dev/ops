@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Go-only Pro Capability Registry</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body data-proof-status="PENDING">
+  <main>
+    <header>
+      <p class="eyebrow">Go-built projection platform</p>
+      <h1>Pro Capability Registry</h1>
+      <p>意思決定主張と実装観測を突合し、同じdistから人・agent・carrierを提供します。</p>
+      <nav>
+        <a href="./agent.html">Agent入口</a>
+        <a href="./.well-known/bootstrap.json">Bootstrap</a>
+        <a href="./.well-known/registry.jsonl">Registry JSONL</a>
+        <a href="./ADD.md">追加手順</a>
+        <a href="./proof/manifest.json">Proof</a>
+      </nav>
+      <div id="summary" role="status">読み込み中</div>
+    </header>
+
+    <section class="controls" aria-label="検索と状態絞り込み">
+      <label>検索 <input id="query" type="search" autocomplete="off" placeholder="id・目的・tag・状態"></label>
+      <label>状態
+        <select id="status">
+          <option value="">すべて</option>
+          <option>active</option>
+          <option>planned</option>
+          <option>drift</option>
+          <option>unadopted</option>
+          <option>unobserved</option>
+          <option>retired</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <div id="records" class="records"></div>
+    </section>
+
+    <section>
+      <h2>公開面</h2>
+      <pre id="proof">準備中</pre>
+    </section>
+  </main>
+  <script src="./assets/wasm_exec.js"></script>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>

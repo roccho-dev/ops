@@ -1,0 +1,1 @@
+{"schema":"capability-decision/1","id":"contract-schema","action":"adopt","title":"Append-only Contract Schema","purpose":"schema・field・edge・query・fixture・authority ruleをJSONLへappendし、Go validatorで形・参照・rewriteを検査してcatalog/indexへ投影する","execution":"local","effects":["filesystem","stdout"],"tags":["contract","schema","jsonl","append-only","validator","projection"]}

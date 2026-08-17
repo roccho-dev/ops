@@ -1,0 +1,1 @@
+{"schema":"go-stdout-fixture/1","args":["selftest"],"stdin":"","stdout":"contract-schema-validator selftest PASS\n","stderr":"","exitCode":0,"timeoutMs":5000}

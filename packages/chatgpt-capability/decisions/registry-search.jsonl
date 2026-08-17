@@ -1,0 +1,1 @@
+{"schema":"capability-decision/1","id":"registry-search","action":"adopt","title":"Registry Search","purpose":"Registryの最小部分一致検索を人のブラウザへ提供する","at":"system://registry-search","execution":"browser","effects":[],"tags":["platform","search","wasm"]}
