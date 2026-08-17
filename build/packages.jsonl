@@ -29,3 +29,4 @@
 {"bin":"gosh","deps":[],"entry":"packages/gosh/cmd/gosh","env":[],"kind":"package","name":"gosh","runtime":"go"}
 {"bin":"jsonl-inspect","deps":["python"],"entry":"packages/jsonl-inspect/bin/jsonl-inspect","env":[],"kind":"package","name":"jsonl-inspect","pythonModule":"jsonl_inspect","pythonPath":"src","runtime":"python"}
 {"bin":"dist-runner","deps":["python"],"entry":"packages/dist-runner/src/__main__.py","env":[],"kind":"package","name":"dist-runner","runtime":"python"}
+{"bin":"ops-capability-loop","deps":["git","gnutar","node","find-packages","package-architecture-map"],"entry":"packages/ops-capability-loop/bin/ops-capability-loop.mjs","env":[{"name":"PACKAGE_ARCHITECTURE_MAP_VIEWER","path":"packages/package-architecture-map/viewer/index.html"}],"kind":"package","name":"ops-capability-loop","runtime":"node"}
