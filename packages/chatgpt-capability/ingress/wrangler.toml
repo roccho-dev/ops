@@ -1,0 +1,4 @@
+name = "stg-cap02-release-ingress"
+main = "release-text-worker.mjs"
+compatibility_date = "2026-08-17"
+workers_dev = true

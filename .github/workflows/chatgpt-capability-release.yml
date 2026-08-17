@@ -1,0 +1,183 @@
+name: ChatGPT capability bootstrap release
+
+on:
+  push:
+    paths:
+      - "packages/chatgpt-capability/**"
+      - ".github/workflows/chatgpt-capability-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/chatgpt-capability/go.mod
+
+      - name: Test and build exact Go source
+        shell: bash
+        run: |
+          set -euo pipefail
+          go -C packages/chatgpt-capability test ./...
+          go -C packages/chatgpt-capability build -trimpath -o "$RUNNER_TEMP/capforge" ./cmd/capforge
+          "$RUNNER_TEMP/capforge" version
+
+      - name: Build bootstrap projection and inspection
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$GITHUB_WORKSPACE/packages/chatgpt-capability"
+          dist="$RUNNER_TEMP/dist"
+          out="$RUNNER_TEMP/release-out"
+          assets="$RUNNER_TEMP/assets"
+          proof="$RUNNER_TEMP/proof"
+          mkdir -p "$out" "$assets" "$proof"
+          timestamp="$(TZ=Asia/Tokyo date +%y%m%d%H%M%S)"
+          tag="cap-${timestamp}-6a819b1d-0d40-83e8-855a-00e20dd48e56"
+          "$RUNNER_TEMP/capforge" publish --root "$root" --dist "$dist" --out "$out" --timestamp "$timestamp" > "$proof/publish.json"
+          mapfile -t intake < <(python3 - "$dist/.well-known/registry.jsonl" <<'PYREG'
+          import json,sys
+          for line in open(sys.argv[1]):
+              r=json.loads(line)
+              if r.get('id')=='bootstrap-intake' and r.get('status')=='active':
+                  i=r['implementation']; print(i['carrierPath'].removeprefix('./')); print(i['payloadSha256']); break
+          else:
+              raise SystemExit('bootstrap-intake is not active')
+          PYREG
+          )
+          "$RUNNER_TEMP/capforge" materialize --carrier "$dist/${intake[0]}" --sha256 "${intake[1]}" --out "$RUNNER_TEMP/bootstrap-intake" --executable
+          "$RUNNER_TEMP/bootstrap-intake" --bootstrap "$dist/.well-known/bootstrap.json" --registry "$dist/.well-known/registry.jsonl" --release-tag "$tag" > "$proof/bootstrap-guide.json"
+          python3 - "$proof/publish.json" "$proof/bootstrap-guide.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1])); g=json.load(open(sys.argv[2]))
+          assert p['project']['status']==p['verify']['status']==p['release']['status']=='PASS',p
+          assert g['status']=='PASS' and g['canExtend'] is True,g
+          ids={x['id'] for x in g['capabilities']}
+          assert {'bootstrap-intake','capforge','registry-search'} <= ids,ids
+          assert len(g['selfExtension'])==2,g
+          PY
+          cp "$dist/.well-known/bootstrap.json" "$proof/bootstrap.json"
+          cp "$dist/.well-known/registry.jsonl" "$proof/registry.jsonl"
+
+          cp "$out"/*.bundle "$assets/"
+          cp "$out"/*.dist.zip "$assets/"
+          cp "$dist/.well-known/bootstrap.json" "$assets/bootstrap.json"
+          cp "$dist/.well-known/registry.jsonl" "$assets/registry.jsonl"
+          cp "$dist/.well-known/verify.json" "$assets/verify.json"
+          cp "$dist/agent-add.txt" "$assets/agent-add.txt"
+          cp "$dist/ADD.md" "$assets/ADD.md"
+          cp "$proof/bootstrap-guide.json" "$assets/bootstrap-guide.json"
+
+          while IFS= read -r carrier; do
+            rel="${carrier#"$dist/"}"
+            IFS=/ read -r _ _ kind target filename <<< "$rel"
+            cp "$carrier" "$assets/carrier.${kind}.${target}.${filename}"
+          done < <(find "$dist/cap/v1" -type f -name '*.b64.txt' | sort)
+
+          mapfile -t kit < <(python3 - "$dist/.well-known/bootstrap.json" <<'PY'
+          import json,sys
+          b=json.load(open(sys.argv[1])); print(b['sourceKit']['carrierPath'].removeprefix('./')); print(b['sourceKit']['sha256'])
+          PY
+          )
+          cp "$dist/${kit[0]}" "$assets/source-kit.${kit[1]}.b64.txt"
+
+          python3 - "$assets" > "$assets/release-manifest.json" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          rows=[]
+          for p in sorted(root.iterdir()):
+            if p.name=='release-manifest.json': continue
+            rows.append({'name':p.name,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          print(json.dumps({'schema':'chatgpt-capability-release-assets/1','assets':rows},indent=2,sort_keys=True))
+          PY
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "assets=$assets" >> "$GITHUB_OUTPUT"
+          echo "proof=$proof" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve bootstrap proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-capability-bootstrap-proof-${{ github.sha }}
+          path: ${{ steps.build.outputs.proof }}/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create GitHub bootstrap Release
+        if: github.ref == 'refs/heads/proposals'
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.build.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$TAG" "$GITHUB_SHA" > "$RUNNER_TEMP/release-request.json" <<'PY'
+          import json,sys
+          tag,sha=sys.argv[1:]
+          print(json.dumps({'tag_name':tag,'target_commitish':sha,'name':tag,'body':'Bootstrap Release: read bootstrap.json or bootstrap-guide.json to discover and materialize self-extension and other active capabilities.','draft':False,'prerelease':False,'make_latest':'false'}))
+          PY
+          curl --fail-with-body --silent --show-error \
+            -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" --data-binary @"$RUNNER_TEMP/release-request.json" -o "$RUNNER_TEMP/release.json"
+          python3 - "$RUNNER_TEMP/release.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json,sys
+          r=json.load(open(sys.argv[1])); print('upload_url='+r['upload_url'].split('{')[0]); print('release_url='+r['html_url'])
+          PY
+
+      - name: Upload bootstrap Release assets
+        if: github.ref == 'refs/heads/proposals'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPLOAD_URL: ${{ steps.release.outputs.upload_url }}
+          ASSETS: ${{ steps.build.outputs.assets }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/uploaded.jsonl"
+          for file in "$ASSETS"/*; do
+            name="$(basename "$file")"
+            case "$name" in
+              *.b64.txt|*.txt|*.md|ADD.md) ctype='text/plain' ;;
+              *.json) ctype='application/json' ;;
+              *.jsonl) ctype='application/x-ndjson' ;;
+              *.dist.zip) ctype='application/zip' ;;
+              *.bundle) ctype='application/octet-stream' ;;
+              *) ctype='application/octet-stream' ;;
+            esac
+            q="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$name")"
+            curl --fail-with-body --silent --show-error \
+              -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: $ctype" \
+              "$UPLOAD_URL?name=$q" --data-binary @"$file" -o "$RUNNER_TEMP/upload.json"
+            python3 - "$RUNNER_TEMP/upload.json" >> "$RUNNER_TEMP/uploaded.jsonl" <<'PY'
+          import json,sys
+          r=json.load(open(sys.argv[1])); assert r['state']=='uploaded',r; print(json.dumps({'name':r['name'],'url':r['browser_download_url']},sort_keys=True))
+          PY
+          done
+
+      - name: Verify public Release readback
+        if: github.ref == 'refs/heads/proposals'
+        env:
+          ASSETS: ${{ steps.build.outputs.assets }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/readback"
+          while read -r row; do
+            mapfile -t x < <(python3 - "$row" <<'PY'
+          import json,sys
+          r=json.loads(sys.argv[1]); print(r['name']); print(r['url'])
+          PY
+            )
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error "${x[1]}" -o "$RUNNER_TEMP/readback/${x[0]}"
+            cmp "$ASSETS/${x[0]}" "$RUNNER_TEMP/readback/${x[0]}"
+          done < "$RUNNER_TEMP/uploaded.jsonl"

@@ -1,0 +1,1 @@
+{"schema":"capability-decision/1","id":"bootstrap-intake","action":"adopt","title":"Bootstrap Intake","purpose":"GitHub Releaseのbootstrap.jsonとregistry.jsonlを読むだけで、自己拡張に必要なexact requestと利用可能な他Capability一覧を機械可読JSONで得る","execution":"local","effects":["stdout"],"tags":["bootstrap","release","self-extension","discovery"]}
