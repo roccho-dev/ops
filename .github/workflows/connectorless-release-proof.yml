@@ -109,3 +109,4 @@ jobs:
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
           curl --fail --location --silent --show-error "$base/bootstrap-guide.json" -o "$RUNNER_TEMP/readback.json"
           cmp "$RUNNER_TEMP/assets/bootstrap-guide.json" "$RUNNER_TEMP/readback.json"
+# registered trigger
