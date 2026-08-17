@@ -1,0 +1,131 @@
+name: deploy ADRS UI to Cloudflare Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: deploy-adrs-ui-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy exact ops revision
+    if: github.ref == 'refs/heads/proposals'
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate private binding
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_PAGES_PROJECT"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Stage immutable site
+        env:
+          SITE_DIR: ${{ runner.temp }}/adrs-ui-site
+        run: |
+          set -euo pipefail
+          rm -rf "$SITE_DIR"
+          mkdir -p "$SITE_DIR"
+          cp -R apps/adrs-ui/. "$SITE_DIR/"
+          python3 - "$SITE_DIR/deployment.json" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          path, revision = sys.argv[1:]
+          with open(path, "w", encoding="utf-8") as file:
+              json.dump(
+                  {"schemaVersion": "1.0", "appId": "adrs-ui", "revision": revision},
+                  file,
+                  ensure_ascii=False,
+                  separators=(",", ":"),
+              )
+              file.write("\n")
+          PY
+
+      - name: Deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: pages deploy "${{ runner.temp }}/adrs-ui-site" --project-name="${{ vars.CLOUDFLARE_PAGES_PROJECT }}" --branch=proposals
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify immutable deployment
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs['deployment-url'] }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOYMENT_URL"
+          response=""
+          for _ in $(seq 1 12); do
+            if response="$(curl --fail --silent --show-error "$DEPLOYMENT_URL/deployment.json")"; then
+              break
+            fi
+            sleep 5
+          done
+          python3 - "$response" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          raw, expected_revision = sys.argv[1:]
+          if not raw:
+              raise SystemExit("deployment.json was not readable")
+          actual = json.loads(raw)
+          if actual != {
+              "schemaVersion": "1.0",
+              "appId": "adrs-ui",
+              "revision": expected_revision,
+          }:
+              raise SystemExit(f"unexpected deployment receipt: {actual!r}")
+          PY
+
+      - name: Emit non-authoritative receipt
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs['deployment-url'] }}
+          DEPLOYMENT_ALIAS_URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] }}
+          CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
+          OUT: ${{ runner.temp }}/adrs-ui-cloudflare-receipt.json
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+
+          receipt = {
+              "schemaVersion": "1.0",
+              "appId": "adrs-ui",
+              "revision": os.environ["GITHUB_SHA"],
+              "runId": os.environ["GITHUB_RUN_ID"],
+              "project": os.environ["CLOUDFLARE_PAGES_PROJECT"],
+              "deploymentUrl": os.environ["DEPLOYMENT_URL"],
+              "aliasUrl": os.environ.get("DEPLOYMENT_ALIAS_URL", ""),
+          }
+          with open(os.environ["OUT"], "w", encoding="utf-8") as file:
+              json.dump(receipt, file, ensure_ascii=False, indent=2, sort_keys=True)
+              file.write("\n")
+          PY
+
+      - name: Upload receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-ui-cloudflare-receipt
+          path: ${{ runner.temp }}/adrs-ui-cloudflare-receipt.json
+          if-no-files-found: error
