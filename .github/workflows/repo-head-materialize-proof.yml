@@ -1,0 +1,215 @@
+name: Repo head materialize and release
+
+on:
+  push:
+    branches:
+      - proposals
+      - proof/repo-head-materialize-2608171123
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Resolve exact latest default head
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$GITHUB_REPOSITORY"
+          meta="$RUNNER_TEMP/repo.json"
+          curl --fail --silent --show-error --location \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/$target" > "$meta"
+
+          read -r visibility default_branch < <(
+            python3 - "$meta" <<'PY'
+          import json, sys
+          x=json.load(open(sys.argv[1]))
+          print(x.get('visibility',''), x['default_branch'])
+          PY
+          )
+          [[ "$visibility" == public ]]
+
+          resolved_head="$(git ls-remote "https://github.com/$target.git" "refs/heads/$default_branch" | awk 'NR==1 {print $1}')"
+          [[ "$resolved_head" =~ ^[0-9a-f]{40}$ ]]
+
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "default_branch=$default_branch" >> "$GITHUB_OUTPUT"
+          echo "resolved_head=$resolved_head" >> "$GITHUB_OUTPUT"
+
+      - name: Build one-commit Git capsule and Carrier
+        id: build
+        shell: bash
+        env:
+          TARGET: ${{ steps.source.outputs.target }}
+          DEFAULT_BRANCH: ${{ steps.source.outputs.default_branch }}
+          RESOLVED_HEAD: ${{ steps.source.outputs.resolved_head }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/materialized"
+          out="$RUNNER_TEMP/out"
+          restore="$RUNNER_TEMP/restore-before-release"
+          mkdir -p "$out" "$restore"
+
+          git init --quiet "$work"
+          git -C "$work" remote add origin "https://github.com/$TARGET.git"
+          git -C "$work" fetch --quiet --depth=1 origin "refs/heads/$DEFAULT_BRANCH"
+          actual_fetch="$(git -C "$work" rev-parse FETCH_HEAD)"
+          [[ "$actual_fetch" == "$RESOLVED_HEAD" ]]
+          git -C "$work" checkout --quiet -b "$DEFAULT_BRANCH" FETCH_HEAD
+
+          head="$(git -C "$work" rev-parse HEAD)"
+          tree="$(git -C "$work" rev-parse 'HEAD^{tree}')"
+          shallow="$(git -C "$work" rev-parse --is-shallow-repository)"
+          commit_count="$(git -C "$work" rev-list --count HEAD)"
+          [[ "$head" == "$RESOLVED_HEAD" ]]
+          [[ "$shallow" == true ]]
+          [[ "$commit_count" == 1 ]]
+          git -C "$work" fsck --no-dangling
+
+          archive="$out/$head.git.tar.gz"
+          carrier="$archive.b64.txt"
+          receipt="$out/$head.receipt.json"
+          tar -C "$work" -czf "$archive" .git
+          base64 -w0 "$archive" > "$carrier"
+
+          archive_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+          carrier_sha256="$(sha256sum "$carrier" | awk '{print $1}')"
+          archive_bytes="$(stat -c %s "$archive")"
+          carrier_bytes="$(stat -c %s "$carrier")"
+
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.git.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.git.tar.gz"
+          base64 -w0 "$RUNNER_TEMP/decoded.git.tar.gz" | cmp - "$carrier"
+          tar -C "$restore" -xzf "$RUNNER_TEMP/decoded.git.tar.gz"
+          git -C "$restore" reset --hard HEAD
+          [[ "$(git -C "$restore" rev-parse HEAD)" == "$head" ]]
+          [[ "$(git -C "$restore" rev-parse 'HEAD^{tree}')" == "$tree" ]]
+          [[ "$(git -C "$restore" rev-parse --is-shallow-repository)" == true ]]
+          [[ "$(git -C "$restore" rev-list --count HEAD)" == 1 ]]
+          git -C "$restore" fsck --no-dangling
+
+          if [[ "$GITHUB_REF" == refs/heads/proposals ]]; then
+            tag="repo-head-$head"
+            prerelease=false
+          else
+            tag="repo-head-proof-$head-$GITHUB_RUN_ID"
+            prerelease=true
+          fi
+
+          python3 - "$receipt" "$TARGET" "$DEFAULT_BRANCH" "$head" "$tree" "$archive" "$archive_bytes" "$archive_sha256" "$carrier" "$carrier_bytes" "$carrier_sha256" "$tag" "$prerelease" <<'PY'
+          import json, pathlib, sys
+          out, repo, branch, head, tree, archive, archive_bytes, archive_sha, carrier, carrier_bytes, carrier_sha, tag, prerelease = sys.argv[1:]
+          x = {
+              'schema': 'repo-head-release/1',
+              'status': 'PASS',
+              'id': head,
+              'source_repo': repo,
+              'default_branch': branch,
+              'head': head,
+              'tree': tree,
+              'shallow': True,
+              'commit_count': 1,
+              'archive': {
+                  'name': pathlib.Path(archive).name,
+                  'bytes': int(archive_bytes),
+                  'sha256': archive_sha,
+              },
+              'carrier': {
+                  'name': pathlib.Path(carrier).name,
+                  'bytes': int(carrier_bytes),
+                  'sha256': carrier_sha,
+                  'codec': 'standard-base64',
+                  'decoded_sha256': archive_sha,
+              },
+              'release': {
+                  'tag': tag,
+                  'prerelease': prerelease == 'true',
+              },
+          }
+          pathlib.Path(out).write_text(json.dumps(x, sort_keys=True, indent=2) + '\n')
+          PY
+
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "carrier=$carrier" >> "$GITHUB_OUTPUT"
+          echo "receipt=$receipt" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve raw capsule as Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-head-${{ steps.build.outputs.head }}
+          path: |
+            ${{ steps.build.outputs.archive }}
+            ${{ steps.build.outputs.receipt }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish immutable-by-name GitHub Release projection
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.build.outputs.tag }}
+          HEAD_SHA: ${{ steps.build.outputs.head }}
+          ARCHIVE: ${{ steps.build.outputs.archive }}
+          CARRIER: ${{ steps.build.outputs.carrier }}
+          RECEIPT: ${{ steps.build.outputs.receipt }}
+          PRERELEASE: ${{ steps.build.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release already exists; verify only: $TAG"
+          else
+            args=(release create "$TAG" "$ARCHIVE" "$CARRIER" "$RECEIPT" --repo "$GITHUB_REPOSITORY" --target "$HEAD_SHA" --title "$TAG" --notes "One-commit shallow Git capsule and neutral-text Carrier for $GITHUB_REPOSITORY@$HEAD_SHA")
+            if [[ "$PRERELEASE" == true ]]; then args+=(--prerelease); fi
+            gh "${args[@]}"
+          fi
+
+      - name: Verify public Release readback and reconstruct Git repo
+        shell: bash
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+          HEAD_SHA: ${{ steps.build.outputs.head }}
+          TREE_SHA: ${{ steps.build.outputs.tree }}
+          ARCHIVE: ${{ steps.build.outputs.archive }}
+          CARRIER: ${{ steps.build.outputs.carrier }}
+          RECEIPT: ${{ steps.build.outputs.receipt }}
+        run: |
+          set -euo pipefail
+          rb="$RUNNER_TEMP/public-readback"
+          restored="$RUNNER_TEMP/public-restored"
+          mkdir -p "$rb" "$restored"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+
+          for src in "$ARCHIVE" "$CARRIER" "$RECEIPT"; do
+            name="$(basename "$src")"
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$rb/$name"
+            cmp "$src" "$rb/$name"
+          done
+
+          base64 --decode "$rb/$(basename "$CARRIER")" > "$rb/decoded.git.tar.gz"
+          cmp "$rb/decoded.git.tar.gz" "$rb/$(basename "$ARCHIVE")"
+          tar -C "$restored" -xzf "$rb/decoded.git.tar.gz"
+          git -C "$restored" reset --hard HEAD
+          [[ "$(git -C "$restored" rev-parse HEAD)" == "$HEAD_SHA" ]]
+          [[ "$(git -C "$restored" rev-parse 'HEAD^{tree}')" == "$TREE_SHA" ]]
+          [[ "$(git -C "$restored" rev-parse --is-shallow-repository)" == true ]]
+          [[ "$(git -C "$restored" rev-list --count HEAD)" == 1 ]]
+          git -C "$restored" fsck --no-dangling
+
+          python3 - "$rb/$(basename "$RECEIPT")" "$HEAD_SHA" "$TREE_SHA" <<'PY'
+          import json, sys
+          x=json.load(open(sys.argv[1]))
+          assert x['status']=='PASS'
+          assert x['id']==x['head']==sys.argv[2]
+          assert x['tree']==sys.argv[3]
+          assert x['shallow'] is True and x['commit_count']==1
+          PY
