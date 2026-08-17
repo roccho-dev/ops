@@ -9,7 +9,8 @@ permissions:
   contents: write
 
 env:
-  TAG: cap-proof-58825bd52728-6a819b1d-0d40-83e8-855a-00e20dd48e56
+  TAG: cap-proof2-eefa9f3d9c4a-6a819b1d-0d40-83e8-855a-00e20dd48e56
+  RELEASE_TARGET: proof/bootstrap-release-source-2608171153
 
 jobs:
   publish:
@@ -70,10 +71,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - "$TAG" "$GITHUB_SHA" > "$RUNNER_TEMP/release-request.json" <<'PY'
+          python3 - "$TAG" "$RELEASE_TARGET" > "$RUNNER_TEMP/release-request.json" <<'PY'
           import json,sys
-          tag,sha=sys.argv[1:]
-          print(json.dumps({'tag_name':tag,'target_commitish':sha,'name':tag,'body':'Connectorless consumer proof: public bootstrap and carriers.','draft':False,'prerelease':True,'make_latest':'false'}))
+          tag,target=sys.argv[1:]
+          print(json.dumps({'tag_name':tag,'target_commitish':target,'name':tag,'body':'Connectorless consumer proof: public bootstrap and carriers.','draft':False,'prerelease':True,'make_latest':'false'}))
           PY
           curl --fail-with-body --silent --show-error -X POST \
             -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -109,4 +110,4 @@ jobs:
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
           curl --fail --location --silent --show-error "$base/bootstrap-guide.json" -o "$RUNNER_TEMP/readback.json"
           cmp "$RUNNER_TEMP/assets/bootstrap-guide.json" "$RUNNER_TEMP/readback.json"
-# registered trigger
+# workflow-clean target
