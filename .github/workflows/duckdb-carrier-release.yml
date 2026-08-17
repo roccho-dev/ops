@@ -14,8 +14,8 @@ permissions:
 
 env:
   DUCKDB_VERSION: v1.5.5
-  DUCKDB_UPSTREAM_ASSET: duckdb_cli-linux-amd64-musl.gz
-  DUCKDB_UPSTREAM_SHA256: 59bc84a96f58777bb21b67129222628d0ac196bbf722d3107ceb94a8602429d2
+  DUCKDB_UPSTREAM_ASSET: duckdb_cli-linux-amd64.gz
+  DUCKDB_UPSTREAM_SHA256: c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885
 
 jobs:
   verify-and-release:
@@ -59,7 +59,7 @@ jobs:
 
           payload_sha="$(sha256sum "$duckdb" | awk '{print $1}')"
           payload_bytes="$(stat -c %s "$duckdb")"
-          carrier="$out/carrier.native.linux-amd64-musl.${payload_sha}.b64.txt"
+          carrier="$out/carrier.native.linux-amd64.${payload_sha}.b64.txt"
           base64 -w0 "$duckdb" > "$carrier"
           ! LC_ALL=C grep -q '[[:space:]]' "$carrier"
           base64 --decode "$carrier" > "$work/decoded"
@@ -91,7 +91,7 @@ jobs:
               'schema':'duckdb-carrier/1',
               'status':'PASS',
               'source':{'url':source_url,'version':version,'asset':asset,'sha256':upstream_sha},
-              'payload':{'kind':'native','target':'linux-amd64-musl','sha256':payload_sha,'bytes':int(payload_bytes),'version':observed},
+              'payload':{'kind':'native','target':'linux-amd64','sha256':payload_sha,'bytes':int(payload_bytes),'version':observed},
               'carrier':{'codec':'base64-standard','whitespace':'forbidden','name':pathlib.Path(carrier).name,'sha256':carrier_sha,'bytes':int(carrier_bytes),'decodedSha256':payload_sha},
               'fixture':{'hot':'jsonl','cold':'parquet','rows':2,'sumValue':30,'status':'PASS','networkExtensionInstall':False},
               'release':{'tag':tag,'prerelease':prerelease=='true'},
