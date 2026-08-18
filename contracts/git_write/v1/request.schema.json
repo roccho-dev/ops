@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.gitWriteRequest.v1",
+  "title": "Ops Git write request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "requestId", "sourceRepo", "baseRef", "baseSha", "worktree", "targetBranch", "commitMessage", "pullRequest", "checks", "adapter"],
+  "properties": {
+    "schema": {"const": "ops.gitWriteRequest.v1"},
+    "requestId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+    "sourceRepo": {"const": "roccho-dev/ops"},
+    "baseRef": {"const": "proposals"},
+    "baseSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "worktree": {"type": "string", "minLength": 1},
+    "targetBranch": {"type": "string", "pattern": "^proposal/connector/[a-z0-9][a-z0-9._-]{2,127}$"},
+    "commitMessage": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "force": {"const": false, "default": false},
+    "pullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "head", "title", "body", "draft"],
+      "properties": {
+        "base": {"const": "proposals"},
+        "head": {"type": "string", "pattern": "^proposal/connector/"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 256},
+        "body": {"type": "string"},
+        "draft": {"const": true}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "command"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+          "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 1800}
+        }
+      }
+    },
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "maxBlobBytes", "maxTotalBytes", "supportsBase64", "supportsCreateTree", "supportsCreateCommit", "supportsRefWrite", "supportsPrCreate"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "maxBlobBytes": {"type": "integer", "minimum": 1},
+        "maxTotalBytes": {"type": "integer", "minimum": 1},
+        "supportsBase64": {"type": "boolean"},
+        "supportsCreateTree": {"type": "boolean"},
+        "supportsCreateCommit": {"type": "boolean"},
+        "supportsRefWrite": {"type": "boolean"},
+        "supportsPrCreate": {"type": "boolean"}
+      }
+    }
+  }
+}
