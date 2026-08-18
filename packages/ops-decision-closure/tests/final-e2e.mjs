@@ -31,6 +31,15 @@ ${r.stderr}`);
   assert.equal(receipt.humanAI.directAuthorityWriteCount, 0);
   assert.ok(fs.statSync(path.join(out, "decision-room.html")).size > 1000);
   assert.ok(fs.statSync(path.join(out, "dd-packet", "known-limitations.json")).size > 10);
+  const querySource = fs.readFileSync(path.join(root, "packages/ops-decision-closure/bin/query.py"), "utf8");
+assert.equal(querySource.includes("duckdb"), false);
+const selected = spawnSync("python3", [path.join(root, "packages/ops-decision-closure/bin/query.py"), "--projection", path.join(out, "checkpoint-selected"), "--query", "current_decisions", "--params-json", JSON.stringify({ domain: "decision-ledger" })], { encoding: "utf8" });
+if (selected.error) throw selected.error;
+if (selected.status !== 0) throw new Error(`${selected.stdout}\n${selected.stderr}`);
+const selectedResult = JSON.parse(selected.stdout);
+assert.equal(selectedResult.status, "PASS");
+assert.deepEqual(selectedResult.rows.map((x) => x.id), ["d-lease-current"]);
+assert.equal(selectedResult.semanticDigest, JSON.parse(fs.readFileSync(path.join(out, "decision-packet.json"), "utf8")).canonical_result_digests.current_decisions);
   process.stdout.write(`${JSON.stringify(summary)}
 `);
 } finally {

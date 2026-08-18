@@ -19,3 +19,6 @@ The selected V1 engine applies only to this decision ledger. It does not replace
 ## Measurement boundary
 
 Engine selection uses the exact eight-query contract repeated five times against real GitHub-backed operational records. It does not fabricate or claim production query telemetry; the decision is reopened when production telemetry or the ingress contract changes. G9 is a controlled deterministic replay of three decision families and records canonical evidence bytes, timings, asset counts, reuse provenance, quality gates, and outcomes.
+## Selected normal runtime
+
+`bin/query.py` is the normal read-only entry and accepts only `ops.sqliteShardProjection.v1`; it depends on Python standard-library SQLite and verifies every manifest asset before query. DuckDB remains only in the exact comparison/check path and is not a normal runtime dependency.
