@@ -11,13 +11,15 @@
     "policyctl"
     "shiftleft-rule-observation-receipt"
     "tree-bound-shiftleft-receipt"
+    "git-write-admission-check"
   ];
   requires = [
     "package-lib-level-governance"
     "functional-core-governance-gate"
     "github-exact-commit-ref"
+    "ops-git-write-closure"
   ];
-  responsibility = "Intake an exact policy bundle, normalize language-specific evidence, fold met/unmet/unobserved/not-applicable, and emit deterministic receipts bound to policy, base tree, and candidate tree.";
+  responsibility = "Intake an exact policy bundle, normalize language-specific evidence, fold met/unmet/unobserved/not-applicable, emit deterministic receipts bound to policy/base/candidate trees, and verify that a live Git worktree still matches a PASS receipt before Git write preparation.";
   mission = "Make code without an exact, evidence-backed Shift Left receipt remain draft, without implementing GitHub write effects or duplicating Rule/Outcome authority.";
   publicInterface = {
     version = "shiftleft-admission.interface.v1";
@@ -26,6 +28,7 @@
       { name = "policyctl observe"; kind = "cli"; contract = "Input: profiles and source fixtures. Output: ShiftLeftObservation JSONL. Errors: missing tool/unsupported/provider failure become unobserved. Effects: declared local provider only, no network."; }
       { name = "policyctl admit"; kind = "cli"; contract = "Input: exact policy ref/hash, normalized observations, base/candidate trees. Output: ShiftLeftReceipt. Errors: blocker/unobserved/mismatch. Effects: receipt file only."; }
       { name = "policyctl verify"; kind = "cli"; contract = "Input: receipt and expected policy/base/candidate identity. Output: PASS. Errors: digest or binding mismatch. Effects: none."; }
+      { name = "policyctl verify-worktree"; kind = "cli"; contract = "Input: PASS receipt, expected policy hash, and Git worktree. Output: worktree verification with actual base/candidate tree and receipt digest. Errors: missing/non-PASS/tampered/stale receipt or invalid worktree. Effects: temporary Git index and unreachable local Git objects only; no worktree or network mutation."; }
     ];
   };
   sourceLayout = {
@@ -33,11 +36,12 @@
     bin = "packages/shiftleft-admission/cmd/policyctl";
     adapters = "packages/shiftleft-admission/adapters";
     policy = "packages/shiftleft-admission/policy";
-    tests = "packages/shiftleft-admission/fixtures and internal/admission/*_test.go";
-    rule = "common gate owns no language AST; language adapters emit normalized observations; #114/#115 remain external.";
+    tests = "packages/shiftleft-admission/fixtures, internal/admission/*_test.go, and tests/git-write-admission.sh";
+    rule = "common gate owns no language AST; language adapters emit normalized observations; #114 consumes the worktree-bound check while #115 remains external Rule/Outcome authority.";
   };
   allowedPaths = [
     "packages/shiftleft-admission/"
+    "packages/ops-purity/bin/purity.mjs"
     "flake.nix"
     "ci.intent.v1.jsonl"
     ".github/workflows/issue-116-shiftleft-proof.yml"
@@ -45,7 +49,7 @@
     "build/checks.jsonl"
   ];
   forbiddenPaths = [
-    "GitHub write implementation"
+    "GitHub write effect implementation"
     "Rule or Outcome authority duplication"
     "common AST"
     "tool missing or skipped converted to PASS"
@@ -53,11 +57,16 @@
   ];
   requiredOutputs = [ "policyctl" "shiftleft-proof artifact" ];
   requiredChecks = [ "issue-116-shiftleft-proof" ];
-  requiredCommands = [ "go test ./..." "policyctl proof --bundle policy --fixtures fixtures --policy-ref <commit> --base-tree <tree> --candidate-tree <tree> --out-dir <dir>" ];
+  requiredCommands = [
+    "go test ./..."
+    "policyctl proof --bundle policy --fixtures fixtures --policy-ref <commit> --base-tree <tree> --candidate-tree <tree> --out-dir <dir>"
+    "policyctl verify-worktree --receipt <receipt> --policy-sha256 <hash> --repo <worktree>"
+    "bash tests/git-write-admission.sh"
+  ];
   checkPackageContract = {
     kind = "spec.checkPackageContract.v1";
     checkId = "shiftleft-admission";
-    inputs = [ "policy/*.jsonl" "fixtures/**" "normalized observations" ];
+    inputs = [ "policy/*.jsonl" "fixtures/**" "normalized observations" "Git candidate worktree" "ShiftLeftReceipt" ];
     guarantees = [
       "mutable ref, missing input, and policy hash mismatch fail before admission"
       "public contracts declare input/output/error/effect plus golden/negative routes and current consumers"
@@ -67,14 +76,25 @@
       "missing tool, unsupported language, and skipped required test are not Green"
       "clean two-run receipt bytes are identical"
       "receipt is bound to policy/base/candidate identity"
+      "#114 prepare passes with the exact PASS receipt and actual worktree tree"
+      "#114 prepare emits no effect plan for a wrong candidate tree or missing receipt"
+      "the same policy/base/candidate binding can be reverified after the effect plan is fixed"
     ];
     failureModes = [
       "false-green-unobserved"
       "language-finding-drift"
       "stale-tree-receipt"
+      "missing-receipt"
       "mutable-policy-intake"
       "nondeterministic-receipt"
     ];
-    evidence = [ "GitHub Actions proof artifact" "provider fixture observations" "receipt.1.json" "receipt.2.json" "proof-summary.json" ];
+    evidence = [
+      "GitHub Actions proof artifact"
+      "provider fixture observations"
+      "receipt.1.json"
+      "receipt.2.json"
+      "proof-summary.json"
+      "git-write-admission stdout/stderr assertions"
+    ];
   };
 }
