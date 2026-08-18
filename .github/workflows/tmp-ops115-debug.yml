@@ -1,0 +1,39 @@
+name: Temporary debug ops 115
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [proposals]
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    if: github.head_ref == 'feat/ops-115-decision-closure-final'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ops-115-decision-closure-final
+      - run: python3 .github/tmp/assemble-ops115.py
+      - name: Acquire DuckDB
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/roccho-dev/ops/releases/download/duckdb-carrier-v1.5.5-3d33b1df037c/carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt \
+            -o "$RUNNER_TEMP/duck.b64"
+          python3 - <<'PY'
+          import base64,pathlib
+          raw=pathlib.Path(__import__('os').environ['RUNNER_TEMP']+'/duck.b64').read_text('ascii')
+          pathlib.Path(__import__('os').environ['RUNNER_TEMP']+'/duckdb').write_bytes(base64.b64decode(raw,validate=True))
+          PY
+          chmod +x "$RUNNER_TEMP/duckdb"
+      - name: Run uncaught proof
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os, pathlib
+          p=pathlib.Path('packages/ops-decision-closure/bin/ops-decision-closure.py').resolve()
+          spec=importlib.util.spec_from_file_location('core',p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          m.proof(p.parents[1], pathlib.Path(os.environ['RUNNER_TEMP'])/'debug-proof', pathlib.Path(os.environ['RUNNER_TEMP'])/'duckdb')
+          PY
