@@ -38,6 +38,7 @@
   };
   allowedPaths = [
     "packages/shiftleft-admission/"
+    "flake.nix"
     ".github/workflows/issue-116-shiftleft-proof.yml"
     "build/packages.jsonl"
     "build/checks.jsonl"
