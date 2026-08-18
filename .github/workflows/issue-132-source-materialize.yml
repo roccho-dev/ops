@@ -6,6 +6,11 @@ on:
       - proof/issue-132-source-materialize
     paths:
       - ".github/workflows/issue-132-source-materialize.yml"
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - ".github/workflows/issue-132-source-materialize.yml"
 
 permissions:
   contents: read
