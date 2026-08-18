@@ -1,26 +1,15 @@
-name: Release carrier materialize
+name: Carrier job materialize
 
 on:
-  push:
-    paths:
-      - ".github/release-carrier-requests/*.json"
   workflow_dispatch:
     inputs:
-      tag:
-        description: Exact GitHub Release tag
-        required: true
-        type: string
-      asset:
-        description: Exact neutral-text carrier asset name
-        required: true
-        type: string
-      payload_sha256:
-        description: Expected decoded payload SHA-256
+      request:
+        description: Provider-neutral carrier-job/1 request JSON
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   materialize:
@@ -28,101 +17,25 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Resolve exact request
-        id: request
+      - name: Materialize and self-verify exact sources
         shell: bash
         env:
-          DISPATCH_TAG: ${{ inputs.tag }}
-          DISPATCH_ASSET: ${{ inputs.asset }}
-          DISPATCH_SHA: ${{ inputs.payload_sha256 }}
+          REQUEST_JSON: ${{ inputs.request }}
         run: |
           set -euo pipefail
-          request_path=""
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            tag="$DISPATCH_TAG"
-            asset="$DISPATCH_ASSET"
-            payload_sha="$DISPATCH_SHA"
-          else
-            mapfile -t requests < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" -- '.github/release-carrier-requests/*.json')
-            [[ ${#requests[@]} -eq 1 ]]
-            request_path="${requests[0]}"
-            mapfile -t values < <(python3 - "$request_path" <<'PY'
-          import json,re,sys
-          x=json.load(open(sys.argv[1]))
-          required={"tag","asset","payload_sha256"}
-          if set(x)!=required: raise SystemExit("request must contain exactly tag, asset, payload_sha256")
-          tag=x["tag"]; asset=x["asset"]; sha=x["payload_sha256"]
-          if not re.fullmatch(r"[A-Za-z0-9._-]+",tag): raise SystemExit("invalid tag")
-          if not re.fullmatch(r"[A-Za-z0-9._-]+\.b64\.txt",asset): raise SystemExit("invalid carrier asset")
-          if not re.fullmatch(r"[0-9a-f]{64}",sha): raise SystemExit("invalid payload_sha256")
-          print(tag); print(asset); print(sha)
-          PY
-            )
-            tag="${values[0]}"; asset="${values[1]}"; payload_sha="${values[2]}"
-          fi
-          [[ "$tag" =~ ^[A-Za-z0-9._-]+$ ]]
-          [[ "$asset" =~ ^[A-Za-z0-9._-]+\.b64\.txt$ ]]
-          [[ "$payload_sha" =~ ^[0-9a-f]{64}$ ]]
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "asset=$asset" >> "$GITHUB_OUTPUT"
-          echo "payload_sha=$payload_sha" >> "$GITHUB_OUTPUT"
-          echo "request_path=$request_path" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=release-carrier-${tag}-${payload_sha:0:12}" >> "$GITHUB_OUTPUT"
+          request="$RUNNER_TEMP/request.json"
+          out="$RUNNER_TEMP/carrier-job"
+          verified="$RUNNER_TEMP/verified.receipt.json"
+          printf '%s' "$REQUEST_JSON" > "$request"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize --request "$request" --out "$out"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify --input "$out" --receipt "$verified"
+          cmp "$out/receipt.json" "$verified"
 
-      - name: Fetch public Release carrier and verify payload
-        shell: bash
-        env:
-          TAG: ${{ steps.request.outputs.tag }}
-          ASSET: ${{ steps.request.outputs.asset }}
-          PAYLOAD_SHA: ${{ steps.request.outputs.payload_sha }}
-        run: |
-          set -euo pipefail
-          out="$RUNNER_TEMP/materialized"
-          mkdir -p "$out"
-          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}"
-          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$url" -o "$out/$ASSET"
-          python3 - "$out/$ASSET" "$PAYLOAD_SHA" "$url" "$out/receipt.json" <<'PY'
-          import base64,hashlib,json,pathlib,sys
-          p=pathlib.Path(sys.argv[1]); expected,url,out=sys.argv[2:]
-          raw=p.read_text(encoding="ascii")
-          if any(c.isspace() for c in raw): raise SystemExit("carrier whitespace forbidden")
-          data=base64.b64decode(raw,validate=True)
-          if base64.b64encode(data).decode("ascii")!=raw: raise SystemExit("carrier is not canonical standard Base64")
-          actual=hashlib.sha256(data).hexdigest()
-          if actual!=expected: raise SystemExit(f"payload SHA mismatch: {actual} != {expected}")
-          pathlib.Path(out).write_text(json.dumps({
-            "schema":"release-carrier-materialize/1",
-            "status":"PASS",
-            "url":url,
-            "asset":p.name,
-            "carrierBytes":p.stat().st_size,
-            "carrierSha256":hashlib.sha256(p.read_bytes()).hexdigest(),
-            "payloadBytes":len(data),
-            "payloadSha256":actual,
-          },sort_keys=True,indent=2)+"\n")
-          PY
-
-      - name: Upload exact Carrier for Pro connector
+      - name: Upload provider-neutral result directory
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.request.outputs.artifact_name }}
-          path: ${{ runner.temp }}/materialized/
+          name: carrier-job-${{ github.run_id }}
+          path: ${{ runner.temp }}/carrier-job/
           if-no-files-found: error
           retention-days: 30
-
-      - name: Erase push request
-        if: steps.request.outputs.request_path != ''
-        shell: bash
-        env:
-          REQUEST_PATH: ${{ steps.request.outputs.request_path }}
-        run: |
-          set -euo pipefail
-          rm -f "$REQUEST_PATH"
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A -- "$REQUEST_PATH"
-          git commit -m "ci: consume release carrier request"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
