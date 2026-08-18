@@ -22,11 +22,5 @@
       "optimizedRun": "run-repo-2"
     }
   ],
-  "schema": "ops.decisionEconomicsFamilies.v1",
-  "workload": {
-    "aggregateQueries": 4,
-    "localQueries": 96,
-    "source": "six exact operational replays across the three families",
-    "totalQueries": 100
-  }
+  "schema": "ops.decisionEconomicsFamilies.v1"
 }

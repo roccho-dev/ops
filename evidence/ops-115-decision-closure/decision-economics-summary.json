@@ -1,13 +1,16 @@
 {
   "failClosedMismatchCount": 0,
   "familyCount": 3,
-  "humanReviewClaim": "no reduction claimed; automated replay remained 0 seconds with stronger quality gates",
+  "humanReviewClaim": "no reduction claimed; both controlled replays required zero human seconds and optimized revisions added measurable quality gates",
+  "measurementBoundary": "controlled replay economics; not ARR, sale value, or production telemetry",
+  "medianBaselineTransferBytes": 2046,
   "medianExternalResearchReductionRatio": 0.5,
+  "medianOptimizedTransferBytes": 1040,
   "medianOutcomeClosureRatio": 1.0,
   "medianRecomputedNodeRatio": 0.13333333333333333,
   "medianReuseRatio": 0.7333333333333333,
   "runsPerFamily": 2,
-  "schema": "ops.decisionEconomicsSummary.v1",
+  "schema": "ops.decisionEconomicsSummary.v2",
   "semanticMismatchCount": 0,
   "status": "PASS_DECISION_ECONOMICS_G9"
 }

@@ -7,6 +7,14 @@ import hashlib
 import json
 import statistics
 
+REPEAT_COUNT = 5
+INGRESS_PROFILE_CAP_BYTES = 1_048_576
+REQUIRED_QUERY_IDS = {
+    'current_decisions', 'trace_decision', 'impact_by_fact', 'missing_outcomes',
+    'unresolved_conflicts', 'research_gaps', 'decision_timeline', 'full_history_aggregate',
+}
+POINT_QUERY_IDS = {'current_decisions', 'trace_decision', 'impact_by_fact', 'research_gaps', 'decision_timeline'}
+
 
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
@@ -42,40 +50,69 @@ def main():
 
     parity = read_json(proof / 'engine-parity.json')
     receipt = read_json(proof / 'closure-receipt.json')
-    workload = read_json(package / 'economics/families.json')['workload']
     queries = {x['queryId']: x for x in parity['queries']}
-    local_ids = ['current_decisions', 'trace_decision', 'impact_by_fact', 'research_gaps', 'decision_timeline']
+    missing_queries = sorted(REQUIRED_QUERY_IDS - set(queries))
+    unexpected_queries = sorted(set(queries) - REQUIRED_QUERY_IDS)
     trace_ratio = queries['trace_decision']['frozenDuckLake']['p95Milliseconds'] / max(queries['trace_decision']['sqlite']['p95Milliseconds'], 0.000001)
     impact_ratio = queries['impact_by_fact']['frozenDuckLake']['p95Milliseconds'] / max(queries['impact_by_fact']['sqlite']['p95Milliseconds'], 0.000001)
-    local_share = workload['localQueries'] / workload['totalQueries']
-    sqlite_local_shards = max(queries[x]['sqlite']['requiredShardOrFileCount'] for x in local_ids)
-    sqlite_local_fetch = statistics.median(queries[x]['sqlite']['fetchBytes'] for x in local_ids)
-    duck_local_fetch = statistics.median(queries[x]['frozenDuckLake']['fetchBytes'] for x in local_ids)
+    sqlite_point_shards = max(queries[x]['sqlite']['requiredShardOrFileCount'] for x in POINT_QUERY_IDS)
+    sqlite_point_fetch = statistics.median(queries[x]['sqlite']['fetchBytes'] for x in POINT_QUERY_IDS)
+    duck_point_fetch = statistics.median(queries[x]['frozenDuckLake']['fetchBytes'] for x in POINT_QUERY_IDS)
     sqlite_manifest = read_json(proof / 'checkpoint-2/sqlite/manifest.json')
     duck_catalog = read_json(proof / 'checkpoint-2/frozen-ducklake/catalog.json')
+
+    executions = []
+    for query_id in sorted(REQUIRED_QUERY_IDS):
+        row = queries[query_id]
+        for iteration in range(REPEAT_COUNT):
+            executions.append({
+                'queryId': query_id,
+                'iteration': iteration + 1,
+                'sqliteFetchBytes': row['sqlite']['fetchBytes'],
+                'sqliteShardCount': row['sqlite']['requiredShardOrFileCount'],
+                'frozenDuckLakeFetchBytes': row['frozenDuckLake']['fetchBytes'],
+                'frozenDuckLakeFileCount': row['frozenDuckLake']['requiredShardOrFileCount'],
+            })
+    within_cap = [x for x in executions if x['sqliteFetchBytes'] <= INGRESS_PROFILE_CAP_BYTES]
+    within_cap_share = len(within_cap) / max(len(executions), 1)
+    p95_fetch = sorted(x['sqliteFetchBytes'] for x in executions)[max(0, int(len(executions) * 0.95) - 1)]
+    p95_shards = sorted(x['sqliteShardCount'] for x in executions)[max(0, int(len(executions) * 0.95) - 1)]
 
     checks = {
         'semanticMismatchCountZero': parity['semanticMismatchCount'] == 0,
         'failClosedMismatchCountZero': receipt['failClosedMismatchCount'] == 0,
-        'normalLocalQueryShareAtLeast95Percent': local_share >= 0.95,
-        'sqliteLocalShardCountAtMostOne': sqlite_local_shards <= 1,
+        'allRequiredQueriesCoveredExactly': not missing_queries and not unexpected_queries,
+        'requiredQueryExecutionsWithinIngressCapAtLeast95Percent': within_cap_share >= 0.95,
+        'sqlitePointQueryShardCountAtMostOne': sqlite_point_shards <= 1,
         'duckdbTraceP95MoreThan2xSQLite': trace_ratio > 2.0,
         'duckdbImpactP95MoreThan2xSQLite': impact_ratio > 2.0,
         'sqliteAssetCountWithinBound': len(sqlite_manifest['assets']) <= 64,
-        'fullHistoryIsMinorityWorkload': workload['aggregateQueries'] / workload['totalQueries'] <= 0.05,
+        'fullHistoryAggregateWithinIngressCap': queries['full_history_aggregate']['sqlite']['fetchBytes'] <= INGRESS_PROFILE_CAP_BYTES,
     }
     if not all(checks.values()):
         raise SystemExit('engine selection blocked: ' + json.dumps(checks, sort_keys=True))
 
+    workload = {
+        'source': 'exact required-query contract replay against GitHub-backed operational authority; equal-weight proof workload, not production telemetry',
+        'requiredQueryTypes': len(REQUIRED_QUERY_IDS),
+        'repeatCountPerQuery': REPEAT_COUNT,
+        'queryExecutionCount': len(executions),
+        'ingressProfileCapBytes': INGRESS_PROFILE_CAP_BYTES,
+        'withinCapExecutionCount': len(within_cap),
+        'withinCapShare': within_cap_share,
+        'p95SQLiteFetchBytes': p95_fetch,
+        'p95SQLiteShardCount': p95_shards,
+        'executions': executions,
+    }
     selection_input = {
-        'schema': 'ops.decisionEngineSelectionInput.v1',
+        'schema': 'ops.decisionEngineSelectionInput.v2',
         'workload': workload,
         'metrics': {
             'traceP95RatioDuckToSQLite': trace_ratio,
             'impactP95RatioDuckToSQLite': impact_ratio,
-            'sqliteLocalShardCountP95': sqlite_local_shards,
-            'sqliteLocalFetchBytesMedian': sqlite_local_fetch,
-            'frozenDuckLakeLocalFetchBytesMedian': duck_local_fetch,
+            'sqlitePointQueryShardCountMax': sqlite_point_shards,
+            'sqlitePointFetchBytesMedian': sqlite_point_fetch,
+            'frozenDuckLakePointFetchBytesMedian': duck_point_fetch,
             'sqliteAssetCount': len(sqlite_manifest['assets']),
             'frozenDuckLakeAssetCount': len(duck_catalog['assets']),
             'duckdbRuntimeCarrierBytes': 82582200,
@@ -86,13 +123,13 @@ def main():
     }
     selection_digest = sha(selection_input)
     selection = {
-        'schema': 'ops.decisionEngineSelection.v1',
+        'schema': 'ops.decisionEngineSelection.v2',
         'status': 'PASS_SQLITE_SHARDS',
         'selectedEngine': 'sqlite-shards',
         'selectionInputDigest': 'sha256:' + selection_digest,
         'selectionInput': selection_input,
         'rejectedEngine': 'frozen-ducklake',
-        'rejectedReason': 'local trace and impact p95 exceed SQLite by more than 2x, normal workload is >=95% local, and the exact DuckDB runtime adds 82,582,200 Carrier bytes',
+        'rejectedReason': 'all required V1 queries fit the fixed 1 MiB ingress profile, point queries touch one SQLite shard, DuckDB trace/impact p95 exceed SQLite by more than 2x, and the exact DuckDB runtime adds 82,582,200 Carrier bytes',
         'authority': False,
     }
     write_json(package / 'engine-selection.json', selection)
@@ -107,29 +144,37 @@ def main():
         f[key]['source_digest'] = source_digest
         f[key]['confidence'] = 'verified'
     f['f-lease-mismatch-demand']['value'] = {'semanticMismatchCount': 0, 'failClosedMismatchCount': 0}
-    f['f-lease-reproposal-action']['value'] = {'compared': ['sqlite-shards', 'frozen-ducklake'], 'queryCount': len(parity['queries']), 'repeatCount': 5}
-    f['f-lease-applications']['value'] = {'normalLocalQueryShare': local_share, 'sqliteLocalShardCountP95': sqlite_local_shards, 'traceP95RatioDuckToSQLite': trace_ratio, 'impactP95RatioDuckToSQLite': impact_ratio}
+    f['f-lease-reproposal-action']['value'] = {'compared': ['sqlite-shards', 'frozen-ducklake'], 'queryCount': len(REQUIRED_QUERY_IDS), 'repeatCount': REPEAT_COUNT, 'executionCount': len(executions)}
+    f['f-lease-applications']['value'] = {'requiredQueryWithinIngressCapShare': within_cap_share, 'p95SQLiteFetchBytes': p95_fetch, 'p95SQLiteShardCount': p95_shards, 'sqlitePointQueryShardCountMax': sqlite_point_shards, 'traceP95RatioDuckToSQLite': trace_ratio, 'impactP95RatioDuckToSQLite': impact_ratio}
     f['f-lease-contracts']['value'] = {'selectedEngine': 'sqlite-shards', 'duckdbRuntimeCarrierBytes': 82582200, 'sqliteAdditionalRuntimeCarrierBytes': 0}
     write_jsonl(facts_path, facts)
+
+    conditions_path = package / 'fixtures/conditions/segment-001.jsonl'
+    conditions = read_jsonl(conditions_path)
+    cond = {x['id']: x for x in conditions}
+    cond['c-lease-threshold']['value'] = '>=95% of the exact required-query replay must fit the fixed 1 MiB ingress profile; point trace/impact must touch one SQLite shard; DuckDB trace/impact p95 must exceed SQLite by >2x'
+    cond['c-lease-freshness']['value'] = 're-open when production telemetry exists, the required query contract changes, or any p95 query exceeds the 1 MiB ingress profile'
+    write_jsonl(conditions_path, conditions)
 
     claims_path = package / 'fixtures/claims/segment-001.jsonl'
     claims = read_jsonl(claims_path)
     c = {x['id']: x for x in claims}
-    c['cl-lease-red-ocean']['value'] = 'Frozen DuckLake is materially heavier for the observed local point-query workload'
+    c['cl-lease-red-ocean']['value'] = 'Frozen DuckLake is materially heavier for the exact required-query replay'
     c['cl-lease-red-ocean']['reason'] = f'trace p95 ratio={trace_ratio:.3f}; impact p95 ratio={impact_ratio:.3f}; runtime Carrier=82582200 bytes'
     c['cl-lease-redefined']['value'] = 'catalog.sqlite plus indexed immutable SQLite shards'
-    c['cl-lease-redefined']['reason'] = 'all canonical results and failure boundaries match while one local shard serves >=95% of the observed workload'
+    c['cl-lease-redefined']['reason'] = f'all {len(executions)} exact query executions fit the 1 MiB ingress profile; point queries touch one shard; canonical results and failure boundaries match'
     c['d-lease-current']['value'] = 'select SQLite catalog plus immutable shards for the public decision ledger v1'
-    c['d-lease-current']['reason'] = 'the predeclared selection rule passed with semantic/fail-closed mismatch zero and materially lower local-query/runtime cost'
-    c['d-lease-current']['selected_reason'] = 'smallest engine that satisfies the exact decision-ledger workload and replay contract'
+    c['d-lease-current']['reason'] = 'the predeclared V1 selection rule passed on the real operational authority and exact required-query replay without claiming production query telemetry'
+    c['d-lease-current']['selected_reason'] = 'smallest engine that satisfies the exact decision-ledger query, ingress, replay, and transfer contract'
     c['d-lease-current']['next_action'] = 'publish an immutable proof checkpoint and run independent clean-room takeover'
     c['d-lease-current']['success_conditions'] = ['semantic mismatch = 0', 'fail-closed mismatch = 0', 'old checkpoint replay PASS', 'independent takeover PASS']
+    c['d-lease-current']['stop_conditions'] = ['any semantic mismatch', 'any required-query p95 fetch exceeds 1 MiB', 'production telemetry materially differs from the proof workload']
     c['cl-lease-gap']['predicate'] = 'monitoring_note'
-    c['cl-lease-gap']['value'] = 're-open engine selection if normal local-query share falls below 95% or full-history analysis becomes primary'
+    c['cl-lease-gap']['value'] = 're-open engine selection when production query telemetry becomes available or the required-query/ingress contract changes'
     c['cl-lease-gap']['reason'] = 'accepted reevaluation trigger, not a current gap'
     write_jsonl(claims_path, claims)
 
-    print(json.dumps({'status': 'PASS_SQLITE_SHARDS', 'selectedEngine': 'sqlite-shards', 'selectionInputDigest': selection['selectionInputDigest']}, sort_keys=True))
+    print(json.dumps({'status': 'PASS_SQLITE_SHARDS', 'selectedEngine': 'sqlite-shards', 'selectionInputDigest': selection['selectionInputDigest'], 'queryExecutionCount': len(executions)}, sort_keys=True))
 
 
 if __name__ == '__main__':

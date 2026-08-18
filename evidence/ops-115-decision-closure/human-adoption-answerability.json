@@ -18,7 +18,7 @@
       "visible": true
     },
     {
-      "answer": "Frozen DuckLake is materially heavier for the observed local point-query workload",
+      "answer": "Frozen DuckLake is materially heavier for the exact required-query replay",
       "id": "evidence_against",
       "visible": true
     },
@@ -38,12 +38,12 @@
       "visible": true
     },
     {
-      "answer": "semantic mismatch = 0 / fail-closed mismatch = 0 / old checkpoint replay PASS / independent takeover PASS / any semantic mismatch / normal local share < 95%",
+      "answer": "semantic mismatch = 0 / fail-closed mismatch = 0 / old checkpoint replay PASS / independent takeover PASS / any semantic mismatch / any required-query p95 fetch exceeds 1 MiB / production telemetry materially differs from the proof workload",
       "id": "success_failure",
       "visible": false
     },
     {
-      "answer": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'queryCount': 8, 'repeatCount': 5}",
+      "answer": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'executionCount': 40, 'queryCount': 8, 'repeatCount': 5}",
       "id": "outcomes",
       "visible": false
     }

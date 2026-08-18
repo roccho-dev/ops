@@ -15,3 +15,7 @@ immutable Fact / Condition / Claim JSONL Authority
 ```
 
 The selected V1 engine applies only to this decision ledger. It does not replace the existing DuckDB production path or override Issue #90 / PR #91. Databases, Parquet, Packet, HTML, metrics, DD files, Release assets, and receipts remain disposable non-authority projections.
+
+## Measurement boundary
+
+Engine selection uses the exact eight-query contract repeated five times against real GitHub-backed operational records. It does not fabricate or claim production query telemetry; the decision is reopened when production telemetry or the ingress contract changes. G9 is a controlled deterministic replay of three decision families and records canonical evidence bytes, timings, asset counts, reuse provenance, quality gates, and outcomes.

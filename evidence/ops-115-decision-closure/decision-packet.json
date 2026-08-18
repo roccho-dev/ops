@@ -13,25 +13,25 @@
   ],
   "canonical_result_digests": {
     "current_decisions": "a8283b85ab1723144261edb77856d3caa787e20780a344a4112f13c268c44c52",
-    "decision_timeline": "f74bea65872d877fbb710e13ebf4e2fa6ad8654160f0095d586a0a737d3040fa",
+    "decision_timeline": "77bb27e9c8b9e55fb9aadfe955f7a55c7a2aa44db644e95fda5161f96b0ea055",
     "full_history_aggregate": "02ea11bcdee30564de189dbbe62667107b74fccf584d6b5ecf4977d89951938f",
     "impact_by_fact": "c39fca4f4d0fe3dd2b35599a65cf67bab1f0d6a481f8c322cd624a74f01159c1",
     "missing_outcomes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "research_gaps": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    "trace_decision": "1a508617d756599fe22875f6c7436192d065a2085f1f3a672fd4b755a02c2c51",
+    "trace_decision": "16844a5107376b39e3553b4d55344fbe713b955856d57c0e601cb796f19656c3",
     "unresolved_conflicts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   },
   "changed_since_previous": [
     {
       "id": "f-lease-reproposal-action",
       "kind": "action",
-      "statement": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'queryCount': 8, 'repeatCount': 5}",
+      "statement": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'executionCount': 40, 'queryCount': 8, 'repeatCount': 5}",
       "type": "fact"
     },
     {
       "id": "f-lease-applications",
       "kind": "outcome",
-      "statement": "{'impactP95RatioDuckToSQLite': 98.88689087563212, 'normalLocalQueryShare': 0.96, 'sqliteLocalShardCountP95': 1, 'traceP95RatioDuckToSQLite': 53.07198528996249}",
+      "statement": "{'impactP95RatioDuckToSQLite': 117.36011739372047, 'p95SQLiteFetchBytes': 192512, 'p95SQLiteShardCount': 4, 'requiredQueryWithinIngressCapShare': 1.0, 'sqlitePointQueryShardCountMax': 1, 'traceP95RatioDuckToSQLite': 62.276245331158556}",
       "type": "fact"
     },
     {
@@ -43,7 +43,7 @@
     {
       "id": "cl-lease-red-ocean",
       "kind": "derived",
-      "statement": "Frozen DuckLake is materially heavier for the observed local point-query workload",
+      "statement": "Frozen DuckLake is materially heavier for the exact required-query replay",
       "type": "claim"
     },
     {
@@ -61,7 +61,7 @@
     {
       "id": "cl-lease-gap",
       "kind": "proposal",
-      "statement": "re-open engine selection if normal local-query share falls below 95% or full-history analysis becomes primary",
+      "statement": "re-open engine selection when production query telemetry becomes available or the required-query/ingress contract changes",
       "type": "claim"
     }
   ],
@@ -79,7 +79,7 @@
     {
       "id": "cl-lease-red-ocean",
       "kind": "derived",
-      "statement": "Frozen DuckLake is materially heavier for the observed local point-query workload",
+      "statement": "Frozen DuckLake is materially heavier for the exact required-query replay",
       "type": "claim"
     }
   ],
@@ -111,13 +111,13 @@
     {
       "id": "c-lease-threshold",
       "kind": "threshold",
-      "statement": "normal local query share >=95%; local trace/impact DuckDB p95 >2x SQLite; one touched SQLite shard",
+      "statement": ">=95% of the exact required-query replay must fit the fixed 1 MiB ingress profile; point trace/impact must touch one SQLite shard; DuckDB trace/impact p95 must exceed SQLite by >2x",
       "type": "condition"
     },
     {
       "id": "c-lease-freshness",
       "kind": "freshness",
-      "statement": "re-evaluate when the observed workload or provider limits change",
+      "statement": "re-open when production telemetry exists, the required query contract changes, or any p95 query exceeds the 1 MiB ingress profile",
       "type": "condition"
     }
   ],
@@ -127,12 +127,12 @@
     {
       "id": "f-lease-reproposal-action",
       "kind": "action",
-      "statement": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'queryCount': 8, 'repeatCount': 5}"
+      "statement": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'executionCount': 40, 'queryCount': 8, 'repeatCount': 5}"
     },
     {
       "id": "f-lease-applications",
       "kind": "outcome",
-      "statement": "{'impactP95RatioDuckToSQLite': 98.88689087563212, 'normalLocalQueryShare': 0.96, 'sqliteLocalShardCountP95': 1, 'traceP95RatioDuckToSQLite': 53.07198528996249}"
+      "statement": "{'impactP95RatioDuckToSQLite': 117.36011739372047, 'p95SQLiteFetchBytes': 192512, 'p95SQLiteShardCount': 4, 'requiredQueryWithinIngressCapShare': 1.0, 'sqlitePointQueryShardCountMax': 1, 'traceP95RatioDuckToSQLite': 62.276245331158556}"
     },
     {
       "id": "f-lease-contracts",
@@ -140,7 +140,7 @@
       "statement": "{'duckdbRuntimeCarrierBytes': 82582200, 'selectedEngine': 'sqlite-shards', 'sqliteAdditionalRuntimeCarrierBytes': 0}"
     }
   ],
-  "packet_digest": "666288d3273dac433f1005f27b0f06bf8e65354d2761f07ba2c9bb6eef864bb6",
+  "packet_digest": "c32e3503ab3d619bca3888320f2f67c8aa498fe1947cc9fde046de8b14bb40c7",
   "projection_asset_refs": [
     "sqlite/manifest.json",
     "frozen-ducklake/catalog.json"
@@ -165,7 +165,8 @@
   "status": "current",
   "stop_conditions": [
     "any semantic mismatch",
-    "normal local share < 95%"
+    "any required-query p95 fetch exceeds 1 MiB",
+    "production telemetry materially differs from the proof workload"
   ],
   "success_conditions": [
     "semantic mismatch = 0",
