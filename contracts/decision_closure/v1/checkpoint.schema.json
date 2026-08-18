@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.decisionCheckpoint.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "checkpoint_id", "authority_root_digest", "schema_digest", "query_contract_digest", "projection_kind", "engine_version", "processor_digest", "assets", "current_decision_ids", "created_at"],
+  "properties": {
+    "schema": {"const": "ops.decisionCheckpoint.v1"},
+    "checkpoint_id": {"type": "string", "minLength": 1},
+    "parent_checkpoint_id": {"type": ["string", "null"]},
+    "authority_root_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "query_contract_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "projection_kind": {"const": "sqlite-shards"},
+    "engine_version": {"type": "string", "minLength": 1},
+    "processor_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "assets": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["path", "bytes", "sha256", "immutable"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "bytes": {"type": "integer", "minimum": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "immutable": {"const": true},
+          "domain": {"type": "string"}
+        }
+      }
+    },
+    "current_decision_ids": {"type": "array", "items": {"type": "string"}},
+    "created_at": {"type": "string", "minLength": 1}
+  }
+}
