@@ -111,7 +111,7 @@ try {
   const repoFixture = path.join(takeoverRoot, "repo");
   const fixturePackage = path.join(repoFixture, "packages/ops-decision-closure");
   fs.mkdirSync(path.dirname(fixturePackage), { recursive: true });
-  fs.cpSync(packageRoot, fixturePackage, { recursive: true });
+  fs.cpSync(fs.realpathSync(packageRoot), fixturePackage, { recursive: true, dereference: true });
   invoke(gitCommand, ["init", "--quiet", repoFixture]);
   invoke(gitCommand, ["-C", repoFixture, "config", "user.name", "independent-takeover-fixture"]);
   invoke(gitCommand, ["-C", repoFixture, "config", "user.email", "takeover@example.invalid"]);
