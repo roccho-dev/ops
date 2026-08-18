@@ -40,3 +40,4 @@
 {"deps":["go","git","nodejs","python3","shiftleft-admission","structured-diagnostic"],"kind":"check","name":"issue-116-shiftleft-proof","script":"packages/shiftleft-admission/tests/e2e.sh"}
 {"deps":["nodejs","structured-diagnostic"],"kind":"check","name":"structured-diagnostic","script":"packages/structured-diagnostic/tests/e2e.mjs"}
 {"deps":["nodejs","git","go","python3","ops-git-write-closure"],"kind":"check","name":"ops-git-write-closure-mandatory-admission","script":"packages/ops-git-write-closure/tests/mandatory-admission.mjs"}
+{"deps":["nodejs","python3","duckdb","git","ops-decision-closure"],"kind":"check","name":"ops-decision-closure","script":"packages/ops-decision-closure/tests/final-e2e.mjs"}

@@ -1,0 +1,20 @@
+{
+  "schema": "ops.decisionQueryContract.v1",
+  "queries": [
+    "current_decisions",
+    "trace_decision",
+    "impact_by_fact",
+    "missing_outcomes",
+    "unresolved_conflicts",
+    "research_gaps",
+    "decision_timeline",
+    "full_history_aggregate"
+  ],
+  "canonical": {
+    "encoding": "UTF-8 JSON",
+    "objectKeys": "sorted",
+    "rows": "query-defined stable order",
+    "missing": "empty string or empty array, never implicit",
+    "booleans": "JSON true/false"
+  }
+}

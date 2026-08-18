@@ -1,0 +1,81 @@
+{
+  "mandatoryQuestionAccuracy": 1.0,
+  "mandatoryQuestionCount": 9,
+  "results": [
+    {
+      "answers": [
+        "Which read-only engine should serve the public decision ledger v1?"
+      ],
+      "id": "question",
+      "visible": true
+    },
+    {
+      "answers": [
+        "select SQLite catalog plus immutable shards for the public decision ledger v1"
+      ],
+      "id": "recommendation",
+      "visible": true
+    },
+    {
+      "answers": [
+        "catalog.sqlite plus indexed immutable SQLite shards"
+      ],
+      "id": "evidence_for",
+      "visible": true
+    },
+    {
+      "answers": [
+        "Frozen DuckLake is materially heavier for the exact required-query replay"
+      ],
+      "id": "evidence_against",
+      "visible": true
+    },
+    {
+      "answers": [
+        "HOLD JSONL only"
+      ],
+      "id": "alternatives",
+      "visible": true
+    },
+    {
+      "answers": [
+        "None"
+      ],
+      "id": "gaps",
+      "visible": true
+    },
+    {
+      "answers": [
+        "publish an immutable proof checkpoint and run independent clean-room takeover"
+      ],
+      "id": "next_action",
+      "visible": true
+    },
+    {
+      "answers": [
+        "semantic mismatch = 0",
+        "fail-closed mismatch = 0",
+        "old checkpoint replay PASS",
+        "independent takeover PASS",
+        "any semantic mismatch",
+        "any required-query p95 fetch exceeds 1 MiB",
+        "production telemetry materially differs from the proof workload"
+      ],
+      "id": "success_failure",
+      "visible": true
+    },
+    {
+      "answers": [
+        "f-lease-applications",
+        "{'impactP95RatioDuckToSQLite': 117.36011739372047, 'p95SQLiteFetchBytes': 192512, 'p95SQLiteShardCount': 4, 'requiredQueryWithinIngressCapShare': 1.0, 'sqlitePointQueryShardCountMax': 1, 'traceP95RatioDuckToSQLite': 62.276245331158556}"
+      ],
+      "id": "outcomes",
+      "visible": true
+    }
+  ],
+  "reviewer": "independent-static-reader-fixture",
+  "reviewerClass": "machine canary; literal independent human review remains separate",
+  "schema": "ops.humanAdoptionAnswerability.v2",
+  "sqlOrJsonlDirectOperationCount": 0,
+  "status": "PASS_MACHINE_ANSWERABILITY"
+}
