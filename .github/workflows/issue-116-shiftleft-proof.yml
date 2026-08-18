@@ -6,14 +6,21 @@ on:
       - feat/issue-116-shiftleft-admission
     paths:
       - ".github/workflows/issue-116-shiftleft-proof.yml"
-      - ".github/bootstrap/issue-116-shiftleft-source.parts/**"
+      - "packages/shiftleft-admission/**"
+      - "build/packages.jsonl"
+      - "build/checks.jsonl"
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - ".github/workflows/issue-116-shiftleft-proof.yml"
       - "packages/shiftleft-admission/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   proof:
@@ -24,113 +31,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Materialize the reviewed source capsule once
-        id: bootstrap
-        shell: bash
-        run: |
-          set -euo pipefail
-          PART_DIR=.github/bootstrap/issue-116-shiftleft-source.parts
-          if [[ ! -d "$PART_DIR" ]]; then
-            echo 'materialized=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          python3 - <<'PY'
-          import base64, hashlib, json, pathlib, shutil, tarfile, tempfile
-
-          part_dir = pathlib.Path('.github/bootstrap/issue-116-shiftleft-source.parts')
-          parts = sorted(part_dir.glob('part-*'))
-          if not parts:
-              raise SystemExit('bootstrap carrier parts missing')
-          raw = b''.join(part.read_bytes() for part in parts)
-          expected_carrier = '3c926bd46f3c99950c6457bba9e1b5e0c3a76f4c499692b7fcdd8cf4c4467256'
-          expected_archive = 'da259ee3fc366f093e0994a06512932a443e66a74a1bbab81cf6932f7ed3ae76'
-          if hashlib.sha256(raw).hexdigest() != expected_carrier:
-              raise SystemExit('bootstrap carrier SHA-256 mismatch')
-          if not raw.endswith(b'\n') or any(chr(c).isspace() for c in raw[:-1]):
-              raise SystemExit('bootstrap carrier must be one strict Base64 line plus LF')
-          archive = base64.b64decode(raw[:-1], validate=True)
-          if hashlib.sha256(archive).hexdigest() != expected_archive:
-              raise SystemExit('bootstrap archive SHA-256 mismatch')
-
-          with tempfile.TemporaryDirectory() as td:
-              tar_path = pathlib.Path(td) / 'source.tar.gz'
-              tar_path.write_bytes(archive)
-              with tarfile.open(tar_path, 'r:gz') as tf:
-                  members = tf.getmembers()
-                  if len(members) > 200:
-                      raise SystemExit('bootstrap archive entry limit exceeded')
-                  total = 0
-                  for m in members:
-                      p = pathlib.PurePosixPath(m.name)
-                      if p.is_absolute() or '..' in p.parts:
-                          raise SystemExit(f'unsafe archive path: {m.name}')
-                      if not (m.name == 'packages/shiftleft-admission' or m.name.startswith('packages/shiftleft-admission/')):
-                          raise SystemExit(f'unexpected archive path: {m.name}')
-                      if m.issym() or m.islnk() or m.isdev():
-                          raise SystemExit(f'unsupported archive member: {m.name}')
-                      total += m.size
-                  if total > 2 * 1024 * 1024:
-                      raise SystemExit('bootstrap archive unpacked limit exceeded')
-                  tf.extractall(td, filter='data')
-              src = pathlib.Path(td) / 'packages/shiftleft-admission'
-              dst = pathlib.Path('packages/shiftleft-admission')
-              if dst.exists():
-                  shutil.rmtree(dst)
-              shutil.copytree(src, dst)
-
-          additions = {
-              pathlib.Path('build/packages.jsonl'): {
-                  'bin': 'policyctl',
-                  'deps': ['go', 'node', 'python'],
-                  'entry': 'packages/shiftleft-admission/cmd/policyctl',
-                  'env': [],
-                  'kind': 'package',
-                  'name': 'shiftleft-admission',
-                  'runtime': 'go',
-              },
-              pathlib.Path('build/checks.jsonl'): {
-                  'deps': ['go', 'git', 'nodejs', 'python3', 'shiftleft-admission'],
-                  'kind': 'check',
-                  'name': 'issue-116-shiftleft-proof',
-                  'script': 'packages/shiftleft-admission/tests/e2e.sh',
-              },
-          }
-          for path, row in additions.items():
-              lines = [line for line in path.read_text().splitlines() if line.strip()]
-              parsed = [json.loads(line) for line in lines]
-              if not any(item.get('name') == row['name'] for item in parsed):
-                  lines.append(json.dumps(row, sort_keys=True, separators=(',', ':')))
-              path.write_text('\n'.join(lines) + '\n')
-          for part in parts:
-              part.unlink()
-          part_dir.rmdir()
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A packages/shiftleft-admission build/packages.jsonl build/checks.jsonl .github/bootstrap
-          git commit -m 'feat: materialize issue 116 shiftleft admission'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-          echo 'materialized=true' >> "$GITHUB_OUTPUT"
-
       - uses: actions/setup-go@v5
-        if: steps.bootstrap.outputs.materialized != 'true'
         with:
           go-version: "1.23.2"
           cache: false
 
       - uses: actions/setup-node@v4
-        if: steps.bootstrap.outputs.materialized != 'true'
         with:
           node-version: "22.16.0"
           cache: false
 
       - uses: actions/setup-python@v5
-        if: steps.bootstrap.outputs.materialized != 'true'
         with:
           python-version: "3.13.5"
 
       - name: Test and build policyctl
-        if: steps.bootstrap.outputs.materialized != 'true'
         working-directory: packages/shiftleft-admission
         run: |
           set -euo pipefail
@@ -140,7 +55,6 @@ jobs:
             go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
 
       - name: Produce two independent proof runs
-        if: steps.bootstrap.outputs.materialized != 'true'
         working-directory: packages/shiftleft-admission
         run: |
           set -euo pipefail
@@ -189,7 +103,6 @@ jobs:
             --candidate-tree "git-tree-sha1:$CANDIDATE_TREE"
 
       - name: Assemble replayable evidence
-        if: steps.bootstrap.outputs.materialized != 'true'
         working-directory: packages/shiftleft-admission
         run: |
           set -euo pipefail
@@ -203,7 +116,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/build/packages.jsonl" "$GITHUB_WORKSPACE/build/checks.jsonl" artifact/
           python3 - <<'PY'
           import json, os, pathlib, subprocess
-          env = dict(line.rstrip("\n").split("=", 1) for line in pathlib.Path("out/proof.env").read_text().splitlines())
+          env = dict(line.split("=", 1) for line in pathlib.Path("out/proof.env").read_text().splitlines())
           metadata = {
               "schema": "issue-116-shiftleft-artifact/1",
               "repository": os.environ["GITHUB_REPOSITORY"],
@@ -230,7 +143,6 @@ jobs:
           )
 
       - uses: actions/upload-artifact@v4
-        if: steps.bootstrap.outputs.materialized != 'true'
         with:
           name: issue-116-shiftleft-proof-${{ github.run_id }}
           path: packages/shiftleft-admission/artifact/
