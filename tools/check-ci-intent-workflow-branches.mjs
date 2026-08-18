@@ -4,135 +4,113 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.argv[2] ?? ".";
-const intentPath = path.join(root, "ci.intent.v1.jsonl");
+const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
+const records = read("ci.intent.v1.jsonl")
+  .split(/\r?\n/)
+  .filter((line) => line.trim())
+  .map((line, index) => {
+    try {
+      return JSON.parse(line);
+    } catch (error) {
+      throw new Error(`ci.intent.v1.jsonl:${index + 1}: ${error.message}`);
+    }
+  })
+  .filter((record) => record.kind === "ci.intent.v1" && record.provider === "github-actions");
 
-function readText(relPath) {
-  return fs.readFileSync(path.join(root, relPath), "utf8");
-}
+const failures = [];
+const indent = (line) => line.match(/^(\s*)/)[1].length;
 
-function parseJsonl(relPath) {
-  return readText(relPath)
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      try {
-        return JSON.parse(line);
-      } catch (error) {
-        throw new Error(`${relPath}:${index + 1}: invalid JSON: ${error.message}`);
-      }
-    });
-}
-
-function indentOf(line) {
-  const match = line.match(/^(\s*)/);
-  return match ? match[1].length : 0;
-}
-
-function parseInlineArray(value, context) {
-  const match = value.trim().match(/^\[(.*)\]\s*$/);
-  if (!match) {
-    throw new Error(`${context}: expected inline array such as [proposals]`);
+function triggerBlock(text, trigger) {
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(new RegExp(`^(\\s*)${trigger}:\\s*(?:#.*)?$`));
+    if (!match) continue;
+    const base = match[1].length;
+    const body = [];
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      const line = lines[cursor];
+      if (!line.trim() || line.trim().startsWith("#")) continue;
+      if (indent(line) <= base) break;
+      body.push(line);
+    }
+    return body;
   }
-  const inner = match[1].trim();
-  if (!inner) return [];
-  return inner
+  return null;
+}
+
+function inlineArray(value, label) {
+  const match = value.trim().match(/^\[(.*)\]$/);
+  if (!match) throw new Error(`${label}: expected inline array`);
+  return match[1]
     .split(",")
     .map((part) => part.trim().replace(/^['\"]|['\"]$/g, ""))
     .filter(Boolean);
 }
 
-function extractTriggerBlock(text, trigger) {
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    const match = lines[i].match(new RegExp(`^(\\s*)${trigger}:\\s*(?:#.*)?$`));
+function pushBranches(text, relative) {
+  const body = triggerBlock(text, "push");
+  if (!body) return null;
+  for (let index = 0; index < body.length; index += 1) {
+    const match = body[index].match(/^(\s*)branches:\s*(.*?)\s*$/);
     if (!match) continue;
-    const baseIndent = match[1].length;
-    const body = [];
-    for (let j = i + 1; j < lines.length; j += 1) {
-      const line = lines[j];
-      if (line.trim() === "" || line.trim().startsWith("#")) continue;
-      if (indentOf(line) <= baseIndent) break;
-      body.push(line);
+    if (match[2]) return inlineArray(match[2], `${relative}:push.branches`);
+    const base = match[1].length;
+    const values = [];
+    for (let cursor = index + 1; cursor < body.length; cursor += 1) {
+      const line = body[cursor];
+      if (indent(line) <= base) break;
+      const item = line.match(/^\s*-\s*['\"]?([^'\"#]+?)['\"]?\s*(?:#.*)?$/);
+      if (!item) throw new Error(`${relative}:push.branches contains an unsupported line: ${line.trim()}`);
+      values.push(item[1].trim());
     }
-    return { line: i + 1, body };
+    return values;
   }
-  return null;
+  return ["*"];
 }
 
-function hasTrigger(text, trigger) {
-  return extractTriggerBlock(text, trigger) !== null;
-}
-
-function extractPushBranches(text, relPath) {
-  const block = extractTriggerBlock(text, "push");
-  if (!block) return null;
-  for (const line of block.body) {
-    const match = line.match(/^\s*branches:\s*(.+?)\s*$/);
-    if (match) {
-      return parseInlineArray(match[1], `${relPath}:push.branches`);
-    }
-  }
-  return null;
-}
-
-function sameSet(a, b) {
-  const left = [...a].sort();
-  const right = [...b].sort();
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-const failures = [];
-const records = parseJsonl("ci.intent.v1.jsonl").filter(
-  (record) => record.kind === "ci.intent.v1" && record.provider === "github-actions",
-);
+const sameSet = (left, right) => {
+  const a = [...left].sort();
+  const b = [...right].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+};
 
 for (const record of records) {
   if (!record.path) {
     failures.push("ci.intent.v1 record missing path");
     continue;
   }
-
   let workflow;
   try {
-    workflow = readText(record.path);
+    workflow = read(record.path);
   } catch (error) {
     failures.push(`${record.path}: workflow file not readable: ${error.message}`);
     continue;
   }
-
   const dispatch = Array.isArray(record.dispatch) ? record.dispatch : [];
-
-  if (dispatch.includes("pull_request") && !hasTrigger(workflow, "pull_request")) {
-    failures.push(`${record.path}: intent declares pull_request but workflow lacks pull_request trigger`);
+  for (const trigger of ["pull_request", "workflow_dispatch"]) {
+    if (dispatch.includes(trigger) && triggerBlock(workflow, trigger) === null) {
+      failures.push(`${record.path}: intent declares ${trigger} but workflow lacks ${trigger} trigger`);
+    }
   }
-
-  if (dispatch.includes("workflow_dispatch") && !hasTrigger(workflow, "workflow_dispatch")) {
-    failures.push(`${record.path}: intent declares workflow_dispatch but workflow lacks workflow_dispatch trigger`);
-  }
-
   if (dispatch.includes("push")) {
-    if (!Array.isArray(record.push_branches)) {
-      failures.push(`${record.path}: intent declares push but missing push_branches array`);
+    const actual = pushBranches(workflow, record.path);
+    if (actual === null) {
+      failures.push(`${record.path}: intent declares push but workflow lacks push trigger`);
       continue;
     }
-    const actual = extractPushBranches(workflow, record.path);
-    if (!actual) {
-      failures.push(`${record.path}: workflow lacks explicit push.branches`);
+    if (!Array.isArray(record.push_branches)) {
+      failures.push(`${record.path}: intent declares push but missing push_branches array; use ["*"] for no branch filter`);
       continue;
     }
     if (!sameSet(record.push_branches, actual)) {
-      failures.push(
-        `${record.path}: push branch mismatch: intent=${JSON.stringify(record.push_branches)} workflow=${JSON.stringify(actual)}`,
-      );
+      failures.push(`${record.path}: push branch mismatch: intent=${JSON.stringify(record.push_branches)} workflow=${JSON.stringify(actual)}`);
     }
   }
 }
 
-if (failures.length > 0) {
+if (failures.length) {
   console.error("ci intent/workflow branch check failed");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-
 console.log(JSON.stringify({ kind: "ops.ciIntentWorkflowBranches.check.v1", status: "pass", records: records.length }));
