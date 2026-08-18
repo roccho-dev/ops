@@ -25,3 +25,4 @@ cmp "$OUT/proof/receipt.1.json" "$OUT/proof/receipt.2.json"
   --policy-sha256 "$POLICY_HASH" \
   --base-tree "$BASE_TREE" \
   --candidate-tree "$CANDIDATE_TREE"
+POLICYCTL="$POLICYCTL" "$ROOT/tests/git-write-admission.sh"
