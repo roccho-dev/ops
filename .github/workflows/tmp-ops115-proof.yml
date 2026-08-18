@@ -1,0 +1,88 @@
+name: Temporary ops 115 exact proof
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-proof.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebase proof inputs onto current accepted base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin proposals
+          if ! git merge-base --is-ancestor origin/proposals HEAD; then
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git merge --no-edit origin/proposals
+          fi
+
+      - name: Materialize exact DuckDB runtime
+        id: duckdb
+        shell: bash
+        env:
+          TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+          ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+          PAYLOAD_SHA: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/duckdb"
+          carrier="$RUNNER_TEMP/duckdb/$ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$ASSET" -o "$carrier"
+          python3 - "$carrier" "$PAYLOAD_SHA" "$RUNNER_TEMP/duckdb/duckdb" <<'PY'
+          import base64,hashlib,pathlib,sys
+          source,expected,out=map(pathlib.Path,(sys.argv[1],sys.argv[2],sys.argv[3])) if False else (pathlib.Path(sys.argv[1]),sys.argv[2],pathlib.Path(sys.argv[3]))
+          raw=source.read_text(encoding='ascii')
+          if any(c.isspace() for c in raw): raise SystemExit('carrier whitespace forbidden')
+          data=base64.b64decode(raw,validate=True)
+          if base64.b64encode(data).decode('ascii')!=raw: raise SystemExit('noncanonical base64')
+          actual=hashlib.sha256(data).hexdigest()
+          if actual!=expected: raise SystemExit(f'{actual} != {expected}')
+          out.write_bytes(data)
+          PY
+          chmod 0555 "$RUNNER_TEMP/duckdb/duckdb"
+          "$RUNNER_TEMP/duckdb/duckdb" -version
+          echo "path=$RUNNER_TEMP/duckdb/duckdb" >> "$GITHUB_OUTPUT"
+
+      - name: Build authority, compare engines, and prove closure
+        shell: bash
+        env:
+          SOURCE_DATE_EPOCH_ISO: 2026-08-18T00:00:00Z
+          DUCKDB: ${{ steps.duckdb.outputs.path }}
+        run: |
+          set -euo pipefail
+          python3 .github/tmp/ops115-generate.py
+          python3 packages/ops-decision-closure/tests/proof.py --root . --duckdb "$DUCKDB" --evidence evidence/ops-115
+          python3 packages/ops-decision-closure/tests/e2e.py
+          python3 -m py_compile packages/ops-decision-closure/bin/ops-decision-closure.py packages/ops-decision-closure/tests/proof.py packages/ops-decision-closure/tests/e2e.py
+          test "$(python3 -c 'import json; print(json.load(open("evidence/ops-115/proof-summary.json"))["status"])')" = PASS
+          test "$(python3 -c 'import json; print(json.load(open("evidence/ops-115/engine-comparison.receipt.json"))["selection"]["selected_engine"])')" = sqlite-shards
+          test "$(python3 -c 'import json; print(json.load(open("evidence/ops-115/decision-economics.receipt.json"))["verdict"])')" = PASS_DECISION_ECONOMICS_G9
+
+      - name: Remove one-shot assembly and commit exact evidence
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/tmp-ops115-proof.yml .github/tmp/ops115-generate.py
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: prove immutable decision closure"
+          git push origin "HEAD:$TARGET_BRANCH"
