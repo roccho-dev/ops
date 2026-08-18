@@ -36,4 +36,5 @@
 {"deps":["nodejs","python3","dist-runner"],"kind":"check","name":"dist-runner","script":"packages/dist-runner/tests/e2e.mjs"}
 {"deps":["nodejs","git","gnutar","ops-capability-loop","find-packages","package-architecture-map"],"kind":"check","name":"ops-capability-loop","script":"packages/ops-capability-loop/tests/e2e.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"carrier-job","script":"packages/chatgpt-capability/ingress/carrier-job.mjs"}
+{"deps":["nodejs","git","ops-git-write-closure"],"kind":"check","name":"ops-git-write-closure","script":"packages/ops-git-write-closure/tests/e2e.mjs"}
 {"deps":["go","git","nodejs","python3","shiftleft-admission"],"kind":"check","name":"issue-116-shiftleft-proof","script":"packages/shiftleft-admission/tests/e2e.sh"}
