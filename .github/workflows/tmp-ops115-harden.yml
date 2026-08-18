@@ -2,7 +2,7 @@ name: Temporary harden ops 115
 
 on:
   pull_request:
-    types: [synchronize]
+    types: [synchronize, reopened]
     branches: [proposals]
 
 permissions:
