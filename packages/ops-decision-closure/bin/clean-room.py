@@ -110,8 +110,9 @@ def verify_repository(repo, exact_commit, exact_tree):
     actual_tree = run(["git", "rev-parse", "HEAD^{tree}"], cwd=repo)
     if actual_commit != exact_commit or actual_tree != exact_tree:
         raise RuntimeError(f"repository identity mismatch: {actual_commit}/{actual_tree}")
-    if run(["git", "status", "--porcelain=v1", "--untracked-files=no"], cwd=repo):
-        raise RuntimeError("tracked repository state is dirty")
+    status = run(["git", "status", "--porcelain=v1", "--untracked-files=no"], cwd=repo)
+    if status:
+        raise RuntimeError("tracked repository state is dirty:\n" + status)
     run(["git", "fsck", "--no-dangling"], cwd=repo)
     return {"commit": actual_commit, "tree": actual_tree, "fsck": "PASS", "trackedWorktreeClean": True}
 
@@ -309,6 +310,7 @@ def main():
     if missing_dd:
         raise SystemExit("DD packet incomplete: " + ",".join(missing_dd))
 
+    repository_after = verify_repository(repo, args.exact_commit, args.exact_tree)
     receipt = {
         "schema": "ops.independentTakeover.v2",
         "verdict": "PASS_INDEPENDENT_TRANSFER_DD_G10",
@@ -327,6 +329,7 @@ def main():
         "model_memory_used": False,
         "owner_local_worktree_used": False,
         "repository_identity_result": repository,
+        "repository_post_run_identity_result": repository_after,
         "release_manifest_sha256": release_manifest_sha,
         "restore_result": "PASS",
         "verify_result": "PASS",
