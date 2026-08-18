@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-exact-patch:
-    if: ${{ hashFiles('.github/proof-requests/ops-114-115.patch.xz.b64.part-*') != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
