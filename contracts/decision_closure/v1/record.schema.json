@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.decisionRecord.v1",
+  "type": "object",
+  "required": ["id", "record_type", "domain", "subject", "predicate", "value", "at", "origin_run_id", "rel"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "record_type": {"enum": ["fact", "condition", "claim"]},
+    "domain": {"type": "string", "minLength": 1},
+    "subject": {"type": "string", "minLength": 1},
+    "predicate": {"type": "string", "minLength": 1},
+    "value": {},
+    "at": {"type": "string", "minLength": 1},
+    "origin_run_id": {"type": "string", "minLength": 1},
+    "classification": {"enum": ["public", "internal", "private", "secret", "pii", "restricted"]},
+    "rel": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "to"],
+        "properties": {
+          "type": {"enum": ["depends_on", "result_of", "supersedes", "contradicts"]},
+          "to": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
