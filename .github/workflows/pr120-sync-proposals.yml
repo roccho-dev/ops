@@ -1,0 +1,107 @@
+name: pr120-sync-proposals
+
+on:
+  push:
+    branches:
+      - feat/issue-116-shiftleft-admission
+    paths:
+      - .github/workflows/pr120-sync-proposals.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-116-shiftleft-admission
+          fetch-depth: 0
+
+      - name: Merge latest proposals and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name roccho
+          git config user.email 40359643+roccho-dev@users.noreply.github.com
+          git fetch origin proposals
+
+          if git merge-base --is-ancestor origin/proposals HEAD; then
+            echo "proposals already included"
+            exit 0
+          fi
+
+          set +e
+          git merge --no-commit --no-ff origin/proposals
+          merge_status=$?
+          set -e
+
+          if [ "$merge_status" -ne 0 ]; then
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            for path in "${conflicts[@]}"; do
+              case "$path" in
+                build/packages.jsonl|build/checks.jsonl|ci.intent.v1.jsonl)
+                  ours=$(mktemp)
+                  theirs=$(mktemp)
+                  git show ":2:$path" > "$ours"
+                  git show ":3:$path" > "$theirs"
+                  python3 - "$path" "$theirs" "$ours" <<'PY'
+          import json
+          import sys
+
+          output, base_path, topic_path = sys.argv[1:]
+
+          def load(path):
+              rows = []
+              with open(path, encoding="utf-8") as source:
+                  for raw in source:
+                      if raw.strip():
+                          rows.append((json.loads(raw), raw.rstrip("\n")))
+              return rows
+
+          merged = []
+          seen = set()
+          for obj, raw in load(base_path) + load(topic_path):
+              key = obj.get("name") or obj.get("id") or json.dumps(obj, sort_keys=True, separators=(",", ":"))
+              if key in seen:
+                  continue
+              seen.add(key)
+              merged.append(raw)
+
+          with open(output, "w", encoding="utf-8", newline="\n") as target:
+              target.write("\n".join(merged) + "\n")
+          PY
+                  git add "$path"
+                  ;;
+                flake.nix)
+                  git checkout --ours -- "$path"
+                  git add "$path"
+                  ;;
+                *)
+                  echo "unexpected conflict: $path" >&2
+                  exit 42
+                  ;;
+              esac
+            done
+          fi
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            git diff --name-only --diff-filter=U >&2
+            exit 43
+          fi
+
+          git diff --cached --check
+          (
+            cd packages/shiftleft-admission
+            go test ./...
+          )
+          go build -trimpath -ldflags='-s -w -buildid=' -o /tmp/policyctl ./packages/shiftleft-admission/cmd/policyctl
+          (
+            cd packages/shiftleft-admission
+            rm -rf /tmp/issue116-proof
+            POLICYCTL=/tmp/policyctl ./tests/e2e.sh /tmp/issue116-proof
+          )
+
+          git commit -m "Merge proposals into feat/issue-116-shiftleft-admission"
+          git push origin HEAD:feat/issue-116-shiftleft-admission
