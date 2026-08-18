@@ -96,6 +96,7 @@
                 wrapProgram "$out/bin/policyctl" \
                   --prefix PATH : ${
                     pkgs.lib.makeBinPath [
+                      pkgs.git
                       pkgs.go
                       pkgs.nodejs
                       pkgs.python3
@@ -127,14 +128,19 @@
             in
             pkgs.runCommand "issue-116-shiftleft-proof-check"
               {
-                nativeBuildInputs = [ packages.${system}.shiftleft-admission ];
+                nativeBuildInputs = [
+                  pkgs.git
+                  pkgs.nodejs
+                  packages.${system}.shiftleft-admission
+                ];
               }
               ''
                 mkdir -p "$out"
                 cp -R ${./packages/shiftleft-admission} source
                 chmod -R u+w source
                 cd source
-                ${pkgs.bash}/bin/bash tests/e2e.sh
+                GIT_WRITE_CLOSURE_SCRIPT=${./packages/ops-git-write-closure/bin/ops-git-write-closure.mjs} \
+                  ${pkgs.bash}/bin/bash tests/e2e.sh
                 touch "$out/ok"
               '';
         }
