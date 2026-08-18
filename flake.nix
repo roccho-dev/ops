@@ -72,10 +72,41 @@
             ];
             doCheck = true;
           };
+          shiftleft-admission =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.buildGoModule {
+              pname = "shiftleft-admission";
+              version = "0.1.0";
+              src = ./packages/shiftleft-admission;
+              vendorHash = null;
+              subPackages = [ "cmd/policyctl" ];
+              ldflags = [
+                "-s"
+                "-w"
+                "-buildid="
+              ];
+              nativeBuildInputs = [ pkgs.makeWrapper ];
+              postInstall = ''
+                test -x "$out/bin/policyctl"
+              '';
+              postFixup = ''
+                wrapProgram "$out/bin/policyctl" \
+                  --prefix PATH : ${
+                    pkgs.lib.makeBinPath [
+                      pkgs.go
+                      pkgs.nodejs
+                      pkgs.python3
+                    ]
+                  }
+              '';
+              doCheck = true;
+            };
         }
       ) original.packages;
       checks = builtins.mapAttrs (
-        _: existing:
+        system: existing:
         existing
         // {
           prove-feat = existing.prove-feat;
@@ -89,6 +120,22 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          issue-116-shiftleft-proof =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "issue-116-shiftleft-proof-check"
+              {
+                nativeBuildInputs = [ packages.${system}.shiftleft-admission ];
+              }
+              ''
+                mkdir -p "$out"
+                cp -R ${./packages/shiftleft-admission} source
+                chmod -R u+w source
+                cd source
+                ${pkgs.bash}/bin/bash tests/e2e.sh
+                touch "$out/ok"
+              '';
         }
       ) original.checks;
     in
