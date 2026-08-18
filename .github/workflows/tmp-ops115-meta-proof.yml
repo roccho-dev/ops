@@ -1,0 +1,82 @@
+name: Temporary meta proof ops 115
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-meta-proof.yml
+
+permissions:
+  contents: write
+
+jobs:
+  meta-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Run real-ops engine, economics, and takeover proof
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+          DUCKDB_TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+          DUCKDB_ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+          DUCKDB_SHA256: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ops115-meta"
+          mkdir -p "$work/bin" evidence/ops-115-decision-closure/meta
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$DUCKDB_TAG/$DUCKDB_ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$url" -o "$work/$DUCKDB_ASSET"
+          python3 - "$work/$DUCKDB_ASSET" "$work/bin/duckdb" "$DUCKDB_SHA256" <<'PY'
+          import base64,hashlib,pathlib,sys
+          src,dst,expected=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]),sys.argv[3]
+          raw=src.read_text(encoding='ascii')
+          assert raw and not any(c.isspace() for c in raw)
+          data=base64.b64decode(raw,validate=True)
+          assert base64.b64encode(data).decode('ascii')==raw
+          assert hashlib.sha256(data).hexdigest()==expected
+          dst.write_bytes(data)
+          PY
+          chmod 0555 "$work/bin/duckdb"
+          export DUCKDB_BIN="$work/bin/duckdb"
+          export PATH="$work/bin:$PATH"
+
+          chmod +x packages/ops-decision-closure/tests/meta_e2e.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('build/checks.jsonl')
+          rows=[json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+          row={'deps':['python3','duckdb'],'kind':'check','name':'ops-decision-closure-meta','script':'packages/ops-decision-closure/tests/meta_e2e.py'}
+          if not any(x.get('name')==row['name'] for x in rows): rows.append(row)
+          p.write_text(''.join(json.dumps(x,sort_keys=True,separators=(',',':'))+'\n' for x in rows))
+          PY
+
+          rm -rf evidence/ops-115-decision-closure/meta
+          python3 packages/ops-decision-closure/tests/meta_e2e.py --out evidence/ops-115-decision-closure/meta | tee "$work/meta.log"
+          nix build -L --no-link --no-write-lock-file .#checks.x86_64-linux.ops-decision-closure-meta
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path('evidence/ops-115-decision-closure/meta')
+          files=sorted(p for p in root.rglob('*') if p.is_file() and p.name!='SHA256SUMS')
+          root.joinpath('SHA256SUMS').write_text(''.join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root).as_posix()}\n" for p in files))
+          PY
+
+          rm -f .github/workflows/tmp-ops115-meta-proof.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test: retain real-ops Issue 115 closure proof"
+          git push origin "HEAD:$TARGET_BRANCH"
