@@ -22,17 +22,23 @@ jobs:
       - name: Assemble real authority and final package
         run: python3 .github/tmp/assemble-ops115.py
 
-      - name: Add direct engine counterevidence edge
+      - name: Normalize migrated engine domain and counterevidence
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import json
+
+          core=Path('packages/ops-decision-closure/bin/ops-decision-closure.py')
+          text=core.read_text(encoding='utf-8')
+          text=text.replace('"lease-recapture"', '"decision-ledger"')
+          core.write_text(text, encoding='utf-8')
+
           p=Path('packages/ops-decision-closure/fixtures/claims/segment-001.jsonl')
-          rows=[json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+          rows=[json.loads(x) for x in p.read_text(encoding='utf-8').splitlines() if x.strip()]
           d=next(x for x in rows if x['id']=='d-lease-current')
           edge={'type':'depends_on','target':'cl-lease-red-ocean'}
           if edge not in d['rel']: d['rel'].insert(1,edge)
-          p.write_text(''.join(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n' for x in rows))
+          p.write_text(''.join(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n' for x in rows),encoding='utf-8')
           PY
 
       - name: Acquire exact DuckDB proof comparator
@@ -94,6 +100,7 @@ jobs:
           set -euo pipefail
           rm -f .github/workflows/tmp-ops115-assemble.yml \
                 .github/workflows/tmp-ops115-pr-assemble.yml \
+                .github/workflows/tmp-ops115-debug.yml \
                 .github/tmp/assemble-ops115.py \
                 .github/tmp/calibrate-selection.py \
                 .github/tmp/final-proof.py \
