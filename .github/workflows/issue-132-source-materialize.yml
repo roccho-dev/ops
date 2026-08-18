@@ -1,0 +1,45 @@
+name: issue-132-source-materialize
+
+on:
+  push:
+    branches:
+      - proof/issue-132-source-materialize
+    paths:
+      - ".github/workflows/issue-132-source-materialize.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proof/issue-132-source-materialize
+          fetch-depth: 1
+
+      - name: Assemble exact source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact/packages artifact/build artifact/workflows
+          cp -a packages/shiftleft-admission artifact/packages/
+          cp -a packages/structured-diagnostic artifact/packages/
+          cp build/packages.jsonl build/checks.jsonl artifact/build/
+          cp .github/workflows/issue-116-shiftleft-proof.yml artifact/workflows/
+          printf 'commit=%s\ntree=%s\n' \
+            "$(git rev-parse HEAD)" "$(git rev-parse HEAD^{tree})" > artifact/SOURCE
+          (
+            cd artifact
+            find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-132-exact-source-${{ github.run_id }}
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 1
