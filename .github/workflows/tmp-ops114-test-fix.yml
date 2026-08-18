@@ -25,7 +25,7 @@ jobs:
           TARGET_BRANCH: feat/ops-114-git-write-closure-final
         run: |
           set -euo pipefail
-          python3 -c 'from pathlib import Path; p=Path("packages/ops-git-write-closure/tests/e2e.mjs"); s=p.read_text(); old="require(\"fs\").writeFileSync" if False else "require(\u0027fs\u0027).writeFileSync(\u0027src/update.txt\u0027,\u0027mutated\\\\n\u0027)"; assert old in s, repr(old); p.write_text(s.replace(old, "require(\u0027fs\u0027).writeFileSync(\u0027src/update.txt\u0027,\u0027mutated\u0027)", 1))'
+          python3 -c 'from pathlib import Path; p=Path("packages/ops-git-write-closure/tests/e2e.mjs"); s=p.read_text(); old="require(\u0027fs\u0027).writeFileSync(\u0027src/update.txt\u0027,\u0027mutated"+chr(92)+"n\u0027)"; assert old in s, repr(old); p.write_text(s.replace(old, "require(\u0027fs\u0027).writeFileSync(\u0027src/update.txt\u0027,\u0027mutated\u0027)", 1))'
           node packages/ops-git-write-closure/tests/e2e.mjs
           rm -f .github/workflows/tmp-ops114-test-fix.yml
           git diff --check
