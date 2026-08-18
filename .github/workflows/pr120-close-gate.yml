@@ -1,0 +1,218 @@
+name: pr120-close-gate
+
+on:
+  push:
+    branches:
+      - feat/issue-116-shiftleft-admission
+    paths:
+      - .github/workflows/pr120-close-gate.yml
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  close-gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-116-shiftleft-admission
+          fetch-depth: 0
+
+      - name: Merge latest proposals and remove one-shot workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name roccho
+          git config user.email 40359643+roccho-dev@users.noreply.github.com
+          git fetch origin proposals
+
+          if ! git merge-base --is-ancestor origin/proposals HEAD; then
+            set +e
+            git merge --no-commit --no-ff origin/proposals
+            merge_status=$?
+            set -e
+            if [ "$merge_status" -ne 0 ]; then
+              mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+              for path in "${conflicts[@]}"; do
+                case "$path" in
+                  build/packages.jsonl|build/checks.jsonl|ci.intent.v1.jsonl)
+                    ours=$(mktemp)
+                    theirs=$(mktemp)
+                    git show ":2:$path" > "$ours"
+                    git show ":3:$path" > "$theirs"
+                    python3 - "$path" "$theirs" "$ours" <<'PY'
+          import json
+          import sys
+
+          output, base_path, topic_path = sys.argv[1:]
+
+          def load(path):
+              rows = []
+              with open(path, encoding="utf-8") as source:
+                  for raw in source:
+                      if raw.strip():
+                          rows.append((json.loads(raw), raw.rstrip("\n")))
+              return rows
+
+          merged = []
+          seen = set()
+          for obj, raw in load(base_path) + load(topic_path):
+              key = obj.get("name") or obj.get("id") or json.dumps(obj, sort_keys=True, separators=(",", ":"))
+              if key in seen:
+                  continue
+              seen.add(key)
+              merged.append(raw)
+
+          with open(output, "w", encoding="utf-8", newline="\n") as target:
+              target.write("\n".join(merged) + "\n")
+          PY
+                    git add "$path"
+                    ;;
+                  flake.nix)
+                    git checkout --ours -- "$path"
+                    git add "$path"
+                    ;;
+                  *)
+                    echo "unexpected conflict: $path" >&2
+                    exit 42
+                    ;;
+                esac
+              done
+            fi
+          fi
+
+          git rm -f --ignore-unmatch \
+            .github/workflows/pr120-sync-proposals.yml \
+            .github/workflows/pr120-finalize-sync.yml \
+            .github/workflows/pr120-close-gate.yml
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            git diff --name-only --diff-filter=U >&2
+            exit 43
+          fi
+          git diff --cached --check
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Verify final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd packages/shiftleft-admission
+            go test ./...
+          )
+          go build -trimpath -ldflags='-s -w -buildid=' -o /tmp/policyctl ./packages/shiftleft-admission/cmd/policyctl
+          (
+            cd packages/shiftleft-admission
+            rm -rf /tmp/issue116-proof
+            POLICYCTL=/tmp/policyctl ./tests/e2e.sh /tmp/issue116-proof
+          )
+          set +e
+          nix flake check --show-trace --no-write-lock-file > /tmp/nix-flake-check.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            tail -n 240 /tmp/nix-flake-check.log >&2
+            exit "$status"
+          fi
+
+      - name: Push verified final tree
+        id: push
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo "no final-tree changes to commit" >&2
+            exit 44
+          fi
+          git commit -m "Merge proposals and verify Issue 116 integration"
+          final_sha=$(git rev-parse HEAD)
+          final_tree=$(git rev-parse HEAD^{tree})
+          git push origin HEAD:feat/issue-116-shiftleft-admission
+          echo "sha=$final_sha" >> "$GITHUB_OUTPUT"
+          echo "tree=$final_tree" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch and await final Issue 116 proof
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.push.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'workflow_dispatch:' .github/workflows/issue-116-shiftleft-proof.yml
+          gh workflow run issue-116-shiftleft-proof.yml --ref feat/issue-116-shiftleft-admission
+
+          run_id=""
+          conclusion=""
+          html_url=""
+          for _ in $(seq 1 90); do
+            response=$(gh api \
+              -H 'Accept: application/vnd.github+json' \
+              'repos/roccho-dev/ops/actions/workflows/issue-116-shiftleft-proof.yml/runs?branch=feat%2Fissue-116-shiftleft-admission&event=workflow_dispatch&per_page=20')
+            run_id=$(jq -r --arg sha "$FINAL_SHA" '[.workflow_runs[] | select(.head_sha == $sha)][0].id // empty' <<<"$response")
+            if [ -n "$run_id" ]; then
+              state=$(jq -r --arg sha "$FINAL_SHA" '[.workflow_runs[] | select(.head_sha == $sha)][0].status' <<<"$response")
+              conclusion=$(jq -r --arg sha "$FINAL_SHA" '[.workflow_runs[] | select(.head_sha == $sha)][0].conclusion // empty' <<<"$response")
+              html_url=$(jq -r --arg sha "$FINAL_SHA" '[.workflow_runs[] | select(.head_sha == $sha)][0].html_url' <<<"$response")
+              if [ "$state" = completed ]; then
+                break
+              fi
+            fi
+            sleep 5
+          done
+
+          if [ -z "$run_id" ] || [ "$conclusion" != success ]; then
+            echo "final proof failed or timed out: run=$run_id conclusion=$conclusion url=$html_url" >&2
+            exit 72
+          fi
+
+          artifact_id=$(gh api "repos/roccho-dev/ops/actions/runs/$run_id/artifacts" --jq '.artifacts[0].id // empty')
+          artifact_digest=$(gh api "repos/roccho-dev/ops/actions/runs/$run_id/artifacts" --jq '.artifacts[0].digest // empty')
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "url=$html_url" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$artifact_id" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$artifact_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Record PASS and mark ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.push.outputs.sha }}
+          FINAL_TREE: ${{ steps.push.outputs.tree }}
+          RUN_ID: ${{ steps.proof.outputs.run_id }}
+          RUN_URL: ${{ steps.proof.outputs.url }}
+          ARTIFACT_ID: ${{ steps.proof.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ steps.proof.outputs.artifact_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh pr comment 120 --body "PR #120 closure gate PASS
+
+- final head: \`$FINAL_SHA\`
+- final tree: \`$FINAL_TREE\`
+- full Nix flake check: PASS
+- Go tests and installed-binary E2E: PASS
+- final Issue #116 proof run: [$RUN_ID]($RUN_URL)
+- artifact ID: \`$ARTIFACT_ID\`
+- artifact digest: \`$ARTIFACT_DIGEST\`
+- latest \`proposals\` is an ancestor of the tested head
+- one-shot sync workflows are absent from the final tree"
+          gh pr ready 120
+
+      - name: Upload closure log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr120-close-gate-${{ github.run_id }}
+          path: |
+            /tmp/nix-flake-check.log
+            /tmp/issue116-proof
+          if-no-files-found: ignore
