@@ -1,0 +1,94 @@
+{
+  "schema": "ops.gitWritePlan.v1",
+  "requestId": "ops114-raw-object-proof-260818-02",
+  "sourceRepo": "roccho-dev/ops",
+  "base": {
+    "ref": "proposals",
+    "commit": "5f5c44ada8a393ec17699a665d8aafced6fcfc0d",
+    "tree": "e3fb48355639c1db99f7b4d5cba08a27f230ff2c"
+  },
+  "candidate": {
+    "tree": "89f7c17a1d324293bfd9ee932b7daa634fa6f178"
+  },
+  "changedPaths": [
+    "evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl"
+  ],
+  "blobOperations": [
+    {
+      "operationId": "blob:evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl",
+      "path": "evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl",
+      "bytes": 654,
+      "payloadSha256": "266554d2c1d85749472a3f0b1be6a49c2b87c6fccc02ff3fdba9c681468ff8aa",
+      "expectedOid": "8cec83a3026b7900e92529020eccb97c7b13db12",
+      "encoding": "utf-8",
+      "content": "{\"authority\":false,\"base_ref\":\"proposals\",\"base_sha\":\"5f5c44ada8a393ec17699a665d8aafced6fcfc0d\",\"base_tree\":\"e3fb48355639c1db99f7b4d5cba08a27f230ff2c\",\"issue\":114,\"merge_authorized\":false,\"observed_at\":\"2026-08-18T03:34:00Z\",\"path\":\"evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl\",\"purpose\":\"prove raw Git blob/tree/commit/ref write and authoritative readback after stale-base retry\",\"record_type\":\"live_proof_fixture\",\"repository\":\"roccho-dev/ops\",\"request_id\":\"ops114-raw-object-proof-260818-02\",\"schema\":\"ops.gitWriteLiveProof.v1\",\"status\":\"PREPARED\",\"target_branch\":\"proposal/connector/ops114-raw-object-proof-260818-02\"}\n"
+    }
+  ],
+  "treeOperations": [
+    {
+      "operationId": "tree:evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl",
+      "action": "add",
+      "path": "evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl",
+      "oldPath": null,
+      "mode": "100644",
+      "type": "blob",
+      "expectedBlobOid": "8cec83a3026b7900e92529020eccb97c7b13db12",
+      "previous": null
+    }
+  ],
+  "commit": {
+    "message": "proof(ops): exercise raw Git object write closure after stale retry",
+    "parent": "5f5c44ada8a393ec17699a665d8aafced6fcfc0d",
+    "tree": "89f7c17a1d324293bfd9ee932b7daa634fa6f178"
+  },
+  "targetBranch": "proposal/connector/ops114-raw-object-proof-260818-02",
+  "pullRequest": {
+    "base": "proposals",
+    "head": "proposal/connector/ops114-raw-object-proof-260818-02",
+    "title": "proof: raw Git object write closure for issue #114 (attempt 2)",
+    "body": "proof-only",
+    "draft": true
+  },
+  "checksReceipt": [
+    {
+      "id": "final-ci-consumer",
+      "runId": 32096164808,
+      "status": "PASS"
+    },
+    {
+      "id": "readme-artifact-exporter",
+      "runId": 32096164745,
+      "status": "PASS"
+    },
+    {
+      "id": "nix-check",
+      "runId": 32096164746,
+      "status": "PASS"
+    },
+    {
+      "id": "gov-package-validation",
+      "runId": 32096164752,
+      "status": "PASS"
+    }
+  ],
+  "adapter": {
+    "id": "github-connector",
+    "maxBlobBytes": 1048576,
+    "maxTotalBytes": 4194304,
+    "supportsBase64": true,
+    "supportsCreateTree": true,
+    "supportsCreateCommit": true,
+    "supportsRefWrite": true,
+    "supportsPrCreate": true
+  },
+  "forbiddenEffects": [
+    "protected-ref-write",
+    "default-ref-write",
+    "force",
+    "merge",
+    "automatic-rebase",
+    "tag",
+    "release"
+  ],
+  "planSha256": "6c3bbe966367c79ed7fd4d099632bde5ba7c84ea4d90e951f0cf6623c6f3bce9"
+}

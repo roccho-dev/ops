@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.gitWriteReceipt.v1",
+  "title": "Ops Git write closure receipt v1",
+  "type": "object",
+  "required": ["schema", "status", "requestId", "planSha256", "baseSha", "candidateTree", "candidateCommit", "targetBranch", "pullRequest", "checks", "readback"],
+  "properties": {
+    "schema": {"const": "ops.gitWriteReceipt.v1"},
+    "status": {"enum": ["PASS", "FAILED", "PARTIAL_EFFECT", "STALE_BASE", "BRANCH_CONFLICT", "ADAPTER_UNAVAILABLE", "NEEDS_BYTE_INGRESS"]},
+    "requestId": {"type": "string"},
+    "planSha256": {"type": "string"},
+    "baseSha": {"type": "string"},
+    "candidateTree": {"type": "string"},
+    "candidateCommit": {"type": ["string", "null"]},
+    "targetBranch": {"type": "string"},
+    "pullRequest": {"type": "object"},
+    "checks": {"type": "array"},
+    "readback": {"type": "object"},
+    "limitations": {"type": "array"}
+  }
+}
