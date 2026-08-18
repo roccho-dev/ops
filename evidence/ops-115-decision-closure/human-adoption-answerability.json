@@ -1,0 +1,56 @@
+{
+  "mandatoryQuestionAccuracy": 0.7777777777777778,
+  "mandatoryQuestionCount": 9,
+  "results": [
+    {
+      "answer": "Which read-only engine should serve the public decision ledger v1?",
+      "id": "question",
+      "visible": true
+    },
+    {
+      "answer": "select SQLite catalog plus immutable shards for the public decision ledger v1",
+      "id": "recommendation",
+      "visible": true
+    },
+    {
+      "answer": "catalog.sqlite plus indexed immutable SQLite shards",
+      "id": "evidence_for",
+      "visible": true
+    },
+    {
+      "answer": "Frozen DuckLake is materially heavier for the observed local point-query workload",
+      "id": "evidence_against",
+      "visible": true
+    },
+    {
+      "answer": "HOLD JSONL only",
+      "id": "alternatives",
+      "visible": true
+    },
+    {
+      "answer": "None",
+      "id": "gaps",
+      "visible": true
+    },
+    {
+      "answer": "publish an immutable proof checkpoint and run independent clean-room takeover",
+      "id": "next_action",
+      "visible": true
+    },
+    {
+      "answer": "semantic mismatch = 0 / fail-closed mismatch = 0 / old checkpoint replay PASS / independent takeover PASS / any semantic mismatch / normal local share < 95%",
+      "id": "success_failure",
+      "visible": false
+    },
+    {
+      "answer": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'queryCount': 8, 'repeatCount': 5}",
+      "id": "outcomes",
+      "visible": false
+    }
+  ],
+  "reviewer": "independent-static-reader-fixture",
+  "reviewerClass": "machine canary; literal independent human review remains separate",
+  "schema": "ops.humanAdoptionAnswerability.v1",
+  "sqlOrJsonlDirectOperationCount": 0,
+  "status": "BLOCKED_HUMAN_ADOPTION"
+}

@@ -1,0 +1,40 @@
+{
+  "authority": false,
+  "rejectedEngine": "frozen-ducklake",
+  "rejectedReason": "local trace and impact p95 exceed SQLite by more than 2x, normal workload is >=95% local, and the exact DuckDB runtime adds 82,582,200 Carrier bytes",
+  "schema": "ops.decisionEngineSelection.v1",
+  "selectedEngine": "sqlite-shards",
+  "selectionInput": {
+    "checks": {
+      "duckdbImpactP95MoreThan2xSQLite": true,
+      "duckdbTraceP95MoreThan2xSQLite": true,
+      "failClosedMismatchCountZero": true,
+      "fullHistoryIsMinorityWorkload": true,
+      "normalLocalQueryShareAtLeast95Percent": true,
+      "semanticMismatchCountZero": true,
+      "sqliteAssetCountWithinBound": true,
+      "sqliteLocalShardCountAtMostOne": true
+    },
+    "metrics": {
+      "duckdbRuntimeCarrierBytes": 82582200,
+      "frozenDuckLakeAssetCount": 8,
+      "frozenDuckLakeLocalFetchBytesMedian": 15769,
+      "impactP95RatioDuckToSQLite": 98.88689087563212,
+      "sqliteAdditionalRuntimeCarrierBytes": 0,
+      "sqliteAssetCount": 5,
+      "sqliteLocalFetchBytesMedian": 69632,
+      "sqliteLocalShardCountP95": 1,
+      "traceP95RatioDuckToSQLite": 53.07198528996249
+    },
+    "schema": "ops.decisionEngineSelectionInput.v1",
+    "scope": "ops decision ledger v1 only; no existing DuckDB path replacement",
+    "workload": {
+      "aggregateQueries": 4,
+      "localQueries": 96,
+      "source": "six exact operational replays across the three families",
+      "totalQueries": 100
+    }
+  },
+  "selectionInputDigest": "sha256:4d7ce6e6b53f2058b605ae5061d5e4b5c70394b57b37fe1d1d9ce0f26bfb6420",
+  "status": "PASS_SQLITE_SHARDS"
+}

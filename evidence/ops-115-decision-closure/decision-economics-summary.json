@@ -1,0 +1,13 @@
+{
+  "failClosedMismatchCount": 0,
+  "familyCount": 3,
+  "humanReviewClaim": "no reduction claimed; automated replay remained 0 seconds with stronger quality gates",
+  "medianExternalResearchReductionRatio": 0.5,
+  "medianOutcomeClosureRatio": 1.0,
+  "medianRecomputedNodeRatio": 0.13333333333333333,
+  "medianReuseRatio": 0.7333333333333333,
+  "runsPerFamily": 2,
+  "schema": "ops.decisionEconomicsSummary.v1",
+  "semanticMismatchCount": 0,
+  "status": "PASS_DECISION_ECONOMICS_G9"
+}
