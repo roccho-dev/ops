@@ -1,0 +1,98 @@
+name: Temporary finalize clean Issue 115 candidate
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final-v4
+    paths:
+      - .github/workflows/tmp-ops115-clean-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Append canonical registries and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD:packages/ops-decision-closure)" = fc0cc319752672a8be876b34e50fdb2e05e3f0af
+          test "$(git rev-parse HEAD:evidence/ops-115-decision-closure)" = 6124b7067069515aebf6d9c82c850f93e5642d85
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          additions = {
+              Path('build/packages.jsonl'): {
+                  'bin': 'ops-decision-closure',
+                  'deps': ['python'],
+                  'entry': 'packages/ops-decision-closure/bin/query.py',
+                  'env': [],
+                  'kind': 'package',
+                  'name': 'ops-decision-closure',
+                  'runtime': 'python',
+              },
+              Path('build/checks.jsonl'): {
+                  'deps': ['nodejs', 'python3', 'duckdb', 'git', 'ops-decision-closure'],
+                  'kind': 'check',
+                  'name': 'ops-decision-closure',
+                  'script': 'packages/ops-decision-closure/tests/final-e2e.mjs',
+              },
+          }
+          for path, row in additions.items():
+              rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+              matches = [item for item in rows if item.get('name') == row['name']]
+              if matches and matches != [row]:
+                  raise SystemExit(f'conflicting registry row: {path}')
+              if not matches:
+                  rows.append(row)
+              if len({item['name'] for item in rows}) != len(rows):
+                  raise SystemExit(f'duplicate registry name: {path}')
+              path.write_text(''.join(json.dumps(item, sort_keys=True, separators=(',', ':')) + '\n' for item in rows))
+
+          human = json.loads(Path('evidence/ops-115-decision-closure/human-adoption-answerability.json').read_text())
+          if human['mandatoryQuestionCount'] != 9 or human['mandatoryQuestionAccuracy'] != 1.0:
+              raise SystemExit('Decision Room is not 9/9 machine-readable')
+          if not all(item['visible'] for item in human['results']):
+              raise SystemExit('one or more mandatory Decision Room answers are hidden')
+          proof = json.loads(Path('evidence/ops-115-decision-closure/implementation-proof.json').read_text())
+          if proof['status'] != 'PASS_IMPLEMENTATION_READY_FOR_RELEASE':
+              raise SystemExit('implementation proof is not release-ready')
+          if proof['semanticMismatchCount'] != 0 or proof['failClosedMismatchCount'] != 0:
+              raise SystemExit('semantic or fail-closed mismatch')
+          if proof['humanAI']['literalIndependentHumanReview'] != 'REQUIRED_BEFORE_ISSUE_CLOSE':
+              raise SystemExit('literal human gate was silently weakened')
+          PY
+          rm .github/workflows/tmp-ops115-clean-finalize.yml
+
+      - name: Run exact repository checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          nix flake check --show-trace --no-write-lock-file
+
+      - name: Commit only the clean candidate
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final-v4
+        run: |
+          set -euo pipefail
+          test ! -e .github/workflows/tmp-ops115-clean-finalize.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add build/checks.jsonl build/packages.jsonl .github/workflows/tmp-ops115-clean-finalize.yml
+          git commit -m "feat: register clean Issue 115 decision closure"
+          git push origin "HEAD:$TARGET_BRANCH"
