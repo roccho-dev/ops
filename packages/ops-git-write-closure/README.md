@@ -1,11 +1,12 @@
 # ops-git-write-closure
 
-Closes the machine-contract portion of Issue #114.
+Closes the machine-contract portion of Issue #114 and consumes the accepted #116 Shift Left receipt.
 
 ```text
 exact-base worktree
+→ mandatory Shift Left receipt verification
 → prepare
-→ checks + candidate object graph + effect plan
+→ remaining checks + candidate object graph + effect plan
 → external authenticated EffectPort
 → authoritative readback
 → verify
@@ -15,6 +16,8 @@ exact-base worktree
 ## Boundary
 
 - `prepare` owns base verification, change inspection, checks, Git OIDs, candidate tree, adapter budget, ordering, and plan identity.
+- The public `ops-git-write-closure` package entry requires exactly one `shiftleft-admission` check before delegating to the Git object planner.
+- The required check is exactly `policyctl verify-worktree --receipt <file> --policy-sha256 <sha256> --repo <worktree>`.
 - The external adapter owns only authenticated blob/tree/commit/ref/PR effects and readback.
 - `verify` trusts neither a write response nor a PR URL; it verifies the supplied authoritative readback against the plan.
 - Protected/default branch write, force, merge, automatic rebase, tags, Releases, and arbitrary large new blobs are outside v1.
@@ -25,6 +28,12 @@ exact-base worktree
 ops-git-write-closure prepare --request request.json --out-dir out [--state-dir state]
 ops-git-write-closure verify --plan out/effect-plan.json --effect-result effect-result.json --out receipt.json
 ```
+
+## Mandatory Shift Left admission
+
+A `prepare` request without exactly one canonical `shiftleft-admission` check is rejected before any effect plan is written. Missing receipts, non-PASS receipts, policy-hash mismatch, stale base, and candidate-tree mismatch fail closed through `policyctl verify-worktree`.
+
+The planner's internal implementation remains separate so its Git object behavior can be tested independently, but `build/packages.jsonl` exposes only the admitted entry as the canonical package binary.
 
 ## Mandatory authoritative blob readback
 
