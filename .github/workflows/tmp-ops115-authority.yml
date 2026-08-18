@@ -1,0 +1,78 @@
+name: Temporary promote ops 115 authority
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-authority.yml
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Promote generated records to immutable Git JSONL and reprove
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+          DUCKDB_TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+          DUCKDB_ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+          DUCKDB_SHA256: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ops115-authority"
+          mkdir -p "$work/bin" "$work/generated"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$DUCKDB_TAG/$DUCKDB_ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$url" -o "$work/$DUCKDB_ASSET"
+          python3 - "$work/$DUCKDB_ASSET" "$work/bin/duckdb" "$DUCKDB_SHA256" <<'PY'
+          import base64,hashlib,pathlib,sys
+          src,dst,expected=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]),sys.argv[3]
+          raw=src.read_text(encoding='ascii'); assert raw and not any(c.isspace() for c in raw)
+          data=base64.b64decode(raw,validate=True); assert base64.b64encode(data).decode('ascii')==raw
+          assert hashlib.sha256(data).hexdigest()==expected; dst.write_bytes(data)
+          PY
+          chmod 0555 "$work/bin/duckdb"
+          export DUCKDB_BIN="$work/bin/duckdb"
+          export PATH="$work/bin:$PATH"
+
+          python3 .github/tmp/promote-ops115-authority.py patch
+          python3 packages/ops-decision-closure/tests/meta_e2e.py --out "$work/generated"
+          python3 .github/tmp/promote-ops115-authority.py promote --generated "$work/generated"
+
+          rm -rf evidence/ops-115-decision-closure/meta
+          python3 packages/ops-decision-closure/tests/meta_e2e.py --out evidence/ops-115-decision-closure/meta
+          python3 .github/tmp/promote-ops115-authority.py prune --generated evidence/ops-115-decision-closure/meta
+
+          nix build -L --no-link --no-write-lock-file .#checks.x86_64-linux.ops-decision-closure-meta
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          rows=[]
+          for stream in ('facts','conditions','claims'):
+              for path in sorted((Path('decision-ledger')/stream).glob('*.jsonl')):
+                  rows += [json.loads(x) for x in path.read_text().splitlines() if x]
+          assert len(rows)==len({x['id'] for x in rows})
+          assert {x['record_type'] for x in rows}=={'fact','condition','claim'}
+          assert not any(Path('evidence/ops-115-decision-closure').rglob('*.sqlite'))
+          assert not any(Path('evidence/ops-115-decision-closure').rglob('*.parquet'))
+          PY
+
+          rm -f .github/workflows/tmp-ops115-authority.yml .github/tmp/promote-ops115-authority.py
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: admit immutable Issue 115 JSONL authority candidate"
+          git push origin "HEAD:$TARGET_BRANCH"
