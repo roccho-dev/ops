@@ -33,3 +33,4 @@
 {"bin":"ops-git-write-closure","deps":["git","node"],"entry":"packages/ops-git-write-closure/bin/ops-git-write-closure.mjs","env":[],"kind":"package","name":"ops-git-write-closure","runtime":"node"}
 {"bin":"policyctl","deps":["git","go","node","python"],"entry":"packages/shiftleft-admission/cmd/policyctl","env":[],"kind":"package","name":"shiftleft-admission","runtime":"go"}
 {"bin":"structured-diagnostic","deps":["node"],"entry":"packages/structured-diagnostic/bin/structured-diagnostic.mjs","env":[],"kind":"package","name":"structured-diagnostic","runtime":"node"}
+{"bin":"ops-decision-closure","deps":["python"],"entry":"packages/ops-decision-closure/bin/query.py","env":[],"kind":"package","name":"ops-decision-closure","runtime":"python"}
