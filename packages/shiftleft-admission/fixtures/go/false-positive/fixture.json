@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"go.false-positive","packageId":"fixture.go","profileId":"go.core-imports","ruleId":"SL-CORE-001","language":"go","fixtureKind":"false-positive","source":"core.go","expectedStatus":"met","expectedFindingCode":"core-import-boundary-clean"}
