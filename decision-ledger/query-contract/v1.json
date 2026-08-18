@@ -1,0 +1,66 @@
+{
+  "schema": "ops.decisionQueryContract.v1",
+  "authority": false,
+  "canonical_json": {
+    "encoding": "utf-8",
+    "object_keys": "lexicographic",
+    "array_order": "query-defined",
+    "newline": "single-final-lf",
+    "missing": "field-omitted",
+    "null": "json-null",
+    "boolean": "json-boolean",
+    "numbers": "json-number"
+  },
+  "read_only": true,
+  "runtime_network_install": false,
+  "queries": [
+    {
+      "name": "current_decisions",
+      "input": {"domain": "optional-string"},
+      "output": "decision-record-array-sorted-by-id",
+      "meaning": "active, non-superseded Claim(role=decision), optionally limited to one domain"
+    },
+    {
+      "name": "trace_decision",
+      "input": {"decision_id": "required-id"},
+      "output": "record-array-sorted-by-id",
+      "meaning": "the Decision, transitive depends_on closure, and Facts with result_of to that Decision"
+    },
+    {
+      "name": "impact_by_fact",
+      "input": {"fact_id": "required-id"},
+      "output": "decision-id-array-sorted",
+      "meaning": "Decision Claims transitively dependent on the Fact"
+    },
+    {
+      "name": "missing_outcomes",
+      "input": {},
+      "output": "rows-sorted-by-decision-id",
+      "meaning": "current Decisions whose expected outcome classes are not all observed by result_of Facts"
+    },
+    {
+      "name": "unresolved_conflicts",
+      "input": {},
+      "output": "sorted-id-pair-array",
+      "meaning": "contradicting pairs where both records remain current"
+    },
+    {
+      "name": "research_gaps",
+      "input": {"decision_id": "required-id"},
+      "output": "decision-id-plus-sorted-missing-and-stale-arrays",
+      "meaning": "required dependencies not linked and linked records explicitly stale"
+    },
+    {
+      "name": "decision_timeline",
+      "input": {"decision_id": "required-id"},
+      "output": "record-array-sorted-by-at-then-id",
+      "meaning": "all records in the Decision family across supersession history"
+    },
+    {
+      "name": "full_history_aggregate",
+      "input": {},
+      "output": "canonical-count-object",
+      "meaning": "all-record totals by type/domain plus Decision and outcome-closed Decision counts"
+    }
+  ]
+}
