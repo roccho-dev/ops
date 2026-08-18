@@ -24,25 +24,39 @@ jobs:
         env:
           TARGET_BRANCH: feat/ops-114-git-write-closure-final
         run: |
-          set -euo pipefail
-          python3 .github/tmp/harden-ops114.py
+          set -u
+          log="$RUNNER_TEMP/ops114-hardener.log"
+          if ! {
+            set -euo pipefail
+            python3 .github/tmp/harden-ops114.py
 
-          node packages/ops-git-write-closure/bin/ops-git-write-closure.mjs verify \
-            --plan evidence/ops-114-git-write-closure/live-effect-plan.json \
-            --effect-result evidence/ops-114-git-write-closure/live-effect-result.json \
-            --out evidence/ops-114-git-write-closure/live-final-receipt.json
-          node --check packages/ops-git-write-closure/bin/ops-git-write-closure.mjs
-          node packages/ops-git-write-closure/tests/e2e.mjs
+            node packages/ops-git-write-closure/bin/ops-git-write-closure.mjs verify \
+              --plan evidence/ops-114-git-write-closure/live-effect-plan.json \
+              --effect-result evidence/ops-114-git-write-closure/live-effect-result.json \
+              --out evidence/ops-114-git-write-closure/live-final-receipt.json
+            node --check packages/ops-git-write-closure/bin/ops-git-write-closure.mjs
+            node packages/ops-git-write-closure/tests/e2e.mjs
 
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          root = Path("evidence/ops-114-git-write-closure")
-          names = ["README.md", "live-effect-plan.json", "raw-live-effect-plan.json", "live-effect-result.json", "live-final-receipt.json", "live-proof-evidence.json"]
-          root.joinpath("SHA256SUMS").write_text("".join(f"{hashlib.sha256(root.joinpath(name).read_bytes()).hexdigest()}  {name}\n" for name in names))
-          PY
+            python3 - <<'PY'
+            from pathlib import Path
+            import hashlib
+            root = Path("evidence/ops-114-git-write-closure")
+            names = ["README.md", "live-effect-plan.json", "raw-live-effect-plan.json", "live-effect-result.json", "live-final-receipt.json", "live-proof-evidence.json"]
+            root.joinpath("SHA256SUMS").write_text("".join(f"{hashlib.sha256(root.joinpath(name).read_bytes()).hexdigest()}  {name}\n" for name in names))
+            PY
+          } >"$log" 2>&1; then
+            cat "$log" >&2
+            cp "$log" .github/tmp/harden-error.log
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add .github/tmp/harden-error.log
+            git commit -m "ci: capture ops 114 hardener failure"
+            git push origin "HEAD:$TARGET_BRANCH"
+            exit 1
+          fi
 
-          rm -f .github/workflows/tmp-ops114-harden.yml .github/tmp/harden-ops114.py
+          cat "$log"
+          rm -f .github/workflows/tmp-ops114-harden.yml .github/tmp/harden-ops114.py .github/tmp/harden-error.log
           git diff --check
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
