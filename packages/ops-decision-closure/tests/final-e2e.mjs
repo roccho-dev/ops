@@ -12,11 +12,12 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
 const cli = path.join(root, "packages/ops-decision-closure/bin/final-proof.py");
 const selectedCli = path.join(root, "packages/ops-decision-closure/bin/query.py");
+const pythonCommand = process.env.OPS_PYTHON || "python3";
 const duckdb = process.env.OPS_DUCKDB || "duckdb";
 const out = fs.mkdtempSync(path.join(os.tmpdir(), "ops-decision-final-"));
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const invokeSelected = (projection, manifestSha, query = "current_decisions", params = { domain: "decision-ledger" }) =>
-  spawnSync("python3", [selectedCli, "--projection", projection, "--manifest-sha256", manifestSha, "--query", query, "--params-json", JSON.stringify(params)], { encoding: "utf8" });
+  spawnSync(pythonCommand, [selectedCli, "--projection", projection, "--manifest-sha256", manifestSha, "--query", query, "--params-json", JSON.stringify(params)], { encoding: "utf8" });
 const requireRejected = (result, pattern) => {
   if (result.error) throw result.error;
   assert.notEqual(result.status, 0);
@@ -29,7 +30,7 @@ const clonedProjection = (name, source) => {
 };
 
 try {
-  const proof = spawnSync("python3", [cli, "--out-dir", out, "--duckdb", duckdb, "--source-commit", "0000000000000000000000000000000000000000", "--source-tree", "0000000000000000000000000000000000000000"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  const proof = spawnSync(pythonCommand, [cli, "--out-dir", out, "--duckdb", duckdb, "--source-commit", "0000000000000000000000000000000000000000", "--source-tree", "0000000000000000000000000000000000000000"], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   if (proof.error) throw proof.error;
   if (proof.status !== 0) throw new Error(`${proof.stdout}\n${proof.stderr}`);
   const summary = JSON.parse(proof.stdout.trim());
