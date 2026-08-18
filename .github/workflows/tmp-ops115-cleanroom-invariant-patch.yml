@@ -1,0 +1,80 @@
+name: Temporary patch ops 115 clean-room invariant
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    branches: [proposals]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'tmp/ops115-cleanroom-invariant-patch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ops-115-decision-closure-clean
+          fetch-depth: 0
+
+      - name: Make clean-room verify repository immutability before PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('packages/ops-decision-closure/bin/clean-room.py')
+          s=p.read_text(encoding='utf-8')
+          old='''    if run(["git", "status", "--porcelain=v1", "--untracked-files=no"], cwd=repo):
+        raise RuntimeError("tracked repository state is dirty")
+'''
+          new='''    status = run(["git", "status", "--porcelain=v1", "--untracked-files=no"], cwd=repo)
+    if status:
+        raise RuntimeError("tracked repository state is dirty:\\n" + status)
+'''
+          assert old in s
+          s=s.replace(old,new,1)
+          anchor='''    if missing_dd:
+        raise SystemExit("DD packet incomplete: " + ",".join(missing_dd))
+
+    receipt = {
+'''
+          replacement='''    if missing_dd:
+        raise SystemExit("DD packet incomplete: " + ",".join(missing_dd))
+
+    repository_after = verify_repository(repo, args.exact_commit, args.exact_tree)
+    receipt = {
+'''
+          assert anchor in s
+          s=s.replace(anchor,replacement,1)
+          anchor='''        "repository_identity_result": repository,
+        "release_manifest_sha256": release_manifest_sha,
+'''
+          replacement='''        "repository_identity_result": repository,
+        "repository_post_run_identity_result": repository_after,
+        "release_manifest_sha256": release_manifest_sha,
+'''
+          assert anchor in s
+          s=s.replace(anchor,replacement,1)
+          p.write_text(s,encoding='utf-8')
+
+          t=Path('packages/ops-decision-closure/tests/final-e2e.mjs')
+          x=t.read_text(encoding='utf-8')
+          anchor='''  assert.equal(takeoverReceipt.repository_identity_result.tree, fixtureTree);
+'''
+          replacement=anchor+'''  assert.equal(takeoverReceipt.repository_post_run_identity_result.commit, fixtureCommit);
+  assert.equal(takeoverReceipt.repository_post_run_identity_result.tree, fixtureTree);
+'''
+          if 'repository_post_run_identity_result' not in x:
+              assert anchor in x
+              x=x.replace(anchor,replacement,1)
+          t.write_text(x,encoding='utf-8')
+          PY
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/ops-decision-closure/bin/clean-room.py packages/ops-decision-closure/tests/final-e2e.mjs
+          git commit -m 'fix: verify clean-room source remains immutable'
+          git push origin HEAD:feat/ops-115-decision-closure-clean
