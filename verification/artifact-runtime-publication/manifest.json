@@ -1,0 +1,37 @@
+{
+  "schema": "ops.artifactRuntimePublication/1",
+  "authority": false,
+  "status": "accepted-source",
+  "source": {
+    "repository": "roccho-dev/ui",
+    "commit": "3dbd12ec1fc7843a54e04712e489dd91f110ffe3",
+    "tree": "dd21b8598612680d75bd1c5af908bf25b1a9fd9c",
+    "sourcePackageSha256": "sha256:845cf4d89b4d1dbe935523f4fb4ff86c005503371b98fd2264bbbad9492034e0",
+    "sourceUiHead": "715b01cac02397e325d4cb64edc3d58464ddf914",
+    "sourceUiBundleSha256": "sha256:f156e0bf36bcdd99e2466258ea0f09d9dfa7d7a2cbc9891cbe3cc752b33aea90"
+  },
+  "publication": {
+    "treeDigest": "sha256:3335c183df450a2d77730f05c9ae4cae9e3067d6279403a0e8a1869ee1f0e90d",
+    "kernelDigest": "sha256:3085b740d61e8ed80dec431717e115a310617bcf4098badac3273525d59ce8f2",
+    "capabilities": 2,
+    "tag": "artifact-runtime-3335c183df450a2d77730f05c9ae4cae9e3067d6279403a0e8a1869ee1f0e90d",
+    "archive": {
+      "name": "artifact-runtime.3335c183df450a2d77730f05c9ae4cae9e3067d6279403a0e8a1869ee1f0e90d.tar.gz",
+      "bytes": 35254,
+      "sha256": "sha256:4097a3d10998c1624626d37e5b7c5c05e02119ac2c74a0752e3919e344171b56"
+    },
+    "carrier": {
+      "name": "artifact-runtime.3335c183df450a2d77730f05c9ae4cae9e3067d6279403a0e8a1869ee1f0e90d.tar.gz.b64.txt",
+      "bytes": 47008,
+      "sha256": "sha256:718306230558b7fe14cf69222eccd8e3994ef1ae9144a88fd0ef4fbc11b13706",
+      "codec": "standard-base64-no-whitespace"
+    }
+  },
+  "boundaries": {
+    "gitSourceAuthority": true,
+    "releaseIsProjection": true,
+    "carrierIsTransportProjection": true,
+    "receiptIsAuthority": false,
+    "mutableLatestAllowed": false
+  }
+}
