@@ -2,8 +2,8 @@
   "runs": [
     {
       "agent_runtime_seconds": {
-        "baseline": 8.2462e-05,
-        "optimized": 3.3909e-05
+        "baseline": 9.1916e-05,
+        "optimized": 3.918e-05
       },
       "all_nodes_count": 15,
       "baseline_digest": "bcd8e2615372c98d9dba72745ed7aa1e03ad0e9909ac11384e8338280c6677b7",
@@ -53,8 +53,8 @@
       },
       "quality_improvement": true,
       "query_seconds": {
-        "baseline": 8.2462e-05,
-        "optimized": 3.3909e-05
+        "baseline": 9.1916e-05,
+        "optimized": 3.918e-05
       },
       "recomputed_node_ratio": 0.13333333333333333,
       "recomputed_nodes_count": 2,
@@ -76,8 +76,8 @@
     },
     {
       "agent_runtime_seconds": {
-        "baseline": 4.2794e-05,
-        "optimized": 2.488e-05
+        "baseline": 5.0869e-05,
+        "optimized": 2.9504e-05
       },
       "all_nodes_count": 15,
       "baseline_digest": "dbacbaa21c066b84b346f482ed2c711ae210b8eaafa306799579417b30a548a3",
@@ -127,8 +127,8 @@
       },
       "quality_improvement": true,
       "query_seconds": {
-        "baseline": 4.2794e-05,
-        "optimized": 2.488e-05
+        "baseline": 5.0869e-05,
+        "optimized": 2.9504e-05
       },
       "recomputed_node_ratio": 0.13333333333333333,
       "recomputed_nodes_count": 2,
@@ -150,8 +150,8 @@
     },
     {
       "agent_runtime_seconds": {
-        "baseline": 4.2114e-05,
-        "optimized": 2.5374e-05
+        "baseline": 5.1617e-05,
+        "optimized": 3.0124e-05
       },
       "all_nodes_count": 15,
       "baseline_digest": "913a461182de643501449cd416c2bf04274f387c7b2adda14bf5f3544856040e",
@@ -201,8 +201,8 @@
       },
       "quality_improvement": true,
       "query_seconds": {
-        "baseline": 4.2114e-05,
-        "optimized": 2.5374e-05
+        "baseline": 5.1617e-05,
+        "optimized": 3.0124e-05
       },
       "recomputed_node_ratio": 0.13333333333333333,
       "recomputed_nodes_count": 2,

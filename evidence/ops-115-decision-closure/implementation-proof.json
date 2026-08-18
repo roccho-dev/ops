@@ -60,10 +60,10 @@
     "sqlitePointQueryShardCountAtMostOne": true
   },
   "selectionReplayMetrics": {
-    "impactP95RatioDuckToSQLite": 128.07784320323015,
+    "impactP95RatioDuckToSQLite": 122.24438278338665,
     "ingressProfileCapBytes": 1048576,
     "queryExecutionCount": 40,
-    "traceP95RatioDuckToSQLite": 70.30010349115734,
+    "traceP95RatioDuckToSQLite": 70.18977694877158,
     "withinIngressCapShare": 1.0
   },
   "selectionStatus": "PASS_SQLITE_SHARDS",
