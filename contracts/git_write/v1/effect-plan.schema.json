@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.gitWritePlan.v1",
+  "title": "Ops Git write effect plan v1",
+  "type": "object",
+  "required": ["schema", "planSha256", "requestId", "sourceRepo", "base", "candidate", "changedPaths", "blobOperations", "treeOperations", "commit", "targetBranch", "pullRequest", "checksReceipt", "adapter", "forbiddenEffects"],
+  "properties": {
+    "schema": {"const": "ops.gitWritePlan.v1"},
+    "planSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "requestId": {"type": "string"},
+    "base": {"type": "object"},
+    "candidate": {"type": "object"},
+    "changedPaths": {"type": "array", "items": {"type": "string"}},
+    "blobOperations": {"type": "array"},
+    "treeOperations": {"type": "array"},
+    "commit": {"type": "object"},
+    "targetBranch": {"type": "string"},
+    "pullRequest": {"type": "object"},
+    "checksReceipt": {"type": "array"},
+    "adapter": {"type": "object"},
+    "forbiddenEffects": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ops.gitWriteEffectResult.v1",
+  "title": "Ops Git write effect result v1",
+  "type": "object",
+  "required": ["schema", "requestId", "planSha256", "status", "baseReadback", "blobs", "tree", "commit", "ref", "pullRequest"],
+  "properties": {
+    "schema": {"const": "ops.gitWriteEffectResult.v1"},
+    "requestId": {"type": "string"},
+    "planSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "status": {"enum": ["PR_OPENED", "PARTIAL_EFFECT", "STALE_BASE", "BRANCH_CONFLICT", "ADAPTER_UNAVAILABLE", "NEEDS_BYTE_INGRESS"]},
+    "baseReadback": {"type": "object"},
+    "blobs": {"type": "array"},
+    "tree": {"type": "object"},
+    "commit": {"type": "object"},
+    "ref": {"type": "object"},
+    "pullRequest": {"type": "object"},
+    "limitations": {"type": "array"}
+  }
+}

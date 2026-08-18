@@ -35,3 +35,5 @@
 {"deps":["nodejs"],"kind":"check","name":"excalidraw-dist-current","script":"packages/excalidraw/tests/dist-current.mjs"}
 {"deps":["nodejs","python3","dist-runner"],"kind":"check","name":"dist-runner","script":"packages/dist-runner/tests/e2e.mjs"}
 {"deps":["nodejs","git","gnutar","ops-capability-loop","find-packages","package-architecture-map"],"kind":"check","name":"ops-capability-loop","script":"packages/ops-capability-loop/tests/e2e.mjs"}
+{"deps":["nodejs","git","ops-git-write-closure"],"kind":"check","name":"ops-git-write-closure","script":"packages/ops-git-write-closure/tests/e2e.mjs"}
+{"deps":["nodejs","python3","duckdb","ops-decision-closure"],"kind":"check","name":"ops-decision-closure","script":"packages/ops-decision-closure/tests/e2e.mjs"}
