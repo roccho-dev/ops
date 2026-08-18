@@ -1,0 +1,1 @@
+{"accepted":false,"action":"CHANGE_CONDITIONS_AND_REEVALUATE","authority":false,"candidate":{"record_type":"condition","subtype":"constraint","value":"candidate condition change"},"checkpoint_id":"decision-ledger-cp2","decision_id":"d-lease-current","direct_write":false,"schema":"ops.humanActionCandidate.v1"}

@@ -1,0 +1,26 @@
+{
+  "families": [
+    {
+      "baselineRun": "run-carrier-1",
+      "currentDecision": "d-carrier-current",
+      "id": "carrier-ingress",
+      "oldDecision": "d-carrier-old",
+      "optimizedRun": "run-carrier-2"
+    },
+    {
+      "baselineRun": "run-git-1",
+      "currentDecision": "d-git-current",
+      "id": "git-write-closure",
+      "oldDecision": "d-git-old",
+      "optimizedRun": "run-git-2"
+    },
+    {
+      "baselineRun": "run-repo-1",
+      "currentDecision": "d-repo-current",
+      "id": "repo-capability-loop",
+      "oldDecision": "d-repo-old",
+      "optimizedRun": "run-repo-2"
+    }
+  ],
+  "schema": "ops.decisionEconomicsFamilies.v1"
+}
