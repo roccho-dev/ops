@@ -1,0 +1,106 @@
+name: Temporary PR assemble ops 115
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [proposals]
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    if: github.head_ref == 'feat/ops-115-decision-closure-final'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/ops-115-decision-closure-final
+          fetch-depth: 0
+
+      - name: Assemble real authority and final package
+        run: python3 .github/tmp/assemble-ops115.py
+
+      - name: Add direct engine counterevidence edge
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('packages/ops-decision-closure/fixtures/claims/segment-001.jsonl')
+          rows=[json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+          d=next(x for x in rows if x['id']=='d-lease-current')
+          edge={'type':'depends_on','target':'cl-lease-red-ocean'}
+          if edge not in d['rel']: d['rel'].insert(1,edge)
+          p.write_text(''.join(json.dumps(x,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n' for x in rows))
+          PY
+
+      - name: Acquire exact DuckDB proof comparator
+        id: duck
+        shell: bash
+        env:
+          PAYLOAD_SHA: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+          TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+        run: |
+          set -euo pipefail
+          carrier="$RUNNER_TEMP/duckdb.b64.txt"
+          duckdb="$RUNNER_TEMP/duckdb"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/carrier.native.linux-amd64.$PAYLOAD_SHA.b64.txt" -o "$carrier"
+          python3 - "$carrier" "$duckdb" "$PAYLOAD_SHA" <<'PY'
+          import base64,hashlib,pathlib,sys
+          src=pathlib.Path(sys.argv[1]); out=pathlib.Path(sys.argv[2]); expected=sys.argv[3]
+          text=src.read_text(encoding='ascii')
+          assert not any(c.isspace() for c in text)
+          data=base64.b64decode(text,validate=True)
+          assert base64.b64encode(data).decode('ascii')==text
+          assert hashlib.sha256(data).hexdigest()==expected
+          out.write_bytes(data)
+          PY
+          chmod 0555 "$duckdb"
+          "$duckdb" -version
+          echo "path=$duckdb" >> "$GITHUB_OUTPUT"
+
+      - name: Calibrate and replay selected engine
+        shell: bash
+        env:
+          DUCKDB: ${{ steps.duck.outputs.path }}
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/ops115-initial" "$RUNNER_TEMP/ops115-final"
+          python3 packages/ops-decision-closure/bin/ops-decision-closure.py proof \
+            --out-dir "$RUNNER_TEMP/ops115-initial" --duckdb "$DUCKDB"
+          python3 packages/ops-decision-closure/bin/calibrate-selection.py \
+            --proof-dir "$RUNNER_TEMP/ops115-initial" \
+            --package-root packages/ops-decision-closure
+          OPS_DUCKDB="$DUCKDB" node packages/ops-decision-closure/tests/final-e2e.mjs
+          python3 packages/ops-decision-closure/bin/final-proof.py \
+            --out-dir "$RUNNER_TEMP/ops115-final" --duckdb "$DUCKDB" \
+            --source-commit 0000000000000000000000000000000000000000 \
+            --source-tree 0000000000000000000000000000000000000000
+
+          mkdir -p evidence/ops-115-decision-closure
+          cp "$RUNNER_TEMP/ops115-final/final-closure-receipt.json" evidence/ops-115-decision-closure/implementation-proof.json
+          cp "$RUNNER_TEMP/ops115-final/decision-economics-summary.json" evidence/ops-115-decision-closure/decision-economics-summary.json
+          cp "$RUNNER_TEMP/ops115-final/human-adoption-answerability.json" evidence/ops-115-decision-closure/human-adoption-answerability.json
+          cp "$RUNNER_TEMP/ops115-final/decision-packet.json" evidence/ops-115-decision-closure/decision-packet.json
+          cp "$RUNNER_TEMP/ops115-final/decision-room.html" evidence/ops-115-decision-closure/decision-room.html
+          cp packages/ops-decision-closure/engine-selection.json evidence/ops-115-decision-closure/engine-selection.json
+          printf '%s\n' '# Issue #115 implementation evidence' '' 'SQLite shards are selected only for the new decision ledger. JSONL remains Authority. Proof Release, clean-room takeover, and literal independent human review are post-merge gates.' > evidence/ops-115-decision-closure/README.md
+
+      - name: Commit focused result and self-remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/tmp-ops115-assemble.yml \
+                .github/workflows/tmp-ops115-pr-assemble.yml \
+                .github/tmp/assemble-ops115.py \
+                .github/tmp/calibrate-selection.py \
+                .github/tmp/final-proof.py \
+                .github/tmp/clean-room.py
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat: select and productize decision closure'
+          git push origin HEAD:feat/ops-115-decision-closure-final
