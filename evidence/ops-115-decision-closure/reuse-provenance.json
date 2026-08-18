@@ -1,0 +1,269 @@
+{
+  "rows": [
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-carrier-release",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-carrier-artifact",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-carrier-temporary",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-carrier-old-outcome",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-carrier-scope",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-carrier-goal",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-carrier-constraint",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-carrier-threshold",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-carrier-freshness",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "cl-carrier-old-proposal",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "d-carrier-old",
+      "into_decision_id": "d-carrier-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-git-objects",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-git-restore",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-git-manual",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-git-old-outcome",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-git-scope",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-git-goal",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-git-constraint",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-git-threshold",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-git-freshness",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "cl-git-old-proposal",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "d-git-old",
+      "into_decision_id": "d-git-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-repo-bootstrap",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-repo-head",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-repo-runbook",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "f-repo-old-outcome",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-repo-scope",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-repo-goal",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-repo-constraint",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-repo-threshold",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "c-repo-freshness",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "exact"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "cl-repo-old-proposal",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    },
+    {
+      "checkpoint_id": "decision-ledger-cp2",
+      "from_record_id": "d-repo-old",
+      "into_decision_id": "d-repo-current",
+      "query_id": "decision.trace",
+      "reason": "same domain; exact source identity; no active supersession, conflict, freshness, or scope rejection in the replay",
+      "reuse_mode": "conditional"
+    }
+  ],
+  "schema": "ops.decisionReuseProvenance.v1"
+}

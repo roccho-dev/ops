@@ -1,0 +1,79 @@
+{
+  "authority": {
+    "commit": "0000000000000000000000000000000000000000",
+    "kind": "immutable-jsonl-segments",
+    "rootDigest": "f6495ff4f7c972d8f0009482127e0d930961b75955c12bbc4c4d059824f03cfb",
+    "tree": "0000000000000000000000000000000000000000"
+  },
+  "cleanRoomRequest": {
+    "decisionPacketDigest": "c32e3503ab3d619bca3888320f2f67c8aa498fe1947cc9fde046de8b14bb40c7",
+    "exactCommit": "0000000000000000000000000000000000000000",
+    "exactTree": "0000000000000000000000000000000000000000",
+    "selectedCheckpointDigest": "588e96a497037587388d8da9e43182152ba9db4b17262b6a075b535c19ec8f70"
+  },
+  "decisionEconomics": {
+    "failClosedMismatchCount": 0,
+    "familyCount": 3,
+    "humanReviewClaim": "no reduction claimed; both controlled replays required zero human seconds and optimized revisions added measurable quality gates",
+    "measurementBoundary": "controlled replay economics; not ARR, sale value, or production telemetry",
+    "medianBaselineTransferBytes": 2046,
+    "medianExternalResearchReductionRatio": 0.5,
+    "medianOptimizedTransferBytes": 1040,
+    "medianOutcomeClosureRatio": 1.0,
+    "medianRecomputedNodeRatio": 0.13333333333333333,
+    "medianReuseRatio": 0.7333333333333333,
+    "runsPerFamily": 2,
+    "schema": "ops.decisionEconomicsSummary.v2",
+    "semanticMismatchCount": 0,
+    "status": "PASS_DECISION_ECONOMICS_G9"
+  },
+  "failClosedMismatchCount": 0,
+  "humanAI": {
+    "actionCandidateCount": 5,
+    "decisionRoomSha256": "34e768fbf52714a372d92d128cf68da0680725f90317e2ac514442d062f761f4",
+    "directAuthorityWriteCount": 0,
+    "javascriptRequired": false,
+    "literalIndependentHumanReview": "REQUIRED_BEFORE_ISSUE_CLOSE",
+    "machineAnswerability": "PASS_MACHINE_ANSWERABILITY",
+    "packetDigest": "c32e3503ab3d619bca3888320f2f67c8aa498fe1947cc9fde046de8b14bb40c7"
+  },
+  "limitations": [
+    "literal independent human reviewer receipt and public Release clean-room takeover are post-merge gates",
+    "existing production DuckDB path is unchanged"
+  ],
+  "oldCheckpointReplay": "PASS",
+  "readonly": {
+    "duckdb": "PASS",
+    "runtimeNetworkInstall": 0,
+    "sqlite": "PASS"
+  },
+  "schema": "ops.decisionClosureFinalReceipt.v1",
+  "selectedEngine": "sqlite-shards",
+  "selectionChecks": {
+    "allRequiredQueriesCoveredExactly": true,
+    "duckdbImpactP95MoreThan2xSQLite": true,
+    "duckdbTraceP95MoreThan2xSQLite": true,
+    "failClosedMismatchCountZero": true,
+    "fullHistoryAggregateWithinIngressCap": true,
+    "requiredQueryExecutionsWithinIngressCapAtLeast95Percent": true,
+    "semanticMismatchCountZero": true,
+    "sqlitePointQueryShardCountAtMostOne": true
+  },
+  "selectionReplayMetrics": {
+    "impactP95RatioDuckToSQLite": 122.24438278338665,
+    "ingressProfileCapBytes": 1048576,
+    "queryExecutionCount": 40,
+    "traceP95RatioDuckToSQLite": 70.18977694877158,
+    "withinIngressCapShare": 1.0
+  },
+  "selectionStatus": "PASS_SQLITE_SHARDS",
+  "semanticMismatchCount": 0,
+  "status": "PASS_IMPLEMENTATION_READY_FOR_RELEASE",
+  "terminalStates": {
+    "L1": "PASS_SQLITE_SHARDS",
+    "L2": "PASS_HUMAN_AI_PROJECTION__INDEPENDENT_HUMAN_REVIEW_OPEN",
+    "L3": "PASS_DECISION_ECONOMICS_G9",
+    "L4": "READY_FOR_INDEPENDENT_TAKEOVER_PROOF",
+    "productionCutover": "NOT_AUTHORIZED"
+  }
+}

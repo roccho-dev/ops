@@ -1,0 +1,177 @@
+{
+  "alternatives": [
+    {
+      "name": "HOLD JSONL only",
+      "reason": "only if no engine passes",
+      "selected": false
+    },
+    {
+      "name": "Frozen DuckLake",
+      "reason": "reject if local point queries and runtime transfer are materially worse",
+      "selected": false
+    }
+  ],
+  "canonical_result_digests": {
+    "current_decisions": "a8283b85ab1723144261edb77856d3caa787e20780a344a4112f13c268c44c52",
+    "decision_timeline": "77bb27e9c8b9e55fb9aadfe955f7a55c7a2aa44db644e95fda5161f96b0ea055",
+    "full_history_aggregate": "02ea11bcdee30564de189dbbe62667107b74fccf584d6b5ecf4977d89951938f",
+    "impact_by_fact": "c39fca4f4d0fe3dd2b35599a65cf67bab1f0d6a481f8c322cd624a74f01159c1",
+    "missing_outcomes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "research_gaps": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "trace_decision": "16844a5107376b39e3553b4d55344fbe713b955856d57c0e601cb796f19656c3",
+    "unresolved_conflicts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "changed_since_previous": [
+    {
+      "id": "f-lease-reproposal-action",
+      "kind": "action",
+      "statement": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'executionCount': 40, 'queryCount': 8, 'repeatCount': 5}",
+      "type": "fact"
+    },
+    {
+      "id": "f-lease-applications",
+      "kind": "outcome",
+      "statement": "{'impactP95RatioDuckToSQLite': 117.36011739372047, 'p95SQLiteFetchBytes': 192512, 'p95SQLiteShardCount': 4, 'requiredQueryWithinIngressCapShare': 1.0, 'sqlitePointQueryShardCountMax': 1, 'traceP95RatioDuckToSQLite': 62.276245331158556}",
+      "type": "fact"
+    },
+    {
+      "id": "f-lease-contracts",
+      "kind": "outcome",
+      "statement": "{'duckdbRuntimeCarrierBytes': 82582200, 'selectedEngine': 'sqlite-shards', 'sqliteAdditionalRuntimeCarrierBytes': 0}",
+      "type": "fact"
+    },
+    {
+      "id": "cl-lease-red-ocean",
+      "kind": "derived",
+      "statement": "Frozen DuckLake is materially heavier for the exact required-query replay",
+      "type": "claim"
+    },
+    {
+      "id": "cl-lease-redefined",
+      "kind": "proposal",
+      "statement": "catalog.sqlite plus indexed immutable SQLite shards",
+      "type": "claim"
+    },
+    {
+      "id": "d-lease-current",
+      "kind": "decision",
+      "statement": "select SQLite catalog plus immutable shards for the public decision ledger v1",
+      "type": "claim"
+    },
+    {
+      "id": "cl-lease-gap",
+      "kind": "proposal",
+      "statement": "re-open engine selection when production query telemetry becomes available or the required-query/ingress contract changes",
+      "type": "claim"
+    }
+  ],
+  "checkpoint_id": "decision-ledger-cp2",
+  "conditions": [
+    "c-lease-scope",
+    "c-lease-goal",
+    "c-lease-constraint",
+    "c-lease-threshold",
+    "c-lease-freshness"
+  ],
+  "conflicts": [],
+  "decision_id": "d-lease-current",
+  "evidence_against": [
+    {
+      "id": "cl-lease-red-ocean",
+      "kind": "derived",
+      "statement": "Frozen DuckLake is materially heavier for the exact required-query replay",
+      "type": "claim"
+    }
+  ],
+  "evidence_for": [
+    {
+      "id": "cl-lease-redefined",
+      "kind": "proposal",
+      "statement": "catalog.sqlite plus indexed immutable SQLite shards",
+      "type": "claim"
+    },
+    {
+      "id": "c-lease-scope",
+      "kind": "scope",
+      "statement": "public Fact Condition Claim decision ledger v1",
+      "type": "condition"
+    },
+    {
+      "id": "c-lease-goal",
+      "kind": "goal",
+      "statement": "select one low-cost read-only engine without changing existing production DuckDB paths",
+      "type": "condition"
+    },
+    {
+      "id": "c-lease-constraint",
+      "kind": "constraint",
+      "statement": "semantic mismatch, fail-closed mismatch, runtime write, secret, and production cutover must remain zero",
+      "type": "condition"
+    },
+    {
+      "id": "c-lease-threshold",
+      "kind": "threshold",
+      "statement": ">=95% of the exact required-query replay must fit the fixed 1 MiB ingress profile; point trace/impact must touch one SQLite shard; DuckDB trace/impact p95 must exceed SQLite by >2x",
+      "type": "condition"
+    },
+    {
+      "id": "c-lease-freshness",
+      "kind": "freshness",
+      "statement": "re-open when production telemetry exists, the required query contract changes, or any p95 query exceeds the 1 MiB ingress profile",
+      "type": "condition"
+    }
+  ],
+  "gaps": [],
+  "next_action": "publish an immutable proof checkpoint and run independent clean-room takeover",
+  "outcomes": [
+    {
+      "id": "f-lease-reproposal-action",
+      "kind": "action",
+      "statement": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'executionCount': 40, 'queryCount': 8, 'repeatCount': 5}"
+    },
+    {
+      "id": "f-lease-applications",
+      "kind": "outcome",
+      "statement": "{'impactP95RatioDuckToSQLite': 117.36011739372047, 'p95SQLiteFetchBytes': 192512, 'p95SQLiteShardCount': 4, 'requiredQueryWithinIngressCapShare': 1.0, 'sqlitePointQueryShardCountMax': 1, 'traceP95RatioDuckToSQLite': 62.276245331158556}"
+    },
+    {
+      "id": "f-lease-contracts",
+      "kind": "outcome",
+      "statement": "{'duckdbRuntimeCarrierBytes': 82582200, 'selectedEngine': 'sqlite-shards', 'sqliteAdditionalRuntimeCarrierBytes': 0}"
+    }
+  ],
+  "packet_digest": "c32e3503ab3d619bca3888320f2f67c8aa498fe1947cc9fde046de8b14bb40c7",
+  "projection_asset_refs": [
+    "sqlite/manifest.json",
+    "frozen-ducklake/catalog.json"
+  ],
+  "query_contract_digest": "dd543c36c748f77ce075cc4494f165d974cf2cd4cea63acd49dd4198cf78c6ef",
+  "question": "Which read-only engine should serve the public decision ledger v1?",
+  "recommendation": "select SQLite catalog plus immutable shards for the public decision ledger v1",
+  "record_refs": [
+    "c-lease-constraint",
+    "c-lease-freshness",
+    "c-lease-goal",
+    "c-lease-scope",
+    "c-lease-threshold",
+    "cl-lease-red-ocean",
+    "cl-lease-redefined",
+    "d-lease-current",
+    "f-lease-applications",
+    "f-lease-contracts",
+    "f-lease-reproposal-action"
+  ],
+  "schema": "ops.decisionPacket.v1",
+  "status": "current",
+  "stop_conditions": [
+    "any semantic mismatch",
+    "any required-query p95 fetch exceeds 1 MiB",
+    "production telemetry materially differs from the proof workload"
+  ],
+  "success_conditions": [
+    "semantic mismatch = 0",
+    "fail-closed mismatch = 0",
+    "old checkpoint replay PASS",
+    "independent takeover PASS"
+  ]
+}
