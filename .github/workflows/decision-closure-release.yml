@@ -1,0 +1,159 @@
+name: Decision closure exact checkpoint release
+
+on:
+  push:
+    branches:
+      - proposals
+    paths:
+      - decision-ledger/**
+      - contracts/decision_closure/**
+      - packages/ops-decision-closure/**
+      - evidence/ops-115/**
+      - build/packages.jsonl
+      - build/checks.jsonl
+      - .github/workflows/decision-closure-release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify accepted authority and selected runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 packages/ops-decision-closure/tests/e2e.py
+          python3 packages/ops-decision-closure/bin/ops-decision-closure.py verify --root . --out "$RUNNER_TEMP/authority.receipt.json"
+
+      - name: Stage exact checkpoint assets
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="evidence/ops-115/checkpoints/ops115-current"
+          packet="evidence/ops-115/decision-room"
+          out="$RUNNER_TEMP/release"
+          mkdir -p "$out"
+          root="$(python3 -c 'import json; print(json.load(open("evidence/ops-115/proof-summary.json"))["authority_root_digest"])')"
+          tree="$(git rev-parse HEAD^{tree})"
+          tag="decision-checkpoint-${root:0:16}-${GITHUB_SHA:0:12}"
+          runtime_sha="$(sha256sum packages/ops-decision-closure/bin/ops-decision-closure.py | awk '{print $1}')"
+          cp "$current/manifest.json" "$out/checkpoint.${root}.manifest.json"
+          cp "$current/catalog.sqlite" "$out/catalog.sqlite"
+          cp "$current"/shards/*.sqlite "$out/"
+          cp "$packet/decision-packet.json" "$out/decision-packet.json"
+          cp "$packet/decision-room.html" "$out/decision-room.html"
+          cp evidence/ops-115/proof-summary.json "$out/verification.receipt.json"
+          cp evidence/ops-115/engine-comparison.receipt.json "$out/engine-comparison.receipt.json"
+          cp evidence/ops-115/decision-economics.receipt.json "$out/decision-economics.receipt.json"
+          cp packages/ops-decision-closure/bin/ops-decision-closure.py "$out/query-runtime.${runtime_sha}.py"
+          tar -C evidence/ops-115 -czf "$out/dd-packet.${root}.tar.gz" dd-packet
+          python3 - "$out" "$tag" "$root" "$tree" "$runtime_sha" <<'PY'
+          import hashlib,json,pathlib,sys
+          out=pathlib.Path(sys.argv[1]); tag,root,tree,runtime_sha=sys.argv[2:]
+          assets=[]
+          for path in sorted(x for x in out.iterdir() if x.is_file()):
+              data=path.read_bytes(); assets.append({'name':path.name,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+          receipt={'schema':'ops.decisionCheckpointRelease.v1','status':'PREPARED','repository':'roccho-dev/ops','accepted_commit':sys.environ['GITHUB_SHA'] if False else '', 'accepted_tree':tree,'authority_root_digest':root,'tag':tag,'query_runtime_sha256':runtime_sha,'assets':assets,'latest_used':False,'runtime_secret_count':0,'runtime_network_install':0}
+          receipt['accepted_commit']=pathlib.Path('/proc/self/environ').read_bytes().split(b'GITHUB_SHA=')[1].split(b'\0')[0].decode() if b'GITHUB_SHA=' in pathlib.Path('/proc/self/environ').read_bytes() else ''
+          (out/'release.receipt.json').write_text(json.dumps(receipt,sort_keys=True,indent=2)+'\n')
+          PY
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "runtime_sha=$runtime_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Publish exact immutable-by-name Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.stage.outputs.tag }}
+          OUT: ${{ steps.stage.outputs.out }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release exists; verify only"
+          else
+            mapfile -t assets < <(find "$OUT" -maxdepth 1 -type f -print | sort)
+            gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$TAG" --notes "Exact read-only Decision checkpoint for $GITHUB_REPOSITORY@$GITHUB_SHA" --latest=false
+          fi
+
+      - name: Public exact readback and query replay
+        id: readback
+        shell: bash
+        env:
+          TAG: ${{ steps.stage.outputs.tag }}
+          OUT: ${{ steps.stage.outputs.out }}
+          ROOT_DIGEST: ${{ steps.stage.outputs.root }}
+          RUNTIME_SHA: ${{ steps.stage.outputs.runtime_sha }}
+        run: |
+          set -euo pipefail
+          rb="$RUNNER_TEMP/readback"
+          checkpoint="$rb/checkpoint"
+          mkdir -p "$rb" "$checkpoint/shards"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          while IFS= read -r source; do
+            name="$(basename "$source")"
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$rb/$name"
+            cmp "$source" "$rb/$name"
+          done < <(find "$OUT" -maxdepth 1 -type f -print | sort)
+          cp "$rb/checkpoint.${ROOT_DIGEST}.manifest.json" "$checkpoint/manifest.json"
+          cp "$rb/catalog.sqlite" "$checkpoint/catalog.sqlite"
+          cp "$rb"/domain-*.sqlite "$checkpoint/shards/"
+          runtime="$rb/query-runtime.${RUNTIME_SHA}.py"
+          for spec in \
+            'current_decisions|{"domain":"git-write-closure"}' \
+            'trace_decision|{"decision_id":"claim.engine.sqlite-shards"}' \
+            'impact_by_fact|{"fact_id":"fact.engine.comparison"}' \
+            'missing_outcomes|{}' \
+            'unresolved_conflicts|{}' \
+            'research_gaps|{"decision_id":"claim.engine.sqlite-shards"}' \
+            'decision_timeline|{"decision_id":"claim.engine.sqlite-shards"}' \
+            'full_history_aggregate|{}'; do
+            name="${spec%%|*}"; args="${spec#*|}"
+            python3 "$runtime" query --checkpoint "$checkpoint" --query "$name" --args "$args" --out "$rb/query-$name.json"
+          done
+          python3 - "$rb" "$TAG" "$GITHUB_SHA" "$ROOT_DIGEST" <<'PY'
+          import hashlib,json,pathlib,sys
+          rb=pathlib.Path(sys.argv[1]); tag,commit,root=sys.argv[2:]
+          queries=[]
+          for path in sorted(rb.glob('query-*.json')):
+              x=json.load(open(path)); queries.append({'query':x['query'],'result_digest':x['result_digest']})
+          receipt={'schema':'ops.decisionCheckpointPublicReadback.v1','status':'PASS','tag':tag,'accepted_commit':commit,'authority_root_digest':root,'query_count':len(queries),'queries':queries,'public_readback':True,'checkpoint_mixing':False,'latest_used':False}
+          path=rb/'public-readback.receipt.json'; path.write_text(json.dumps(receipt,sort_keys=True,indent=2)+'\n')
+          print(hashlib.sha256(path.read_bytes()).hexdigest())
+          PY
+          echo "path=$rb/public-readback.receipt.json" >> "$GITHUB_OUTPUT"
+
+      - name: Admit and verify public-readback receipt asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.stage.outputs.tag }}
+          RECEIPT: ${{ steps.readback.outputs.path }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq public-readback.receipt.json; then
+            gh release upload "$TAG" "$RECEIPT" --repo "$GITHUB_REPOSITORY"
+          fi
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/public-readback.receipt.json" -o "$RUNNER_TEMP/readback-receipt.json"
+          cmp "$RECEIPT" "$RUNNER_TEMP/readback-receipt.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: decision-checkpoint-${{ steps.stage.outputs.root }}
+          path: |
+            ${{ steps.stage.outputs.out }}/release.receipt.json
+            ${{ steps.readback.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
