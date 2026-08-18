@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"diagnostic.good","packageId":"structured-diagnostic","profileId":"javascript.diagnostic-stdio","ruleId":"SL-DIAGNOSTIC-001","language":"javascript","fixtureKind":"good","source":"program.mjs","expectedStatus":"met","expectedFindingCode":"stdio-contract-clean"}

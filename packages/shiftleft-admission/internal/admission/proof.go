@@ -32,7 +32,7 @@ func expectedFixtureMap(fixturesDir string) (map[string]Fixture, error) {
 	return out, err
 }
 
-func copyDir(src, dst string, skip string) error {
+func copyDir(src, dst, skip string) error {
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -119,15 +119,15 @@ func RunProof(bundleDir, fixturesDir, policyRef, baseTree, candidateTree, outDir
 	}
 	meaning := map[string]string{}
 	for _, o := range all {
-		key := o.FixtureKind
-		value := strings.Join([]string{o.RuleID, o.Status, o.FindingCode}, "|")
+		key := o.RuleID + "\x00" + o.FixtureKind
+		value := strings.Join([]string{o.Status, o.FindingCode}, "|")
 		if prior, ok := meaning[key]; ok && prior != value {
-			return ProofSummary{}, fmt.Errorf("PROOF_CROSS_LANGUAGE_FINDING_DRIFT: %s got %s and %s", key, prior, value)
+			return ProofSummary{}, fmt.Errorf("PROOF_PROVIDER_FINDING_DRIFT: %s got %s and %s", key, prior, value)
 		}
 		meaning[key] = value
 	}
-	add("cross-language-finding-parity", "PASS", "JS/Python/Go share SL-CORE-001 status and finding codes")
-	add("language-provider-fixture-matrix", "PASS", fmt.Sprintf("%d executable JS/Python/Go cases", len(all)))
+	add("provider-finding-parity", "PASS", "provider profiles share status and finding codes within each rule")
+	add("provider-fixture-matrix", "PASS", fmt.Sprintf("%d executable provider cases", len(all)))
 	if err := writeJSONL(filepath.Join(outDir, "provider-observations.all.jsonl"), append([]Observation(nil), all...)); err != nil {
 		return ProofSummary{}, err
 	}
