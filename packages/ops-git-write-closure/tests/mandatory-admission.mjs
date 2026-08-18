@@ -9,13 +9,15 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
-const policyRoot = path.join(repoRoot, "packages/shiftleft-admission/policy");
-const fixturesRoot = path.join(repoRoot, "packages/shiftleft-admission/fixtures");
+const shiftleftRoot = path.join(repoRoot, "packages/shiftleft-admission");
+const policyRoot = path.join(shiftleftRoot, "policy");
+const fixturesRoot = path.join(shiftleftRoot, "fixtures");
+let executionEnv = process.env;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
-    env: options.env ?? process.env,
+    env: options.env ?? executionEnv,
     encoding: "utf8",
     input: options.input,
     maxBuffer: 64 * 1024 * 1024,
@@ -37,7 +39,7 @@ function writeJson(file, value) {
 
 function candidateTree(repo, indexFile) {
   fs.copyFileSync(path.join(repo, ".git", "index"), indexFile);
-  const env = { ...process.env, GIT_INDEX_FILE: indexFile };
+  const env = { ...executionEnv, GIT_INDEX_FILE: indexFile };
   run("git", ["-C", repo, "add", "-A", "--", "."], { env });
   return run("git", ["-C", repo, "write-tree"], { env }).stdout.trim();
 }
@@ -100,8 +102,36 @@ function prepare(requestFile, outDir, allowed = [0]) {
   ], { allowed });
 }
 
+const declarations = fs.readFileSync(path.join(repoRoot, "build/packages.jsonl"), "utf8")
+  .split("\n")
+  .filter(Boolean)
+  .map((line) => JSON.parse(line));
+const publicPackage = declarations.find((entry) => entry.name === "ops-git-write-closure");
+assert.equal(
+  publicPackage?.entry,
+  "packages/ops-git-write-closure/bin/ops-git-write-closure-admitted.mjs",
+  "canonical package entry must enforce Shift Left admission",
+);
+
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "ops-mandatory-admission-"));
 try {
+  const binDir = path.join(temp, "bin");
+  fs.mkdirSync(binDir);
+  const policyctlBin = path.join(binDir, "policyctl");
+  const buildEnv = {
+    ...process.env,
+    HOME: temp,
+    GOCACHE: path.join(temp, "go-cache"),
+  };
+  run("go", ["build", "-trimpath", "-o", policyctlBin, "./cmd/policyctl"], {
+    cwd: shiftleftRoot,
+    env: buildEnv,
+  });
+  executionEnv = {
+    ...buildEnv,
+    PATH: `${binDir}:${process.env.PATH}`,
+  };
+
   const repo = path.join(temp, "repo");
   fs.mkdirSync(repo);
   run("git", ["init", "--quiet", "--initial-branch=proposals", repo]);
