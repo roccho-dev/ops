@@ -35,7 +35,7 @@ jobs:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
 
-      - name: Append canonical registries and remove temporary workflow
+      - name: Append canonical registries, harden proof, and remove temporary workflow
         shell: bash
         run: |
           set -euo pipefail
@@ -73,6 +73,20 @@ jobs:
                   raise SystemExit(f'duplicate registry name: {path}')
               path.write_text(''.join(json.dumps(item, sort_keys=True, separators=(',', ':')) + '\n' for item in rows))
 
+          test_path = Path('packages/ops-decision-closure/tests/final-e2e.mjs')
+          source = test_path.read_text()
+          marker = 'const duckdb = process.env.OPS_DUCKDB || "duckdb";\n'
+          if 'process.env.PYTHONDONTWRITEBYTECODE = "1";' not in source:
+              if marker not in source:
+                  raise SystemExit('Python environment insertion point missing')
+              source = source.replace(marker, marker + 'process.env.PYTHONDONTWRITEBYTECODE = "1";\n', 1)
+          clean_marker = '    LC_ALL: "C.UTF-8",\n'
+          if '    PYTHONDONTWRITEBYTECODE: "1",\n' not in source:
+              if clean_marker not in source:
+                  raise SystemExit('clean-room environment insertion point missing')
+              source = source.replace(clean_marker, clean_marker + '    PYTHONDONTWRITEBYTECODE: "1",\n', 1)
+          test_path.write_text(source)
+
           human = json.loads(Path('evidence/ops-115-decision-closure/human-adoption-answerability.json').read_text())
           if human['mandatoryQuestionCount'] != 9 or human['mandatoryQuestionAccuracy'] != 1.0:
               raise SystemExit('Decision Room is not 9/9 machine-readable')
@@ -104,6 +118,6 @@ jobs:
           test ! -e .github/workflows/tmp-ops115-clean-finalize.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add build/checks.jsonl build/packages.jsonl .github/workflows/tmp-ops115-clean-finalize.yml
+          git add build/checks.jsonl build/packages.jsonl packages/ops-decision-closure/tests/final-e2e.mjs .github/workflows/tmp-ops115-clean-finalize.yml
           git commit -m "feat: register clean Issue 115 decision closure"
           git push origin "HEAD:$TARGET_BRANCH"
