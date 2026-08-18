@@ -10,10 +10,11 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
 const cli = path.join(root, "packages/ops-decision-closure/bin/ops-decision-closure.py");
+const pythonCommand = process.env.OPS_PYTHON || "python3";
 const duckdb = process.env.OPS_DUCKDB || "duckdb";
 const out = fs.mkdtempSync(path.join(os.tmpdir(), "ops-decision-closure-"));
 try {
-  const r = spawnSync("python3", [cli, "proof", "--out-dir", out, "--duckdb", duckdb], { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
+  const r = spawnSync(pythonCommand, [cli, "proof", "--out-dir", out, "--duckdb", duckdb], { encoding: "utf8", maxBuffer: 128 * 1024 * 1024 });
   if (r.error) throw r.error;
   if (r.status !== 0) throw new Error(`${r.stdout}\n${r.stderr}`);
   const summary = JSON.parse(r.stdout.trim());
