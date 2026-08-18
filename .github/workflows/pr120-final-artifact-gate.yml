@@ -1,0 +1,259 @@
+name: pr120-final-artifact-gate
+
+on:
+  push:
+    branches:
+      - feat/issue-116-shiftleft-admission
+    paths:
+      - .github/workflows/pr120-final-artifact-gate.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  build-final-artifact:
+    runs-on: ubuntu-24.04
+    outputs:
+      final_sha: ${{ steps.final.outputs.sha }}
+      final_tree: ${{ steps.final.outputs.tree }}
+      base_tree: ${{ steps.final.outputs.base_tree }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-116-shiftleft-admission
+          fetch-depth: 0
+
+      - name: Form final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name roccho
+          git config user.email 40359643+roccho-dev@users.noreply.github.com
+          git fetch origin proposals
+
+          if ! git merge-base --is-ancestor origin/proposals HEAD; then
+            set +e
+            git merge --no-commit --no-ff origin/proposals
+            merge_status=$?
+            set -e
+            if [ "$merge_status" -ne 0 ]; then
+              mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+              for path in "${conflicts[@]}"; do
+                case "$path" in
+                  build/packages.jsonl|build/checks.jsonl|ci.intent.v1.jsonl)
+                    ours=$(mktemp)
+                    theirs=$(mktemp)
+                    git show ":2:$path" > "$ours"
+                    git show ":3:$path" > "$theirs"
+                    python3 - "$path" "$theirs" "$ours" <<'PY'
+          import json
+          import sys
+
+          output, base_path, topic_path = sys.argv[1:]
+
+          def load(path):
+              rows = []
+              with open(path, encoding="utf-8") as source:
+                  for raw in source:
+                      if raw.strip():
+                          rows.append((json.loads(raw), raw.rstrip("\n")))
+              return rows
+
+          merged = []
+          seen = set()
+          for obj, raw in load(base_path) + load(topic_path):
+              key = obj.get("name") or obj.get("id") or json.dumps(obj, sort_keys=True, separators=(",", ":"))
+              if key in seen:
+                  continue
+              seen.add(key)
+              merged.append(raw)
+
+          with open(output, "w", encoding="utf-8", newline="\n") as target:
+              target.write("\n".join(merged) + "\n")
+          PY
+                    git add "$path"
+                    ;;
+                  flake.nix)
+                    git checkout --ours -- "$path"
+                    git add "$path"
+                    ;;
+                  *)
+                    echo "unexpected conflict: $path" >&2
+                    exit 42
+                    ;;
+                esac
+              done
+            fi
+          fi
+
+          git rm -f --ignore-unmatch \
+            .github/workflows/pr120-sync-proposals.yml \
+            .github/workflows/pr120-finalize-sync.yml \
+            .github/workflows/pr120-close-gate.yml \
+            .github/workflows/pr120-final-artifact-gate.yml
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            git diff --name-only --diff-filter=U >&2
+            exit 43
+          fi
+          git diff --cached --check
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Verify and commit exact final tree
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd packages/shiftleft-admission
+            go test ./...
+          )
+          nix flake check --show-trace --no-write-lock-file
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Verify final Issue 116 integration tree"
+            git push origin HEAD:feat/issue-116-shiftleft-admission
+          fi
+
+          final_sha=$(git rev-parse HEAD)
+          final_tree=$(git rev-parse HEAD^{tree})
+          base_tree=$(git rev-parse origin/proposals^{tree})
+          git merge-base --is-ancestor origin/proposals HEAD
+          echo "sha=$final_sha" >> "$GITHUB_OUTPUT"
+          echo "tree=$final_tree" >> "$GITHUB_OUTPUT"
+          echo "base_tree=$base_tree" >> "$GITHUB_OUTPUT"
+
+      - name: Build exact artifact and canonical proof
+        env:
+          FINAL_SHA: ${{ steps.final.outputs.sha }}
+          FINAL_TREE: ${{ steps.final.outputs.tree }}
+          BASE_TREE: ${{ steps.final.outputs.base_tree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$PWD/packages/shiftleft-admission"
+          out="$RUNNER_TEMP/issue116-artifact"
+          proof="$out/proof"
+          mkdir -p "$out/bin" "$proof"
+
+          go build -trimpath -ldflags='-s -w -buildid=' -o "$out/bin/policyctl" ./packages/shiftleft-admission/cmd/policyctl
+          cp -R "$root/policy" "$out/policy"
+          cp -R "$root/fixtures" "$out/fixtures"
+
+          "$out/bin/policyctl" proof \
+            --bundle "$out/policy" \
+            --fixtures "$out/fixtures" \
+            --policy-ref "$FINAL_SHA" \
+            --base-tree "git-tree-sha1:$BASE_TREE" \
+            --candidate-tree "git-tree-sha1:$FINAL_TREE" \
+            --out-dir "$proof"
+
+          cmp "$proof/receipt.1.json" "$proof/receipt.2.json"
+          policy_hash=$("$out/bin/policyctl" hash --bundle "$out/policy")
+          "$out/bin/policyctl" verify \
+            --receipt "$proof/receipt.1.json" \
+            --policy-sha256 "$policy_hash" \
+            --base-tree "git-tree-sha1:$BASE_TREE" \
+            --candidate-tree "git-tree-sha1:$FINAL_TREE"
+
+          jq -n \
+            --arg head "$FINAL_SHA" \
+            --arg base_tree "git-tree-sha1:$BASE_TREE" \
+            --arg candidate_tree "git-tree-sha1:$FINAL_TREE" \
+            --arg policy_hash "$policy_hash" \
+            '{schema:"issue116-artifact-metadata/1",head:$head,baseTree:$base_tree,candidateTree:$candidate_tree,policyHash:$policy_hash}' \
+            > "$out/metadata.json"
+
+          (
+            cd "$out"
+            find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-116-final-${{ steps.final.outputs.sha }}
+          path: ${{ runner.temp }}/issue116-artifact
+          if-no-files-found: error
+          retention-days: 90
+
+  artifact-only-replay:
+    needs: build-final-artifact
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: issue-116-final-${{ needs.build-final-artifact.outputs.final_sha }}
+          path: artifact
+
+      - name: Verify, replay twice, and compare without source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifact
+          sha256sum -c SHA256SUMS
+          chmod +x bin/policyctl
+
+          head=$(jq -r .head metadata.json)
+          base_tree=$(jq -r .baseTree metadata.json)
+          candidate_tree=$(jq -r .candidateTree metadata.json)
+          expected_policy_hash=$(jq -r .policyHash metadata.json)
+          actual_policy_hash=$(bin/policyctl hash --bundle policy)
+          test "$actual_policy_hash" = "$expected_policy_hash"
+
+          bin/policyctl verify \
+            --receipt proof/receipt.1.json \
+            --policy-sha256 "$actual_policy_hash" \
+            --base-tree "$base_tree" \
+            --candidate-tree "$candidate_tree"
+
+          for run in A B; do
+            bin/policyctl proof \
+              --bundle policy \
+              --fixtures fixtures \
+              --policy-ref "$head" \
+              --base-tree "$base_tree" \
+              --candidate-tree "$candidate_tree" \
+              --out-dir "replay-$run"
+          done
+
+          diff -ru replay-A replay-B
+          diff -ru proof replay-A
+
+  mark-ready:
+    needs:
+      - build-final-artifact
+      - artifact-only-replay
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Record exact PASS and mark PR ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ needs.build-final-artifact.outputs.final_sha }}
+          FINAL_TREE: ${{ needs.build-final-artifact.outputs.final_tree }}
+          BASE_TREE: ${{ needs.build-final-artifact.outputs.base_tree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts=$(gh api "repos/roccho-dev/ops/actions/runs/${GITHUB_RUN_ID}/artifacts")
+          artifact_id=$(jq -r '.artifacts[] | select(.name | startswith("issue-116-final-")) | .id' <<<"$artifacts")
+          artifact_digest=$(jq -r '.artifacts[] | select(.name | startswith("issue-116-final-")) | .digest' <<<"$artifacts")
+          gh pr comment 120 --body "PR #120 final artifact gate PASS
+
+- final head: \`$FINAL_SHA\`
+- base tree: \`git-tree-sha1:$BASE_TREE\`
+- candidate tree: \`git-tree-sha1:$FINAL_TREE\`
+- full \`nix flake check\`: PASS
+- source-free artifact replay A/B: byte-identical
+- canonical proof vs replay: byte-identical
+- artifact ID: \`$artifact_id\`
+- artifact digest: \`$artifact_digest\`
+- run: https://github.com/roccho-dev/ops/actions/runs/${GITHUB_RUN_ID}
+- latest \`proposals\` is an ancestor of the tested final head
+- one-shot workflows are absent from the final tree"
+          gh pr ready 120
