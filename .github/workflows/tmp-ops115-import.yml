@@ -1,0 +1,48 @@
+name: Temporary import ops 115 proof
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-import.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import bounded Issue 115 implementation and self-remove
+        shell: bash
+        env:
+          SOURCE_SHA: 8c1787d94c4a6e451bbe2e2ccd6cf32797feb575
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+        run: |
+          set -euo pipefail
+          git fetch origin "$SOURCE_SHA"
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE_SHA"
+          python3 .github/tmp/import-ops115.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          for path in Path('.').rglob('*.jsonl'):
+              if '.git' in path.parts: continue
+              for line_no, line in enumerate(path.read_text(errors='strict').splitlines(), 1):
+                  if line.strip(): json.loads(line)
+          PY
+
+          rm -f .github/workflows/tmp-ops115-import.yml .github/tmp/import-ops115.py
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: import bounded Issue 115 decision closure proof"
+          git push origin "HEAD:$TARGET_BRANCH"
