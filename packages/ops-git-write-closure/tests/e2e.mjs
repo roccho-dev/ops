@@ -214,7 +214,7 @@ try {
   assert.match(invoke(["prepare", "--request", mutateFile, "--out-dir", path.join(tmp, "mutate-check")], [1]).stderr, /CHECK_MUTATED_WORKTREE/);
 
   const sameStatusRoot = path.join(tmp, "same-status-mut"); fs.mkdirSync(sameStatusRoot); const sameStatus = fixture(sameStatusRoot);
-  const sameStatusCheck = requestFor(sameStatus.repo, sameStatus.base, "ops-114-check-mutates-same-status", { checks: [{ id: "mutate", command: [process.execPath, "-e", "require('fs').writeFileSync('src/update.txt','mutated\n')"] }] });
+  const sameStatusCheck = requestFor(sameStatus.repo, sameStatus.base, "ops-114-check-mutates-same-status", { checks: [{ id: "mutate", command: [process.execPath, "-e", "require('fs').writeFileSync('src/update.txt','mutated')"] }] });
   const sameStatusFile = path.join(tmp, "same-status-check.json"); writeJson(sameStatusFile, sameStatusCheck);
   assert.match(invoke(["prepare", "--request", sameStatusFile, "--out-dir", path.join(tmp, "same-status-check")], [1]).stderr, /CHECK_MUTATED_WORKTREE/);
 
