@@ -12,4 +12,6 @@ The machine Decision Room canary finds all nine mandatory answers without SQL or
 
 Generated databases, Decision Packet, Decision Room, metrics, DD files, and receipts are disposable non-authoritative projections. Immutable proof Release, clean-room takeover, and literal independent human review remain post-merge gates.
 
-The clean exact-head proof passed in workflow run `32185033903` after Python bytecode-cache writes were disabled. Generated cache files are not part of the candidate or its Authority.
+The clean exact-head proof passed after Python bytecode-cache writes were disabled. Generated cache files are not part of the candidate or its Authority.
+
+The latest-base finalizer run `32186421701` passed on `proposals` base `db85f25cbac106c7b0351e82d66ebebbc42cee43`, removed its temporary workflow, and produced clean head `9744d31f6ff441ff36dc4802f2d27649a9aead61` before this CI-trigger receipt update.
