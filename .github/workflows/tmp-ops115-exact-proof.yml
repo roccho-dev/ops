@@ -1,0 +1,81 @@
+name: Temporary exact proof ops 115
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-exact-proof.yml
+
+permissions:
+  contents: write
+
+jobs:
+  exact-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Materialize exact DuckDB and run Issue 115 proof
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+          DUCKDB_TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+          DUCKDB_ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+          DUCKDB_SHA256: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ops115"
+          mkdir -p "$work/bin" evidence/ops-115-decision-closure
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$DUCKDB_TAG/$DUCKDB_ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$url" -o "$work/$DUCKDB_ASSET"
+          python3 - "$work/$DUCKDB_ASSET" "$work/bin/duckdb" "$DUCKDB_SHA256" <<'PY'
+          import base64, hashlib, pathlib, sys
+          src, dst, expected = map(pathlib.Path, sys.argv[1:3]) + (sys.argv[3],) if False else (pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3])
+          raw = src.read_text(encoding='ascii')
+          if any(c.isspace() for c in raw): raise SystemExit('carrier whitespace forbidden')
+          data = base64.b64decode(raw, validate=True)
+          if base64.b64encode(data).decode('ascii') != raw: raise SystemExit('non-canonical Base64')
+          actual = hashlib.sha256(data).hexdigest()
+          if actual != expected: raise SystemExit(f'{actual} != {expected}')
+          dst.write_bytes(data)
+          PY
+          chmod 0555 "$work/bin/duckdb"
+          test "$(sha256sum "$work/bin/duckdb" | awk '{print $1}')" = "$DUCKDB_SHA256"
+          "$work/bin/duckdb" -version | tee "$work/duckdb-version.txt"
+
+          export PATH="$work/bin:$PATH"
+          export DUCKDB_BIN="$work/bin/duckdb"
+          python3 packages/ops-decision-closure/tests/e2e.py | tee "$work/e2e.log"
+          nix flake check --no-write-lock-file -L | tee "$work/nix.log"
+
+          python3 - "$work" evidence/ops-115-decision-closure/exact-head-proof.json "$DUCKDB_TAG" "$DUCKDB_ASSET" "$DUCKDB_SHA256" <<'PY'
+          import hashlib, json, pathlib, subprocess, sys
+          work, out, tag, asset, payload_sha = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), *sys.argv[3:]
+          def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
+          x={
+            'schema':'ops.issue115ExactHeadProof.v1','status':'PASS','candidateCommit':head,'candidateTree':tree,
+            'duckdb':{'tag':tag,'asset':asset,'payloadSha256':payload_sha,'version':work.joinpath('duckdb-version.txt').read_text().strip()},
+            'commands':['python3 packages/ops-decision-closure/tests/e2e.py','nix flake check --no-write-lock-file -L'],
+            'logs':{'e2eSha256':sha(work/'e2e.log'),'nixSha256':sha(work/'nix.log')},
+            'networkExtensionInstall':0,'runtimeSecrets':0,
+          }
+          out.write_text(json.dumps(x,sort_keys=True,indent=2)+'\n')
+          PY
+
+          rm -f .github/workflows/tmp-ops115-exact-proof.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test: retain exact-head Issue 115 proof"
+          git push origin "HEAD:$TARGET_BRANCH"
