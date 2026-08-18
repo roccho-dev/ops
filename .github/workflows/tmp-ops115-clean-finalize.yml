@@ -6,17 +6,28 @@ on:
       - feat/ops-115-decision-closure-final-v4
     paths:
       - .github/workflows/tmp-ops115-clean-finalize.yml
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - .github/workflows/tmp-ops115-clean-finalize.yml
+
+concurrency:
+  group: ops115-clean-finalize
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   finalize:
+    if: github.event_name == 'push' || github.head_ref == 'feat/ops-115-decision-closure-final-v4'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: feat/ops-115-decision-closure-final-v4
           fetch-depth: 0
 
       - uses: cachix/install-nix-action@v31
