@@ -1,0 +1,91 @@
+name: Temporary finalize ops 115
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Materialize exact DuckDB runtime
+        id: duckdb
+        shell: bash
+        env:
+          TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+          ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+          PAYLOAD_SHA: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/duckdb"
+          carrier="$RUNNER_TEMP/duckdb/$ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$ASSET" -o "$carrier"
+          python3 - "$carrier" "$PAYLOAD_SHA" "$RUNNER_TEMP/duckdb/duckdb" <<'PY'
+          import base64,hashlib,pathlib,sys
+          source=pathlib.Path(sys.argv[1]); expected=sys.argv[2]; out=pathlib.Path(sys.argv[3])
+          raw=source.read_text(encoding='ascii')
+          if any(c.isspace() for c in raw): raise SystemExit('carrier whitespace')
+          data=base64.b64decode(raw,validate=True)
+          if base64.b64encode(data).decode()!=raw: raise SystemExit('noncanonical')
+          if hashlib.sha256(data).hexdigest()!=expected: raise SystemExit('payload identity')
+          out.write_bytes(data)
+          PY
+          chmod 0555 "$RUNNER_TEMP/duckdb/duckdb"
+          echo "path=$RUNNER_TEMP/duckdb/duckdb" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate final proof and audit candidate
+        shell: bash
+        env:
+          DUCKDB: ${{ steps.duckdb.outputs.path }}
+          SOURCE_DATE_EPOCH_ISO: 2026-08-18T00:00:00Z
+        run: |
+          set -euo pipefail
+          python3 .github/tmp/ops115-finalize.py
+          rm -rf decision-ledger/facts decision-ledger/conditions decision-ledger/claims evidence/ops-115
+          python3 packages/ops-decision-closure/tests/proof.py --root . --duckdb "$DUCKDB" --evidence evidence/ops-115
+          python3 packages/ops-decision-closure/tests/e2e.py
+          python3 -m py_compile packages/ops-decision-closure/bin/ops-decision-closure.py packages/ops-decision-closure/tests/proof.py packages/ops-decision-closure/tests/e2e.py
+          python3 - <<'PY'
+          import json, pathlib
+          summary=json.load(open('evidence/ops-115/proof-summary.json'))
+          assert summary['status']=='PASS' and summary['engine']=='sqlite-shards'
+          comparison=json.load(open('evidence/ops-115/engine-comparison.receipt.json'))
+          assert comparison['semantic_mismatch_count']==0 and comparison['fail_closed_mismatch_count']==0
+          assert comparison['selection']['dual_runtime_normal_path'] is False
+          negative=json.load(open('evidence/ops-115/negative-proof.receipt.json'))
+          assert negative['case_count']>=42 and negative['fail_closed_mismatch_count']==0
+          economics=json.load(open('evidence/ops-115/decision-economics.receipt.json'))
+          assert economics['verdict']=='PASS_DECISION_ECONOMICS_G9'
+          human=json.load(open('evidence/ops-115/decision-room/human-adoption.receipt.json'))
+          assert human['mandatory_question_accuracy']==1.0 and human['purpose_authority_action']=='ADOPT_IF_FIXED_GATES_PASS'
+          assert not pathlib.Path('.github/tmp/ops115-generate.py').exists()
+          assert not pathlib.Path('.github/tmp/ops115-harden.py').exists()
+          PY
+          grep -Fq 'fact.engine.owner-adopt' decision-ledger/facts/ops-engine-selection-001.jsonl
+          grep -Fq '.github/workflows/decision-closure-release.yml' ci.intent.v1.jsonl
+          grep -Fq '.github/workflows/decision-closure-takeover.yml' ci.intent.v1.jsonl
+
+      - name: Self-remove and commit final candidate
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/tmp-ops115-finalize.yml .github/tmp/ops115-finalize.py
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: finalize public decision closure proof"
+          git push origin "HEAD:$TARGET_BRANCH"
