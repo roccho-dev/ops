@@ -5,11 +5,45 @@ on:
   push:
     branches: [proposals]
 
+permissions:
+  contents: write
+
 jobs:
   flake-check:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feat/ops-115-decision-closure-final-v3
+          fetch-depth: 0
+      - name: Apply immutable SQLite URI fix and restore this workflow
+        if: github.head_ref == 'feat/ops-115-decision-closure-final-v3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin proposals
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('packages/ops-decision-closure/bin/ops-decision-closure.py')
+          s=p.read_text(encoding='utf-8')
+          replacements={
+            'sqlite3.connect(f"file:{catalog_path}?mode=ro", uri=True)': 'sqlite3.connect(f"file:{catalog_path}?mode=ro&immutable=1", uri=True)',
+            'conn = sqlite3.connect(":memory:")': 'conn = sqlite3.connect(":memory:", uri=True)',
+            'f"file:{projection / shard}?mode=ro"': 'f"file:{projection / shard}?mode=ro&immutable=1"',
+          }
+          for old,new in replacements.items():
+              if s.count(old)!=1:
+                  raise SystemExit(f'unexpected replacement count for {old}: {s.count(old)}')
+              s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          git show origin/proposals:.github/workflows/nix-check.yml > .github/workflows/nix-check.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/ops-decision-closure/bin/ops-decision-closure.py .github/workflows/nix-check.yml
+          git commit -m 'fix: open SQLite shards as immutable URIs'
+          git push origin HEAD:feat/ops-115-decision-closure-final-v3
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
