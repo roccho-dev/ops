@@ -10,6 +10,15 @@ on:
       - "packages/shiftleft-admission/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - ".github/workflows/issue-116-shiftleft-proof.yml"
+      - ".github/bootstrap/issue-116-v2-update.parts/**"
+      - "packages/shiftleft-admission/**"
+      - "build/packages.jsonl"
+      - "build/checks.jsonl"
   workflow_dispatch:
 
 permissions:
