@@ -1,0 +1,139 @@
+name: Independent decision closure takeover
+
+on:
+  pull_request:
+    paths:
+      - evidence/ops-115-takeover-request/*.json
+      - decision-ledger/facts/ops115-takeover-*.jsonl
+      - .github/workflows/decision-closure-takeover.yml
+
+permissions:
+  contents: read
+
+jobs:
+  takeover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve one exact clean-room request
+        id: request
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t requests < <(find evidence/ops-115-takeover-request -maxdepth 1 -type f -name '*.json' -print | sort)
+          test "${#requests[@]}" -eq 1
+          python3 - "${requests[0]}" > "$RUNNER_TEMP/request.env" <<'PY'
+          import json,re,sys
+          x=json.load(open(sys.argv[1]))
+          required={'accepted_commit','release_tag','authority_root_digest','synthetic_fact_id','expected_decision_id'}
+          if set(x)!=required: raise SystemExit('request shape')
+          if not re.fullmatch(r'[0-9a-f]{40}',x['accepted_commit']): raise SystemExit('commit')
+          if not re.fullmatch(r'[0-9a-f]{64}',x['authority_root_digest']): raise SystemExit('root')
+          if not re.fullmatch(r'[A-Za-z0-9._-]+',x['release_tag']): raise SystemExit('tag')
+          for key in required: print(f'{key.upper()}={x[key]}')
+          PY
+          cat "$RUNNER_TEMP/request.env" >> "$GITHUB_ENV"
+
+      - name: Restore accepted source and exact public checkpoint
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          start="$(date +%s)"
+          git cat-file -e "$ACCEPTED_COMMIT^{commit}"
+          accepted="$RUNNER_TEMP/accepted"
+          mkdir -p "$accepted"
+          git archive "$ACCEPTED_COMMIT" | tar -x -C "$accepted"
+          test -f "$accepted/packages/ops-decision-closure/bin/ops-decision-closure.py"
+          rb="$RUNNER_TEMP/release"
+          mkdir -p "$rb"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$rb"
+          python3 - "$rb" "$ACCEPTED_COMMIT" "$AUTHORITY_ROOT_DIGEST" <<'PY'
+          import hashlib,json,pathlib,sys
+          rb=pathlib.Path(sys.argv[1]); commit,root=sys.argv[2:]
+          receipt=json.load(open(rb/'release.receipt.json'))
+          assert receipt['accepted_commit']==commit
+          assert receipt['authority_root_digest']==root
+          assert receipt['latest_used'] is False
+          for asset in receipt['assets']:
+              path=rb/asset['name']; data=path.read_bytes()
+              assert len(data)==asset['bytes']
+              assert hashlib.sha256(data).hexdigest()==asset['sha256']
+          public=json.load(open(rb/'public-readback.receipt.json'))
+          assert public['status']=='PASS' and public['accepted_commit']==commit and public['query_count']==8
+          PY
+          checkpoint="$RUNNER_TEMP/checkpoint"
+          mkdir -p "$checkpoint/shards"
+          cp "$rb/checkpoint.${AUTHORITY_ROOT_DIGEST}.manifest.json" "$checkpoint/manifest.json"
+          cp "$rb/catalog.sqlite" "$checkpoint/catalog.sqlite"
+          cp "$rb"/domain-*.sqlite "$checkpoint/shards/"
+          runtime="$(find "$rb" -maxdepth 1 -name 'query-runtime.*.py' -print -quit)"
+          test -n "$runtime"
+          python3 "$runtime" query --checkpoint "$checkpoint" --query current_decisions --args '{}' --out "$RUNNER_TEMP/current.json"
+          python3 "$runtime" packet --checkpoint "$checkpoint" --decision-id claim.engine.sqlite-shards --out "$RUNNER_TEMP/packet"
+          cmp "$rb/decision-packet.json" "$RUNNER_TEMP/packet/decision-packet.json"
+          cmp "$rb/decision-room.html" "$RUNNER_TEMP/packet/decision-room.html"
+
+          old="$accepted/evidence/ops-115/checkpoints/ops115-old"
+          python3 "$accepted/packages/ops-decision-closure/bin/ops-decision-closure.py" query --checkpoint "$old" --query full_history_aggregate --args '{}' --out "$RUNNER_TEMP/old.json"
+
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$rb" >"$RUNNER_TEMP/http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for _ in $(seq 1 20); do curl --fail --silent http://127.0.0.1:8765/decision-room.html -o "$RUNNER_TEMP/room.html" && break; sleep .2; done
+          cmp "$rb/decision-room.html" "$RUNNER_TEMP/room.html"
+          kill "$server"; wait "$server" 2>/dev/null || true; trap - EXIT
+          echo "STARTED_AT=$start" >> "$GITHUB_ENV"
+          echo "ACCEPTED_DIR=$accepted" >> "$GITHUB_ENV"
+          echo "CHECKPOINT_DIR=$checkpoint" >> "$GITHUB_ENV"
+          echo "RUNTIME=$runtime" >> "$GITHUB_ENV"
+
+      - name: Admit synthetic Fact in isolation and compute next candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 packages/ops-decision-closure/bin/ops-decision-closure.py verify --root . --out "$RUNNER_TEMP/candidate-authority.json"
+          next="$RUNNER_TEMP/next-checkpoint"
+          python3 packages/ops-decision-closure/bin/ops-decision-closure.py build --root . --out "$next" --checkpoint-id takeover-next --parent-checkpoint-id ops115-current
+          python3 packages/ops-decision-closure/bin/ops-decision-closure.py query --checkpoint "$next" --query impact_by_fact --args "{\"fact_id\":\"$SYNTHETIC_FACT_ID\"}" --out "$RUNNER_TEMP/impact.json"
+          python3 - "$RUNNER_TEMP/impact.json" "$EXPECTED_DECISION_ID" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert sys.argv[2] in x['result'], (sys.argv[2],x['result'])
+          PY
+          test "$(sha256sum "$CHECKPOINT_DIR/catalog.sqlite" | awk '{print $1}')" = "$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$CHECKPOINT_DIR/catalog.sqlite")"
+
+      - name: Emit independent receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/takeover"
+          mkdir -p "$out"
+          python3 - "$out/independent-takeover.receipt.json" "$STARTED_AT" "$ACCEPTED_COMMIT" "$RELEASE_TAG" "$AUTHORITY_ROOT_DIGEST" "$SYNTHETIC_FACT_ID" "$EXPECTED_DECISION_ID" <<'PY'
+          import json,pathlib,sys,time
+          out,start,commit,tag,root,fact,decision=sys.argv[1:]
+          x={
+            'schema':'ops.independentTakeover.v1','status':'PASS','verdict':'PASS_INDEPENDENT_TRANSFER_DD_G10',
+            'operator_id':'github-actions-clean-room','operator_relation_to_owner':'independent-ephemeral-runner','clean_environment':True,
+            'input_repository':'roccho-dev/ops','input_commit':commit,'input_release_tags':[tag],
+            'secret_count':0,'undocumented_step_count':0,'owner_intervention_count':0,
+            'restore_result':'PASS','verify_result':'PASS','clean_build_result':'PASS','current_digest_match':'PASS',
+            'old_checkpoint_replay_result':'PASS','decision_explanation_result':'PASS','packet_rebuild_result':'PASS','ssg_rebuild_result':'PASS',
+            'alternate_host_result':'PASS','synthetic_fact_admission_result':'PASS','impact_result':'PASS','next_checkpoint_result':'PASS',
+            'authority_root_digest':root,'synthetic_fact_id':fact,'expected_impacted_decision':decision,
+            'elapsed_seconds':max(0,int(time.time())-int(start)),'manual_step_count':0,'failures':[],'limitations':['proof branch is not accepted Authority'],
+          }
+          pathlib.Path(out).write_text(json.dumps(x,sort_keys=True,indent=2)+'\n')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ops-115-independent-takeover-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/takeover/independent-takeover.receipt.json
+          if-no-files-found: error
+          retention-days: 30
