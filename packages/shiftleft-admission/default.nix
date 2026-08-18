@@ -18,6 +18,7 @@
     "functional-core-governance-gate"
     "github-exact-commit-ref"
     "ops-git-write-closure"
+    "structured-diagnostic"
   ];
   responsibility = "Intake an exact policy bundle, normalize implementation-, language-, and execution-specific evidence, fold met/unmet/unobserved/not-applicable, emit deterministic receipts bound to policy/base/candidate trees, and verify that a live Git worktree still matches a PASS receipt before Git write preparation.";
   mission = "Make code without an exact, evidence-backed Shift Left receipt remain draft, without implementing GitHub write effects, runtime diagnostic behavior, or duplicating Rule/Outcome authority.";
@@ -67,7 +68,7 @@
   checkPackageContract = {
     kind = "spec.checkPackageContract.v1";
     checkId = "shiftleft-admission";
-    inputs = [ "policy/*.jsonl" "fixtures/**" "normalized observations" "Git candidate worktree" "ShiftLeftReceipt" ];
+    inputs = [ "policy/*.jsonl" "fixtures/**" "normalized observations" "structured-diagnostic contract and executable boundary" "Git candidate worktree" "ShiftLeftReceipt" ];
     guarantees = [
       "mutable ref, missing input, and policy hash mismatch fail before admission"
       "public contracts declare input/output/error/effect plus golden/negative routes and current consumers"
