@@ -28,7 +28,7 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
-      - name: Verify, materialize, and replace this one-shot workflow
+      - name: Verify and materialize the reviewed package capsule
         shell: bash
         run: |
           set -euo pipefail
@@ -94,7 +94,6 @@ jobs:
               if destination_package.exists():
                   shutil.rmtree(destination_package)
               shutil.copytree(source_package, destination_package)
-              shutil.copy2(source_workflow, pathlib.Path('.github/workflows/issue-116-shiftleft-proof.yml'))
 
           for part in parts:
               part.unlink()
@@ -103,7 +102,7 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A packages/shiftleft-admission .github/workflows/issue-116-shiftleft-proof.yml .github/bootstrap
+          git add -A packages/shiftleft-admission .github/bootstrap
           git commit -m 'fix: make issue 116 fixture evidence executable'
           TARGET_BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           git push origin "HEAD:refs/heads/$TARGET_BRANCH"
