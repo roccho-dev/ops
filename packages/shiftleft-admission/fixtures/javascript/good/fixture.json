@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"javascript.good","packageId":"fixture.javascript","profileId":"javascript.core-imports","ruleId":"SL-CORE-001","language":"javascript","fixtureKind":"good","source":"core.mjs","expectedStatus":"met","expectedFindingCode":"core-import-boundary-clean"}

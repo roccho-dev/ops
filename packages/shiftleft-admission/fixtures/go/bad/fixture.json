@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"go.bad","packageId":"fixture.go","profileId":"go.core-imports","ruleId":"SL-CORE-001","language":"go","fixtureKind":"bad","source":"core.go","expectedStatus":"unmet","expectedFindingCode":"core-imports-effect-adapter"}

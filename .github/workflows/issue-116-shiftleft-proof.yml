@@ -1,0 +1,177 @@
+name: issue-116-shiftleft-proof
+
+on:
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - ".github/workflows/issue-116-shiftleft-proof.yml"
+      - "packages/shiftleft-admission/**"
+      - "packages/ops-git-write-closure/**"
+      - "build/packages.jsonl"
+      - "build/checks.jsonl"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.2"
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.5"
+
+      - name: Test adapters, Git write admission, and build static policyctl
+        working-directory: packages/shiftleft-admission
+        run: |
+          set -euo pipefail
+          go test -count=1 ./...
+          go vet ./...
+          bash -n tests/e2e.sh tests/git-write-admission.sh
+          node --check adapters/js_imports.mjs
+          python3 -m py_compile adapters/python_imports.py
+          go build -o /tmp/issue-116-go-adapter adapters/go_imports.go
+          mkdir -p out
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
+            go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
+          POLICYCTL="$PWD/out/policyctl" bash tests/git-write-admission.sh
+
+      - name: Produce two independent proof runs
+        working-directory: packages/shiftleft-admission
+        run: |
+          set -euo pipefail
+          BASE_COMMIT=59457a5667488da34d4ba977fa32c3a101a4a38e
+          HEAD_SHA=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)
+          git -C "$GITHUB_WORKSPACE" cat-file -e "$BASE_COMMIT^{commit}"
+          BASE_TREE=$(git -C "$GITHUB_WORKSPACE" rev-parse "$BASE_COMMIT^{tree}")
+          CANDIDATE_TREE=$(git -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}')
+          POLICY_HASH=$(./out/policyctl hash --bundle policy)
+          printf 'head_sha=%s\nbase_commit=%s\nbase_tree=%s\ncandidate_tree=%s\npolicy_hash=%s\n' \
+            "$HEAD_SHA" "$BASE_COMMIT" "$BASE_TREE" "$CANDIDATE_TREE" "$POLICY_HASH" > out/proof.env
+
+          for run in a b; do
+            ./out/policyctl proof \
+              --bundle policy \
+              --fixtures fixtures \
+              --policy-ref "$HEAD_SHA" \
+              --base-tree "git-tree-sha1:$BASE_TREE" \
+              --candidate-tree "git-tree-sha1:$CANDIDATE_TREE" \
+              --out-dir "out/proof-$run"
+          done
+
+          cmp out/proof-a/receipt.1.json out/proof-a/receipt.2.json
+          for file in \
+            receipt.1.json \
+            receipt.2.json \
+            proof-summary.json \
+            admission-observations.jsonl \
+            provider-observations.all.jsonl \
+            rule-fixture-observations.all.jsonl \
+            fixture-coverage-observations.jsonl
+          do
+            cmp "out/proof-a/$file" "out/proof-b/$file"
+          done
+
+          ./out/policyctl admit \
+            --bundle policy \
+            --policy-ref "$HEAD_SHA" \
+            --policy-sha256 "$POLICY_HASH" \
+            --base-tree "git-tree-sha1:$BASE_TREE" \
+            --candidate-tree "git-tree-sha1:$CANDIDATE_TREE" \
+            --observations out/proof-a/admission-observations.jsonl \
+            --out out/replayed-receipt.json > out/replayed-receipt.stdout
+          cmp out/proof-a/receipt.1.json out/replayed-receipt.json
+
+          ./out/policyctl verify \
+            --receipt out/replayed-receipt.json \
+            --policy-sha256 "$POLICY_HASH" \
+            --base-tree "git-tree-sha1:$BASE_TREE" \
+            --candidate-tree "git-tree-sha1:$CANDIDATE_TREE"
+
+      - name: Assemble replayable evidence
+        working-directory: packages/shiftleft-admission
+        run: |
+          set -euo pipefail
+          rm -rf artifact
+          mkdir -p artifact/replay artifact/proof-a artifact/proof-b
+          install -m 0755 out/policyctl artifact/policyctl
+          cp -a policy adapters fixtures artifact/replay/
+          cp -a out/proof-a/. artifact/proof-a/
+          cp -a out/proof-b/. artifact/proof-b/
+          cp out/proof.env out/replayed-receipt.json out/replayed-receipt.stdout artifact/
+          cp "$GITHUB_WORKSPACE/build/packages.jsonl" "$GITHUB_WORKSPACE/build/checks.jsonl" artifact/
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          env = dict(line.split('=', 1) for line in pathlib.Path('out/proof.env').read_text().splitlines())
+          summary = json.loads(pathlib.Path('out/proof-a/proof-summary.json').read_text())
+          metadata = {
+              'schema': 'issue-116-shiftleft-artifact/2',
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'workflowRunId': os.environ['GITHUB_RUN_ID'],
+              'commit': env['head_sha'],
+              'baseCommit': env['base_commit'],
+              'baseTree': 'git-tree-sha1:' + env['base_tree'],
+              'candidateTree': 'git-tree-sha1:' + env['candidate_tree'],
+              'policyHash': env['policy_hash'],
+              'providerCases': summary['providerCases'],
+              'proofCases': len(summary['cases']),
+              'fixtureEvidence': {
+                  'languageProviderCases': 12,
+                  'languageNeutralRuleCases': 20,
+                  'blockerCoverageObservations': 6,
+              },
+              'toolchain': {
+                  'go': subprocess.check_output(['go', 'version'], text=True).strip(),
+                  'node': subprocess.check_output(['node', '--version'], text=True).strip(),
+                  'python': subprocess.check_output(['python3', '--version'], text=True).strip(),
+              },
+              'sourceCloneUsedByConsumer': False,
+              'sourceBuildRequiredByConsumer': False,
+              'repairAllowed': False,
+              'gitWriteAdmission': {
+                  'correctReceipt': 'PASS',
+                  'wrongCandidateTree': 'CHECK_FAILED',
+                  'missingReceipt': 'CHECK_FAILED',
+                  'readbackReverify': 'PASS',
+              },
+              'materializer': {
+                  'carrierSha256': '5fc1284e4c89fcbcd2c8907d2275617d670e92159abb7100917a87c75ce066d1',
+                  'archiveSha256': '4800479e20c2479bb535b16ef271f85c693a851c57cd0d052890c6577aeb53d1',
+                  'archiveEntries': 74,
+              },
+          }
+          pathlib.Path('artifact/metadata.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
+          PY
+          (
+            cd artifact
+            find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-116-shiftleft-proof-${{ github.run_id }}
+          path: packages/shiftleft-admission/artifact/
+          if-no-files-found: error
+          retention-days: 30

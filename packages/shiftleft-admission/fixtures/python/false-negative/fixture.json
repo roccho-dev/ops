@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"python.false-negative","packageId":"fixture.python","profileId":"python.core-imports","ruleId":"SL-CORE-001","language":"python","fixtureKind":"false-negative","source":"core.py","expectedStatus":"unmet","expectedFindingCode":"core-imports-effect-adapter"}

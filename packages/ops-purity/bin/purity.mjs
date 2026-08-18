@@ -1,19 +1,21 @@
 #!/usr/bin/env node
-// repo-wide node-only purity check (completion-spec gate #5, DC-S-11 / DC-M-08).
+// repo-wide runtime purity check (completion-spec gate #5, DC-S-11 / DC-M-08).
 //
-// 与えられた root 配下の packages/** logic 層をスキャンし、非 node runtime の痕跡を
+// 与えられた root 配下の packages/** logic 層をスキャンし、宣言されていない非 node runtime の痕跡を
 // 1 件でも見つけたら fail(exit 1, offender を列挙)する。clean なら exit 0。
 //
 // 検出対象(LOGIC 層):
-//   - *.py / *.pyc ソース(__pycache__ 配下含む) — ただし runtime:"python" 宣言 package dir は除外
+//   - *.py / *.pyc ソース(__pycache__ 配下含む)
+//     — runtime:"python" または deps に python/python3 を明示した package dir は除外
 //   - __pycache__ ディレクトリそのもの(everywhere)
 //   - *.zig ソース(everywhere)
 //   - *.mjs 内の実 `from "qjs:..."` import
 //   - *.mjs / *.sh 内の shell `python3` / `qjs` 起動(spawn / exec / 直接コマンド)
 //
-// hybrid 境界(completion-spec gate#5 緩和): build/packages.jsonl で runtime=="python" と
-// 宣言された package dir 配下の .py/.pyc は許容(明示境界)。node runtime package 配下の .py は
-// 依然 offender(node 群は node-only を強制)。
+// hybrid 境界(completion-spec gate#5 緩和): build/packages.jsonl で runtime=="python"、または
+// Python Evidence Provider等のため deps に python/python3 を宣言した package dir 配下の
+// .py/.pyc と python3 起動は許容する。既存package宣言を唯一のAuthorityとし、path allowlistは持たない。
+// Pythonを宣言していないnode/go package配下の .py は依然offender。
 //
 // 検出対象外(builder / glue / docs — purity は runtime/logic 層が対象):
 //   - flake.nix の nix builder shell(DC-M-08 境界: nix builder は許容)
@@ -31,7 +33,7 @@ const pkgRoot = resolve(root, "packages");
 
 const offenders = [];
 
-// build/packages.jsonl を読み、runtime=="python" 宣言 package の dir 集合を作る。
+// build/packages.jsonl を読み、Python runtime/sourceを明示した package の dir 集合を作る。
 // entry(例: packages/ops-src-runtime-pack/bin/x.py)から package dir 相対 path
 // (packages/ops-src-runtime-pack)を導出する。これら配下の .py/.pyc は purity 許容。
 function pythonPackageDirs() {
@@ -52,7 +54,10 @@ function pythonPackageDirs() {
     } catch {
       continue;
     }
-    if (decl.runtime === "python" && typeof decl.entry === "string") {
+    const pythonDeclared =
+      decl.runtime === "python" ||
+      (Array.isArray(decl.deps) && decl.deps.some((dep) => dep === "python" || dep === "python3"));
+    if (pythonDeclared && typeof decl.entry === "string") {
       // entry の最初の2セグメント(packages/<name>)を package dir とする
       const parts = decl.entry.split("/");
       if (parts.length >= 2) dirs.add(parts.slice(0, 2).join("/"));
@@ -63,7 +68,7 @@ function pythonPackageDirs() {
 
 const pythonDirs = pythonPackageDirs();
 
-// relPath が runtime:"python" 宣言 package dir 配下か
+// relPath がPythonを明示したpackage dir配下か
 function underPythonPackage(relPath) {
   for (const d of pythonDirs) {
     if (relPath === d || relPath.startsWith(d + "/")) return true;
@@ -150,7 +155,7 @@ function walk(dir) {
     if (ext === ".md") continue;
 
     // 1) 非 node runtime のソースそのもの
-    // hybrid 境界: runtime:"python" 宣言 package dir 配下の .py/.pyc は許容。
+    // hybrid 境界: Pythonを明示したpackage dir配下の .py/.pyc は許容。
     // (__pycache__ ディレクトリ自体は上で everywhere 検出済 — python 宣言下でも捕捉)
     if (ext === ".py") {
       if (!underPythonPackage(relPath)) {

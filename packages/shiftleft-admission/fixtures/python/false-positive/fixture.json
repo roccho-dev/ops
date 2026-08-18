@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"python.false-positive","packageId":"fixture.python","profileId":"python.core-imports","ruleId":"SL-CORE-001","language":"python","fixtureKind":"false-positive","source":"core.py","expectedStatus":"met","expectedFindingCode":"core-import-boundary-clean"}

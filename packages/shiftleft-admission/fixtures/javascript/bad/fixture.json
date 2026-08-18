@@ -1,0 +1,1 @@
+{"schema":"shiftleft-fixture/1","caseId":"javascript.bad","packageId":"fixture.javascript","profileId":"javascript.core-imports","ruleId":"SL-CORE-001","language":"javascript","fixtureKind":"bad","source":"core.mjs","expectedStatus":"unmet","expectedFindingCode":"core-imports-effect-adapter"}
