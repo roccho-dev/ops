@@ -1,0 +1,69 @@
+name: Temporary ops 115 premerge audit
+
+on:
+  push:
+    branches:
+      - feat/ops-115-decision-closure-final
+    paths:
+      - .github/workflows/tmp-ops115-premerge-audit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Test the final tree without temporary assembly
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_head="$(git rev-parse HEAD)"
+          rm -f .github/workflows/tmp-ops115-premerge-audit.yml
+          rm -rf .github/tmp
+          test -z "$(find .github/workflows -maxdepth 1 -type f -name 'tmp-ops115-*' -print)"
+          python3 packages/ops-decision-closure/tests/e2e.py
+          nix flake check --no-write-lock-file -L
+          git diff --check
+          mkdir -p evidence/ops-115
+          python3 - "$source_head" > evidence/ops-115/premerge-audit.receipt.json <<'PY'
+          import hashlib,json,pathlib,subprocess,sys
+          source=sys.argv[1]
+          summary=json.load(open('evidence/ops-115/proof-summary.json'))
+          comparison=json.load(open('evidence/ops-115/engine-comparison.receipt.json'))
+          negative=json.load(open('evidence/ops-115/negative-proof.receipt.json'))
+          economics=json.load(open('evidence/ops-115/decision-economics.receipt.json'))
+          human=json.load(open('evidence/ops-115/decision-room/human-adoption.receipt.json'))
+          receipt={
+            'schema':'ops.decisionClosurePremergeAudit.v1','status':'PASS','source_head':source,
+            'authority_root_digest':summary['authority_root_digest'],'selected_engine':summary['engine'],
+            'semantic_mismatch_count':comparison['semantic_mismatch_count'],'fail_closed_mismatch_count':comparison['fail_closed_mismatch_count'],
+            'negative_case_count':negative['case_count'],'economics':economics['verdict'],'human_accuracy':human['mandatory_question_accuracy'],
+            'nix_flake_check':'PASS','normal_e2e':'PASS','temporary_workflow_count':0,'temporary_helper_count':0,
+          }
+          print(json.dumps(receipt,sort_keys=True,indent=2))
+          PY
+          echo "source_head=$source_head" >> "$GITHUB_OUTPUT"
+
+      - name: Commit only final audit evidence
+        shell: bash
+        env:
+          TARGET_BRANCH: feat/ops-115-decision-closure-final
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test: retain exact decision closure premerge audit"
+          git push origin "HEAD:$TARGET_BRANCH"
