@@ -39,4 +39,4 @@
 {"deps":["nodejs","git","ops-git-write-closure"],"kind":"check","name":"ops-git-write-closure","script":"packages/ops-git-write-closure/tests/e2e.mjs"}
 {"deps":["go","git","nodejs","python3","shiftleft-admission"],"kind":"check","name":"issue-116-shiftleft-proof","script":"packages/shiftleft-admission/tests/e2e.sh"}
 {"deps":["nodejs","structured-diagnostic"],"kind":"check","name":"structured-diagnostic","script":"packages/structured-diagnostic/tests/e2e.mjs"}
-{"deps":["nodejs","python3","duckdb","ops-decision-closure"],"kind":"check","name":"ops-decision-closure","script":"packages/ops-decision-closure/tests/final-e2e.mjs"}
+{"deps":["nodejs","python3","duckdb","git","ops-decision-closure"],"kind":"check","name":"ops-decision-closure","script":"packages/ops-decision-closure/tests/final-e2e.mjs"}
