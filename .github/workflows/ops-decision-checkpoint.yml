@@ -1,0 +1,226 @@
+name: Ops decision checkpoint proof
+
+on:
+  pull_request:
+    paths:
+      - decision-ledger/**
+      - packages/ops-decision-closure/**
+      - evidence/ops-115-decision-closure/**
+      - dist/decision-room/**
+      - build/checks.jsonl
+      - build/packages.jsonl
+      - .github/workflows/ops-decision-checkpoint.yml
+  push:
+    branches:
+      - proposals
+    paths:
+      - decision-ledger/**
+      - packages/ops-decision-closure/**
+      - evidence/ops-115-decision-closure/**
+      - dist/decision-room/**
+      - build/checks.jsonl
+      - build/packages.jsonl
+      - .github/workflows/ops-decision-checkpoint.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish-proof:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Materialize exact comparison runtime
+        id: runtime
+        shell: bash
+        env:
+          DUCKDB_TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+          DUCKDB_ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+          DUCKDB_SHA256: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ops115-runtime"
+          mkdir -p "$work"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$DUCKDB_TAG/$DUCKDB_ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$url" -o "$work/$DUCKDB_ASSET"
+          python3 - "$work/$DUCKDB_ASSET" "$work/duckdb" "$DUCKDB_SHA256" <<'PY'
+          import base64, hashlib, pathlib, sys
+          src, dst, expected = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
+          raw = src.read_text(encoding='ascii')
+          if not raw or any(c.isspace() for c in raw): raise SystemExit('carrier whitespace forbidden')
+          data = base64.b64decode(raw, validate=True)
+          if base64.b64encode(data).decode('ascii') != raw: raise SystemExit('non-canonical Base64')
+          actual = hashlib.sha256(data).hexdigest()
+          if actual != expected: raise SystemExit(f'payload SHA mismatch: {actual} != {expected}')
+          dst.write_bytes(data)
+          PY
+          chmod 0555 "$work/duckdb"
+          echo "duckdb=$work/duckdb" >> "$GITHUB_OUTPUT"
+
+      - name: Build exact checkpoint from Git JSONL authority
+        id: build
+        shell: bash
+        env:
+          DUCKDB_BIN: ${{ steps.runtime.outputs.duckdb }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/checkpoint-build"
+          release="$RUNNER_TEMP/checkpoint-release"
+          mkdir -p "$out" "$release"
+
+          nix build -L --no-link --no-write-lock-file .#checks.x86_64-linux.ops-decision-closure-meta
+          python3 packages/ops-decision-closure/tests/meta_e2e.py --out "$out"
+
+          python3 - "$out" "$release" "$GITHUB_SHA" "$GITHUB_REPOSITORY" <<'PY'
+          import hashlib, json, pathlib, shutil, subprocess, sys
+          source, release, commit, repo = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3:]
+          def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
+          tree = subprocess.check_output(['git','rev-parse','HEAD^{tree}'], text=True).strip()
+          authority = json.loads(pathlib.Path('decision-ledger/manifest.json').read_text())
+          meta = json.loads((source/'meta-proof.receipt.json').read_text())
+          if meta['semanticMismatchCount'] != 0 or meta['failClosedMismatchCount'] != 0: raise SystemExit('parity mismatch')
+          if meta['engineSelection']['selectedEngine'] != 'sqlite_shards': raise SystemExit('selected engine changed')
+          selected = [source/'projections'/'catalog.sqlite', *sorted((source/'projections').glob('sqlite.*.sqlite'))]
+          selected += [source/'decision-packet.json', source/'decision-room.html', source/'meta-proof.receipt.json', source/'independent-takeover.json', source/'decision-economics.json']
+          for path in selected:
+              if not path.is_file(): raise SystemExit(f'missing selected asset: {path}')
+              shutil.copy2(path, release/path.name)
+          assets=[]
+          for path in sorted(release.iterdir()): assets.append({'name':path.name,'sha256':sha(path),'bytes':path.stat().st_size})
+          checkpoint={
+            'schema':'ops.decisionCheckpointRelease.v1','status':'PASS','checkpointId':f"ops115-{authority['recordSetDigest'][:16]}",
+            'repository':repo,'authorityCommit':commit,'authorityTree':tree,'authorityRecordSetDigest':authority['recordSetDigest'],
+            'selectedReadModel':'sqlite-shards','generatedProjectionAuthority':False,'runtimeWrite':0,'runtimeSecret':0,'runtimeNetworkInstall':0,
+            'assets':assets,
+          }
+          manifest=release/f"checkpoint.{authority['recordSetDigest']}.manifest.json"
+          manifest.write_text(json.dumps(checkpoint,sort_keys=True,indent=2)+'\n')
+          assets.append({'name':manifest.name,'sha256':sha(manifest),'bytes':manifest.stat().st_size})
+          receipt=release/'verification.receipt.json'
+          receipt.write_text(json.dumps({
+            'schema':'ops.decisionCheckpointVerification.v1','status':'PASS','authorityCommit':commit,'authorityTree':tree,
+            'authorityRecordSetDigest':authority['recordSetDigest'],'semanticMismatchCount':0,'failClosedMismatchCount':0,
+            'selectedReadModel':'sqlite-shards','assetCount':len(assets),'runtimeWrite':0,'runtimeSecret':0,'runtimeNetworkInstall':0,
+          },sort_keys=True,indent=2)+'\n')
+          names=sorted(p for p in release.iterdir() if p.is_file())
+          (release/'SHA256SUMS').write_text(''.join(f"{sha(p)}  {p.name}\n" for p in names))
+          PY
+
+          root="$(python3 -c 'import json; print(json.load(open("decision-ledger/manifest.json"))["recordSetDigest"])')"
+          tag="decision-checkpoint-proof-${root:0:16}-${GITHUB_RUN_ID}"
+          echo "release_dir=$release" >> "$GITHUB_OUTPUT"
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Verify selected projection is read-only
+        shell: bash
+        env:
+          RELEASE_DIR: ${{ steps.build.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          python3 - "$RELEASE_DIR" <<'PY'
+          import json, pathlib, sqlite3, sys
+          root=pathlib.Path(sys.argv[1])
+          catalog=root/'catalog.sqlite'
+          db=sqlite3.connect(f'file:{catalog}?mode=ro',uri=True)
+          shards=list(db.execute('select domain, round, name, sha256, bytes from shards order by domain, round'))
+          if len(shards) < 6: raise SystemExit('incomplete shard catalog')
+          try:
+              db.execute("insert into shards values('x',0,'x','x',0)")
+              raise SystemExit('catalog write unexpectedly allowed')
+          except sqlite3.OperationalError:
+              pass
+          db.close()
+          count=0
+          for _,_,name,_,_ in shards:
+              path=root/name
+              sdb=sqlite3.connect(f'file:{path}?mode=ro',uri=True)
+              count += sdb.execute('select count(*) from records').fetchone()[0]
+              try:
+                  sdb.execute("delete from records")
+                  raise SystemExit('shard write unexpectedly allowed')
+              except sqlite3.OperationalError:
+                  pass
+              sdb.close()
+          packet=json.loads((root/'decision-packet.json').read_text())
+          room=(root/'decision-room.html').read_text()
+          if packet['packet_digest'] not in json.dumps(packet): raise SystemExit('packet digest missing')
+          if 'Decision Room' not in room: raise SystemExit('Decision Room missing')
+          if count < 20: raise SystemExit('record set unexpectedly small')
+          PY
+
+      - name: Upload exact checkpoint artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops115-decision-checkpoint-${{ steps.build.outputs.root }}
+          path: ${{ steps.build.outputs.release_dir }}/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish immutable proof prerelease
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.build.outputs.tag }}
+          RELEASE_DIR: ${{ steps.build.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          test ! -e "$RELEASE_DIR/.git"
+          mapfile -t assets < <(find "$RELEASE_DIR" -maxdepth 1 -type f -print | sort)
+          test ${#assets[@]} -ge 10
+          gh release create "$TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "$TAG" --notes "Read-only Fact/Condition/Claim checkpoint generated from exact Git JSONL authority. Proof only; no production cutover."
+
+      - name: Public exact readback and query replay
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.build.outputs.tag }}
+          RELEASE_DIR: ${{ steps.build.outputs.release_dir }}
+        run: |
+          set -euo pipefail
+          rb="$RUNNER_TEMP/public-readback"
+          mkdir -p "$rb"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          while IFS= read -r src; do
+            name="$(basename "$src")"
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$rb/$name"
+            cmp "$src" "$rb/$name"
+          done < <(find "$RELEASE_DIR" -maxdepth 1 -type f -print | sort)
+          (cd "$rb" && sha256sum -c SHA256SUMS)
+
+          python3 - "$rb" "$TAG" "$GITHUB_SHA" <<'PY'
+          import hashlib,json,pathlib,sqlite3,sys
+          root,tag,commit=pathlib.Path(sys.argv[1]),sys.argv[2],sys.argv[3]
+          manifest=next(root.glob('checkpoint.*.manifest.json'))
+          data=json.loads(manifest.read_text())
+          if data['authorityCommit']!=commit or data['selectedReadModel']!='sqlite-shards': raise SystemExit('manifest identity mismatch')
+          db=sqlite3.connect(f"file:{root/'catalog.sqlite'}?mode=ro",uri=True)
+          names=[x[0] for x in db.execute('select name from shards order by name')]; db.close()
+          count=0
+          for name in names:
+              sdb=sqlite3.connect(f'file:{root/name}?mode=ro',uri=True)
+              count += sdb.execute('select count(*) from records').fetchone()[0]; sdb.close()
+          packet=json.loads((root/'decision-packet.json').read_text())
+          receipt={
+            'schema':'ops.decisionCheckpointPublicReadback.v1','status':'PASS','releaseTag':tag,'authorityCommit':commit,
+            'manifestSha256':hashlib.sha256(manifest.read_bytes()).hexdigest(),'assetCount':len(list(root.iterdir())),
+            'recordCount':count,'decisionId':packet['decision_id'],'selectedReadModel':'sqlite-shards','runtimeWrite':0,
+          }
+          (root/'public-readback.receipt.json').write_text(json.dumps(receipt,sort_keys=True,indent=2)+'\n')
+          PY
+          gh release upload "$TAG" "$rb/public-readback.receipt.json" --repo "$GITHUB_REPOSITORY"
+          curl --fail --location --silent --show-error "$base/public-readback.receipt.json" -o "$rb/public-readback.remote.json"
+          cmp "$rb/public-readback.receipt.json" "$rb/public-readback.remote.json"
