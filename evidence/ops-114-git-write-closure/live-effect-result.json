@@ -1,0 +1,43 @@
+{
+  "schema": "ops.gitWriteEffectResult.v1",
+  "requestId": "ops114-raw-object-proof-260818-02",
+  "planSha256": "6c3bbe966367c79ed7fd4d099632bde5ba7c84ea4d90e951f0cf6623c6f3bce9",
+  "status": "PR_OPENED",
+  "baseReadback": {
+    "ref": "proposals",
+    "sha": "5f5c44ada8a393ec17699a665d8aafced6fcfc0d"
+  },
+  "blobs": [
+    {
+      "operationId": "blob:evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl",
+      "expectedOid": "8cec83a3026b7900e92529020eccb97c7b13db12",
+      "actualOid": "8cec83a3026b7900e92529020eccb97c7b13db12",
+      "readbackBase64": "eyJhdXRob3JpdHkiOmZhbHNlLCJiYXNlX3JlZiI6InByb3Bvc2FscyIsImJhc2Vfc2hhIjoiNWY1YzQ0YWRhOGEzOTNlYzE3Njk5YTY2NWQ4YWFmY2VkNmZjZmMwZCIsImJhc2VfdHJlZSI6ImUzZmI0ODM1NTYzOWMxZGI5OWY3YjRkNWNiYTA4YTI3ZjIzMGZmMmMiLCJpc3N1ZSI6MTE0LCJtZXJnZV9hdXRob3JpemVkIjpmYWxzZSwib2JzZXJ2ZWRfYXQiOiIyMDI2LTA4LTE4VDAzOjM0OjAwWiIsInBhdGgiOiJldmlkZW5jZS9vcHMtMTE0LWdpdC13cml0ZS1jbG9zdXJlL29wczExNC1yYXctb2JqZWN0LXByb29mLTI2MDgxOC0wMi5qc29ubCIsInB1cnBvc2UiOiJwcm92ZSByYXcgR2l0IGJsb2IvdHJlZS9jb21taXQvcmVmIHdyaXRlIGFuZCBhdXRob3JpdGF0aXZlIHJlYWRiYWNrIGFmdGVyIHN0YWxlLWJhc2UgcmV0cnkiLCJyZWNvcmRfdHlwZSI6ImxpdmVfcHJvb2ZfZml4dHVyZSIsInJlcG9zaXRvcnkiOiJyb2NjaG8tZGV2L29wcyIsInJlcXVlc3RfaWQiOiJvcHMxMTQtcmF3LW9iamVjdC1wcm9vZi0yNjA4MTgtMDIiLCJzY2hlbWEiOiJvcHMuZ2l0V3JpdGVMaXZlUHJvb2YudjEiLCJzdGF0dXMiOiJQUkVQQVJFRCIsInRhcmdldF9icmFuY2giOiJwcm9wb3NhbC9jb25uZWN0b3Ivb3BzMTE0LXJhdy1vYmplY3QtcHJvb2YtMjYwODE4LTAyIn0K"
+    }
+  ],
+  "tree": {
+    "expectedSha": "89f7c17a1d324293bfd9ee932b7daa634fa6f178",
+    "actualSha": "89f7c17a1d324293bfd9ee932b7daa634fa6f178"
+  },
+  "commit": {
+    "sha": "fe2486120b1277f62666090a38ee8e874bc089dd",
+    "parent": "5f5c44ada8a393ec17699a665d8aafced6fcfc0d",
+    "tree": "89f7c17a1d324293bfd9ee932b7daa634fa6f178",
+    "message": "proof(ops): exercise raw Git object write closure after stale retry"
+  },
+  "ref": {
+    "name": "proposal/connector/ops114-raw-object-proof-260818-02",
+    "sha": "fe2486120b1277f62666090a38ee8e874bc089dd"
+  },
+  "pullRequest": {
+    "number": 123,
+    "url": "https://github.com/roccho-dev/ops/pull/123",
+    "head": "proposal/connector/ops114-raw-object-proof-260818-02",
+    "base": "proposals",
+    "draft": true,
+    "matchingCount": 1
+  },
+  "limitations": [
+    "proof PR is intentionally unmerged; accepted implementation is admitted separately"
+  ]
+}
