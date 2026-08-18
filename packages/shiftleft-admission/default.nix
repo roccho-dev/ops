@@ -41,7 +41,6 @@
   };
   allowedPaths = [
     "packages/shiftleft-admission/"
-    "packages/structured-diagnostic/"
     "packages/ops-purity/bin/purity.mjs"
     "flake.nix"
     "ci.intent.v1.jsonl"
