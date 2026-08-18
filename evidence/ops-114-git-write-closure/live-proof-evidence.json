@@ -1,0 +1,50 @@
+{
+  "schema": "ops.gitWriteLiveProofEvidence.v1",
+  "status": "PASS",
+  "issue": 114,
+  "successfulAttempt": {
+    "requestId": "ops114-raw-object-proof-260818-02",
+    "commit": "fe2486120b1277f62666090a38ee8e874bc089dd",
+    "tree": "89f7c17a1d324293bfd9ee932b7daa634fa6f178",
+    "blob": "8cec83a3026b7900e92529020eccb97c7b13db12",
+    "branch": "proposal/connector/ops114-raw-object-proof-260818-02",
+    "pullRequest": {
+      "number": 123,
+      "url": "https://github.com/roccho-dev/ops/pull/123",
+      "head": "proposal/connector/ops114-raw-object-proof-260818-02",
+      "base": "proposals",
+      "draft": true
+    },
+    "checks": [
+      {
+        "id": "final-ci-consumer",
+        "runId": 32096164808,
+        "status": "PASS"
+      },
+      {
+        "id": "readme-artifact-exporter",
+        "runId": 32096164745,
+        "status": "PASS"
+      },
+      {
+        "id": "nix-check",
+        "runId": 32096164746,
+        "status": "PASS"
+      },
+      {
+        "id": "gov-package-validation",
+        "runId": 32096164752,
+        "status": "PASS"
+      }
+    ],
+    "rawProviderPlanSha256": "a6734af5792ae66ae5db6cdaa88b687c21f119ad58fa93dbd0885809a659ef13",
+    "productizedVerificationPlanSha256": "6c3bbe966367c79ed7fd4d099632bde5ba7c84ea4d90e951f0cf6623c6f3bce9"
+  },
+  "failClosedAttempt": {
+    "requestId": "ops114-raw-object-proof-260818-01",
+    "pullRequest": 122,
+    "status": "STALE_BASE_AFTER_OBJECT_WRITE",
+    "force": false,
+    "automaticRebase": false
+  }
+}

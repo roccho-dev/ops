@@ -1,0 +1,112 @@
+{
+  "$id": "ops.gitWriteEffectResult.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "baseReadback": {
+      "type": "object"
+    },
+    "blobs": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "actualOid": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "expectedOid": {
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "readbackBase64": {
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "expectedOid",
+          "actualOid",
+          "readbackBase64"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "commit": {
+      "type": "object"
+    },
+    "limitations": {
+      "type": "array"
+    },
+    "planSha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "pullRequest": {
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "head": {
+          "type": "string"
+        },
+        "matchingCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "number": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ref": {
+      "type": "object"
+    },
+    "requestId": {
+      "type": "string"
+    },
+    "schema": {
+      "const": "ops.gitWriteEffectResult.v1"
+    },
+    "status": {
+      "enum": [
+        "PR_OPENED",
+        "PARTIAL_EFFECT",
+        "STALE_BASE",
+        "BRANCH_CONFLICT",
+        "ADAPTER_UNAVAILABLE",
+        "NEEDS_BYTE_INGRESS"
+      ]
+    },
+    "tree": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "requestId",
+    "planSha256",
+    "status",
+    "baseReadback",
+    "blobs",
+    "tree",
+    "commit",
+    "ref",
+    "pullRequest"
+  ],
+  "title": "Ops Git write effect result v1",
+  "type": "object"
+}
