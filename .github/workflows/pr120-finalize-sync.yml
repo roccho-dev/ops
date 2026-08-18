@@ -1,0 +1,87 @@
+name: pr120-finalize-sync
+
+on:
+  push:
+    branches:
+      - feat/issue-116-shiftleft-admission
+    paths:
+      - .github/workflows/pr120-finalize-sync.yml
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-116-shiftleft-admission
+          fetch-depth: 0
+
+      - name: Wait for proposals merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            git fetch -q origin proposals feat/issue-116-shiftleft-admission
+            if git merge-base --is-ancestor origin/proposals origin/feat/issue-116-shiftleft-admission; then
+              git reset --hard origin/feat/issue-116-shiftleft-admission
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "latest proposals was not merged into the PR branch" >&2
+          exit 70
+
+      - name: Remove one-shot workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/pr120-sync-proposals.yml
+          git rm .github/workflows/pr120-finalize-sync.yml
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Verify final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --cached --check
+          (
+            cd packages/shiftleft-admission
+            go test ./...
+          )
+          go build -trimpath -ldflags='-s -w -buildid=' -o /tmp/policyctl ./packages/shiftleft-admission/cmd/policyctl
+          (
+            cd packages/shiftleft-admission
+            rm -rf /tmp/issue116-proof
+            POLICYCTL=/tmp/policyctl ./tests/e2e.sh /tmp/issue116-proof
+          )
+          nix flake check --show-trace --no-write-lock-file
+
+      - name: Push verified final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name roccho
+          git config user.email 40359643+roccho-dev@users.noreply.github.com
+          git commit -m "ci: remove PR 120 one-shot sync workflows"
+          git push origin HEAD:feat/issue-116-shiftleft-admission
+
+      - name: Dispatch final Issue 116 proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'workflow_dispatch:' .github/workflows/issue-116-shiftleft-proof.yml; then
+            gh workflow run issue-116-shiftleft-proof.yml --ref feat/issue-116-shiftleft-admission
+          else
+            echo "issue-116 proof workflow has no workflow_dispatch" >&2
+            exit 71
+          fi
