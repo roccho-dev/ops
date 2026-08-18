@@ -1,3 +1,7 @@
 # Issue #115 implementation evidence
 
-SQLite shards are selected only for the new decision ledger. JSONL remains Authority. Proof Release, clean-room takeover, and literal independent human review are post-merge gates.
+SQLite catalog plus immutable shards are selected only for the new public decision ledger. Immutable Fact / Condition / Claim JSONL remains the sole meaning Authority.
+
+Frozen DuckLake remains comparison evidence, not a second normal runtime. This change does not replace existing DuckDB production behavior, authorize production cutover, add Cloudflare compute, or introduce a live multiwriter service.
+
+The generated databases, Decision Packet, Decision Room, metrics, DD files, and receipts are disposable non-authoritative projections. An immutable proof Release, independent clean-room takeover, and literal independent human review remain post-merge gates.
