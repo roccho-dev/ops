@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply-exact-patch:
-    if: ${{ hashFiles('.github/proof-requests/ops-114-115.patch.xz.b64.txt') != '' }}
+    if: ${{ hashFiles('.github/proof-requests/ops-114-115.patch.xz.b64.part-*') != '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -22,10 +22,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          request='.github/proof-requests/ops-114-115.patch.xz.b64.txt'
           [[ "$GITHUB_REF" == 'refs/heads/proof/ops-114-115-260818' ]]
-          [[ "$(sha256sum "$request" | awk '{print $1}')" == 'f64fb41debca11ca697f8f4b848063643e93db31d23e22e2a050b277ca33d5a7' ]]
-          base64 --decode "$request" > "$RUNNER_TEMP/implementation.patch.xz"
+          mapfile -t parts < <(find .github/proof-requests -maxdepth 1 -type f -name 'ops-114-115.patch.xz.b64.part-*' -print | LC_ALL=C sort)
+          [[ "${#parts[@]}" == 5 ]]
+          cat "${parts[@]}" > "$RUNNER_TEMP/implementation.patch.xz.b64.txt"
+          [[ "$(sha256sum "$RUNNER_TEMP/implementation.patch.xz.b64.txt" | awk '{print $1}')" == 'f64fb41debca11ca697f8f4b848063643e93db31d23e22e2a050b277ca33d5a7' ]]
+          base64 --decode "$RUNNER_TEMP/implementation.patch.xz.b64.txt" > "$RUNNER_TEMP/implementation.patch.xz"
           [[ "$(sha256sum "$RUNNER_TEMP/implementation.patch.xz" | awk '{print $1}')" == '822d849462662c985e3276af5e70ea4e7acb69c521b6da416e3a483dac4dea2c' ]]
           xz --decompress --stdout "$RUNNER_TEMP/implementation.patch.xz" > "$RUNNER_TEMP/implementation.patch"
           [[ "$(sha256sum "$RUNNER_TEMP/implementation.patch" | awk '{print $1}')" == '3f2ef4cd3b6ab5d41260ff37629d61c3654af6e22e3ef7e869c9915058a8959b' ]]
@@ -69,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/proof-requests/ops-114-115.patch.xz.b64.txt
+          rm -f .github/proof-requests/ops-114-115.patch.xz.b64.part-*
           rmdir .github/proof-requests 2>/dev/null || true
           rm -f .github/workflows/proof-ops-114-115-current-thread.yml
           rm -f .github/workflows/proof-apply-ops-114-115.yml
