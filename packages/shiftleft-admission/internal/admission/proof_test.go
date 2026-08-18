@@ -31,7 +31,7 @@ func TestProofClosure(t *testing.T) {
 	if summary.Status != "PASS" {
 		t.Fatalf("status=%s", summary.Status)
 	}
-	if summary.ProviderCases != 32 {
+	if summary.ProviderCases != 36 {
 		t.Fatalf("providerCases=%d", summary.ProviderCases)
 	}
 	if len(summary.Cases) != 13 {
@@ -61,7 +61,7 @@ func TestIncompleteContractBlocks(t *testing.T) {
 		o, err := finalizeObservation(Observation{
 			Schema: "shiftleft-observation/1", RuleID: p.RuleID, ProfileID: p.ID,
 			PackageID: "fixture", Language: p.Language, Required: true, Status: StatusMet,
-			FindingCode: "core-import-boundary-clean", ConfigSHA256: "sha256:" + shaHex([]byte(p.ID)),
+			FindingCode: "provider-contract-clean", ConfigSHA256: "sha256:" + shaHex([]byte(p.ID)),
 			Tool: ToolIdentity{Name: p.Tool}, Evidence: []Evidence{{Kind: "test", Detail: "met"}},
 		})
 		if err != nil {
@@ -92,7 +92,7 @@ func TestReceiptCandidateBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range b.Profiles {
-		o, err := finalizeObservation(Observation{Schema: "shiftleft-observation/1", RuleID: p.RuleID, ProfileID: p.ID, PackageID: "fixture", Language: p.Language, Required: true, Status: StatusMet, FindingCode: "core-import-boundary-clean", ConfigSHA256: "sha256:" + shaHex([]byte(p.ID)), Tool: ToolIdentity{Name: p.Tool}, Evidence: []Evidence{{Kind: "test", Detail: "met"}}})
+		o, err := finalizeObservation(Observation{Schema: "shiftleft-observation/1", RuleID: p.RuleID, ProfileID: p.ID, PackageID: "fixture", Language: p.Language, Required: true, Status: StatusMet, FindingCode: "provider-contract-clean", ConfigSHA256: "sha256:" + shaHex([]byte(p.ID)), Tool: ToolIdentity{Name: p.Tool}, Evidence: []Evidence{{Kind: "test", Detail: "met"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +121,7 @@ func TestObservedUnmetIsNotReclassifiedUnobserved(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range b.Profiles {
-		status, code := StatusMet, "core-import-boundary-clean"
+		status, code := StatusMet, "provider-contract-clean"
 		if p.ID == "javascript.core-imports" {
 			status, code = StatusUnmet, "core-imports-effect-adapter"
 		}
@@ -154,37 +154,26 @@ func TestBlockerFixtureMatrixIsExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules, specs, err := ObserveRuleFixtures(b, filepath.Join(root, "fixtures"))
+	fixturesDir := filepath.Join(root, "fixtures")
+	rules, specs, err := ObserveRuleFixtures(b, fixturesDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rules) != 20 || len(specs) != 20 {
 		t.Fatalf("rules=%d specs=%d", len(rules), len(specs))
 	}
-	providers := []Observation{}
-	for _, p := range b.Profiles {
-		for _, kind := range []string{"bad", "false-negative", "false-positive", "good"} {
-			status, code := StatusUnmet, "core-imports-effect-adapter"
-			if kind == "false-positive" || kind == "good" {
-				status, code = StatusMet, "core-import-boundary-clean"
-			}
-			o, err := finalizeObservation(Observation{
-				Schema: "shiftleft-observation/1", RuleID: p.RuleID, ProfileID: p.ID, PackageID: "fixture",
-				Language: p.Language, Required: true, Status: status, FindingCode: code, FixtureKind: kind,
-				CaseID: p.Language + "." + kind, ConfigSHA256: "sha256:" + shaHex([]byte(p.ID+kind)),
-				Tool: ToolIdentity{Name: p.Tool}, Evidence: []Evidence{{Kind: "test", Detail: status}},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			providers = append(providers, o)
-		}
+	providers, err := ObserveFixtures(b, fixturesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 16 {
+		t.Fatalf("providers=%d", len(providers))
 	}
 	coverage, err := FixtureCoverageObservations(b, providers, rules)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(coverage) != 6 {
+	if len(coverage) != 7 {
 		t.Fatalf("coverage=%d", len(coverage))
 	}
 	for _, o := range coverage {

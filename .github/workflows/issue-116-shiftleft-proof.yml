@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/issue-116-shiftleft-proof.yml"
       - "packages/shiftleft-admission/**"
+      - "packages/structured-diagnostic/**"
       - "packages/ops-git-write-closure/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
@@ -46,6 +47,7 @@ jobs:
           go vet ./...
           bash -n tests/e2e.sh tests/git-write-admission.sh
           node --check adapters/js_imports.mjs
+          node --check adapters/diagnostic_process.mjs
           python3 -m py_compile adapters/python_imports.py
           go build -o /tmp/issue-116-go-adapter adapters/go_imports.go
           mkdir -p out
@@ -113,6 +115,7 @@ jobs:
           mkdir -p artifact/replay artifact/proof-a artifact/proof-b
           install -m 0755 out/policyctl artifact/policyctl
           cp -a policy adapters fixtures artifact/replay/
+          cp -a "$GITHUB_WORKSPACE/packages/structured-diagnostic" artifact/structured-diagnostic
           cp -a out/proof-a/. artifact/proof-a/
           cp -a out/proof-b/. artifact/proof-b/
           cp out/proof.env out/replayed-receipt.json out/replayed-receipt.stdout artifact/
@@ -138,8 +141,9 @@ jobs:
               'proofCases': len(summary['cases']),
               'fixtureEvidence': {
                   'languageProviderCases': 12,
+                  'diagnosticProcessCases': 4,
                   'languageNeutralRuleCases': 20,
-                  'blockerCoverageObservations': 6,
+                  'blockerCoverageObservations': 7,
               },
               'toolchain': {
                   'go': subprocess.check_output(['go', 'version'], text=True).strip(),

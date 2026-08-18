@@ -2,6 +2,7 @@ package admission
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,14 @@ import (
 	"sort"
 	"strings"
 )
+
+type diagnosticProcessReport struct {
+	Schema         string     `json:"schema"`
+	Status         string     `json:"status"`
+	FindingCode    string     `json:"findingCode"`
+	ContractSHA256 string     `json:"contractSha256"`
+	Evidence       []Evidence `json:"evidence"`
+}
 
 func normalizeToolVersion(tool string) (string, error) {
 	var args []string
@@ -42,29 +51,47 @@ func findProfile(b *Bundle, id string) (Profile, bool) {
 	return Profile{}, false
 }
 
-func runImportAdapter(b *Bundle, profile Profile, sourcePath string) (ImportReport, ToolIdentity, error) {
+func adapterPathAndIdentity(b *Bundle, profile Profile, digestPrefix string, extra ...string) (string, ToolIdentity, error) {
 	adapterPath := filepath.Clean(filepath.Join(b.Dir, profile.Adapter))
 	adapterBytes, err := os.ReadFile(adapterPath)
 	if err != nil {
-		return ImportReport{}, ToolIdentity{}, fmt.Errorf("ADAPTER_READ_FAILED: %s: %w", profile.ID, err)
+		return "", ToolIdentity{}, fmt.Errorf("ADAPTER_READ_FAILED: %s: %w", profile.ID, err)
 	}
 	version, err := normalizeToolVersion(profile.Tool)
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
-			return ImportReport{}, ToolIdentity{}, fmt.Errorf("REQUIRED_TOOL_MISSING: %s", profile.Tool)
+			return "", ToolIdentity{}, fmt.Errorf("REQUIRED_TOOL_MISSING: %s", profile.Tool)
 		}
-		return ImportReport{}, ToolIdentity{}, fmt.Errorf("TOOL_VERSION_FAILED: %s: %w", profile.Tool, err)
+		return "", ToolIdentity{}, fmt.Errorf("TOOL_VERSION_FAILED: %s: %w", profile.Tool, err)
 	}
-	var cmd *exec.Cmd
+	adapterSHA := "sha256:" + shaHex(adapterBytes)
+	parts := []string{digestPrefix, profile.Tool, version, adapterSHA}
+	parts = append(parts, extra...)
+	digest := "sha256:" + shaHex([]byte(strings.Join(parts, "\n")+"\n"))
+	return adapterPath, ToolIdentity{Name: profile.Tool, Version: version, AdapterSHA256: adapterSHA, Digest: digest}, nil
+}
+
+func providerCommand(profile Profile, adapterPath string, args ...string) (*exec.Cmd, error) {
 	switch profile.Tool {
 	case "node":
-		cmd = exec.Command("node", adapterPath, sourcePath)
+		return exec.Command("node", append([]string{adapterPath}, args...)...), nil
 	case "python3":
-		cmd = exec.Command("python3", adapterPath, sourcePath)
+		return exec.Command("python3", append([]string{adapterPath}, args...)...), nil
 	case "go":
-		cmd = exec.Command("go", "run", adapterPath, "--", sourcePath)
+		return exec.Command("go", append([]string{"run", adapterPath, "--"}, args...)...), nil
 	default:
-		return ImportReport{}, ToolIdentity{}, fmt.Errorf("UNSUPPORTED_TOOL: %s", profile.Tool)
+		return nil, fmt.Errorf("UNSUPPORTED_TOOL: %s", profile.Tool)
+	}
+}
+
+func runImportAdapter(b *Bundle, profile Profile, sourcePath string) (ImportReport, ToolIdentity, error) {
+	adapterPath, toolID, err := adapterPathAndIdentity(b, profile, "shiftleft-tool/1")
+	if err != nil {
+		return ImportReport{}, ToolIdentity{}, err
+	}
+	cmd, err := providerCommand(profile, adapterPath, sourcePath)
+	if err != nil {
+		return ImportReport{}, ToolIdentity{}, err
 	}
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.TempDir(), "GOCACHE=" + filepath.Join(os.TempDir(), "issue116-go-cache")}
 	var stdout, stderr bytes.Buffer
@@ -85,9 +112,56 @@ func runImportAdapter(b *Bundle, profile Profile, sourcePath string) (ImportRepo
 		}
 		return report.Imports[i].Line < report.Imports[j].Line
 	})
+	return report, toolID, nil
+}
+
+func runDiagnosticProcessAdapter(b *Bundle, profile Profile, sourcePath string) (diagnosticProcessReport, ToolIdentity, error) {
+	adapterPath := filepath.Clean(filepath.Join(b.Dir, profile.Adapter))
+	adapterBytes, err := os.ReadFile(adapterPath)
+	if err != nil {
+		return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("ADAPTER_READ_FAILED: %s: %w", profile.ID, err)
+	}
+	version, err := normalizeToolVersion(profile.Tool)
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
+			return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("REQUIRED_TOOL_MISSING: %s", profile.Tool)
+		}
+		return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("TOOL_VERSION_FAILED: %s: %w", profile.Tool, err)
+	}
+	cmd, err := providerCommand(profile, adapterPath, sourcePath)
+	if err != nil {
+		return diagnosticProcessReport{}, ToolIdentity{}, err
+	}
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.TempDir()}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_FAILED: %s: %v: %s", profile.ID, err, strings.TrimSpace(stderr.String()))
+	}
+	var report diagnosticProcessReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_OUTPUT_INVALID: %s: %w", profile.ID, err)
+	}
+	if report.Schema != "shiftleft-diagnostic-process-report/1" {
+		return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_SCHEMA_INVALID: %s", report.Schema)
+	}
+	if !validStatus(report.Status) || !nonblank(report.FindingCode) || !validSHA256Digest(report.ContractSHA256) || len(report.Evidence) == 0 {
+		return diagnosticProcessReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_REPORT_INVALID: %s", profile.ID)
+	}
 	adapterSHA := "sha256:" + shaHex(adapterBytes)
-	digest := "sha256:" + shaHex([]byte("shiftleft-tool/1\n"+profile.Tool+"\n"+version+"\n"+adapterSHA+"\n"))
-	return report, ToolIdentity{Name: profile.Tool, Version: version, AdapterSHA256: adapterSHA, Digest: digest}, nil
+	digest := "sha256:" + shaHex([]byte(strings.Join([]string{
+		"shiftleft-diagnostic-process-tool/1", profile.Tool, version, adapterSHA, report.ContractSHA256, "",
+	}, "\n")))
+	toolID := ToolIdentity{Name: profile.Tool, Version: version, AdapterSHA256: adapterSHA, Digest: digest}
+	return report, toolID, nil
+}
+
+func validSHA256Digest(value string) bool {
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+64 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
 }
 
 func forbiddenSet(values []string) map[string]bool {
@@ -96,6 +170,20 @@ func forbiddenSet(values []string) map[string]bool {
 		out[v] = true
 	}
 	return out
+}
+
+func providerFailure(base Observation, err error) (Observation, error) {
+	base.Status = StatusUnobserved
+	switch {
+	case strings.Contains(err.Error(), "REQUIRED_TOOL_MISSING"):
+		base.FindingCode = "required-tool-missing"
+	case strings.Contains(err.Error(), "UNSUPPORTED_TOOL"):
+		base.FindingCode = "unsupported-required-adapter"
+	default:
+		base.FindingCode = "provider-failed"
+	}
+	base.Evidence = []Evidence{{Kind: "provider", Detail: err.Error()}}
+	return finalizeObservation(base)
 }
 
 func observeFixture(b *Bundle, fixturePath string, fixture Fixture) (Observation, error) {
@@ -131,40 +219,51 @@ func observeFixture(b *Bundle, fixturePath string, fixture Fixture) (Observation
 	rel, _ := filepath.Rel(filepath.Dir(filepath.Dir(filepath.Dir(fixturePath))), sourcePath)
 	base.SourcePath = filepath.ToSlash(rel)
 	base.SourceSHA256 = "sha256:" + shaHex(sourceBytes)
-	report, toolID, err := runImportAdapter(b, profile, sourcePath)
-	if err != nil {
-		base.Status = StatusUnobserved
-		switch {
-		case strings.Contains(err.Error(), "REQUIRED_TOOL_MISSING"):
-			base.FindingCode = "required-tool-missing"
-		case strings.Contains(err.Error(), "UNSUPPORTED_TOOL"):
-			base.FindingCode = "unsupported-required-adapter"
-		default:
-			base.FindingCode = "provider-failed"
+
+	switch profile.Provider {
+	case "language-import-provider":
+		report, toolID, err := runImportAdapter(b, profile, sourcePath)
+		if err != nil {
+			return providerFailure(base, err)
 		}
-		base.Evidence = []Evidence{{Kind: "provider", Detail: err.Error()}}
+		base.Tool = toolID
+		forbidden := forbiddenSet(profile.ForbiddenImports)
+		hits := []ImportFinding{}
+		for _, imp := range report.Imports {
+			if forbidden[imp.Module] {
+				hits = append(hits, imp)
+			}
+		}
+		if len(hits) > 0 {
+			base.Status = StatusUnmet
+			base.FindingCode = "core-imports-effect-adapter"
+			for _, hit := range hits {
+				base.Evidence = append(base.Evidence, Evidence{Kind: "forbidden-import", Path: base.SourcePath, Line: hit.Line, Detail: hit.Module})
+			}
+		} else {
+			base.Status = StatusMet
+			base.FindingCode = "core-import-boundary-clean"
+			base.Evidence = []Evidence{{Kind: "import-scan", Path: base.SourcePath, Detail: fmt.Sprintf("%d imports; no forbidden effect adapter", len(report.Imports))}}
+		}
+		return finalizeObservation(base)
+
+	case "diagnostic-process-provider":
+		report, toolID, err := runDiagnosticProcessAdapter(b, profile, sourcePath)
+		if err != nil {
+			return providerFailure(base, err)
+		}
+		base.Tool = toolID
+		base.Status = report.Status
+		base.FindingCode = report.FindingCode
+		base.Evidence = append(report.Evidence, Evidence{Kind: "contract", Path: "structured-diagnostic/contract.json", Detail: report.ContractSHA256})
+		return finalizeObservation(base)
+
+	default:
+		base.Status = StatusUnobserved
+		base.FindingCode = "unsupported-required-adapter"
+		base.Evidence = []Evidence{{Kind: "provider", Detail: "unsupported provider: " + profile.Provider}}
 		return finalizeObservation(base)
 	}
-	base.Tool = toolID
-	forbidden := forbiddenSet(profile.ForbiddenImports)
-	hits := []ImportFinding{}
-	for _, imp := range report.Imports {
-		if forbidden[imp.Module] {
-			hits = append(hits, imp)
-		}
-	}
-	if len(hits) > 0 {
-		base.Status = StatusUnmet
-		base.FindingCode = "core-imports-effect-adapter"
-		for _, hit := range hits {
-			base.Evidence = append(base.Evidence, Evidence{Kind: "forbidden-import", Path: base.SourcePath, Line: hit.Line, Detail: hit.Module})
-		}
-	} else {
-		base.Status = StatusMet
-		base.FindingCode = "core-import-boundary-clean"
-		base.Evidence = []Evidence{{Kind: "import-scan", Path: base.SourcePath, Detail: fmt.Sprintf("%d imports; no forbidden effect adapter", len(report.Imports))}}
-	}
-	return finalizeObservation(base)
 }
 
 func ObserveFixtures(b *Bundle, fixturesDir string) ([]Observation, error) {

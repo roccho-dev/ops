@@ -135,10 +135,11 @@
                 ];
               }
               ''
-                mkdir -p "$out"
-                cp -R ${./packages/shiftleft-admission} source
+                mkdir -p "$out" source/packages
+                cp -R ${./packages/shiftleft-admission} source/packages/shiftleft-admission
+                cp -R ${./packages/structured-diagnostic} source/packages/structured-diagnostic
                 chmod -R u+w source
-                cd source
+                cd source/packages/shiftleft-admission
                 GIT_WRITE_CLOSURE_SCRIPT=${./packages/ops-git-write-closure/bin/ops-git-write-closure.mjs} \
                   ${pkgs.bash}/bin/bash tests/e2e.sh
                 touch "$out/ok"

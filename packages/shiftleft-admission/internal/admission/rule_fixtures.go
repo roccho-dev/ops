@@ -169,6 +169,16 @@ func evaluateRuleFixture(b *Bundle, f RuleFixture) (Observation, error) {
 	return Observation{}, fmt.Errorf("RULE_FIXTURE_OBSERVATION_MISSING: %s", f.RuleID)
 }
 
+func requiredProfileCount(b *Bundle, ruleID string) int {
+	count := 0
+	for _, profile := range b.Profiles {
+		if profile.Required && profile.RuleID == ruleID {
+			count++
+		}
+	}
+	return count
+}
+
 func ObserveRuleFixtures(b *Bundle, fixturesDir string) ([]Observation, []RuleFixture, error) {
 	fixtures, err := loadRuleFixtures(fixturesDir)
 	if err != nil {
@@ -176,8 +186,8 @@ func ObserveRuleFixtures(b *Bundle, fixturesDir string) ([]Observation, []RuleFi
 	}
 	out := make([]Observation, 0, len(fixtures))
 	for _, f := range fixtures {
-		if f.RuleID == "SL-CORE-001" {
-			return nil, nil, fmt.Errorf("RULE_FIXTURE_CORE_MUST_USE_LANGUAGE_PROVIDERS: %s", f.CaseID)
+		if requiredProfileCount(b, f.RuleID) > 0 {
+			return nil, nil, fmt.Errorf("RULE_FIXTURE_PROVIDER_BACKED_MUST_USE_PROFILE_PROVIDER: %s", f.CaseID)
 		}
 		o, err := evaluateRuleFixture(b, f)
 		if err != nil {
@@ -225,7 +235,7 @@ func fixtureCoverageObservation(target Rule, cases []Observation, profileCount i
 				continue
 			}
 			expected := StatusUnmet
-			if kind == "good" || kind == "false-positive" {
+			if kind == "false-positive" || kind == "good" {
 				expected = StatusMet
 			}
 			if o.Status != expected {
@@ -251,14 +261,9 @@ func FixtureCoverageObservations(b *Bundle, providerCases, ruleCases []Observati
 		}
 		cases := ruleCases
 		profiles := 1
-		if rule.ID == "SL-CORE-001" {
+		if count := requiredProfileCount(b, rule.ID); count > 0 {
 			cases = providerCases
-			profiles = 0
-			for _, p := range b.Profiles {
-				if p.Required && p.RuleID == rule.ID {
-					profiles++
-				}
-			}
+			profiles = count
 		}
 		o, err := fixtureCoverageObservation(rule, cases, profiles)
 		if err != nil {
