@@ -365,7 +365,7 @@ COPY (SELECT * FROM read_json({sql_literal(str(relations_file))}, format='newlin
     shutil.rmtree(flat_dir)
     for asset in assets:
         os.chmod(out / asset["name"], 0o444)
-    catalog = {"schema": "ops.frozenDuckLakeCatalog.v1", "checkpointId": checkpoint_id, "projectionKind": "frozen-ducklake", "authorityRootDigest": projection_root_digest(records), "assets": assets, "runtime": {"kind": "duckdb", "networkExtensionInstall": False}}
+    catalog = {"schema": "ops.frozenDuckLakeCatalog.v1", "checkpointId": checkpoint_id, "projectionKind": "frozen-ducklake", "authorityRootDigest": projection_root_digest(records), "recordIndex": {x["id"]: x["domain"] for x in records}, "assets": assets, "runtime": {"kind": "duckdb", "networkExtensionInstall": False}}
     write_json(out / "catalog.json", catalog)
     return catalog
 
@@ -536,14 +536,12 @@ def duckdb_query_domains(projection: pathlib.Path, query_id: str, params: dict[s
     domains = sorted({x["domain"] for x in catalog["assets"]})
     if query_id == "current_decisions":
         return [params["domain"]]
-    if query_id in {"trace_decision", "research_gaps", "decision_timeline"}:
-        prefix = params["decision_id"].split("-", 2)[1]
-        mapping = {"lease": "lease-recapture", "carrier": "carrier-ingress", "git": "git-write-closure"}
-        return [mapping[prefix]]
-    if query_id == "impact_by_fact":
-        prefix = params["fact_id"].split("-", 2)[1]
-        mapping = {"lease": "lease-recapture", "carrier": "carrier-ingress", "git": "git-write-closure"}
-        return [mapping[prefix]]
+    record_id = params.get("decision_id") or params.get("fact_id")
+    if record_id:
+        domain = catalog.get("recordIndex", {}).get(record_id)
+        if not domain:
+            fail("UNKNOWN_RECORD", record_id)
+        return [domain]
     return domains
 
 
@@ -569,7 +567,7 @@ def query_duckdb(projection: pathlib.Path, duckdb: pathlib.Path, query_id: str, 
 
 def all_queries() -> list[tuple[str, dict[str, str]]]:
     return [
-        ("current_decisions", {"domain": "lease-recapture"}),
+        ("current_decisions", {"domain": "decision-ledger"}),
         ("trace_decision", {"decision_id": "d-lease-current"}),
         ("impact_by_fact", {"fact_id": "f-lease-mismatch-demand"}),
         ("missing_outcomes", {}),
@@ -715,28 +713,34 @@ def incremental_reuse(cp1: dict[str, Any], cp2: dict[str, Any]) -> dict[str, Any
 
 def decision_packet(records: list[dict[str, Any]], previous: list[dict[str, Any]], query_digests: dict[str, str], query_contract_sha: str) -> dict[str, Any]:
     ids = {x["id"]: x for x in records}
-    decision = ids["d-lease-current"]
+    current = [x for x in records if x["domain"] == "decision-ledger" and x["record_type"] == "claim" and x["subtype"] == "decision" and x.get("decision_status") == "current"]
+    if len(current) != 1:
+        fail("DECISION_PACKET_CURRENT", str([x["id"] for x in current]))
+    decision = current[0]
     dependencies = [x["target"] for x in decision["rel"] if x["type"] == "depends_on"]
     evidence_for = []
     evidence_against = []
     for record_id in dependencies:
         row = ids[record_id]
         item = {"id": row["id"], "type": row["record_type"], "kind": row["subtype"], "statement": str(row["value"])}
-        if row["id"] == "cl-lease-red-ocean": evidence_against.append(item)
-        else: evidence_for.append(item)
+        if row.get("predicate") in {"counterevidence", "risk"}:
+            evidence_against.append(item)
+        else:
+            evidence_for.append(item)
     previous_ids = {x["id"] for x in previous}
-    changed = [{"id": x["id"], "type": x["record_type"], "kind": x["subtype"], "statement": str(x["value"])} for x in records if x["id"] not in previous_ids and x["domain"] == "lease-recapture"]
-    gaps = [{"id": ids["cl-lease-gap"]["id"], "statement": ids["cl-lease-gap"]["value"]}]
+    changed = [{"id": x["id"], "type": x["record_type"], "kind": x["subtype"], "statement": str(x["value"])} for x in records if x["id"] not in previous_ids and x["domain"] == "decision-ledger"]
+    gaps = [{"id": x["id"], "statement": x["value"]} for x in records if x["domain"] == "decision-ledger" and x["record_type"] == "claim" and x.get("predicate") == "research_gap"]
     outcomes = [{"id": x["id"], "kind": x["subtype"], "statement": str(x["value"])} for x in records if any(r["type"] == "result_of" and r["target"] == decision["id"] for r in x["rel"])]
+    reasons = decision.get("alternative_reasons", {})
     packet = {
         "schema": "ops.decisionPacket.v1",
         "decision_id": decision["id"],
         "checkpoint_id": "decision-ledger-cp2",
-        "question": "Should condition-mismatch rental demand be tested as a narrow manual recapture wedge?",
+        "question": decision.get("question", "Which decision should be adopted?"),
         "status": decision["decision_status"],
         "recommendation": decision["value"],
         "changed_since_previous": changed,
-        "alternatives": [{"name": x, "selected": False} for x in decision["alternatives"]],
+        "alternatives": [{"name": x, "selected": False, "reason": reasons.get(x, "not selected by the accepted rule")} for x in decision["alternatives"]],
         "evidence_for": evidence_for,
         "evidence_against": evidence_against,
         "conditions": [x for x in dependencies if ids[x]["record_type"] == "condition"],
@@ -744,8 +748,9 @@ def decision_packet(records: list[dict[str, Any]], previous: list[dict[str, Any]
         "gaps": gaps,
         "next_action": decision["next_action"],
         "success_conditions": decision["success_conditions"],
+        "stop_conditions": decision["stop_conditions"],
         "outcomes": outcomes,
-        "record_refs": sorted({decision["id"], *dependencies, *(x["id"] for x in outcomes), "cl-lease-gap"}),
+        "record_refs": sorted({decision["id"], *dependencies, *(x["id"] for x in outcomes), *(x["id"] for x in gaps)}),
         "projection_asset_refs": ["sqlite/manifest.json", "frozen-ducklake/catalog.json"],
         "query_contract_digest": query_contract_sha,
         "canonical_result_digests": query_digests,
@@ -753,9 +758,8 @@ def decision_packet(records: list[dict[str, Any]], previous: list[dict[str, Any]
     packet["packet_digest"] = sha256_bytes(canonical(packet))
     return packet
 
-
 def render_decision_room(packet: dict[str, Any], path: pathlib.Path) -> str:
-    meaning = {k: packet[k] for k in ("decision_id", "question", "status", "recommendation", "changed_since_previous", "alternatives", "evidence_for", "evidence_against", "gaps", "next_action", "success_conditions", "outcomes", "record_refs")}
+    meaning = {k: packet[k] for k in ("decision_id", "question", "status", "recommendation", "changed_since_previous", "alternatives", "evidence_for", "evidence_against", "conditions", "conflicts", "gaps", "next_action", "success_conditions", "stop_conditions", "outcomes", "record_refs")}
     meaning_digest = sha256_bytes(canonical(meaning))
     def cards(items: list[dict[str, Any]], key: str = "statement") -> str:
         if not items: return '<p class="empty">None</p>'
@@ -771,7 +775,7 @@ def render_decision_room(packet: dict[str, Any], path: pathlib.Path) -> str:
 <section><h2>Changed</h2>{cards(packet['changed_since_previous'])}</section>
 <section id="evidence"><h2>Evidence for</h2>{cards(packet['evidence_for'])}<h2>Evidence against</h2>{cards(packet['evidence_against'])}</section>
 <section id="alternatives"><h2>Alternatives</h2><ul>{alternatives}</ul><h2>Gaps</h2>{cards(packet['gaps'])}</section>
-<section id="action"><h2>Next action</h2><p>{html.escape(packet['next_action'])}</p><h2>Success / stop</h2><ul>{success}</ul><h2>Outcomes</h2>{cards(packet['outcomes'])}</section>
+<section id="action"><h2>Next action</h2><p>{html.escape(packet['next_action'])}</p><h2>Success</h2><ul>{success}</ul><h2>Stop</h2><ul>{"".join(f"<li>{html.escape(str(x))}</li>" for x in packet["stop_conditions"])}</ul><h2>Outcomes</h2>{cards(packet['outcomes'])}</section>
 <section><h2>Trace</h2><p>{html.escape(', '.join(packet['record_refs']))}</p><p class="meta">packet {packet['packet_digest']} · query contract {packet['query_contract_digest']} · meaning {meaning_digest}</p></section>
 </body></html>"""
     path.write_text(document, encoding="utf-8")
@@ -811,10 +815,10 @@ def proof(package_root: pathlib.Path, out: pathlib.Path, duckdb: pathlib.Path) -
 
     parity = compare_engines(out / "checkpoint-2" / "sqlite", out / "checkpoint-2" / "frozen-ducklake", duckdb, out / "engine-parity.json")
     query_digests = {x["queryId"]: x["semanticDigest"] for x in parity["queries"]}
-    old_rows, _ = query_sqlite(out / "checkpoint-1" / "sqlite", "current_decisions", {"domain": "lease-recapture"})
+    old_rows, _ = query_sqlite(out / "checkpoint-1" / "sqlite", "current_decisions", {"domain": "decision-ledger"})
     if [x["id"] for x in old_rows] != ["d-lease-old"]:
         fail("OLD_CHECKPOINT_REPLAY", str(old_rows))
-    current_rows, _ = query_sqlite(out / "checkpoint-2" / "sqlite", "current_decisions", {"domain": "lease-recapture"})
+    current_rows, _ = query_sqlite(out / "checkpoint-2" / "sqlite", "current_decisions", {"domain": "decision-ledger"})
     if [x["id"] for x in current_rows] != ["d-lease-current"]:
         fail("CURRENT_CHECKPOINT", str(current_rows))
 

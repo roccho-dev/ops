@@ -3,11 +3,11 @@ builtins.fromJSON ''
   "kind": "ops.packageImplementationMetadata.v1",
   "package": "ops-decision-closure",
   "repoId": "ops",
-  "mission": "Prove the immutable Fact Condition Claim authority, engine-neutral query contract, read-only release projections, Decision Packet, and static Decision Room required by Issue #115.",
+  "mission": "Close Issue #115 with immutable Fact Condition Claim authority, one selected read model, Human AI parity, measurable decision economics, and independent clean-room takeover evidence.",
   "primaryTarget": "packages/ops-decision-closure",
   "requiredOutputs": "packages.<system>.ops-decision-closure",
   "requiredChecks": "checks.<system>.ops-decision-closure",
-  "responsibility": "Validate immutable JSONL segments, build SQLite-shard and Frozen-DuckLake candidates, compare canonical query results and fail-closed cases, prove replay and incremental reuse, and generate one engine-neutral Decision Packet plus static human projection.",
-  "forbiddenResponsibility": "Does not make generated databases authoritative, cut over the existing DuckDB path, publish a Release, deploy Cloudflare, admit human choices without Git review, claim real decision-economics savings from synthetic runs, or claim independent takeover from the originating thread."
+  "responsibility": "Validate JSONL authority, compare candidates, enforce the accepted selection rule, generate read-only checkpoints, Decision Packets, static Decision Rooms, economics and DD receipts, and verify clean-room replay.",
+  "forbiddenResponsibility": "Does not move meaning authority into a database, replace existing DuckDB production paths, admit UI actions without Git review, deploy Cloudflare, add live multiwriter services, or claim corporate-sale outcomes."
 }
 ''
