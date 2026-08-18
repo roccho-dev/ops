@@ -117,16 +117,47 @@ func RunProof(bundleDir, fixturesDir, policyRef, baseTree, candidateTree, outDir
 			}
 		}
 	}
-	add("provider-fixture-matrix", "PASS", fmt.Sprintf("%d cases", len(all)))
+	meaning := map[string]string{}
+	for _, o := range all {
+		key := o.FixtureKind
+		value := strings.Join([]string{o.RuleID, o.Status, o.FindingCode}, "|")
+		if prior, ok := meaning[key]; ok && prior != value {
+			return ProofSummary{}, fmt.Errorf("PROOF_CROSS_LANGUAGE_FINDING_DRIFT: %s got %s and %s", key, prior, value)
+		}
+		meaning[key] = value
+	}
+	add("cross-language-finding-parity", "PASS", "JS/Python/Go share SL-CORE-001 status and finding codes")
+	add("language-provider-fixture-matrix", "PASS", fmt.Sprintf("%d executable JS/Python/Go cases", len(all)))
 	if err := writeJSONL(filepath.Join(outDir, "provider-observations.all.jsonl"), append([]Observation(nil), all...)); err != nil {
 		return ProofSummary{}, err
 	}
+	ruleCases, _, err := ObserveRuleFixtures(b, fixturesDir)
+	if err != nil {
+		return ProofSummary{}, err
+	}
+	if err := writeJSONL(filepath.Join(outDir, "rule-fixture-observations.all.jsonl"), append([]Observation(nil), ruleCases...)); err != nil {
+		return ProofSummary{}, err
+	}
+	coverage, err := FixtureCoverageObservations(b, all, ruleCases)
+	if err != nil {
+		return ProofSummary{}, err
+	}
+	for _, o := range coverage {
+		if o.Status != StatusMet {
+			return ProofSummary{}, fmt.Errorf("PROOF_FIXTURE_COVERAGE_NOT_MET: %s/%s", o.PackageID, o.FindingCode)
+		}
+	}
+	if err := writeJSONL(filepath.Join(outDir, "fixture-coverage-observations.jsonl"), append([]Observation(nil), coverage...)); err != nil {
+		return ProofSummary{}, err
+	}
+	add("blocker-rule-fixture-matrix", "PASS", fmt.Sprintf("%d executable cases across %d blocker rules", len(all)+len(ruleCases), len(coverage)))
 	positive := []Observation{}
 	for _, o := range all {
 		if o.FixtureKind == "good" || o.FixtureKind == "false-positive" {
 			positive = append(positive, o)
 		}
 	}
+	positive = append(positive, coverage...)
 	if err := writeJSONL(filepath.Join(outDir, "admission-observations.jsonl"), append([]Observation(nil), positive...)); err != nil {
 		return ProofSummary{}, err
 	}
@@ -206,10 +237,29 @@ func RunProof(bundleDir, fixturesDir, policyRef, baseTree, candidateTree, outDir
 		return ProofSummary{}, fmt.Errorf("PROOF_TREE_MISMATCH_NOT_REJECTED: %v", err)
 	}
 	add("candidate-tree-mismatch", "PASS", "CANDIDATE_TREE_MISMATCH")
+	violating := []Observation{}
+	for _, o := range positive {
+		if o.ProfileID != "javascript.core-imports" {
+			violating = append(violating, o)
+		}
+	}
+	for _, o := range all {
+		if o.CaseID == "javascript.bad" {
+			violating = append(violating, o)
+		}
+	}
+	violatingReceipt, err := Admit(b, policyRef, b.Hash, baseTree, candidateTree, violating)
+	if err != nil {
+		return ProofSummary{}, err
+	}
+	if violatingReceipt.Verdict != "BLOCK" || violatingReceipt.TerminalState != "BLOCKED_RULE" || violatingReceipt.Counts.RequiredUnobserved != 0 {
+		return ProofSummary{}, fmt.Errorf("PROOF_OBSERVED_UNMET_MISCLASSIFIED: %s/%s requiredUnobserved=%d", violatingReceipt.Verdict, violatingReceipt.TerminalState, violatingReceipt.Counts.RequiredUnobserved)
+	}
+	add("observed-unmet-is-blocked-rule", "PASS", "BLOCKED_RULE without required-unobserved")
 	for _, neg := range []struct{ id, code string }{
 		{"missing-tool-not-green", "required-tool-missing"}, {"unsupported-language-not-green", "unsupported-language"}, {"skipped-test-not-green", "skipped-required-test"},
 	} {
-		obs := append(append([]Observation(nil), positive...), syntheticUnobserved("SL-CORE-001", "js.core-imports", neg.code))
+		obs := append(append([]Observation(nil), positive...), syntheticUnobserved("SL-CORE-001", "javascript.core-imports", neg.code))
 		r, err := Admit(b, policyRef, b.Hash, baseTree, candidateTree, obs)
 		if err != nil {
 			return ProofSummary{}, err
@@ -220,7 +270,7 @@ func RunProof(bundleDir, fixturesDir, policyRef, baseTree, candidateTree, outDir
 		add(neg.id, "PASS", r.TerminalState)
 	}
 	sort.Slice(cases, func(i, j int) bool { return cases[i].ID < cases[j].ID })
-	summary := ProofSummary{Schema: "shiftleft-proof-summary/1", Status: "PASS", PolicyRef: policyRef, PolicyHash: b.Hash, BaseTree: baseTree, CandidateTree: candidateTree, ReceiptDigest: r1.ReceiptDigest, SemanticRoot: semanticRoot(positive), ProviderCases: len(all), Cases: cases}
+	summary := ProofSummary{Schema: "shiftleft-proof-summary/1", Status: "PASS", PolicyRef: policyRef, PolicyHash: b.Hash, BaseTree: baseTree, CandidateTree: candidateTree, ReceiptDigest: r1.ReceiptDigest, SemanticRoot: semanticRoot(positive), ProviderCases: len(all) + len(ruleCases), Cases: cases}
 	if err := writeJSON(filepath.Join(outDir, "proof-summary.json"), summary); err != nil {
 		return ProofSummary{}, err
 	}

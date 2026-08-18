@@ -93,7 +93,7 @@ func (b *Bundle) validate() error {
 	}
 	ruleIDs := map[string]bool{}
 	for _, r := range b.Rules {
-		if r.ID == "" || r.Claim == "" || r.Strength == "" {
+		if r.Schema != "shiftleft-rule/1" || strings.TrimSpace(r.ID) == "" || strings.TrimSpace(r.Claim) == "" || strings.TrimSpace(r.Strength) == "" || len(r.RequiredEvidence) == 0 {
 			return fmt.Errorf("POLICY_RULE_INVALID: %+v", r)
 		}
 		if ruleIDs[r.ID] {
@@ -103,10 +103,23 @@ func (b *Bundle) validate() error {
 		if r.Strength != "block" && r.Strength != "review" && r.Strength != "observe" {
 			return fmt.Errorf("POLICY_RULE_STRENGTH_INVALID: %s", r.ID)
 		}
+		kindCounts := map[string]int{}
+		for _, kind := range r.FixtureKinds {
+			kindCounts[kind]++
+		}
+		for _, kind := range requiredFixtureKinds {
+			if kindCounts[kind] != 1 {
+				return fmt.Errorf("POLICY_RULE_FIXTURE_KINDS_INVALID: %s/%s=%d", r.ID, kind, kindCounts[kind])
+			}
+			delete(kindCounts, kind)
+		}
+		if len(kindCounts) != 0 {
+			return fmt.Errorf("POLICY_RULE_FIXTURE_KINDS_UNKNOWN: %s", r.ID)
+		}
 	}
 	profileIDs := map[string]bool{}
 	for _, p := range b.Profiles {
-		if p.ID == "" || p.RuleID == "" || p.Language == "" || p.Provider == "" {
+		if p.Schema != "shiftleft-profile/1" || strings.TrimSpace(p.ID) == "" || strings.TrimSpace(p.RuleID) == "" || strings.TrimSpace(p.Language) == "" || strings.TrimSpace(p.Provider) == "" || strings.TrimSpace(p.Adapter) == "" || strings.TrimSpace(p.Tool) == "" {
 			return fmt.Errorf("POLICY_PROFILE_INVALID: %+v", p)
 		}
 		if profileIDs[p.ID] {
@@ -119,13 +132,33 @@ func (b *Bundle) validate() error {
 	}
 	packageIDs := map[string]bool{}
 	for _, c := range b.Contracts {
-		if c.PackageID == "" || c.Responsibility == "" {
+		if c.Schema != "shiftleft-package-contract/1" || strings.TrimSpace(c.PackageID) == "" || strings.TrimSpace(c.Responsibility) == "" {
 			return fmt.Errorf("POLICY_CONTRACT_INVALID: %+v", c)
 		}
 		if packageIDs[c.PackageID] {
 			return fmt.Errorf("POLICY_DUPLICATE_PACKAGE_CONTRACT: %s", c.PackageID)
 		}
 		packageIDs[c.PackageID] = true
+		publicIDs := map[string]bool{}
+		routeIDs := map[string]bool{}
+		for _, public := range c.PublicContracts {
+			if strings.TrimSpace(public.ID) != "" {
+				if publicIDs[public.ID] {
+					return fmt.Errorf("POLICY_DUPLICATE_PUBLIC_CONTRACT: %s/%s", c.PackageID, public.ID)
+				}
+				publicIDs[public.ID] = true
+			}
+			for _, route := range append(append([]Route(nil), public.GoldenRoutes...), public.NegativeRoutes...) {
+				if strings.TrimSpace(route.ID) == "" {
+					continue
+				}
+				key := public.ID + "\x00" + route.ID
+				if routeIDs[key] {
+					return fmt.Errorf("POLICY_DUPLICATE_ROUTE: %s/%s/%s", c.PackageID, public.ID, route.ID)
+				}
+				routeIDs[key] = true
+			}
+		}
 	}
 	return nil
 }

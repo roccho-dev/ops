@@ -87,6 +87,16 @@ type Fixture struct {
 	ExpectedFindingCode string `json:"expectedFindingCode"`
 }
 
+type RuleFixture struct {
+	Schema         string   `json:"schema"`
+	CaseID         string   `json:"caseId"`
+	RuleID         string   `json:"ruleId"`
+	FixtureKind    string   `json:"fixtureKind"`
+	ExpectedStatus string   `json:"expectedStatus"`
+	Scenario       string   `json:"scenario"`
+	PresentKinds   []string `json:"presentKinds,omitempty"`
+}
+
 type ImportFinding struct {
 	Module string `json:"module"`
 	Line   int    `json:"line"`

@@ -30,12 +30,16 @@ policyctl proof ...
 
 `proof`は以下を実行します。
 
-- JS/Python/Go × good/bad/false-positive/false-negative = 12 provider fixtures
+- JS/Python/Go × good/bad/false-positive/false-negative = 12 language-provider fixtures
+- 5 language-neutral rules × good/bad/false-positive/false-negative = 20 executable rule fixtures
+- 6 blocker rules全件について、宣言ではなく計32件の実fixtureからcoverage observationを生成
+- JS/Python/Goの`SL-CORE-001` status・finding code一致
 - exact policy hash検査
 - tamper/missing/mutable ref拒否
 - public contract、parse boundary、golden/negative route、current consumer検査
 - missing tool、unsupported language、skipped required testの非Green化
-- clean 2 run receipt byte一致
+- clean 2 runの全Observation・Receipt byte一致（workflowでrun A/Bを比較）
+- 観測済み`unmet`を`unobserved`へ誤分類しないこと
 - policy/base/candidate tree bindingとcandidate mismatch拒否
 
 ## Terminal states

@@ -54,7 +54,7 @@ func Admit(b *Bundle, policyRef, expectedPolicyHash, baseTree, candidateTree str
 	rm := ruleMap(b)
 	profileSeen := map[string]bool{}
 	for _, o := range observations {
-		if o.ProfileID != "internal.contract" && o.Status == StatusMet {
+		if o.ProfileID != "internal.contract" && o.Status != StatusUnobserved {
 			profileSeen[o.ProfileID] = true
 		}
 	}

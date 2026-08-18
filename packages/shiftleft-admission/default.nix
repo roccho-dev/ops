@@ -59,7 +59,9 @@
     guarantees = [
       "mutable ref, missing input, and policy hash mismatch fail before admission"
       "public contracts declare input/output/error/effect plus golden/negative routes and current consumers"
-      "JS/Python/Go return the same SL-CORE-001 finding meaning"
+      "32 executable fixtures cover all 6 blocker rules; fixtureKinds declarations alone never satisfy SL-TEST-001"
+      "JS/Python/Go return the same SL-CORE-001 status and finding meaning"
+      "observed unmet remains BLOCKED_RULE rather than being reclassified as unobserved"
       "missing tool, unsupported language, and skipped required test are not Green"
       "clean two-run receipt bytes are identical"
       "receipt is bound to policy/base/candidate identity"
