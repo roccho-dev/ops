@@ -1,0 +1,55 @@
+{
+  "base_commit": "5f5c44ada8a393ec17699a665d8aafced6fcfc0d",
+  "base_ref": "proposals",
+  "base_tree": "e3fb48355639c1db99f7b4d5cba08a27f230ff2c",
+  "blob_operations": [
+    {
+      "bytes": 654,
+      "encoding": "utf-8",
+      "expected_git_oid": "8cec83a3026b7900e92529020eccb97c7b13db12",
+      "operation_id": "blob-001",
+      "path": "evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl"
+    }
+  ],
+  "changed_paths": [
+    "evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl"
+  ],
+  "checks": {
+    "authoritative_base_tree_rebuilt_locally": "PASS",
+    "json_parse": "PASS",
+    "single_changed_path": "PASS"
+  },
+  "commit_message": "proof(ops): exercise raw Git object write closure after stale retry",
+  "commit_parent": "5f5c44ada8a393ec17699a665d8aafced6fcfc0d",
+  "expected_candidate_tree": "89f7c17a1d324293bfd9ee932b7daa634fa6f178",
+  "expected_intermediate_trees": {
+    "evidence": "b609d099bfc695ccabb184a161cfff004746daf6",
+    "ops-114-git-write-closure": "8da7daf664a82d66ca2ceea4e39c81d904ef17b6"
+  },
+  "forbidden_effects": [
+    "force",
+    "merge",
+    "protected_ref_update",
+    "release_create"
+  ],
+  "plan_sha256": "a6734af5792ae66ae5db6cdaa88b687c21f119ad58fa93dbd0885809a659ef13",
+  "pr": {
+    "base": "proposals",
+    "draft": true,
+    "head": "proposal/connector/ops114-raw-object-proof-260818-02",
+    "title": "proof: raw Git object write closure for issue #114 (attempt 2)"
+  },
+  "request_id": "ops114-raw-object-proof-260818-02",
+  "schema": "ops.gitWritePlan.v1",
+  "source_repo": "roccho-dev/ops",
+  "target_branch": "proposal/connector/ops114-raw-object-proof-260818-02",
+  "tree_operations": [
+    {
+      "blob_sha": "8cec83a3026b7900e92529020eccb97c7b13db12",
+      "mode": "100644",
+      "operation_id": "tree-001",
+      "path": "evidence/ops-114-git-write-closure/ops114-raw-object-proof-260818-02.jsonl",
+      "type": "blob"
+    }
+  ]
+}
