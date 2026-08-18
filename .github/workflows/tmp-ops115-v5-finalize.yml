@@ -6,6 +6,11 @@ on:
       - feat/ops-115-decision-closure-final-v5
     paths:
       - .github/workflows/tmp-ops115-v5-finalize.yml
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - .github/workflows/tmp-ops115-v5-finalize.yml
 
 concurrency:
   group: ops115-v5-finalize
@@ -16,6 +21,7 @@ permissions:
 
 jobs:
   finalize:
+    if: github.event_name == 'push' || github.head_ref == 'feat/ops-115-decision-closure-final-v5'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
