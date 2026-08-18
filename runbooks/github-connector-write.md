@@ -16,3 +16,17 @@
 ## Mandatory authoritative blob readback
 
 `verify` requires canonical Base64 readback bytes for every changed blob and recomputes byte count, payload SHA-256, and the Git blob OID. Echoed object IDs without authoritative bytes never produce `PASS`. Candidate-tree SHA, commit parent/tree/message, ref, and draft PR are still independently read back and compared.
+
+## Idempotent external effect
+
+Before writing, inspect the deterministic target branch and matching head/base PRs:
+
+- missing branch: execute normally;
+- branch at the planned candidate commit: skip object/ref creation and continue with PR/readback;
+- branch at the base commit: resume only after proving the planned candidate objects;
+- branch at any other commit: `BRANCH_CONFLICT`;
+- zero matching PRs: create one draft PR;
+- one matching PR: reuse it;
+- more than one matching PR: `BRANCH_CONFLICT`.
+
+The effect result records `matchingCount`; `verify` requires exactly one. The request ID is bound to its plan in local Git metadata and a different plan never reuses the same request.

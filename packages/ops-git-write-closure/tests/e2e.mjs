@@ -102,7 +102,7 @@ function localEffect(plan, baseRepo, remoteDir) {
     tree: { expectedSha: plan.candidate.tree, actualSha: actualTree },
     commit: { sha: commit, parent, tree, message },
     ref: { name: plan.targetBranch, sha: run("git", ["-C", remoteDir, "rev-parse", `refs/heads/${plan.targetBranch}`]).stdout.trim() },
-    pullRequest: { number: 1, url: "https://example.invalid/pr/1", head: plan.pullRequest.head, base: plan.pullRequest.base, draft: true },
+    pullRequest: { number: 1, url: "https://example.invalid/pr/1", head: plan.pullRequest.head, base: plan.pullRequest.base, draft: true, matchingCount: 1 },
     limitations: ["local bare repository substitutes for authenticated GitHub effect in this test"],
   };
 }
@@ -193,6 +193,10 @@ try {
   const tamperedPrFile = path.join(tmp, "tampered-pr.json"); writeJson(tamperedPrFile, tamperedPr);
   assert.match(invoke(["verify", "--plan", path.join(outDir, "effect-plan.json"), "--effect-result", tamperedPrFile, "--out", path.join(tmp, "tampered-pr-receipt.json")], [1]).stderr, /REMOTE_READBACK_MISMATCH/);
 
+  const duplicatePr = structuredClone(effect); duplicatePr.pullRequest.matchingCount = 2;
+  const duplicatePrFile = path.join(tmp, "duplicate-pr.json"); writeJson(duplicatePrFile, duplicatePr);
+  assert.match(invoke(["verify", "--plan", path.join(outDir, "effect-plan.json"), "--effect-result", duplicatePrFile, "--out", path.join(tmp, "duplicate-pr-receipt.json")], [1]).stderr, /REMOTE_READBACK_MISMATCH/);
+
   const tamperedPlan = structuredClone(plan); tamperedPlan.commit.message = "tampered";
   const tamperedPlanFile = path.join(tmp, "tampered-plan.json"); writeJson(tamperedPlanFile, tamperedPlan);
   assert.match(invoke(["verify", "--plan", tamperedPlanFile, "--effect-result", effectFile, "--out", path.join(tmp, "tampered-plan-receipt.json")], [1]).stderr, /PLAN_HASH_MISMATCH/);
@@ -209,13 +213,25 @@ try {
   const mutateFile = path.join(tmp, "mutate-check.json"); writeJson(mutateFile, mutateCheck);
   assert.match(invoke(["prepare", "--request", mutateFile, "--out-dir", path.join(tmp, "mutate-check")], [1]).stderr, /CHECK_MUTATED_WORKTREE/);
 
+  const sameStatusRoot = path.join(tmp, "same-status-mut"); fs.mkdirSync(sameStatusRoot); const sameStatus = fixture(sameStatusRoot);
+  const sameStatusCheck = requestFor(sameStatus.repo, sameStatus.base, "ops-114-check-mutates-same-status", { checks: [{ id: "mutate", command: [process.execPath, "-e", "require('fs').writeFileSync('src/update.txt','mutated\n')"] }] });
+  const sameStatusFile = path.join(tmp, "same-status-check.json"); writeJson(sameStatusFile, sameStatusCheck);
+  assert.match(invoke(["prepare", "--request", sameStatusFile, "--out-dir", path.join(tmp, "same-status-check")], [1]).stderr, /CHECK_MUTATED_WORKTREE/);
+
+  const identityRoot = path.join(tmp, "default-identity"); fs.mkdirSync(identityRoot); const identity = fixture(identityRoot);
+  const identityRequest = requestFor(identity.repo, identity.base, "ops-114-default-identity");
+  const identityFile = path.join(tmp, "default-identity.json"); writeJson(identityFile, identityRequest);
+  invoke(["prepare", "--request", identityFile, "--out-dir", path.join(tmp, "default-identity-first")]);
+  writeJson(identityFile, { ...identityRequest, commitMessage: "different plan" });
+  assert.match(invoke(["prepare", "--request", identityFile, "--out-dir", path.join(tmp, "default-identity-second")], [1]).stderr, /REQUEST_ID_REUSED_WITH_DIFFERENT_PLAN/);
+
   const noChangeRoot = path.join(tmp, "no-change"); fs.mkdirSync(noChangeRoot); const noChange = fixture(noChangeRoot);
   git(noChange.repo, "add", "-A"); git(noChange.repo, "commit", "--quiet", "-m", "candidate becomes base"); const noChangeBase = git(noChange.repo, "rev-parse", "HEAD");
   const noChangeReq = requestFor(noChange.repo, noChangeBase, "ops-114-no-change");
   const noChangeFile = path.join(tmp, "no-change.json"); writeJson(noChangeFile, noChangeReq);
   assert.match(invoke(["prepare", "--request", noChangeFile, "--out-dir", path.join(tmp, "no-change-out")], [1]).stderr, /NO_CHANGES/);
 
-  process.stdout.write(`${JSON.stringify({ status: "PASS", positive: 2, negative: 17, base: f.base, baseTree: f.baseTree, candidateTree: plan.candidate.tree, largeTrackedBlobBytes: 24 * 1024 * 1024, largeTrackedBlobOid: f.largeOid, changedBlobBytes: prepared.changedBlobBytes })}\n`);
+  process.stdout.write(`${JSON.stringify({ status: "PASS", positive: 2, negative: 20, base: f.base, baseTree: f.baseTree, candidateTree: plan.candidate.tree, largeTrackedBlobBytes: 24 * 1024 * 1024, largeTrackedBlobOid: f.largeOid, changedBlobBytes: prepared.changedBlobBytes })}\n`);
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

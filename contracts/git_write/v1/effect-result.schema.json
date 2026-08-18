@@ -47,6 +47,29 @@
       "type": "string"
     },
     "pullRequest": {
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "head": {
+          "type": "string"
+        },
+        "matchingCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "number": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
       "type": "object"
     },
     "ref": {

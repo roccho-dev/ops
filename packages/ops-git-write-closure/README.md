@@ -29,3 +29,7 @@ ops-git-write-closure verify --plan out/effect-plan.json --effect-result effect-
 ## Mandatory authoritative blob readback
 
 `verify` requires canonical Base64 readback bytes for every changed blob and recomputes byte count, payload SHA-256, and the Git blob OID. Echoed object IDs without authoritative bytes never produce `PASS`. Candidate-tree SHA, commit parent/tree/message, ref, and draft PR are still independently read back and compared.
+
+## Idempotency and checked snapshot
+
+When `--state-dir` is omitted, request identity is retained under `.git/ops-git-write-closure`; reusing one request ID with another plan is rejected. Checks are bounded by full candidate-tree snapshots before and after execution, not only by `git status`, so same-status content mutation is rejected. Final PR readback must report exactly one matching head/base PR.

@@ -34,7 +34,8 @@
     "url": "https://github.com/roccho-dev/ops/pull/123",
     "head": "proposal/connector/ops114-raw-object-proof-260818-02",
     "base": "proposals",
-    "draft": true
+    "draft": true,
+    "matchingCount": 1
   },
   "limitations": [
     "proof PR is intentionally unmerged; accepted implementation is admitted separately"

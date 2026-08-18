@@ -106,6 +106,20 @@ const classifyBlob = (bytes) => {
   }
   return { encoding: "base64", content: bytes.toString("base64") };
 };
+const snapshotTree = (repo) => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ops-git-write-snapshot-"));
+  try {
+    const indexFile = path.join(tempDir, "index");
+    fs.copyFileSync(path.join(repo, ".git", "index"), indexFile);
+    const env = { ...process.env, GIT_INDEX_FILE: indexFile };
+    git(repo, ["add", "-A", "--", "."], { env });
+    const tree = git(repo, ["write-tree"], { env }).stdout.trim();
+    requireHex(tree, 40, "snapshot tree");
+    return tree;
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+};
 
 function prepare(requestFile, outDir, stateDir) {
   const request = validateRequest(readJson(requestFile));
@@ -117,6 +131,7 @@ function prepare(requestFile, outDir, stateDir) {
   requireHex(baseTree, 40, "base tree");
   git(repo, ["fsck", "--no-dangling"]);
 
+  const beforeChecksTree = snapshotTree(repo);
   const beforeChecks = statusBytes(repo);
   const checksReceipt = [];
   for (const check of request.checks) {
@@ -138,7 +153,8 @@ function prepare(requestFile, outDir, stateDir) {
     });
   }
   const afterChecks = statusBytes(repo);
-  if (!beforeChecks.equals(afterChecks)) fail("CHECK_MUTATED_WORKTREE", "checks changed the candidate worktree");
+  const afterChecksTree = snapshotTree(repo);
+  if (!beforeChecks.equals(afterChecks) || beforeChecksTree !== afterChecksTree) fail("CHECK_MUTATED_WORKTREE", "checks changed the candidate worktree");
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ops-git-write-"));
   try {
@@ -148,6 +164,7 @@ function prepare(requestFile, outDir, stateDir) {
     git(repo, ["add", "-A", "--", "."], { env });
     const candidateTree = git(repo, ["write-tree"], { env }).stdout.trim();
     requireHex(candidateTree, 40, "candidate tree");
+    if (candidateTree !== afterChecksTree) fail("CANDIDATE_SNAPSHOT_MISMATCH", "candidate tree differs from the checked snapshot");
     if (candidateTree === baseTree) fail("NO_CHANGES", "candidate tree equals base tree");
     const diffRaw = git(repo, ["diff-tree", "--no-commit-id", "--name-status", "-r", "-z", request.baseSha, candidateTree], { encoding: "buffer" }).stdout;
     const changes = parseDiffTree(diffRaw);
@@ -202,14 +219,13 @@ function prepare(requestFile, outDir, stateDir) {
     const plan = { ...planBase, planSha256 };
 
     fs.mkdirSync(outDir, { recursive: true });
-    if (stateDir) {
-      fs.mkdirSync(stateDir, { recursive: true });
-      const stateFile = path.join(stateDir, `${request.requestId}.json`);
-      if (fs.existsSync(stateFile)) {
-        const prior = readJson(stateFile);
-        if (prior.planSha256 !== planSha256) fail("REQUEST_ID_REUSED_WITH_DIFFERENT_PLAN", `requestId ${request.requestId} already maps to another plan`);
-      } else writeJson(stateFile, { schema: "ops.gitWriteRequestIdentity.v1", requestId: request.requestId, planSha256 });
-    }
+    const identityDir = stateDir ? path.resolve(stateDir) : path.join(repo, ".git", "ops-git-write-closure");
+    fs.mkdirSync(identityDir, { recursive: true });
+    const stateFile = path.join(identityDir, `${request.requestId}.json`);
+    if (fs.existsSync(stateFile)) {
+      const prior = readJson(stateFile);
+      if (prior.planSha256 !== planSha256) fail("REQUEST_ID_REUSED_WITH_DIFFERENT_PLAN", `requestId ${request.requestId} already maps to another plan`);
+    } else writeJson(stateFile, { schema: "ops.gitWriteRequestIdentity.v1", requestId: request.requestId, planSha256 });
     writeJson(path.join(outDir, "effect-plan.json"), plan);
     const receipt = {
       schema: "ops.gitWritePreparedReceipt.v1",
@@ -303,6 +319,7 @@ function verify(planFile, effectResultFile, outFile) {
   add(effect.pullRequest?.draft === true, "PR is not draft");
   add(Number.isInteger(effect.pullRequest?.number) && effect.pullRequest.number > 0, "PR number invalid");
   add(typeof effect.pullRequest?.url === "string" && effect.pullRequest.url.length > 0, "PR URL invalid");
+  add(effect.pullRequest?.matchingCount === 1, "matching PR count is not exactly one");
   if (errors.length) fail("REMOTE_READBACK_MISMATCH", errors.join("; "), { errors });
 
   const receipt = {
