@@ -1,56 +1,81 @@
 {
-  "mandatoryQuestionAccuracy": 0.7777777777777778,
+  "mandatoryQuestionAccuracy": 1.0,
   "mandatoryQuestionCount": 9,
   "results": [
     {
-      "answer": "Which read-only engine should serve the public decision ledger v1?",
+      "answers": [
+        "Which read-only engine should serve the public decision ledger v1?"
+      ],
       "id": "question",
       "visible": true
     },
     {
-      "answer": "select SQLite catalog plus immutable shards for the public decision ledger v1",
+      "answers": [
+        "select SQLite catalog plus immutable shards for the public decision ledger v1"
+      ],
       "id": "recommendation",
       "visible": true
     },
     {
-      "answer": "catalog.sqlite plus indexed immutable SQLite shards",
+      "answers": [
+        "catalog.sqlite plus indexed immutable SQLite shards"
+      ],
       "id": "evidence_for",
       "visible": true
     },
     {
-      "answer": "Frozen DuckLake is materially heavier for the exact required-query replay",
+      "answers": [
+        "Frozen DuckLake is materially heavier for the exact required-query replay"
+      ],
       "id": "evidence_against",
       "visible": true
     },
     {
-      "answer": "HOLD JSONL only",
+      "answers": [
+        "HOLD JSONL only"
+      ],
       "id": "alternatives",
       "visible": true
     },
     {
-      "answer": "None",
+      "answers": [
+        "None"
+      ],
       "id": "gaps",
       "visible": true
     },
     {
-      "answer": "publish an immutable proof checkpoint and run independent clean-room takeover",
+      "answers": [
+        "publish an immutable proof checkpoint and run independent clean-room takeover"
+      ],
       "id": "next_action",
       "visible": true
     },
     {
-      "answer": "semantic mismatch = 0 / fail-closed mismatch = 0 / old checkpoint replay PASS / independent takeover PASS / any semantic mismatch / any required-query p95 fetch exceeds 1 MiB / production telemetry materially differs from the proof workload",
+      "answers": [
+        "semantic mismatch = 0",
+        "fail-closed mismatch = 0",
+        "old checkpoint replay PASS",
+        "independent takeover PASS",
+        "any semantic mismatch",
+        "any required-query p95 fetch exceeds 1 MiB",
+        "production telemetry materially differs from the proof workload"
+      ],
       "id": "success_failure",
-      "visible": false
+      "visible": true
     },
     {
-      "answer": "{'compared': ['sqlite-shards', 'frozen-ducklake'], 'executionCount': 40, 'queryCount': 8, 'repeatCount': 5}",
+      "answers": [
+        "f-lease-applications",
+        "{'impactP95RatioDuckToSQLite': 117.36011739372047, 'p95SQLiteFetchBytes': 192512, 'p95SQLiteShardCount': 4, 'requiredQueryWithinIngressCapShare': 1.0, 'sqlitePointQueryShardCountMax': 1, 'traceP95RatioDuckToSQLite': 62.276245331158556}"
+      ],
       "id": "outcomes",
-      "visible": false
+      "visible": true
     }
   ],
   "reviewer": "independent-static-reader-fixture",
   "reviewerClass": "machine canary; literal independent human review remains separate",
-  "schema": "ops.humanAdoptionAnswerability.v1",
+  "schema": "ops.humanAdoptionAnswerability.v2",
   "sqlOrJsonlDirectOperationCount": 0,
-  "status": "BLOCKED_HUMAN_ADOPTION"
+  "status": "PASS_MACHINE_ANSWERABILITY"
 }

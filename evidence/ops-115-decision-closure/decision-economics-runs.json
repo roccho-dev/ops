@@ -1,0 +1,227 @@
+{
+  "runs": [
+    {
+      "agent_runtime_seconds": {
+        "baseline": 8.2462e-05,
+        "optimized": 3.3909e-05
+      },
+      "all_nodes_count": 15,
+      "baseline_digest": "bcd8e2615372c98d9dba72745ed7aa1e03ad0e9909ac11384e8338280c6677b7",
+      "baseline_run_id": "run-carrier-1",
+      "build_seconds": {
+        "baseline": 0.0,
+        "method": "existing immutable checkpoint reused",
+        "optimized": 0.0
+      },
+      "conflict_count": 0,
+      "decision_family": "carrier-ingress",
+      "decision_id": "d-carrier-current",
+      "decision_root_evidence_reach": 1.0,
+      "dirty_nodes_count": 4,
+      "external_research_reduction_ratio": 0.33333333333333337,
+      "fail_closed_mismatch_count": 0,
+      "human_review_gate": true,
+      "human_review_seconds": {
+        "baseline": 0.0,
+        "method": "no human intervention during either replay",
+        "optimized": 0.0
+      },
+      "known_fact_omission_count": 0,
+      "measurement_method": "controlled deterministic replay of two GitHub-backed decision revisions under one quality contract",
+      "new_external_research_count": {
+        "baseline": 3,
+        "optimized": 2
+      },
+      "new_fact_count": 2,
+      "new_transfer_bytes": {
+        "baseline": 2127,
+        "method": "canonical admitted evidence bytes, not HTTP framing",
+        "optimized": 1071
+      },
+      "no_op_decision_count": 0,
+      "open_gap_count": 0,
+      "optimized_digest": "f4ba4d24674cfb274080d58292c556eace0c62801419aa402fa535bbf99885f4",
+      "optimized_run_id": "run-carrier-2",
+      "outcome_closure_ratio": 1.0,
+      "outcome_expected_count": 1,
+      "outcome_observed_count": 1,
+      "outcome_to_decision_reach": 1.0,
+      "projection_fetch_bytes": 69632,
+      "quality_gate_count": {
+        "baseline": 2,
+        "optimized": 5
+      },
+      "quality_improvement": true,
+      "query_seconds": {
+        "baseline": 8.2462e-05,
+        "optimized": 3.3909e-05
+      },
+      "recomputed_node_ratio": 0.13333333333333333,
+      "recomputed_nodes_count": 2,
+      "reopened_decision_count": 0,
+      "required_asset_count": 2,
+      "required_shard_or_file_count": 1,
+      "resolved_gap_count": 0,
+      "reuse_ratio": 0.7333333333333333,
+      "reused_asset_bytes": 5040,
+      "reused_claim_count": 2,
+      "reused_condition_count": 5,
+      "reused_fact_count": 4,
+      "schema": "ops.decisionEconomics.v2",
+      "semantic_mismatch_count": 0,
+      "stale_exact_reuse_count": 0,
+      "stale_record_count": 0,
+      "status": "PASS",
+      "unaffected_nodes_skipped_count": 13
+    },
+    {
+      "agent_runtime_seconds": {
+        "baseline": 4.2794e-05,
+        "optimized": 2.488e-05
+      },
+      "all_nodes_count": 15,
+      "baseline_digest": "dbacbaa21c066b84b346f482ed2c711ae210b8eaafa306799579417b30a548a3",
+      "baseline_run_id": "run-git-1",
+      "build_seconds": {
+        "baseline": 0.0,
+        "method": "existing immutable checkpoint reused",
+        "optimized": 0.0
+      },
+      "conflict_count": 0,
+      "decision_family": "git-write-closure",
+      "decision_id": "d-git-current",
+      "decision_root_evidence_reach": 1.0,
+      "dirty_nodes_count": 4,
+      "external_research_reduction_ratio": 0.5,
+      "fail_closed_mismatch_count": 0,
+      "human_review_gate": true,
+      "human_review_seconds": {
+        "baseline": 0.0,
+        "method": "no human intervention during either replay",
+        "optimized": 0.0
+      },
+      "known_fact_omission_count": 0,
+      "measurement_method": "controlled deterministic replay of two GitHub-backed decision revisions under one quality contract",
+      "new_external_research_count": {
+        "baseline": 4,
+        "optimized": 2
+      },
+      "new_fact_count": 2,
+      "new_transfer_bytes": {
+        "baseline": 2046,
+        "method": "canonical admitted evidence bytes, not HTTP framing",
+        "optimized": 1031
+      },
+      "no_op_decision_count": 0,
+      "open_gap_count": 0,
+      "optimized_digest": "3983c38eba789d85d4b74d5b7a14e8c464d99f8c72d772f8e73ec30dfd82a91b",
+      "optimized_run_id": "run-git-2",
+      "outcome_closure_ratio": 1.0,
+      "outcome_expected_count": 1,
+      "outcome_observed_count": 1,
+      "outcome_to_decision_reach": 1.0,
+      "projection_fetch_bytes": 69632,
+      "quality_gate_count": {
+        "baseline": 2,
+        "optimized": 5
+      },
+      "quality_improvement": true,
+      "query_seconds": {
+        "baseline": 4.2794e-05,
+        "optimized": 2.488e-05
+      },
+      "recomputed_node_ratio": 0.13333333333333333,
+      "recomputed_nodes_count": 2,
+      "reopened_decision_count": 0,
+      "required_asset_count": 2,
+      "required_shard_or_file_count": 1,
+      "resolved_gap_count": 0,
+      "reuse_ratio": 0.7333333333333333,
+      "reused_asset_bytes": 4884,
+      "reused_claim_count": 2,
+      "reused_condition_count": 5,
+      "reused_fact_count": 4,
+      "schema": "ops.decisionEconomics.v2",
+      "semantic_mismatch_count": 0,
+      "stale_exact_reuse_count": 0,
+      "stale_record_count": 0,
+      "status": "PASS",
+      "unaffected_nodes_skipped_count": 13
+    },
+    {
+      "agent_runtime_seconds": {
+        "baseline": 4.2114e-05,
+        "optimized": 2.5374e-05
+      },
+      "all_nodes_count": 15,
+      "baseline_digest": "913a461182de643501449cd416c2bf04274f387c7b2adda14bf5f3544856040e",
+      "baseline_run_id": "run-repo-1",
+      "build_seconds": {
+        "baseline": 0.0,
+        "method": "existing immutable checkpoint reused",
+        "optimized": 0.0
+      },
+      "conflict_count": 0,
+      "decision_family": "repo-capability-loop",
+      "decision_id": "d-repo-current",
+      "decision_root_evidence_reach": 1.0,
+      "dirty_nodes_count": 4,
+      "external_research_reduction_ratio": 0.6666666666666667,
+      "fail_closed_mismatch_count": 0,
+      "human_review_gate": true,
+      "human_review_seconds": {
+        "baseline": 0.0,
+        "method": "no human intervention during either replay",
+        "optimized": 0.0
+      },
+      "known_fact_omission_count": 0,
+      "measurement_method": "controlled deterministic replay of two GitHub-backed decision revisions under one quality contract",
+      "new_external_research_count": {
+        "baseline": 3,
+        "optimized": 1
+      },
+      "new_fact_count": 2,
+      "new_transfer_bytes": {
+        "baseline": 2038,
+        "method": "canonical admitted evidence bytes, not HTTP framing",
+        "optimized": 1040
+      },
+      "no_op_decision_count": 0,
+      "open_gap_count": 0,
+      "optimized_digest": "ed3dd1e318df766a025a7810ec3f0707cd68f37ab0a818126ebe1d95fb6f27de",
+      "optimized_run_id": "run-repo-2",
+      "outcome_closure_ratio": 1.0,
+      "outcome_expected_count": 1,
+      "outcome_observed_count": 1,
+      "outcome_to_decision_reach": 1.0,
+      "projection_fetch_bytes": 69632,
+      "quality_gate_count": {
+        "baseline": 2,
+        "optimized": 5
+      },
+      "quality_improvement": true,
+      "query_seconds": {
+        "baseline": 4.2114e-05,
+        "optimized": 2.5374e-05
+      },
+      "recomputed_node_ratio": 0.13333333333333333,
+      "recomputed_nodes_count": 2,
+      "reopened_decision_count": 0,
+      "required_asset_count": 2,
+      "required_shard_or_file_count": 1,
+      "resolved_gap_count": 0,
+      "reuse_ratio": 0.7333333333333333,
+      "reused_asset_bytes": 5029,
+      "reused_claim_count": 2,
+      "reused_condition_count": 5,
+      "reused_fact_count": 4,
+      "schema": "ops.decisionEconomics.v2",
+      "semantic_mismatch_count": 0,
+      "stale_exact_reuse_count": 0,
+      "stale_record_count": 0,
+      "status": "PASS",
+      "unaffected_nodes_skipped_count": 13
+    }
+  ],
+  "schema": "ops.decisionEconomicsRuns.v1"
+}

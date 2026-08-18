@@ -27,6 +27,7 @@ ${r.stderr}`);
   assert.equal(receipt.terminalStates.L1, "PASS_SQLITE_SHARDS");
   assert.equal(receipt.terminalStates.L3, "PASS_DECISION_ECONOMICS_G9");
   assert.equal(receipt.humanAI.actionCandidateCount, 5);
+  assert.equal(receipt.humanAI.machineAnswerability, "PASS_MACHINE_ANSWERABILITY");
   assert.equal(receipt.humanAI.directAuthorityWriteCount, 0);
   assert.ok(fs.statSync(path.join(out, "decision-room.html")).size > 1000);
   assert.ok(fs.statSync(path.join(out, "dd-packet", "known-limitations.json")).size > 10);

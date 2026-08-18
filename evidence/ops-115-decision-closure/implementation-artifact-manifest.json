@@ -1,0 +1,350 @@
+{
+  "files": [
+    {
+      "bytes": 298,
+      "path": "action-candidates/adopt.jsonl",
+      "sha256": "c6259b340dbf81dcbdc7c46ebbe5e6b379c17e2cb49cbeabc11ae0aa305a5d7d"
+    },
+    {
+      "bytes": 311,
+      "path": "action-candidates/change_conditions_and_reevaluate.jsonl",
+      "sha256": "35b7940295a932650d90b6f9de704214140716bb0267f7699dcef07e12b10f8a"
+    },
+    {
+      "bytes": 296,
+      "path": "action-candidates/hold.jsonl",
+      "sha256": "45d0f46f174b65a5026f52766087ae2756e149a430ed9a793c3895455b5298ea"
+    },
+    {
+      "bytes": 300,
+      "path": "action-candidates/reject.jsonl",
+      "sha256": "bf34fe9766e34ef61558681c7c140f2baa1143910217b042289ffcd6b7e0e006"
+    },
+    {
+      "bytes": 300,
+      "path": "action-candidates/research.jsonl",
+      "sha256": "de3ec60894454b12b0b09947e6f830df27c106ae568d0476345306c401d66ba6"
+    },
+    {
+      "bytes": 4614,
+      "path": "bounded/checkpoint-1/frozen-ducklake/catalog.json",
+      "sha256": "7b26338d7fc300bea535cd9d83b703c9ada7ec1db3d6193f56ca5b93e694a61c"
+    },
+    {
+      "bytes": 9050,
+      "path": "bounded/checkpoint-1/frozen-ducklake/records-carrier-ingress.parquet",
+      "sha256": "9b567460c7bd3fa869e593eee21168bd4d21c08d83a55c40a745ee1917d75745"
+    },
+    {
+      "bytes": 7870,
+      "path": "bounded/checkpoint-1/frozen-ducklake/records-decision-ledger.parquet",
+      "sha256": "b90773c5f01adff9b9b5cbb6cc5cf36c3d66efabaa7dc3a8553d7f8b62a5b0e4"
+    },
+    {
+      "bytes": 9129,
+      "path": "bounded/checkpoint-1/frozen-ducklake/records-git-write-closure.parquet",
+      "sha256": "70b2140319d50c0c7832bd6e6485f11c32188c742622cc2d4d327b127a251dc2"
+    },
+    {
+      "bytes": 8960,
+      "path": "bounded/checkpoint-1/frozen-ducklake/records-repo-capability-loop.parquet",
+      "sha256": "ce3f9a7150cb4bd6c18943955681040853040110097a2a78e5f330cfee03bea8"
+    },
+    {
+      "bytes": 1500,
+      "path": "bounded/checkpoint-1/frozen-ducklake/relations-carrier-ingress.parquet",
+      "sha256": "7ad79ef5f7010051f29ed96b14e890f3815c21c1a822bd888b67b5612537c832"
+    },
+    {
+      "bytes": 1080,
+      "path": "bounded/checkpoint-1/frozen-ducklake/relations-decision-ledger.parquet",
+      "sha256": "20839715e76e552686562b453507434acfec03e0cb2d3fcf72fdb62e1b6ac0f3"
+    },
+    {
+      "bytes": 1469,
+      "path": "bounded/checkpoint-1/frozen-ducklake/relations-git-write-closure.parquet",
+      "sha256": "9ac8189dce2fc9889aa9e01a894028136789172d3de43e45894ddc011e63c210"
+    },
+    {
+      "bytes": 1520,
+      "path": "bounded/checkpoint-1/frozen-ducklake/relations-repo-capability-loop.parquet",
+      "sha256": "1ae5a022e15a5e2fae4910fde1d56f89f94a47675bbbd2705eebcc3c7d546104"
+    },
+    {
+      "bytes": 20480,
+      "path": "bounded/checkpoint-1/sqlite/catalog.sqlite",
+      "sha256": "1efa146fa4dbf5079196dd00fecbce480a16dadba3c08a109123a0b1abbad8d5"
+    },
+    {
+      "bytes": 1223,
+      "path": "bounded/checkpoint-1/sqlite/manifest.json",
+      "sha256": "131876a6372a38526fe02bdf73d9e05da9fd8f3dc7116a1046664ecec382bcae"
+    },
+    {
+      "bytes": 40960,
+      "path": "bounded/checkpoint-1/sqlite/shard-carrier-ingress.sqlite",
+      "sha256": "43f411279e25030fe798a606c7b6e836259e14b17f1f2af7093705e1f227fe9d"
+    },
+    {
+      "bytes": 32768,
+      "path": "bounded/checkpoint-1/sqlite/shard-decision-ledger.sqlite",
+      "sha256": "acff4a21b68a4dbdc268405acf9ddcf2a7d1369464495b3ed7ad268b4e3dbc0f"
+    },
+    {
+      "bytes": 40960,
+      "path": "bounded/checkpoint-1/sqlite/shard-git-write-closure.sqlite",
+      "sha256": "58e79795c2436afebf987270d9dcc8b8afcfdb20ee05f39ec88ecabfea378a5d"
+    },
+    {
+      "bytes": 40960,
+      "path": "bounded/checkpoint-1/sqlite/shard-repo-capability-loop.sqlite",
+      "sha256": "76ae2bd34ef2a573b5eb6ebba77d4aa3aed15a9b4f7bb5e5b6cd845dfcf05409"
+    },
+    {
+      "bytes": 4929,
+      "path": "bounded/checkpoint-2/frozen-ducklake/catalog.json",
+      "sha256": "aa25b6533fd00f0298d2a333d2c7719c26a66b6f177f64fd5ffc72c03d6aa9ac"
+    },
+    {
+      "bytes": 9050,
+      "path": "bounded/checkpoint-2/frozen-ducklake/records-carrier-ingress.parquet",
+      "sha256": "9b567460c7bd3fa869e593eee21168bd4d21c08d83a55c40a745ee1917d75745"
+    },
+    {
+      "bytes": 12001,
+      "path": "bounded/checkpoint-2/frozen-ducklake/records-decision-ledger.parquet",
+      "sha256": "d04b81f69af441ef9235939f5015ac2336d0b31610ec1620e84aae5f21c55815"
+    },
+    {
+      "bytes": 9129,
+      "path": "bounded/checkpoint-2/frozen-ducklake/records-git-write-closure.parquet",
+      "sha256": "70b2140319d50c0c7832bd6e6485f11c32188c742622cc2d4d327b127a251dc2"
+    },
+    {
+      "bytes": 8960,
+      "path": "bounded/checkpoint-2/frozen-ducklake/records-repo-capability-loop.parquet",
+      "sha256": "ce3f9a7150cb4bd6c18943955681040853040110097a2a78e5f330cfee03bea8"
+    },
+    {
+      "bytes": 1500,
+      "path": "bounded/checkpoint-2/frozen-ducklake/relations-carrier-ingress.parquet",
+      "sha256": "7ad79ef5f7010051f29ed96b14e890f3815c21c1a822bd888b67b5612537c832"
+    },
+    {
+      "bytes": 1547,
+      "path": "bounded/checkpoint-2/frozen-ducklake/relations-decision-ledger.parquet",
+      "sha256": "7fd7d637a831e92775af1c4eaeaa7cf6529839264c3f4af0f3112bc356d72eb3"
+    },
+    {
+      "bytes": 1469,
+      "path": "bounded/checkpoint-2/frozen-ducklake/relations-git-write-closure.parquet",
+      "sha256": "9ac8189dce2fc9889aa9e01a894028136789172d3de43e45894ddc011e63c210"
+    },
+    {
+      "bytes": 1520,
+      "path": "bounded/checkpoint-2/frozen-ducklake/relations-repo-capability-loop.parquet",
+      "sha256": "1ae5a022e15a5e2fae4910fde1d56f89f94a47675bbbd2705eebcc3c7d546104"
+    },
+    {
+      "bytes": 28672,
+      "path": "bounded/checkpoint-2/sqlite/catalog.sqlite",
+      "sha256": "60dbfe40d2870345d237da4de6b3f2c6407387d7c4a848a7940075e6c0c27de6"
+    },
+    {
+      "bytes": 1223,
+      "path": "bounded/checkpoint-2/sqlite/manifest.json",
+      "sha256": "588e96a497037587388d8da9e43182152ba9db4b17262b6a075b535c19ec8f70"
+    },
+    {
+      "bytes": 40960,
+      "path": "bounded/checkpoint-2/sqlite/shard-carrier-ingress.sqlite",
+      "sha256": "43f411279e25030fe798a606c7b6e836259e14b17f1f2af7093705e1f227fe9d"
+    },
+    {
+      "bytes": 45056,
+      "path": "bounded/checkpoint-2/sqlite/shard-decision-ledger.sqlite",
+      "sha256": "7a602a00734ced7aed8427deab89cc12ddb8a8fc4f1df3bdee0f736044a81d3f"
+    },
+    {
+      "bytes": 40960,
+      "path": "bounded/checkpoint-2/sqlite/shard-git-write-closure.sqlite",
+      "sha256": "58e79795c2436afebf987270d9dcc8b8afcfdb20ee05f39ec88ecabfea378a5d"
+    },
+    {
+      "bytes": 40960,
+      "path": "bounded/checkpoint-2/sqlite/shard-repo-capability-loop.sqlite",
+      "sha256": "76ae2bd34ef2a573b5eb6ebba77d4aa3aed15a9b4f7bb5e5b6cd845dfcf05409"
+    },
+    {
+      "bytes": 11721,
+      "path": "bounded/closure-receipt.json",
+      "sha256": "48ca0fe413b9a88fa9ea96cfa298609145bf580b3c257740a5caa7b2f5cf2ab2"
+    },
+    {
+      "bytes": 6534,
+      "path": "bounded/decision-packet.json",
+      "sha256": "4b6c676e6f19d3cfa2d066fe2cda6971ca8179bd5f60f357dada5dcc098e064a"
+    },
+    {
+      "bytes": 5599,
+      "path": "bounded/decision-room.html",
+      "sha256": "34e768fbf52714a372d92d128cf68da0680725f90317e2ac514442d062f761f4"
+    },
+    {
+      "bytes": 7211,
+      "path": "bounded/engine-parity.json",
+      "sha256": "dd5b5a69b3a9a5b86a03e2c0b87e367689fa2d11d56f3f8424f49e4483de35b7"
+    },
+    {
+      "bytes": 6930,
+      "path": "bounded/negative-cases.json",
+      "sha256": "ade40b32765089075102b490d5d636e18bd83acb9e4eedca4454562e9eee7ca0"
+    },
+    {
+      "bytes": 28672,
+      "path": "checkpoint-selected/catalog.sqlite",
+      "sha256": "60dbfe40d2870345d237da4de6b3f2c6407387d7c4a848a7940075e6c0c27de6"
+    },
+    {
+      "bytes": 1223,
+      "path": "checkpoint-selected/manifest.json",
+      "sha256": "588e96a497037587388d8da9e43182152ba9db4b17262b6a075b535c19ec8f70"
+    },
+    {
+      "bytes": 40960,
+      "path": "checkpoint-selected/shard-carrier-ingress.sqlite",
+      "sha256": "43f411279e25030fe798a606c7b6e836259e14b17f1f2af7093705e1f227fe9d"
+    },
+    {
+      "bytes": 45056,
+      "path": "checkpoint-selected/shard-decision-ledger.sqlite",
+      "sha256": "7a602a00734ced7aed8427deab89cc12ddb8a8fc4f1df3bdee0f736044a81d3f"
+    },
+    {
+      "bytes": 40960,
+      "path": "checkpoint-selected/shard-git-write-closure.sqlite",
+      "sha256": "58e79795c2436afebf987270d9dcc8b8afcfdb20ee05f39ec88ecabfea378a5d"
+    },
+    {
+      "bytes": 40960,
+      "path": "checkpoint-selected/shard-repo-capability-loop.sqlite",
+      "sha256": "76ae2bd34ef2a573b5eb6ebba77d4aa3aed15a9b4f7bb5e5b6cd845dfcf05409"
+    },
+    {
+      "bytes": 315,
+      "path": "clean-room-request.json",
+      "sha256": "f789c92d038d55b99a22285f53489b93dd30f951662873a59563bbadc309ce9d"
+    },
+    {
+      "bytes": 208,
+      "path": "dd-packet/authority-and-ownership.json",
+      "sha256": "5073d8d0bdfc6e1858824c88548c9039fb0714eba3ab2e8d81a05ca1d81b6229"
+    },
+    {
+      "bytes": 51,
+      "path": "dd-packet/conflicts-and-gaps.json",
+      "sha256": "469f5bc4ae9608850fb3bba8d189453159bb28595f14a566712c4647c1051083"
+    },
+    {
+      "bytes": 906,
+      "path": "dd-packet/current-decisions.json",
+      "sha256": "86d711493581a6e43240c603fedb13d29cb6669bac7f1fabbf3ac3f8bb0c310b"
+    },
+    {
+      "bytes": 104,
+      "path": "dd-packet/data-classification.json",
+      "sha256": "6dd1057806e7e1520e40655181858ae40da2e71daa09cd9a61bc0b150ce61dea"
+    },
+    {
+      "bytes": 708,
+      "path": "dd-packet/decision-economics.json",
+      "sha256": "0812f5c44c51b352ef24d797340022302a8ab9adfd8bfb337ad846ef29fdd301"
+    },
+    {
+      "bytes": 47,
+      "path": "dd-packet/decision-lineage.json",
+      "sha256": "f074523b6cb944345835d5b0b214ae8824e81f46412df73bccd9d4a3cfe6ada7"
+    },
+    {
+      "bytes": 180,
+      "path": "dd-packet/known-limitations.json",
+      "sha256": "c618c06800ad865e4ac4dd33724f7a40711f64c17c3431b8feca9ff1d91a8bda"
+    },
+    {
+      "bytes": 170,
+      "path": "dd-packet/operational-runbook.json",
+      "sha256": "05a1ca5bbd845d78dca6f2e960319a788c61005f1c4f2faf2f0363f6194e4412"
+    },
+    {
+      "bytes": 765,
+      "path": "dd-packet/outcome-coverage.json",
+      "sha256": "bf170a323f28ede6252cfb3b464c49fcc25e1dbee411eb348dc0936b1fe5aa25"
+    },
+    {
+      "bytes": 137,
+      "path": "dd-packet/provider-dependencies.json",
+      "sha256": "702f9e51e004d7f8801b486524863ee92a3a966ecb905e586e2c4b9b2ec8ddc0"
+    },
+    {
+      "bytes": 192,
+      "path": "dd-packet/public-private-boundary.json",
+      "sha256": "833e2923ca6199a2f41819becc5f78da1c96338f8bc4c0c6d517ac74740f2bc8"
+    },
+    {
+      "bytes": 11721,
+      "path": "dd-packet/receipts/bounded-proof.json",
+      "sha256": "48ca0fe413b9a88fa9ea96cfa298609145bf580b3c257740a5caa7b2f5cf2ab2"
+    },
+    {
+      "bytes": 11774,
+      "path": "dd-packet/receipts/engine-selection.json",
+      "sha256": "503c59a1433bd56f347cda1618a90aeeac3ea7ccfb06b132de0405121b78061a"
+    },
+    {
+      "bytes": 181,
+      "path": "dd-packet/software-sbom.json",
+      "sha256": "21c1f9d0b989ce69be661232521c01bcf994ef50bb4e300068eac2b0efb29387"
+    },
+    {
+      "bytes": 165,
+      "path": "dd-packet/source-and-license-inventory.json",
+      "sha256": "190aabaa526cbabdfa77302b4e2cdc17ca0cc0b08335c7456e43f8c0ae2a907c"
+    },
+    {
+      "bytes": 7734,
+      "path": "decision-economics-runs.json",
+      "sha256": "7ec877570c113bc7a4cd07aeefc0f2d5c56d98d4795de9098668cdc0d23d0636"
+    },
+    {
+      "bytes": 708,
+      "path": "decision-economics-summary.json",
+      "sha256": "0812f5c44c51b352ef24d797340022302a8ab9adfd8bfb337ad846ef29fdd301"
+    },
+    {
+      "bytes": 6534,
+      "path": "decision-packet.json",
+      "sha256": "4b6c676e6f19d3cfa2d066fe2cda6971ca8179bd5f60f357dada5dcc098e064a"
+    },
+    {
+      "bytes": 5599,
+      "path": "decision-room.html",
+      "sha256": "34e768fbf52714a372d92d128cf68da0680725f90317e2ac514442d062f761f4"
+    },
+    {
+      "bytes": 3274,
+      "path": "final-closure-receipt.json",
+      "sha256": "3cf3ccc4c7cdf9b5354d1213ca6c39cde0c9ae34529b91c99f23f20d0fac77db"
+    },
+    {
+      "bytes": 2192,
+      "path": "human-adoption-answerability.json",
+      "sha256": "8f3b88a6c4fd090f838dad8807811277487434355ecadb34d421bbe5fab02df3"
+    },
+    {
+      "bytes": 11528,
+      "path": "reuse-provenance.json",
+      "sha256": "19ccce1e8648ca6fc63da048f10376ca344406ce1c79d9ebb45ef29ebb8ca15c"
+    }
+  ],
+  "schema": "ops.proofArtifactManifest.v1"
+}

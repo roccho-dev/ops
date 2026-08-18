@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import argparse
 import hashlib
+import html
 import json
 import shutil
 import statistics
@@ -257,21 +258,22 @@ def action_candidates(packet, out):
 
 
 def answerability(packet, html_path):
-    text = html_path.read_text(encoding='utf-8')
-    questions = [
-        ('question', packet['question']),
-        ('recommendation', str(packet['recommendation'])),
-        ('evidence_for', packet['evidence_for'][0]['statement'] if packet['evidence_for'] else 'None'),
-        ('evidence_against', packet['evidence_against'][0]['statement'] if packet['evidence_against'] else 'None'),
-        ('alternatives', packet['alternatives'][0]['name'] if packet['alternatives'] else 'None'),
-        ('gaps', packet['gaps'][0]['statement'] if packet['gaps'] else 'None'),
-        ('next_action', packet['next_action']),
-        ('success_failure', ' / '.join(packet['success_conditions'] + packet.get('stop_conditions', []))),
-        ('outcomes', packet['outcomes'][0]['statement'] if packet['outcomes'] else 'None'),
+    text = html.unescape(html_path.read_text(encoding='utf-8'))
+    outcome = next((x for x in packet['outcomes'] if x.get('kind') == 'outcome'), packet['outcomes'][0] if packet['outcomes'] else {'id': 'None', 'statement': 'None'})
+    checks = [
+        ('question', [packet['question']]),
+        ('recommendation', [str(packet['recommendation'])]),
+        ('evidence_for', [packet['evidence_for'][0]['statement'] if packet['evidence_for'] else 'None']),
+        ('evidence_against', [packet['evidence_against'][0]['statement'] if packet['evidence_against'] else 'None']),
+        ('alternatives', [packet['alternatives'][0]['name'] if packet['alternatives'] else 'None']),
+        ('gaps', [packet['gaps'][0]['statement'] if packet['gaps'] else 'None']),
+        ('next_action', [packet['next_action']]),
+        ('success_failure', [*packet['success_conditions'], *packet.get('stop_conditions', [])]),
+        ('outcomes', [outcome['id'], outcome['statement']]),
     ]
-    results = [{'id': q, 'answer': a, 'visible': str(a) in text} for q, a in questions]
+    results = [{'id': key, 'answers': values, 'visible': all(str(value) in text for value in values)} for key, values in checks]
     return {
-        'schema': 'ops.humanAdoptionAnswerability.v1',
+        'schema': 'ops.humanAdoptionAnswerability.v2',
         'reviewer': 'independent-static-reader-fixture',
         'reviewerClass': 'machine canary; literal independent human review remains separate',
         'mandatoryQuestionCount': len(results),
@@ -280,7 +282,6 @@ def answerability(packet, html_path):
         'results': results,
         'status': 'PASS_MACHINE_ANSWERABILITY' if all(x['visible'] for x in results) else 'BLOCKED_HUMAN_ADOPTION',
     }
-
 
 def dd_packet(out, records, selection, economics_summary, source_commit, source_tree, bounded_receipt):
     dd = out / 'dd-packet'; (dd / 'receipts').mkdir(parents=True, exist_ok=True)

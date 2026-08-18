@@ -34,7 +34,7 @@
     "directAuthorityWriteCount": 0,
     "javascriptRequired": false,
     "literalIndependentHumanReview": "REQUIRED_BEFORE_ISSUE_CLOSE",
-    "machineAnswerability": "BLOCKED_HUMAN_ADOPTION",
+    "machineAnswerability": "PASS_MACHINE_ANSWERABILITY",
     "packetDigest": "c32e3503ab3d619bca3888320f2f67c8aa498fe1947cc9fde046de8b14bb40c7"
   },
   "limitations": [
@@ -60,10 +60,10 @@
     "sqlitePointQueryShardCountAtMostOne": true
   },
   "selectionReplayMetrics": {
-    "impactP95RatioDuckToSQLite": 106.55585418459373,
+    "impactP95RatioDuckToSQLite": 128.07784320323015,
     "ingressProfileCapBytes": 1048576,
     "queryExecutionCount": 40,
-    "traceP95RatioDuckToSQLite": 56.33923510071426,
+    "traceP95RatioDuckToSQLite": 70.30010349115734,
     "withinIngressCapShare": 1.0
   },
   "selectionStatus": "PASS_SQLITE_SHARDS",
