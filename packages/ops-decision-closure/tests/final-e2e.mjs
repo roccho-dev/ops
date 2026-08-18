@@ -93,7 +93,9 @@ try {
   const tamperedProjection = clonedProjection("checkpoint-tampered-asset", selectedProjection);
   const tamperedManifestPath = path.join(tamperedProjection, "manifest.json");
   const tamperedManifest = JSON.parse(fs.readFileSync(tamperedManifestPath, "utf8"));
-  fs.appendFileSync(path.join(tamperedProjection, tamperedManifest.assets[0].name), "tamper");
+  const tamperedAssetPath = path.join(tamperedProjection, tamperedManifest.assets[0].name);
+  fs.chmodSync(tamperedAssetPath, 0o644);
+  fs.appendFileSync(tamperedAssetPath, "tamper");
   requireRejected(invokeSelected(tamperedProjection, sha256(fs.readFileSync(tamperedManifestPath))), /ASSET_IDENTITY_MISMATCH/);
 
   process.stdout.write(`${JSON.stringify(summary)}\n`);
