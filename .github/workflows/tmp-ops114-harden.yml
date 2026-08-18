@@ -37,13 +37,7 @@ jobs:
             node --check packages/ops-git-write-closure/bin/ops-git-write-closure.mjs
             node packages/ops-git-write-closure/tests/e2e.mjs
 
-            python3 - <<'PY'
-            from pathlib import Path
-            import hashlib
-            root = Path("evidence/ops-114-git-write-closure")
-            names = ["README.md", "live-effect-plan.json", "raw-live-effect-plan.json", "live-effect-result.json", "live-final-receipt.json", "live-proof-evidence.json"]
-            root.joinpath("SHA256SUMS").write_text("".join(f"{hashlib.sha256(root.joinpath(name).read_bytes()).hexdigest()}  {name}\n" for name in names))
-            PY
+            python3 -c 'from pathlib import Path; import hashlib; root=Path("evidence/ops-114-git-write-closure"); names=["README.md","live-effect-plan.json","raw-live-effect-plan.json","live-effect-result.json","live-final-receipt.json","live-proof-evidence.json"]; root.joinpath("SHA256SUMS").write_text("".join(f"{hashlib.sha256(root.joinpath(name).read_bytes()).hexdigest()}  {name}\n" for name in names))'
           } >"$log" 2>&1; then
             cat "$log" >&2
             cp "$log" .github/tmp/harden-error.log
