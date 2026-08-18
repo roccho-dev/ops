@@ -10,11 +10,15 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../../..");
-const cli = path.join(root, "packages/ops-decision-closure/bin/final-proof.py");
-const selectedCli = path.join(root, "packages/ops-decision-closure/bin/query.py");
+const packageRoot = path.join(root, "packages/ops-decision-closure");
+const cli = path.join(packageRoot, "bin/final-proof.py");
+const selectedCli = path.join(packageRoot, "bin/query.py");
+const cleanRoomCli = path.join(packageRoot, "bin/clean-room.py");
 const pythonCommand = process.env.OPS_PYTHON || "python3";
+const gitCommand = process.env.OPS_GIT || "git";
 const duckdb = process.env.OPS_DUCKDB || "duckdb";
 const out = fs.mkdtempSync(path.join(os.tmpdir(), "ops-decision-final-"));
+const takeoverRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ops-decision-takeover-"));
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const invokeSelected = (projection, manifestSha, query = "current_decisions", params = { domain: "decision-ledger" }) =>
   spawnSync(pythonCommand, [selectedCli, "--projection", projection, "--manifest-sha256", manifestSha, "--query", query, "--params-json", JSON.stringify(params)], { encoding: "utf8" });
@@ -27,6 +31,12 @@ const clonedProjection = (name, source) => {
   const target = path.join(out, name);
   fs.cpSync(source, target, { recursive: true });
   return target;
+};
+const invoke = (command, args, options = {}) => {
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, ...options });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
+  return result.stdout.trim();
 };
 
 try {
@@ -98,7 +108,76 @@ try {
   fs.appendFileSync(tamperedAssetPath, "tamper");
   requireRejected(invokeSelected(tamperedProjection, sha256(fs.readFileSync(tamperedManifestPath))), /ASSET_IDENTITY_MISMATCH/);
 
-  process.stdout.write(`${JSON.stringify(summary)}\n`);
+  const repoFixture = path.join(takeoverRoot, "repo");
+  const fixturePackage = path.join(repoFixture, "packages/ops-decision-closure");
+  fs.mkdirSync(path.dirname(fixturePackage), { recursive: true });
+  fs.cpSync(packageRoot, fixturePackage, { recursive: true });
+  invoke(gitCommand, ["init", "--quiet", repoFixture]);
+  invoke(gitCommand, ["-C", repoFixture, "config", "user.name", "independent-takeover-fixture"]);
+  invoke(gitCommand, ["-C", repoFixture, "config", "user.email", "takeover@example.invalid"]);
+  invoke(gitCommand, ["-C", repoFixture, "add", "packages/ops-decision-closure"]);
+  invoke(gitCommand, ["-C", repoFixture, "commit", "--quiet", "-m", "fixture: exact decision closure source"]);
+  const fixtureCommit = invoke(gitCommand, ["-C", repoFixture, "rev-parse", "HEAD"]);
+  const fixtureTree = invoke(gitCommand, ["-C", repoFixture, "rev-parse", "HEAD^{tree}"]);
+
+  const releaseProof = path.join(takeoverRoot, "release-proof");
+  invoke(pythonCommand, [path.join(fixturePackage, "bin/final-proof.py"), "--out-dir", releaseProof, "--duckdb", duckdb, "--source-commit", fixtureCommit, "--source-tree", fixtureTree]);
+  const releaseManifestSha = sha256(fs.readFileSync(path.join(releaseProof, "artifact-manifest.json")));
+  const takeoverOut = path.join(takeoverRoot, "takeover");
+  const cleanHome = path.join(takeoverRoot, "home");
+  const cleanTmp = path.join(takeoverRoot, "tmp");
+  fs.mkdirSync(cleanHome);
+  fs.mkdirSync(cleanTmp);
+  const cleanEnvironment = {
+    PATH: process.env.PATH || "",
+    HOME: cleanHome,
+    TMPDIR: cleanTmp,
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+  };
+  const takeover = spawnSync(pythonCommand, [
+    path.join(fixturePackage, "bin/clean-room.py"),
+    "--repo-root", repoFixture,
+    "--release-proof-dir", releaseProof,
+    "--release-manifest-sha256", releaseManifestSha,
+    "--out-dir", takeoverOut,
+    "--duckdb", duckdb,
+    "--exact-commit", fixtureCommit,
+    "--exact-tree", fixtureTree,
+    "--release-tag", `decision-ledger-proof-${fixtureCommit.slice(0, 12)}`,
+    "--operator-id", "nix-clean-room-fixture",
+  ], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env: cleanEnvironment });
+  if (takeover.error) throw takeover.error;
+  if (takeover.status !== 0) throw new Error(`${takeover.stdout}\n${takeover.stderr}`);
+  const takeoverSummary = JSON.parse(takeover.stdout.trim());
+  assert.equal(takeoverSummary.status, "PASS_INDEPENDENT_TRANSFER_DD_G10");
+  const takeoverReceipt = JSON.parse(fs.readFileSync(path.join(takeoverOut, "independent-takeover.receipt.json"), "utf8"));
+  assert.equal(takeoverReceipt.verdict, "PASS_INDEPENDENT_TRANSFER_DD_G10");
+  assert.equal(takeoverReceipt.secret_count, 0);
+  assert.equal(takeoverReceipt.owner_intervention_count, 0);
+  assert.equal(takeoverReceipt.repository_identity_result.commit, fixtureCommit);
+  assert.equal(takeoverReceipt.repository_identity_result.tree, fixtureTree);
+  assert.equal(takeoverReceipt.release_manifest_sha256, releaseManifestSha);
+  assert.equal(takeoverReceipt.selected_query_result.status, "PASS");
+  assert.equal(takeoverReceipt.alternate_host_result.status, "PASS");
+  assert.equal(takeoverReceipt.impact_result.status, "PASS");
+  assert.equal(takeoverReceipt.source_checkpoint_unchanged, true);
+
+  const wrongReleaseManifest = spawnSync(pythonCommand, [
+    path.join(fixturePackage, "bin/clean-room.py"),
+    "--repo-root", repoFixture,
+    "--release-proof-dir", releaseProof,
+    "--release-manifest-sha256", "0".repeat(64),
+    "--out-dir", path.join(takeoverRoot, "takeover-wrong-manifest"),
+    "--duckdb", duckdb,
+    "--exact-commit", fixtureCommit,
+    "--exact-tree", fixtureTree,
+    "--release-tag", "decision-ledger-proof-invalid",
+  ], { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, env: cleanEnvironment });
+  requireRejected(wrongReleaseManifest, /release manifest SHA mismatch/);
+
+  process.stdout.write(`${JSON.stringify({ ...summary, cleanRoom: takeoverSummary.status })}\n`);
 } finally {
   fs.rmSync(out, { recursive: true, force: true });
+  fs.rmSync(takeoverRoot, { recursive: true, force: true });
 }
