@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/issue-116-shiftleft-proof.yml"
       - "packages/shiftleft-admission/**"
+      - "packages/ops-git-write-closure/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
   workflow_dispatch:
@@ -37,19 +38,20 @@ jobs:
         with:
           python-version: "3.13.5"
 
-      - name: Test adapters and build static policyctl
+      - name: Test adapters, Git write admission, and build static policyctl
         working-directory: packages/shiftleft-admission
         run: |
           set -euo pipefail
           go test -count=1 ./...
           go vet ./...
-          bash -n tests/e2e.sh
+          bash -n tests/e2e.sh tests/git-write-admission.sh
           node --check adapters/js_imports.mjs
           python3 -m py_compile adapters/python_imports.py
           go build -o /tmp/issue-116-go-adapter adapters/go_imports.go
           mkdir -p out
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
             go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
+          POLICYCTL="$PWD/out/policyctl" bash tests/git-write-admission.sh
 
       - name: Produce two independent proof runs
         working-directory: packages/shiftleft-admission
@@ -147,6 +149,12 @@ jobs:
               'sourceCloneUsedByConsumer': False,
               'sourceBuildRequiredByConsumer': False,
               'repairAllowed': False,
+              'gitWriteAdmission': {
+                  'correctReceipt': 'PASS',
+                  'wrongCandidateTree': 'CHECK_FAILED',
+                  'missingReceipt': 'CHECK_FAILED',
+                  'readbackReverify': 'PASS',
+              },
               'materializer': {
                   'carrierSha256': '5fc1284e4c89fcbcd2c8907d2275617d670e92159abb7100917a87c75ce066d1',
                   'archiveSha256': '4800479e20c2479bb535b16ef271f85c693a851c57cd0d052890c6577aeb53d1',
