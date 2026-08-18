@@ -1,0 +1,51 @@
+{
+  "schema": "ops.114115.currentThreadClosure.v1",
+  "status": "PASS_EXECUTABLE_SCOPE",
+  "observed_at": "2026-08-18T00:00:00Z",
+  "base": {
+    "commit": "59457a5667488da34d4ba977fa32c3a101a4a38e",
+    "tree": "b3677c62ff7c66dd00f0aebbd16c31fe9beaba5c"
+  },
+  "ingress": {
+    "issue_117": "PASS_REPLAYED",
+    "exact_base_artifact_id": 9306467781,
+    "exact_base_artifact_sha256": "61738286b22dac92fa371f78f59923b30ed455c6bc21b585868be98a52eee9c0",
+    "duckdb_artifact_id": 9306467628,
+    "duckdb_artifact_sha256": "bd7ff1574673726c8e8f8f59c300214d5fb08190e6536123a796afbd3426cbe0",
+    "duckdb_payload_sha256": "3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788"
+  },
+  "issue_114": {
+    "local_prepare_verify": "PASS",
+    "positive_cases": 2,
+    "negative_cases": 7,
+    "unchanged_large_blob_bytes": 25165824,
+    "large_blob_in_effect_plan": false,
+    "connector_contents_write": "PASS_PR_118",
+    "raw_git_object_sequence": "PENDING_SEPARATE_LIVE_SEQUENCE"
+  },
+  "issue_115": {
+    "authority_record_count": 19,
+    "engines": ["raw", "single-sqlite", "sqlite-shards", "frozen-ducklake"],
+    "query_count": 8,
+    "semantic_mismatch_count": 0,
+    "fail_closed_mismatch_count": 0,
+    "negative_case_count": 43,
+    "decision_packet": "PASS",
+    "static_decision_room": "PASS",
+    "javascript_required": false,
+    "human_action_candidates": 5,
+    "authority_direct_write": false
+  },
+  "terminal_states": {
+    "issue_114_local_core": "PASS",
+    "issue_114_connector_contents_effect": "PASS",
+    "issue_114_raw_git_object_adapter": "PENDING_LIVE_OBJECT_SEQUENCE",
+    "issue_115_L1_semantic_parity": "PASS",
+    "issue_115_engine_selection": "BLOCKED_REAL_DATA_LOCALITY",
+    "issue_115_L2_human_ai_contract": "PASS_LOCAL_CONTRACT",
+    "issue_115_G9": "HOLD_INSUFFICIENT_ECONOMIC_BASELINE",
+    "issue_115_G10": "BLOCKED_INDEPENDENT_OPERATOR_REQUIRED",
+    "production_cutover": "NOT_AUTHORIZED"
+  },
+  "merge_authorized": false
+}
