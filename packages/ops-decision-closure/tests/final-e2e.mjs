@@ -17,6 +17,7 @@ const cleanRoomCli = path.join(packageRoot, "bin/clean-room.py");
 const pythonCommand = process.env.OPS_PYTHON || "python3";
 const gitCommand = process.env.OPS_GIT || "git";
 const duckdb = process.env.OPS_DUCKDB || "duckdb";
+process.env.PYTHONDONTWRITEBYTECODE = "1";
 const out = fs.mkdtempSync(path.join(os.tmpdir(), "ops-decision-final-"));
 const takeoverRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ops-decision-takeover-"));
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -134,6 +135,7 @@ try {
     TMPDIR: cleanTmp,
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
+    PYTHONDONTWRITEBYTECODE: "1",
   };
   const takeover = spawnSync(pythonCommand, [
     path.join(fixturePackage, "bin/clean-room.py"),
