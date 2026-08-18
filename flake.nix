@@ -75,11 +75,19 @@
           shiftleft-admission =
             let
               pkgs = nixpkgs.legacyPackages.${system};
+              source = pkgs.lib.fileset.toSource {
+                root = ./.;
+                fileset = pkgs.lib.fileset.unions [
+                  ./packages/shiftleft-admission
+                  ./packages/shiftleft-python-provider
+                ];
+              };
             in
             pkgs.buildGoModule {
               pname = "shiftleft-admission";
               version = "0.1.0";
-              src = ./packages/shiftleft-admission;
+              src = source;
+              sourceRoot = "source/packages/shiftleft-admission";
               vendorHash = null;
               subPackages = [ "cmd/policyctl" ];
               ldflags = [
@@ -88,6 +96,10 @@
                 "-buildid="
               ];
               nativeBuildInputs = [ pkgs.makeWrapper ];
+              nativeCheckInputs = [
+                pkgs.nodejs
+                pkgs.python3
+              ];
               postInstall = ''
                 test -x "$out/bin/policyctl"
               '';
@@ -126,14 +138,19 @@
             in
             pkgs.runCommand "issue-116-shiftleft-proof-check"
               {
-                nativeBuildInputs = [ packages.${system}.shiftleft-admission ];
+                nativeBuildInputs = [
+                  packages.${system}.shiftleft-admission
+                  packages.${system}.shiftleft-python-provider
+                ];
               }
               ''
-                mkdir -p "$out"
-                cp -R ${./packages/shiftleft-admission} source
-                chmod -R u+w source
-                cd source
-                ${pkgs.bash}/bin/bash tests/e2e.sh
+                mkdir -p "$out" workspace/packages
+                cp -R ${./packages/shiftleft-admission} workspace/packages/shiftleft-admission
+                cp -R ${./packages/shiftleft-python-provider} workspace/packages/shiftleft-python-provider
+                chmod -R u+w workspace
+                cd workspace/packages/shiftleft-admission
+                shiftleft-python-imports ../shiftleft-python-provider/fixtures/python/good/core.py > "$out/python-provider.json"
+                ${pkgs.bash}/bin/bash tests/e2e.sh "$out/proof"
                 touch "$out/ok"
               '';
         }

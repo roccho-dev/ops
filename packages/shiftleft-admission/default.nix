@@ -16,6 +16,7 @@
     "package-lib-level-governance"
     "functional-core-governance-gate"
     "github-exact-commit-ref"
+    "shiftleft-python-provider"
   ];
   responsibility = "Intake an exact policy bundle, normalize language-specific evidence, fold met/unmet/unobserved/not-applicable, and emit deterministic receipts bound to policy, base tree, and candidate tree.";
   mission = "Make code without an exact, evidence-backed Shift Left receipt remain draft, without implementing GitHub write effects or duplicating Rule/Outcome authority.";
@@ -31,13 +32,14 @@
   sourceLayout = {
     core = "packages/shiftleft-admission/internal/admission";
     bin = "packages/shiftleft-admission/cmd/policyctl";
-    adapters = "packages/shiftleft-admission/adapters";
+    adapters = "packages/shiftleft-admission/adapters for Go/JavaScript; packages/shiftleft-python-provider for Python";
     policy = "packages/shiftleft-admission/policy";
-    tests = "packages/shiftleft-admission/fixtures and internal/admission/*_test.go";
-    rule = "common gate owns no language AST; language adapters emit normalized observations; #114/#115 remain external.";
+    tests = "packages/shiftleft-admission/fixtures plus packages/shiftleft-python-provider/fixtures and internal/admission/*_test.go";
+    rule = "common gate owns no language AST; language adapters emit normalized observations; Python runtime/source is an independent package; #114/#115 remain external.";
   };
   allowedPaths = [
     "packages/shiftleft-admission/"
+    "packages/shiftleft-python-provider/"
     "flake.nix"
     "ci.intent.v1.jsonl"
     ".github/workflows/issue-116-shiftleft-proof.yml"
@@ -50,14 +52,19 @@
     "common AST"
     "tool missing or skipped converted to PASS"
     "mutable policy ref"
+    "Python source inside the Go admission package"
   ];
-  requiredOutputs = [ "policyctl" "shiftleft-proof artifact" ];
+  requiredOutputs = [ "policyctl" "shiftleft-python-provider" "shiftleft-proof artifact" ];
   requiredChecks = [ "issue-116-shiftleft-proof" ];
-  requiredCommands = [ "go test ./..." "policyctl proof --bundle policy --fixtures fixtures --policy-ref <commit> --base-tree <tree> --candidate-tree <tree> --out-dir <dir>" ];
+  requiredCommands = [
+    "go test ./..."
+    "nix build .#shiftleft-admission"
+    "policyctl proof --bundle policy --fixtures fixtures --policy-ref <commit> --base-tree <tree> --candidate-tree <tree> --out-dir <dir>"
+  ];
   checkPackageContract = {
     kind = "spec.checkPackageContract.v1";
     checkId = "shiftleft-admission";
-    inputs = [ "policy/*.jsonl" "fixtures/**" "normalized observations" ];
+    inputs = [ "policy/*.jsonl" "fixtures/**" "shiftleft-python-provider fixtures" "normalized observations" ];
     guarantees = [
       "mutable ref, missing input, and policy hash mismatch fail before admission"
       "public contracts declare input/output/error/effect plus golden/negative routes and current consumers"
@@ -67,6 +74,8 @@
       "missing tool, unsupported language, and skipped required test are not Green"
       "clean two-run receipt bytes are identical"
       "receipt is bound to policy/base/candidate identity"
+      "Nix builds policyctl before execution and exposes only declared provider runtimes"
+      "Python AST source and Python fixtures live in an independently declared Python package"
     ];
     failureModes = [
       "false-green-unobserved"
@@ -74,6 +83,8 @@
       "stale-tree-receipt"
       "mutable-policy-intake"
       "nondeterministic-receipt"
+      "go-source-treated-as-an-interpreted-runtime"
+      "python-source-hidden-inside-go-package"
     ];
     evidence = [ "GitHub Actions proof artifact" "provider fixture observations" "receipt.1.json" "receipt.2.json" "proof-summary.json" ];
   };

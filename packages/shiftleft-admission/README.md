@@ -11,6 +11,7 @@ ShiftLeftReceipt
 ## Boundaries
 
 - **このpackage**: exact policy intake、Package契約検査、provider結果の4状態fold、policy/base/candidate tree-bound receipt。
+- **shiftleft-python-provider**: Python AST observationとPython fixtureだけを所有する独立runtime package。
 - **#114**: GitHub write effect。ここでは変更しない。
 - **#115**: Rule/Conditionの意味AuthorityとOutcome Fact。ここでは変更しない。
 - **#117**: compiled `policyctl`やproof packをPro sandboxへ搬入するtransport。意味判定はこのpackageが担う。
@@ -38,9 +39,11 @@ policyctl proof ...
 - tamper/missing/mutable ref拒否
 - public contract、parse boundary、golden/negative route、current consumer検査
 - missing tool、unsupported language、skipped required testの非Green化
-- clean 2 runの全Observation・Receipt byte一致（workflowでrun A/Bを比較）
+- clean 2 runの全Observation・Receipt byte一致
 - 観測済み`unmet`を`unobserved`へ誤分類しないこと
 - policy/base/candidate tree bindingとcandidate mismatch拒否
+
+Pythonの実装・fixtureは`../shiftleft-python-provider`にあり、Go package内へPython sourceを混在させません。
 
 ## Terminal states
 

@@ -7,8 +7,11 @@ on:
     paths:
       - ".github/workflows/issue-116-shiftleft-proof.yml"
       - "packages/shiftleft-admission/**"
+      - "packages/shiftleft-python-provider/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
+      - "flake.nix"
+      - "ci.intent.v1.jsonl"
   workflow_dispatch:
 
 permissions:
@@ -38,25 +41,44 @@ jobs:
           python-version: "3.13.5"
 
       - name: Test adapters and build static policyctl
-        working-directory: packages/shiftleft-admission
+        shell: bash
         run: |
           set -euo pipefail
-          go test -count=1 ./...
-          go vet ./...
-          bash -n tests/e2e.sh
-          node --check adapters/js_imports.mjs
-          python3 -m py_compile adapters/python_imports.py
-          go build -o /tmp/issue-116-go-adapter adapters/go_imports.go
-          mkdir -p out
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
-            go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
+          (
+            cd packages/shiftleft-admission
+            go test -count=1 ./...
+            go vet ./...
+            bash -n tests/e2e.sh
+            node --check adapters/js_imports.mjs
+            go build -o /tmp/issue-116-go-adapter adapters/go_imports.go
+            mkdir -p out
+            CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
+              go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
+          )
+          export PYTHONPYCACHEPREFIX="$RUNNER_TEMP/issue-116-pycache"
+          python3 -m py_compile \
+            packages/shiftleft-python-provider/bin/shiftleft-python-imports.py \
+            packages/shiftleft-python-provider/fixtures/python/bad/core.py \
+            packages/shiftleft-python-provider/fixtures/python/false-negative/core.py \
+            packages/shiftleft-python-provider/fixtures/python/false-positive/core.py \
+            packages/shiftleft-python-provider/fixtures/python/good/core.py
+          python3 packages/shiftleft-python-provider/bin/shiftleft-python-imports.py \
+            packages/shiftleft-python-provider/fixtures/python/good/core.py \
+            | python3 -c 'import json,sys; row=json.load(sys.stdin); assert row["schema"] == "shiftleft-import-report/1" and row["imports"] == []'
 
       - name: Produce two independent proof runs
         working-directory: packages/shiftleft-admission
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          BASE_COMMIT=59457a5667488da34d4ba977fa32c3a101a4a38e
           HEAD_SHA=$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)
+          if [[ -n "${PR_BASE_SHA:-}" ]]; then
+            BASE_COMMIT="$PR_BASE_SHA"
+          else
+            git -C "$GITHUB_WORKSPACE" fetch origin proposals
+            BASE_COMMIT=$(git -C "$GITHUB_WORKSPACE" rev-parse origin/proposals)
+          fi
           git -C "$GITHUB_WORKSPACE" cat-file -e "$BASE_COMMIT^{commit}"
           BASE_TREE=$(git -C "$GITHUB_WORKSPACE" rev-parse "$BASE_COMMIT^{tree}")
           CANDIDATE_TREE=$(git -C "$GITHUB_WORKSPACE" rev-parse 'HEAD^{tree}')
@@ -108,9 +130,10 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf artifact
-          mkdir -p artifact/replay artifact/proof-a artifact/proof-b
+          mkdir -p artifact/replay artifact/shiftleft-python-provider artifact/proof-a artifact/proof-b
           install -m 0755 out/policyctl artifact/policyctl
           cp -a policy adapters fixtures artifact/replay/
+          cp -a ../shiftleft-python-provider/. artifact/shiftleft-python-provider/
           cp -a out/proof-a/. artifact/proof-a/
           cp -a out/proof-b/. artifact/proof-b/
           cp out/proof.env out/replayed-receipt.json out/replayed-receipt.stdout artifact/
@@ -124,7 +147,7 @@ jobs:
           env = dict(line.split('=', 1) for line in pathlib.Path('out/proof.env').read_text().splitlines())
           summary = json.loads(pathlib.Path('out/proof-a/proof-summary.json').read_text())
           metadata = {
-              'schema': 'issue-116-shiftleft-artifact/2',
+              'schema': 'issue-116-shiftleft-artifact/3',
               'repository': os.environ['GITHUB_REPOSITORY'],
               'workflowRunId': os.environ['GITHUB_RUN_ID'],
               'commit': env['head_sha'],
@@ -139,6 +162,11 @@ jobs:
                   'languageNeutralRuleCases': 20,
                   'blockerCoverageObservations': 6,
               },
+              'replay': {
+                  'bundle': 'replay/policy',
+                  'fixtures': 'replay/fixtures',
+                  'pythonProvider': 'shiftleft-python-provider',
+              },
               'toolchain': {
                   'go': subprocess.check_output(['go', 'version'], text=True).strip(),
                   'node': subprocess.check_output(['node', '--version'], text=True).strip(),
@@ -147,11 +175,6 @@ jobs:
               'sourceCloneUsedByConsumer': False,
               'sourceBuildRequiredByConsumer': False,
               'repairAllowed': False,
-              'materializer': {
-                  'carrierSha256': '5fc1284e4c89fcbcd2c8907d2275617d670e92159abb7100917a87c75ce066d1',
-                  'archiveSha256': '4800479e20c2479bb535b16ef271f85c693a851c57cd0d052890c6577aeb53d1',
-                  'archiveEntries': 74,
-              },
           }
           pathlib.Path('artifact/metadata.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
           PY
