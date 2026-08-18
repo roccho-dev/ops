@@ -81,6 +81,7 @@
               version = "0.1.0";
               src = ./packages/shiftleft-admission;
               vendorHash = null;
+              allowGoReference = true;
               subPackages = [ "cmd/policyctl" ];
               ldflags = [
                 "-s"
