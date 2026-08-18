@@ -495,16 +495,16 @@ def normalize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def query_sqlite(projection: pathlib.Path, query_id: str, params: dict[str, str]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     catalog_path = projection / "catalog.sqlite"
     before = {p.name: sha256_file(p) for p in projection.glob("*.sqlite")}
-    catalog = sqlite3.connect(f"file:{catalog_path}?mode=ro", uri=True)
+    catalog = sqlite3.connect(f"file:{catalog_path}?mode=ro&immutable=1", uri=True)
     try:
         domains = selected_domains(query_id, params, catalog)
-        conn = sqlite3.connect(":memory:")
+        conn = sqlite3.connect(":memory:", uri=True)
         try:
             record_parts = []
             relation_parts = []
             for i, domain in enumerate(domains):
                 shard = catalog.execute("SELECT shard FROM shard_manifest WHERE domain=?", (domain,)).fetchone()[0]
-                conn.execute(f"ATTACH DATABASE ? AS s{i}", (f"file:{projection / shard}?mode=ro",))
+                conn.execute(f"ATTACH DATABASE ? AS s{i}", (f"file:{projection / shard}?mode=ro&immutable=1",))
                 record_parts.append(f"SELECT * FROM s{i}.records")
                 relation_parts.append(f"SELECT * FROM s{i}.relations")
             conn.execute(f"CREATE TEMP VIEW records AS {' UNION ALL '.join(record_parts)}")
