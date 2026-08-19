@@ -1,0 +1,42 @@
+{
+  "schema": "ops.artifactRuntimeStaticHost/1",
+  "authority": false,
+  "status": "planned-provider-effect",
+  "issue": 160,
+  "publication": {
+    "treeDigest": "sha256:c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
+    "tag": "artifact-runtime-c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
+    "archive": {
+      "name": "artifact-runtime.c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928.tar.gz",
+      "bytes": 32825,
+      "sha256": "sha256:a47f2520a360b74b519b923808aa9345f0c7ae51d58f0d7f202d5a1d664f0975"
+    },
+    "listedFiles": 45
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "environment": "cloudflare-production",
+    "project": "stg-artifact-runtime",
+    "productionBranch": "proposals",
+    "pathPrefix": "releases/c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928"
+  },
+  "trigger": {
+    "kind": "owner-issue-comment",
+    "issue": 160,
+    "command": "/artifact-runtime-deploy"
+  },
+  "readback": {
+    "required": true,
+    "verifyTreeDigest": true,
+    "verifyAllFileHashes": true,
+    "expectedListedFiles": 45
+  },
+  "boundaries": {
+    "gitSourceAuthority": true,
+    "releaseIsImmutableInputProjection": true,
+    "staticHostIsProjection": true,
+    "deploymentReceiptIsAuthority": false,
+    "mutableLatestAllowed": false,
+    "existingCloudflareProjectOverwriteAllowed": false
+  }
+}
