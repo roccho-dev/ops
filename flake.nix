@@ -130,7 +130,9 @@
               {
                 nativeBuildInputs = [
                   pkgs.git
+                  pkgs.go
                   pkgs.nodejs
+                  pkgs.python3
                   packages.${system}.shiftleft-admission
                 ];
               }
@@ -140,6 +142,7 @@
                 cp -R ${./packages/structured-diagnostic} source/packages/structured-diagnostic
                 chmod -R u+w source
                 cd source/packages/shiftleft-admission
+                POLICYCTL=${packages.${system}.shiftleft-admission}/bin/.policyctl-wrapped \
                 GIT_WRITE_CLOSURE_SCRIPT=${./packages/ops-git-write-closure/bin/ops-git-write-closure.mjs} \
                   ${pkgs.bash}/bin/bash tests/e2e.sh
                 touch "$out/ok"

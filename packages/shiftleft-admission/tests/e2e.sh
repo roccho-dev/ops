@@ -26,3 +26,5 @@ cmp "$OUT/proof/receipt.1.json" "$OUT/proof/receipt.2.json"
   --base-tree "$BASE_TREE" \
   --candidate-tree "$CANDIDATE_TREE"
 POLICYCTL="$POLICYCTL" bash "$ROOT/tests/git-write-admission.sh"
+POLICYCTL_BIN="$POLICYCTL" node "$ROOT/tests/local-e2e.mjs" > "$OUT/local-e2e.json"
+grep -q '"status":"PASS"' "$OUT/local-e2e.json"

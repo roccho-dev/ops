@@ -1,105 +1,138 @@
 # shiftleft-admission
 
-Issue #116のV1実装。規約の意味を言語共通の3型へ固定し、実装・言語・実行環境の差はEvidence Providerへ隔離します。
+Language-neutral Shift Left admission for both Chat Pro local implementation and optional GitHub adoption.
 
 ```text
-ShiftLeftRule
-ShiftLeftObservation
-ShiftLeftReceipt
+exact or local policy source
+→ policyctl intake
+→ local Python / JavaScript / Go workspace
+→ policyctl run
+→ native tests + evidence providers + package contract
+→ local completion Receipt
+
+optional formal adoption
+→ policyctl verify-worktree
+→ ops-git-write-closure
 ```
 
-## Boundaries
+## Completion rule
 
-- **このpackage**: exact policy intake、Package契約検査、provider結果の4状態fold、policy/base/candidate tree-bound receipt、live worktreeとの再照合。
-- **structured-diagnostic**: 独立した`diagnostic/1`実装契約とruntime。#116へ依存しない。
-- **このpackageのdiagnostic provider**: executable boundaryを外部実行し、primary outputとdiagnostic streamを独立観測する。runtime機能は提供しない。
-- **#114**: GitHub write effect。既存のcheck contractから`policyctl verify-worktree`を呼び、非0ならeffect planを生成しない。
-- **#115**: Rule/Conditionの意味AuthorityとOutcome Fact。ここでは変更しない。
-- **#117**: compiled `policyctl`やproof packをPro sandboxへ搬入するtransport。意味判定はこのpackageが担う。
+> No local completion Receipt means the implementation is draft.
 
-依存方向は一方向です。
+A `COMPLETE / PASS` Receipt is bound to the exact policy, intake source, task contract, toolchain, workspace base, and candidate content. Missing tools, skipped tests, unmet rules, policy tampering, or candidate drift never become complete.
+
+## Local entry
+
+### 1. Intake an accepted artifact
+
+The extracted source directory contains `policyctl`, `policy/`, `adapters/`, and a sorted `SHA256SUMS`. `--source-sha256` is the SHA-256 of the exact manifest bytes.
+
+```bash
+./policyctl intake \
+  --source-dir ./artifact \
+  --source-kind actions-artifact \
+  --source-id 123456789 \
+  --source-sha256 sha256:<manifest-sha256> \
+  --policy-ref <40-hex-commit> \
+  --policy-sha256 sha256:<policy-hash> \
+  --out-dir ./session
+```
+
+Formal source kinds are `actions-artifact`, `git-commit`, and `release`. They require an exact commit policy ref, expected policy hash, and verified manifest.
+
+### 2. Run a local implementation
+
+```bash
+./session/bin/policyctl run \
+  --session ./session \
+  --workspace ./candidate \
+  --contract ./task.json \
+  --out-dir ./evidence
+```
+
+The task contract declares:
 
 ```text
-structured-diagnostic runtime
-  └─ #116へ依存しない
-
-#116 assurance
-  └─ contractと実行結果を観測する
+task ID
+language + provider profile
+changed source scope
+Package in / parsed-in / out / error / effect
+one golden route + negative routes
+current consumer
+native test argv
 ```
 
-#116がなくても`structured-diagnostic`は動きます。#116が追加するのは「動作する」ことではなく、exact policy・candidate tree・実行証拠へ結び付いた規約準拠Receiptです。
+Outputs:
 
-## Commands
+```text
+observations.jsonl
+tests.json
+diagnostics/*
+completion-receipt.json
+```
+
+The same command and Receipt schema apply to non-Git directories and arbitrary Git worktrees. Git worktrees use actual HEAD/candidate Git trees; plain directories use a deterministic `sha256-tree` identity.
+
+## Local policy experiment
+
+A policy may be changed and tested without updating GitHub:
+
+```bash
+policyctl intake \
+  --source-dir ./local-policy-source \
+  --source-kind local-experiment \
+  --out-dir ./local-session
+```
+
+The Receipt uses `local-policy-sha256:<hash>`. This is valid for local completion but is intentionally rejected by `policyctl verify-worktree`; formal GitHub adoption requires a new exact Git policy identity.
+
+## Evidence providers
+
+| Provider | Observation | Current profiles |
+|---|---|---|
+| `language-import-provider` | Core does not import runtime/effect adapters | Go, JavaScript, Python |
+| `diagnostic-process-provider` | Primary output separation and `diagnostic/1` conformance | JavaScript executable boundary |
+| native test adapter | Declared golden and negative routes actually execute | Task-local Python / JavaScript / Go commands |
+| package contract adapter | Parse boundary, in/out/error/effect, routes, current consumer | Language-neutral |
+
+Native test runners remain native. Test commands are argv arrays, not shell strings. The common gate owns no language AST or runtime feature.
+
+`diagnostic-process-provider` does not implement the `structured-diagnostic` runtime. It reads the exact contract, executes the target as a separate process, and externally observes stdout/stderr.
+
+## Existing lower-level commands
 
 ```bash
 policyctl hash --bundle policy
 policyctl observe --bundle policy --fixtures fixtures --out observations.jsonl
-policyctl admit --bundle policy --policy-ref <40hex> --policy-sha256 <sha256:...> \
-  --base-tree git-tree-sha1:<sha> --candidate-tree git-tree-sha1:<sha> \
-  --observations observations.jsonl --out receipt.json
-policyctl verify --receipt receipt.json --policy-sha256 <sha256:...> \
-  --base-tree git-tree-sha1:<sha> --candidate-tree git-tree-sha1:<sha>
-policyctl verify-worktree --receipt receipt.json --policy-sha256 <sha256:...> \
-  --repo <git-worktree>
+policyctl admit --bundle policy --policy-ref <ref> --policy-sha256 <hash> \
+  --base-tree <tree> --candidate-tree <tree> --observations observations.jsonl --out receipt.json
+policyctl verify --receipt receipt.json --policy-sha256 <hash> \
+  --base-tree <tree> --candidate-tree <tree>
+policyctl verify-worktree --receipt receipt.json --policy-sha256 <hash> --repo <worktree>
 policyctl proof ...
 ```
 
-`verify-worktree`は、temporary Git indexで`HEAD tree`と`git add -A`後のcandidate treeを計算し、Receiptのpolicy/base/candidate binding、digest、PASS状態を照合します。worktree・ref・networkは変更しません。
+`verify-worktree` only accepts a formal exact-commit policy Receipt. It computes the actual HEAD/candidate trees with a temporary Git index and performs no worktree, ref, or network mutation.
 
-#114 requestでは、次を通常checkとして渡します。
+## Boundaries
 
-```text
-id: shiftleft-admission
-command:
-  policyctl verify-worktree
-  --receipt <receipt>
-  --policy-sha256 <policy-hash>
-  --repo <candidate-worktree>
-```
-
-正Receiptだけがexit 0になります。wrong tree、tamper、missing receipt、非PASS Receiptは非0になり、#114は`CHECK_FAILED`としてeffect planを作りません。
-
-## Evidence providers
-
-| Provider | 観測対象 | 現在のprofile |
-|---|---|---|
-| `language-import-provider` | Coreがeffect adapterをimportしていないか | Go、JavaScript、Python |
-| `diagnostic-process-provider` | primary output分離、`diagnostic/1`適合、host-owned field非偽造 | JavaScript process boundary |
-
-`diagnostic-process-provider`は`structured-diagnostic`のvalidatorをimportしません。隣接するexact `contract.json`を読み、対象programを別processとして実行し、stdout・stderrを外部観測します。したがって、対象実装の自己申告をそのままPASSへ変換しません。
+- This package owns policy intake, evidence normalization, four-state folding, local completion Receipts, and formal worktree Receipt verification.
+- `structured-diagnostic` remains an independent runtime and does not depend on this package.
+- #117 transports exact runtime/policy bytes into Chat Pro.
+- #114 owns optional authenticated GitHub effects and authoritative readback.
+- #115 owns durable Rule/Condition and Outcome Fact semantics.
+- GitHub is not required for local implementation completion.
+- No server, database, daemon, common AST, hidden global policy, or second policy engine is introduced.
 
 ## Proof
 
-`proof`と統合testは以下を実行します。
+The integrated proofs cover:
 
-- JS/Python/Go × good/bad/false-positive/false-negative = 12 language-import provider fixtures
-- diagnostic process × good/bad/false-positive/false-negative = 4 executable fixtures
-- 5 language-neutral rules × good/bad/false-positive/false-negative = 20 executable rule fixtures
-- 7 blocker rules全件について、宣言ではなく計36件の実fixtureからcoverage observationを生成
-- 同じruleを担当するprovider profile間のstatus・finding code一致
-- primary outputへ`diagnostic/1`を混ぜたcaseの拒否
-- top-level host-owned fieldを偽造したcaseの拒否
-- messageやfield valueに`event_id`等の文字列があるだけのcaseを誤拒否しないこと
-- exact diagnostic contract SHAをprovider identityとEvidenceへ結ぶこと
-- exact policy hash検査
-- tamper/missing/mutable ref拒否
-- public contract、parse boundary、golden/negative route、current consumer検査
-- missing tool、unsupported language、skipped required testの非Green化
-- clean 2 runの全Observation・Receipt byte一致
-- 観測済み`unmet`を`unobserved`へ誤分類しないこと
-- policy/base/candidate tree bindingとcandidate mismatch拒否
-- 正Receiptで#114 prepareがeffect planを生成すること
-- wrong candidate tree／missing receiptでは#114 prepareが`CHECK_FAILED`となりeffect planを生成しないこと
-- effect plan確定後にも同じpolicy/base/candidateでReceiptを再verifyできること
-
-## Terminal states
-
-```text
-PASS
-BLOCKED_RULE
-BLOCKED_PACKAGE_CONTRACT
-BLOCKED_GOLDEN_ROUTE
-BLOCKED_TEST_EVIDENCE
-UNSUPPORTED_REQUIRED_ADAPTER
-REVIEW_REQUIRED
-```
+- Python plain-directory implementation
+- JavaScript arbitrary Git repository implementation
+- formal artifact intake with exact manifest, runtime, policy, and artifact identity
+- local policy experimentation without GitHub update
+- byte-identical rerun for the same policy/candidate/toolchain/task
+- artifact-only replay without repository checkout or source build
+- tampered source, missing tool, missing test, unmet rule, and candidate drift fail closed
+- existing language, diagnostic, package-contract, and #114 worktree admission proofs

@@ -26,12 +26,12 @@ func terminalFromFindings(findings []Finding) string {
 		}
 	}
 	for _, f := range findings {
-		if f.FindingCode == "golden-route-missing" {
+		if f.FindingCode == "golden-route-missing" || f.FindingCode == "route-test-missing" {
 			return "BLOCKED_GOLDEN_ROUTE"
 		}
 	}
 	for _, f := range findings {
-		if f.FindingCode == "fixture-matrix-incomplete" {
+		if f.FindingCode == "fixture-matrix-incomplete" || f.FindingCode == "native-test-failed" || f.FindingCode == "required-test-timeout" {
 			return "BLOCKED_TEST_EVIDENCE"
 		}
 	}
@@ -39,7 +39,7 @@ func terminalFromFindings(findings []Finding) string {
 }
 
 func Admit(b *Bundle, policyRef, expectedPolicyHash, baseTree, candidateTree string, observations []Observation) (Receipt, error) {
-	if err := ValidateExactPolicyRef(policyRef); err != nil {
+	if err := ValidatePolicyRef(policyRef); err != nil {
 		return Receipt{}, err
 	}
 	if b.Hash != expectedPolicyHash {

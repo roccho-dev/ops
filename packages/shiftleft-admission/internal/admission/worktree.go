@@ -94,6 +94,9 @@ func RunVerifyWorktreeCLI(args []string, stdout, stderr io.Writer) error {
 	if err := json.Unmarshal(data, &r); err != nil {
 		return fmt.Errorf("RECEIPT_PARSE_FAILED: %w", err)
 	}
+	if err := ValidateExactPolicyRef(r.PolicyRef); err != nil {
+		return fmt.Errorf("FORMAL_POLICY_REQUIRED: %w", err)
+	}
 	base, candidate, err := WorktreeTreeRefs(*repo)
 	if err != nil {
 		return err

@@ -1,0 +1,268 @@
+name: issue-161-chatpro-local-proof
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - ".github/workflows/issue-161-chatpro-local-proof.yml"
+      - "packages/shiftleft-admission/**"
+      - "ci.intent.v1.jsonl"
+  push:
+    branches: [proposals]
+    paths:
+      - ".github/workflows/issue-161-chatpro-local-proof.yml"
+      - "packages/shiftleft-admission/**"
+      - "ci.intent.v1.jsonl"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      source_artifact_id: ${{ steps.source_artifact.outputs.artifact-id }}
+      source_artifact_digest: ${{ steps.source_artifact.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.2"
+          cache: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.5"
+
+      - name: Test one local intake/run entry
+        working-directory: packages/shiftleft-admission
+        run: |
+          set -euo pipefail
+          go test -count=1 ./...
+          go vet ./...
+          node --check tests/local-e2e.mjs
+          python3 -m py_compile adapters/python_imports.py
+          go build -o /tmp/issue-161-go-adapter adapters/go_imports.go
+          mkdir -p out
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
+            go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
+          POLICYCTL_BIN="$PWD/out/policyctl" node tests/local-e2e.mjs | tee out/local-e2e.json
+          grep -q '"status":"PASS"' out/local-e2e.json
+
+      - name: Assemble exact reusable policy source
+        working-directory: packages/shiftleft-admission
+        run: |
+          set -euo pipefail
+          rm -rf artifact
+          mkdir -p artifact/source artifact/proof/samples artifact/proof/expected
+          install -m 0755 out/policyctl artifact/source/policyctl
+          cp -a policy adapters artifact/source/
+          find artifact/source -type d -name __pycache__ -prune -exec rm -rf {} +
+          find artifact/source -type f -name '*.pyc' -delete
+          cp -a local-fixtures/. artifact/proof/samples/
+          (
+            cd artifact/source
+            find . -type f ! -name SHA256SUMS -printf '%P\0' \
+              | LC_ALL=C sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - id: source_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-161-policy-source-${{ github.run_id }}
+          path: packages/shiftleft-admission/artifact/source/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Generate deterministic local completion receipts
+        working-directory: packages/shiftleft-admission
+        env:
+          SOURCE_ID: ${{ steps.source_artifact.outputs.artifact-id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ steps.source_artifact.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="sha256:$(sha256sum artifact/source/SHA256SUMS | awk '{print $1}')"
+          POLICY_HASH="$(out/policyctl hash --bundle artifact/source/policy)"
+          HEAD_SHA="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
+
+          out/policyctl intake \
+            --source-dir artifact/source \
+            --source-kind actions-artifact \
+            --source-id "$SOURCE_ID" \
+            --source-sha256 "$SOURCE_SHA" \
+            --policy-ref "$HEAD_SHA" \
+            --policy-sha256 "$POLICY_HASH" \
+            --out-dir "$RUNNER_TEMP/session"
+
+          run_python() {
+            local suffix="$1"
+            local workspace="$RUNNER_TEMP/python-$suffix"
+            local evidence="$RUNNER_TEMP/python-evidence-$suffix"
+            cp -a artifact/proof/samples/python/workspace "$workspace"
+            "$RUNNER_TEMP/session/bin/policyctl" run \
+              --session "$RUNNER_TEMP/session" \
+              --workspace "$workspace" \
+              --contract artifact/proof/samples/python/task.json \
+              --out-dir "$evidence"
+          }
+
+          run_javascript() {
+            local suffix="$1"
+            local workspace="$RUNNER_TEMP/javascript-$suffix"
+            local evidence="$RUNNER_TEMP/javascript-evidence-$suffix"
+            cp -a artifact/proof/samples/javascript/workspace "$workspace"
+            git init -q --initial-branch=main "$workspace"
+            git -C "$workspace" config user.name issue161-proof
+            git -C "$workspace" config user.email issue161@example.invalid
+            printf 'baseline\n' > "$workspace/baseline.txt"
+            git -C "$workspace" add baseline.txt
+            git -C "$workspace" -c commit.gpgsign=false commit -q -m baseline
+            "$RUNNER_TEMP/session/bin/policyctl" run \
+              --session "$RUNNER_TEMP/session" \
+              --workspace "$workspace" \
+              --contract artifact/proof/samples/javascript/task.json \
+              --out-dir "$evidence"
+          }
+
+          run_python a
+          run_python b
+          run_javascript a
+          run_javascript b
+          cmp "$RUNNER_TEMP/python-evidence-a/completion-receipt.json" "$RUNNER_TEMP/python-evidence-b/completion-receipt.json"
+          cmp "$RUNNER_TEMP/javascript-evidence-a/completion-receipt.json" "$RUNNER_TEMP/javascript-evidence-b/completion-receipt.json"
+          cp "$RUNNER_TEMP/session/intake-receipt.json" artifact/proof/expected/
+          cp "$RUNNER_TEMP/python-evidence-a/completion-receipt.json" artifact/proof/expected/python-completion-receipt.json
+          cp "$RUNNER_TEMP/javascript-evidence-a/completion-receipt.json" artifact/proof/expected/javascript-completion-receipt.json
+          cp out/local-e2e.json artifact/proof/expected/
+
+          python3 - "$SOURCE_SHA" "$POLICY_HASH" "$HEAD_SHA" "$SOURCE_ID" "$SOURCE_ARTIFACT_DIGEST" <<'PY'
+          import hashlib, json, pathlib, sys
+          source_sha, policy_hash, head_sha, source_id, artifact_digest = sys.argv[1:]
+          if not artifact_digest.startswith('sha256:'):
+              artifact_digest = 'sha256:' + artifact_digest
+          expected = pathlib.Path('artifact/proof/expected')
+          def digest(name):
+              return 'sha256:' + hashlib.sha256((expected / name).read_bytes()).hexdigest()
+          metadata = {
+              'schema': 'issue-161-chatpro-local-artifact/1',
+              'repository': 'roccho-dev/ops',
+              'commit': head_sha,
+              'sourceKind': 'actions-artifact',
+              'sourceArtifactId': source_id,
+              'sourceArtifactDigest': artifact_digest,
+              'sourceSha256': source_sha,
+              'policyHash': policy_hash,
+              'intakeReceiptSha256': digest('intake-receipt.json'),
+              'pythonCompletionReceiptSha256': digest('python-completion-receipt.json'),
+              'javascriptCompletionReceiptSha256': digest('javascript-completion-receipt.json'),
+              'sourceCloneRequiredByConsumer': False,
+              'sourceBuildRequiredByConsumer': False,
+              'githubWriteRequiredForLocalCompletion': False,
+              'completionRule': 'no Receipt = draft',
+          }
+          pathlib.Path('artifact/proof/metadata.json').write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          (
+            cd artifact/proof
+            find . -type f ! -name SHA256SUMS -print0 \
+              | LC_ALL=C sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-161-chatpro-local-proof-${{ github.run_id }}
+          path: packages/shiftleft-admission/artifact/proof/
+          if-no-files-found: error
+          retention-days: 30
+
+  artifact-only-replay:
+    needs: build-and-prove
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.5"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: issue-161-policy-source-${{ github.run_id }}
+          path: source
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: issue-161-chatpro-local-proof-${{ github.run_id }}
+          path: proof
+
+      - name: Replay without repository checkout or source build
+        env:
+          EXPECTED_SOURCE_ID: ${{ needs.build-and-prove.outputs.source_artifact_id }}
+          EXPECTED_SOURCE_ARTIFACT_DIGEST: ${{ needs.build-and-prove.outputs.source_artifact_digest }}
+        run: |
+          set -euo pipefail
+          (cd source && sha256sum -c SHA256SUMS)
+          (cd proof && sha256sum -c SHA256SUMS)
+          chmod +x source/policyctl
+
+          SOURCE_SHA="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["sourceSha256"])')"
+          POLICY_HASH="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["policyHash"])')"
+          HEAD_SHA="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["commit"])')"
+          EXPECTED_DIGEST="$EXPECTED_SOURCE_ARTIFACT_DIGEST"
+          [[ "$EXPECTED_DIGEST" == sha256:* ]] || EXPECTED_DIGEST="sha256:$EXPECTED_DIGEST"
+          test "$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["sourceArtifactId"])')" = "$EXPECTED_SOURCE_ID"
+          test "$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["sourceArtifactDigest"])')" = "$EXPECTED_DIGEST"
+
+          source/policyctl intake \
+            --source-dir source \
+            --source-kind actions-artifact \
+            --source-id "$EXPECTED_SOURCE_ID" \
+            --source-sha256 "$SOURCE_SHA" \
+            --policy-ref "$HEAD_SHA" \
+            --policy-sha256 "$POLICY_HASH" \
+            --out-dir "$RUNNER_TEMP/session"
+          cmp "$RUNNER_TEMP/session/intake-receipt.json" proof/expected/intake-receipt.json
+
+          cp -a proof/samples/python/workspace "$RUNNER_TEMP/python"
+          "$RUNNER_TEMP/session/bin/policyctl" run \
+            --session "$RUNNER_TEMP/session" \
+            --workspace "$RUNNER_TEMP/python" \
+            --contract proof/samples/python/task.json \
+            --out-dir "$RUNNER_TEMP/python-evidence"
+          cmp "$RUNNER_TEMP/python-evidence/completion-receipt.json" proof/expected/python-completion-receipt.json
+
+          cp -a proof/samples/javascript/workspace "$RUNNER_TEMP/javascript"
+          git init -q --initial-branch=main "$RUNNER_TEMP/javascript"
+          git -C "$RUNNER_TEMP/javascript" config user.name issue161-proof
+          git -C "$RUNNER_TEMP/javascript" config user.email issue161@example.invalid
+          printf 'baseline\n' > "$RUNNER_TEMP/javascript/baseline.txt"
+          git -C "$RUNNER_TEMP/javascript" add baseline.txt
+          git -C "$RUNNER_TEMP/javascript" -c commit.gpgsign=false commit -q -m baseline
+          "$RUNNER_TEMP/session/bin/policyctl" run \
+            --session "$RUNNER_TEMP/session" \
+            --workspace "$RUNNER_TEMP/javascript" \
+            --contract proof/samples/javascript/task.json \
+            --out-dir "$RUNNER_TEMP/javascript-evidence"
+          cmp "$RUNNER_TEMP/javascript-evidence/completion-receipt.json" proof/expected/javascript-completion-receipt.json
+
+          test "$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["sourceBuildRequiredByConsumer"])')" = False
+          test "$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["githubWriteRequiredForLocalCompletion"])')" = False
