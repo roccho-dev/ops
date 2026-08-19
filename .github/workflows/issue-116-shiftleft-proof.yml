@@ -18,8 +18,8 @@ permissions:
 
 jobs:
   proof:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,18 +39,42 @@ jobs:
         with:
           python-version: "3.13.5"
 
-      - name: Test adapters, Git write admission, and build static policyctl
+      - name: Materialize exact ast-grep
+        env:
+          AST_GREP_URL: https://github.com/ast-grep/ast-grep/releases/download/0.42.1/app-x86_64-unknown-linux-gnu.zip
+          AST_GREP_ARCHIVE_SHA256: 5de8b87cba67fc8dc3e239d54b6484802ad745a7ae3de76be4fe89661dc52657
+          AST_GREP_BINARY_SHA256: eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/astgrep/unpacked"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/astgrep/archive.zip" "$AST_GREP_URL"
+          printf '%s  %s\n' "$AST_GREP_ARCHIVE_SHA256" "$RUNNER_TEMP/astgrep/archive.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/astgrep/archive.zip" -d "$RUNNER_TEMP/astgrep/unpacked"
+          install -m 0755 "$RUNNER_TEMP/astgrep/unpacked/ast-grep" "$RUNNER_TEMP/astgrep/ast-grep"
+          test "$("$RUNNER_TEMP/astgrep/ast-grep" --version)" = "ast-grep 0.42.1"
+          printf '%s  %s\n' "$AST_GREP_BINARY_SHA256" "$RUNNER_TEMP/astgrep/ast-grep" | sha256sum -c -
+          printf '%s\n' "$RUNNER_TEMP/astgrep" >> "$GITHUB_PATH"
+
+      - name: Test providers, Git write admission, and build static policyctl
         working-directory: packages/shiftleft-admission
         run: |
           set -euo pipefail
+          mkdir -p out
+          test "$(ast-grep --version)" = "ast-grep 0.42.1"
+          test "$(sha256sum "$(command -v ast-grep)" | awk '{print $1}')" = "eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905"
           go test -count=1 ./...
           go vet ./...
           bash -n tests/e2e.sh tests/git-write-admission.sh
-          node --check adapters/js_imports.mjs
           node --check adapters/diagnostic_process.mjs
-          python3 -m py_compile adapters/python_imports.py
-          go build -o /tmp/issue-116-go-adapter adapters/go_imports.go
-          mkdir -p out
+          node --check providers/structure/astgrep/normalize.mjs
+          node --check tests/astgrep-conformance.mjs
+          node tests/astgrep-conformance.mjs > out/astgrep-conformance.a.json
+          node tests/astgrep-conformance.mjs > out/astgrep-conformance.b.json
+          cmp out/astgrep-conformance.a.json out/astgrep-conformance.b.json
+          test ! -e adapters/go_imports.go
+          test ! -e adapters/js_imports.mjs
+          test ! -e adapters/python_imports.py
+          ! grep -q '"provider":"language-import-provider"' policy/profiles.jsonl
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
             go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
           POLICYCTL="$PWD/out/policyctl" bash tests/git-write-admission.sh
@@ -114,13 +138,16 @@ jobs:
           rm -rf artifact
           mkdir -p artifact/replay artifact/proof-a artifact/proof-b
           install -m 0755 out/policyctl artifact/policyctl
-          cp -a policy adapters fixtures artifact/replay/
+          install -m 0755 "$(command -v ast-grep)" artifact/ast-grep
+          cp -a policy adapters providers rulepacks toolchains fixtures artifact/replay/
           cp -a "$GITHUB_WORKSPACE/packages/structured-diagnostic" artifact/structured-diagnostic
           cp -a out/proof-a/. artifact/proof-a/
           cp -a out/proof-b/. artifact/proof-b/
           cp out/proof.env out/replayed-receipt.json out/replayed-receipt.stdout artifact/
+          cp out/astgrep-conformance.a.json artifact/astgrep-conformance.json
           cp "$GITHUB_WORKSPACE/build/packages.jsonl" "$GITHUB_WORKSPACE/build/checks.jsonl" artifact/
           python3 - <<'PY'
+          import hashlib
           import json
           import os
           import pathlib
@@ -128,8 +155,10 @@ jobs:
 
           env = dict(line.split('=', 1) for line in pathlib.Path('out/proof.env').read_text().splitlines())
           summary = json.loads(pathlib.Path('out/proof-a/proof-summary.json').read_text())
+          conformance = json.loads(pathlib.Path('out/astgrep-conformance.a.json').read_text())
+          ast_grep = pathlib.Path('artifact/ast-grep')
           metadata = {
-              'schema': 'issue-116-shiftleft-artifact/2',
+              'schema': 'issue-116-shiftleft-artifact/3',
               'repository': os.environ['GITHUB_REPOSITORY'],
               'workflowRunId': os.environ['GITHUB_RUN_ID'],
               'commit': env['head_sha'],
@@ -140,7 +169,8 @@ jobs:
               'providerCases': summary['providerCases'],
               'proofCases': len(summary['cases']),
               'fixtureEvidence': {
-                  'languageProviderCases': 12,
+                  'structureProviderCases': 12,
+                  'astGrepConformanceCases': len(conformance['cases']),
                   'diagnosticProcessCases': 4,
                   'languageNeutralRuleCases': 20,
                   'blockerCoverageObservations': 7,
@@ -149,6 +179,10 @@ jobs:
                   'go': subprocess.check_output(['go', 'version'], text=True).strip(),
                   'node': subprocess.check_output(['node', '--version'], text=True).strip(),
                   'python': subprocess.check_output(['python3', '--version'], text=True).strip(),
+                  'astGrep': subprocess.check_output([str(ast_grep.resolve()), '--version'], text=True).strip(),
+                  'astGrepSha256': 'sha256:' + hashlib.sha256(ast_grep.read_bytes()).hexdigest(),
+                  'normalizerSha256': conformance['normalizerSha256'],
+                  'rulepackSha256': conformance['rulepacks'],
               },
               'sourceCloneUsedByConsumer': False,
               'sourceBuildRequiredByConsumer': False,
