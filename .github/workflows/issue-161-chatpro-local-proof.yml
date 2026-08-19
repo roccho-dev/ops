@@ -6,13 +6,17 @@ on:
     paths:
       - ".github/workflows/issue-161-chatpro-local-proof.yml"
       - "packages/shiftleft-admission/**"
-      - "ci.intent.v1.jsonl"
+      - "flake.nix"
+      - "build/packages.jsonl"
+      - "build/checks.jsonl"
   push:
     branches: [proposals]
     paths:
       - ".github/workflows/issue-161-chatpro-local-proof.yml"
       - "packages/shiftleft-admission/**"
-      - "ci.intent.v1.jsonl"
+      - "flake.nix"
+      - "build/packages.jsonl"
+      - "build/checks.jsonl"
   workflow_dispatch:
 
 permissions:
@@ -21,7 +25,7 @@ permissions:
 jobs:
   build-and-prove:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     outputs:
       source_artifact_id: ${{ steps.source_artifact.outputs.artifact-id }}
       source_artifact_digest: ${{ steps.source_artifact.outputs.artifact-digest }}
@@ -44,29 +48,58 @@ jobs:
         with:
           python-version: "3.13.5"
 
-      - name: Test one local intake/run entry
-        working-directory: packages/shiftleft-admission
+      - name: Materialize exact ast-grep
+        env:
+          AST_GREP_URL: https://github.com/ast-grep/ast-grep/releases/download/0.42.1/app-x86_64-unknown-linux-gnu.zip
+          AST_GREP_ARCHIVE_SHA256: 5de8b87cba67fc8dc3e239d54b6484802ad745a7ae3de76be4fe89661dc52657
+          AST_GREP_BINARY_SHA256: eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/astgrep/unpacked"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/astgrep/archive.zip" "$AST_GREP_URL"
+          printf '%s  %s\n' "$AST_GREP_ARCHIVE_SHA256" "$RUNNER_TEMP/astgrep/archive.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/astgrep/archive.zip" -d "$RUNNER_TEMP/astgrep/unpacked"
+          install -m 0755 "$RUNNER_TEMP/astgrep/unpacked/ast-grep" "$RUNNER_TEMP/astgrep/ast-grep"
+          test "$("$RUNNER_TEMP/astgrep/ast-grep" --version)" = "ast-grep 0.42.1"
+          printf '%s  %s\n' "$AST_GREP_BINARY_SHA256" "$RUNNER_TEMP/astgrep/ast-grep" | sha256sum -c -
+
+      - name: Test one local intake and run entry
+        working-directory: packages/shiftleft-admission
+        env:
+          AST_GREP_BIN: ${{ runner.temp }}/astgrep/ast-grep
+        run: |
+          set -euo pipefail
+          export PATH="$(dirname "$AST_GREP_BIN"):$PATH"
           go test -count=1 ./...
           go vet ./...
+          node --check providers/structure/astgrep/normalize.mjs
+          node --check tests/astgrep-conformance.mjs
           node --check tests/local-e2e.mjs
-          python3 -m py_compile adapters/python_imports.py
-          go build -o /tmp/issue-161-go-adapter adapters/go_imports.go
+          node tests/astgrep-conformance.mjs | tee /tmp/astgrep-conformance-a.json
+          node tests/astgrep-conformance.mjs | tee /tmp/astgrep-conformance-b.json
+          cmp /tmp/astgrep-conformance-a.json /tmp/astgrep-conformance-b.json
+          test ! -e adapters/go_imports.go
+          test ! -e adapters/js_imports.mjs
+          test ! -e adapters/python_imports.py
+          ! grep -q '"provider":"language-import-provider"' policy/profiles.jsonl
           mkdir -p out
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
             go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
           POLICYCTL_BIN="$PWD/out/policyctl" node tests/local-e2e.mjs | tee out/local-e2e.json
           grep -q '"status":"PASS"' out/local-e2e.json
+          cp /tmp/astgrep-conformance-a.json out/astgrep-conformance.json
 
       - name: Assemble exact reusable policy source
         working-directory: packages/shiftleft-admission
+        env:
+          AST_GREP_BIN: ${{ runner.temp }}/astgrep/ast-grep
         run: |
           set -euo pipefail
           rm -rf artifact
           mkdir -p artifact/source artifact/proof/samples artifact/proof/expected
           install -m 0755 out/policyctl artifact/source/policyctl
-          cp -a policy adapters artifact/source/
+          install -m 0755 "$AST_GREP_BIN" artifact/source/ast-grep
+          cp -a policy adapters providers rulepacks toolchains artifact/source/
           find artifact/source -type d -name __pycache__ -prune -exec rm -rf {} +
           find artifact/source -type f -name '*.pyc' -delete
           cp -a local-fixtures/. artifact/proof/samples/
@@ -146,6 +179,7 @@ jobs:
           cp "$RUNNER_TEMP/python-evidence-a/completion-receipt.json" artifact/proof/expected/python-completion-receipt.json
           cp "$RUNNER_TEMP/javascript-evidence-a/completion-receipt.json" artifact/proof/expected/javascript-completion-receipt.json
           cp out/local-e2e.json artifact/proof/expected/
+          cp out/astgrep-conformance.json artifact/proof/expected/
 
           python3 - "$SOURCE_SHA" "$POLICY_HASH" "$HEAD_SHA" "$SOURCE_ID" "$SOURCE_ARTIFACT_DIGEST" <<'PY'
           import hashlib, json, pathlib, sys
@@ -156,7 +190,7 @@ jobs:
           def digest(name):
               return 'sha256:' + hashlib.sha256((expected / name).read_bytes()).hexdigest()
           metadata = {
-              'schema': 'issue-161-chatpro-local-artifact/1',
+              'schema': 'issue-161-chatpro-local-artifact/2',
               'repository': 'roccho-dev/ops',
               'commit': head_sha,
               'sourceKind': 'actions-artifact',
@@ -164,9 +198,12 @@ jobs:
               'sourceArtifactDigest': artifact_digest,
               'sourceSha256': source_sha,
               'policyHash': policy_hash,
+              'astGrepVersion': '0.42.1',
+              'astGrepSha256': 'sha256:eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905',
               'intakeReceiptSha256': digest('intake-receipt.json'),
               'pythonCompletionReceiptSha256': digest('python-completion-receipt.json'),
               'javascriptCompletionReceiptSha256': digest('javascript-completion-receipt.json'),
+              'astGrepConformanceSha256': digest('astgrep-conformance.json'),
               'sourceCloneRequiredByConsumer': False,
               'sourceBuildRequiredByConsumer': False,
               'githubWriteRequiredForLocalCompletion': False,
@@ -222,7 +259,9 @@ jobs:
           set -euo pipefail
           (cd source && sha256sum -c SHA256SUMS)
           (cd proof && sha256sum -c SHA256SUMS)
-          chmod +x source/policyctl
+          chmod +x source/policyctl source/ast-grep
+          test "$(source/ast-grep --version)" = "ast-grep 0.42.1"
+          test "sha256:$(sha256sum source/ast-grep | awk '{print $1}')" = "sha256:eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905"
 
           SOURCE_SHA="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["sourceSha256"])')"
           POLICY_HASH="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["policyHash"])')"
