@@ -15,7 +15,7 @@
   },
   "provider": {
     "kind": "cloudflare-pages",
-    "environment": "production",
+    "environment": "cloudflare-production",
     "project": "stg-artifact-runtime",
     "productionBranch": "proposals",
     "pathPrefix": "releases/c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928"
