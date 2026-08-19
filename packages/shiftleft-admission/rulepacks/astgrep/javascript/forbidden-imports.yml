@@ -1,0 +1,23 @@
+id: shiftleft-javascript-static-import
+language: JavaScript
+severity: warning
+message: observe static JavaScript import
+rule:
+  kind: import_statement
+  has:
+    field: source
+    pattern: $MODULE
+---
+id: shiftleft-javascript-dynamic-import
+language: JavaScript
+severity: warning
+message: observe dynamic JavaScript import
+rule:
+  pattern: import($MODULE)
+---
+id: shiftleft-javascript-require
+language: JavaScript
+severity: warning
+message: observe CommonJS require
+rule:
+  pattern: require($MODULE)

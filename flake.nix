@@ -96,6 +96,7 @@
                 wrapProgram "$out/bin/policyctl" \
                   --prefix PATH : ${
                     pkgs.lib.makeBinPath [
+                      pkgs.ast-grep
                       pkgs.git
                       pkgs.go
                       pkgs.nodejs
@@ -129,6 +130,7 @@
             pkgs.runCommand "issue-116-shiftleft-proof-check"
               {
                 nativeBuildInputs = [
+                  pkgs.ast-grep
                   pkgs.git
                   pkgs.go
                   pkgs.nodejs

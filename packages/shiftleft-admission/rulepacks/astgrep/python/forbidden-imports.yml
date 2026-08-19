@@ -1,0 +1,20 @@
+id: shiftleft-python-import
+language: Python
+severity: warning
+message: observe Python import
+rule:
+  kind: dotted_name
+  inside:
+    kind: import_statement
+    stopBy: end
+---
+id: shiftleft-python-from-import
+language: Python
+severity: warning
+message: observe Python from import
+rule:
+  kind: dotted_name
+  inside:
+    kind: import_from_statement
+    field: module_name
+    stopBy: end

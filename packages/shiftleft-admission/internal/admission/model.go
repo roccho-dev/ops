@@ -70,6 +70,7 @@ type Profile struct {
 	Provider         string   `json:"provider"`
 	Adapter          string   `json:"adapter"`
 	Tool             string   `json:"tool"`
+	Rulepack         string   `json:"rulepack,omitempty"`
 	Required         bool     `json:"required"`
 	ForbiddenImports []string `json:"forbiddenImports"`
 }

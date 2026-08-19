@@ -128,6 +128,9 @@ func (b *Bundle) validate() error {
 		if !ruleIDs[p.RuleID] {
 			return fmt.Errorf("POLICY_PROFILE_UNKNOWN_RULE: %s -> %s", p.ID, p.RuleID)
 		}
+		if p.Provider == "astgrep-structure-provider" && strings.TrimSpace(p.Rulepack) == "" {
+			return fmt.Errorf("POLICY_PROFILE_RULEPACK_REQUIRED: %s", p.ID)
+		}
 		profileIDs[p.ID] = true
 	}
 	packageIDs := map[string]bool{}

@@ -1,0 +1,9 @@
+id: shiftleft-go-import
+language: Go
+severity: warning
+message: observe imported Go package
+rule:
+  kind: import_spec
+  has:
+    field: path
+    pattern: $MODULE

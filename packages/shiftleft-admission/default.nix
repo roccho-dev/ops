@@ -20,8 +20,9 @@
     "github-exact-commit-ref"
     "ops-git-write-closure"
     "structured-diagnostic"
+    "ast-grep"
   ];
-  responsibility = "Intake exact or explicitly local policy sources, normalize implementation-, language-, and execution-specific evidence, run declared local tests, fold met/unmet/unobserved/not-applicable, emit deterministic Git- or directory-bound local completion receipts, and verify formal receipts before Git write preparation.";
+  responsibility = "Intake exact or explicitly local policy sources, run one pinned ast-grep structure provider plus declared native evidence providers and tests, normalize their observations, fold met/unmet/unobserved/not-applicable, emit deterministic Git- or directory-bound local completion receipts, and verify formal receipts before Git write preparation.";
   mission = "Make Chat Pro code without an exact evidence-backed local completion receipt remain draft while keeping GitHub adoption, runtime diagnostic behavior, and Rule/Outcome authority outside this package.";
   publicInterface = {
     version = "shiftleft-admission.interface.v2";
@@ -38,7 +39,9 @@
   sourceLayout = {
     core = "packages/shiftleft-admission/internal/admission";
     bin = "packages/shiftleft-admission/cmd/policyctl";
-    adapters = "packages/shiftleft-admission/adapters";
+    adapters = "packages/shiftleft-admission/adapters and providers/structure/astgrep";
+    rulepacks = "packages/shiftleft-admission/rulepacks/astgrep";
+    toolchains = "packages/shiftleft-admission/toolchains/astgrep.lock.json";
     policy = "packages/shiftleft-admission/policy";
     fixtures = "packages/shiftleft-admission/fixtures and local-fixtures";
     tests = "packages/shiftleft-admission/internal/admission/*_test.go and tests/*.sh|*.mjs";
@@ -58,6 +61,7 @@
     "GitHub write effect implementation"
     "Rule or Outcome authority duplication"
     "common AST"
+    "active per-language import parser"
     "runtime diagnostic implementation"
     "native test runner replacement"
     "tool missing or skipped converted to PASS"
@@ -82,6 +86,7 @@
     "policyctl verify-worktree --receipt <receipt> --policy-sha256 <hash> --repo <worktree>"
     "bash tests/git-write-admission.sh"
     "node tests/local-e2e.mjs"
+    "node tests/astgrep-conformance.mjs"
   ];
   checkPackageContract = {
     kind = "spec.checkPackageContract.v1";
@@ -93,6 +98,7 @@
       "normalized observations"
       "structured-diagnostic contract and executable boundary"
       "local task/package contract"
+      "pinned ast-grep executable, normalizer, and language rulepacks"
       "local Git or directory candidate workspace"
       "ShiftLeftReceipt and local intake/completion receipts"
     ];
@@ -101,6 +107,9 @@
       "local policy experiments receive a content-derived local-policy-sha256 identity without GitHub mutation"
       "local-experiment receipts are rejected by formal verify-worktree"
       "Python and JavaScript local implementations use the same intake/run entry and completion receipt schema"
+      "Go, JavaScript, and Python structure evidence uses one ast-grep provider contract with exact tool, adapter, and rulepack identity"
+      "good, bad, false-positive, false-negative, and syntax-variant structure cases preserve the accepted import-report meaning"
+      "malformed ast-grep output, unsupported language, missing tool, and rulepack tamper never become Green"
       "plain directories receive deterministic sha256-tree identity and arbitrary Git repositories receive actual HEAD/candidate Git trees"
       "declared golden and negative routes map to actually executed native tests"
       "missing policy, missing tool, skipped test, unmet rule, or candidate drift never becomes COMPLETE"
@@ -117,6 +126,8 @@
     failureModes = [
       "false-green-unobserved"
       "provider-finding-drift"
+      "astgrep-rulepack-drift"
+      "astgrep-output-malformed"
       "diagnostic-input-closure-missing"
       "local-policy-promoted-without-formal-identity"
       "local-candidate-drift"
@@ -133,7 +144,8 @@
       "Python directory completion receipt"
       "JavaScript Git-worktree completion receipt"
       "local policy experiment receipt"
-      "language-import and diagnostic-process provider observations"
+      "ast-grep structure and diagnostic-process provider observations"
+      "ast-grep conformance evidence in the issue-161 artifact-only replay proof"
       "git-write-admission assertions"
     ];
   };
