@@ -25,7 +25,7 @@ A `COMPLETE / PASS` Receipt is bound to the exact policy, intake source, task co
 
 ### 1. Intake an accepted artifact
 
-The extracted source directory contains `policyctl`, `policy/`, `adapters/`, and a sorted `SHA256SUMS`. `--source-sha256` is the SHA-256 of the exact manifest bytes.
+The extracted source directory contains `policyctl`, pinned `ast-grep`, `policy/`, `adapters/`, `providers/`, `rulepacks/`, `toolchains/`, and a sorted `SHA256SUMS`. `--source-sha256` is the SHA-256 of the exact manifest bytes.
 
 ```bash
 ./policyctl intake \
@@ -90,12 +90,12 @@ The Receipt uses `local-policy-sha256:<hash>`. This is valid for local completio
 
 | Provider | Observation | Current profiles |
 |---|---|---|
-| `language-import-provider` | Core does not import runtime/effect adapters | Go, JavaScript, Python |
+| `astgrep-structure-provider` | Core does not import runtime/effect adapters | Go, JavaScript, Python |
 | `diagnostic-process-provider` | Primary output separation and `diagnostic/1` conformance | JavaScript executable boundary |
 | native test adapter | Declared golden and negative routes actually execute | Task-local Python / JavaScript / Go commands |
 | package contract adapter | Parse boundary, in/out/error/effect, routes, current consumer | Language-neutral |
 
-Native test runners remain native. Test commands are argv arrays, not shell strings. The common gate owns no language AST or runtime feature.
+Native test runners remain native. Test commands are argv arrays, not shell strings. ast-grep only observes syntax structure; the common Gate owns the four-state decision and no language AST or runtime feature.
 
 `diagnostic-process-provider` does not implement the `structured-diagnostic` runtime. It reads the exact contract, executes the target as a separate process, and externally observes stdout/stderr.
 
@@ -116,7 +116,9 @@ policyctl proof ...
 
 ## Boundaries
 
-- This package owns policy intake, evidence normalization, four-state folding, local completion Receipts, and formal worktree Receipt verification.
+- This package owns policy intake, provider selection, evidence normalization, four-state folding, local completion Receipts, and formal worktree Receipt verification.
+- One pinned ast-grep provider owns currently proven Go, JavaScript, and Python import-structure observation; tool, adapter, and rulepack identities enter evidence.
+- The retired custom language import parsers are absent from the active runtime tree; Git history and Issue #172 preserve parity evidence.
 - `structured-diagnostic` remains an independent runtime and does not depend on this package.
 - #117 transports exact runtime/policy bytes into Chat Pro.
 - #114 owns optional authenticated GitHub effects and authoritative readback.
@@ -134,5 +136,7 @@ The integrated proofs cover:
 - local policy experimentation without GitHub update
 - byte-identical rerun for the same policy/candidate/toolchain/task
 - artifact-only replay without repository checkout or source build
-- tampered source, missing tool, missing test, unmet rule, and candidate drift fail closed
+- tampered source/provider/rulepack, missing ast-grep or native tool, missing test, unmet rule, and candidate drift fail closed
+- Go, JavaScript, and Python structure fixtures plus syntax variants run through one pinned ast-grep provider
+- malformed ast-grep output and unsupported languages fail closed
 - existing language, diagnostic, package-contract, and #114 worktree admission proofs

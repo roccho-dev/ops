@@ -2,16 +2,19 @@ package admission
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type diagnosticProcessReport struct {
@@ -51,24 +54,100 @@ func findProfile(b *Bundle, id string) (Profile, bool) {
 	return Profile{}, false
 }
 
-func adapterPathAndIdentity(b *Bundle, profile Profile, digestPrefix string, extra ...string) (string, ToolIdentity, error) {
+func resolveProfileTool(b *Bundle, profile Profile) (string, error) {
+	if profile.Tool == "ast-grep" {
+		candidate := filepath.Clean(filepath.Join(b.Dir, "..", "bin", "ast-grep"))
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			return candidate, nil
+		}
+	}
+	path, err := exec.LookPath(profile.Tool)
+	if err != nil {
+		return "", fmt.Errorf("REQUIRED_TOOL_MISSING: %s", profile.Tool)
+	}
+	return path, nil
+}
+
+func profileConfigSHA256(b *Bundle, profile Profile, seed []byte) (string, error) {
+	parts := [][]byte{[]byte("shiftleft-provider-config/1\n"), seed}
+	if profile.Rulepack != "" {
+		rulePath := filepath.Clean(filepath.Join(b.Dir, profile.Rulepack))
+		ruleBytes, err := os.ReadFile(rulePath)
+		if err != nil {
+			return "", fmt.Errorf("RULEPACK_READ_FAILED: %s: %w", profile.ID, err)
+		}
+		parts = append(parts, []byte("\nrulepack\n"), ruleBytes)
+	}
+	return "sha256:" + shaHex(bytes.Join(parts, nil)), nil
+}
+
+func runStructureAdapter(b *Bundle, profile Profile, sourcePath string) (ImportReport, ToolIdentity, error) {
+	if profile.Provider != "astgrep-structure-provider" {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("UNSUPPORTED_TOOL: provider=%s", profile.Provider)
+	}
 	adapterPath := filepath.Clean(filepath.Join(b.Dir, profile.Adapter))
+	rulePath := filepath.Clean(filepath.Join(b.Dir, profile.Rulepack))
 	adapterBytes, err := os.ReadFile(adapterPath)
 	if err != nil {
-		return "", ToolIdentity{}, fmt.Errorf("ADAPTER_READ_FAILED: %s: %w", profile.ID, err)
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("ADAPTER_READ_FAILED: %s: %w", profile.ID, err)
 	}
-	version, err := normalizeToolVersion(profile.Tool)
+	ruleBytes, err := os.ReadFile(rulePath)
 	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) || strings.Contains(err.Error(), "executable file not found") {
-			return "", ToolIdentity{}, fmt.Errorf("REQUIRED_TOOL_MISSING: %s", profile.Tool)
-		}
-		return "", ToolIdentity{}, fmt.Errorf("TOOL_VERSION_FAILED: %s: %w", profile.Tool, err)
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("RULEPACK_READ_FAILED: %s: %w", profile.ID, err)
+	}
+	toolPath, err := resolveProfileTool(b, profile)
+	if err != nil {
+		return ImportReport{}, ToolIdentity{}, err
+	}
+	version, err := normalizeToolVersion(toolPath)
+	if err != nil {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("TOOL_VERSION_FAILED: %s: %w", profile.Tool, err)
 	}
 	adapterSHA := "sha256:" + shaHex(adapterBytes)
-	parts := []string{digestPrefix, profile.Tool, version, adapterSHA}
-	parts = append(parts, extra...)
-	digest := "sha256:" + shaHex([]byte(strings.Join(parts, "\n")+"\n"))
-	return adapterPath, ToolIdentity{Name: profile.Tool, Version: version, AdapterSHA256: adapterSHA, Digest: digest}, nil
+	ruleSHA := "sha256:" + shaHex(ruleBytes)
+	digest := "sha256:" + shaHex([]byte(strings.Join([]string{
+		"shiftleft-astgrep-tool/1", profile.Tool, version, adapterSHA, ruleSHA, "",
+	}, "\n")))
+	toolID := ToolIdentity{Name: profile.Tool, Version: version, AdapterSHA256: adapterSHA, Digest: digest}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "node", adapterPath,
+		"--ast-grep", toolPath,
+		"--rule", rulePath,
+		"--source", sourcePath,
+		"--language", profile.Language,
+	)
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.TempDir(), "LC_ALL=C", "NO_COLOR=1"}
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	runErr := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_TIMEOUT: %s", profile.ID)
+	}
+	if runErr != nil {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_FAILED: %s: %v: %s", profile.ID, runErr, strings.TrimSpace(stderr.String()))
+	}
+	var report ImportReport
+	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&report); err != nil {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_OUTPUT_INVALID: %s: %w", profile.ID, err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_OUTPUT_INVALID: %s: trailing JSON", profile.ID)
+	}
+	if report.Schema != "shiftleft-import-report/1" {
+		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_SCHEMA_INVALID: %s", report.Schema)
+	}
+	sort.Slice(report.Imports, func(i, j int) bool {
+		if report.Imports[i].Module != report.Imports[j].Module {
+			return report.Imports[i].Module < report.Imports[j].Module
+		}
+		return report.Imports[i].Line < report.Imports[j].Line
+	})
+	return report, toolID, nil
 }
 
 func providerCommand(profile Profile, adapterPath string, args ...string) (*exec.Cmd, error) {
@@ -82,37 +161,6 @@ func providerCommand(profile Profile, adapterPath string, args ...string) (*exec
 	default:
 		return nil, fmt.Errorf("UNSUPPORTED_TOOL: %s", profile.Tool)
 	}
-}
-
-func runImportAdapter(b *Bundle, profile Profile, sourcePath string) (ImportReport, ToolIdentity, error) {
-	adapterPath, toolID, err := adapterPathAndIdentity(b, profile, "shiftleft-tool/1")
-	if err != nil {
-		return ImportReport{}, ToolIdentity{}, err
-	}
-	cmd, err := providerCommand(profile, adapterPath, sourcePath)
-	if err != nil {
-		return ImportReport{}, ToolIdentity{}, err
-	}
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.TempDir(), "GOCACHE=" + filepath.Join(os.TempDir(), "issue116-go-cache")}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_FAILED: %s: %v: %s", profile.ID, err, strings.TrimSpace(stderr.String()))
-	}
-	var report ImportReport
-	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
-		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_OUTPUT_INVALID: %s: %w", profile.ID, err)
-	}
-	if report.Schema != "shiftleft-import-report/1" {
-		return ImportReport{}, ToolIdentity{}, fmt.Errorf("PROVIDER_SCHEMA_INVALID: %s", report.Schema)
-	}
-	sort.Slice(report.Imports, func(i, j int) bool {
-		if report.Imports[i].Module != report.Imports[j].Module {
-			return report.Imports[i].Module < report.Imports[j].Module
-		}
-		return report.Imports[i].Line < report.Imports[j].Line
-	})
-	return report, toolID, nil
 }
 
 func runDiagnosticProcessAdapter(b *Bundle, profile Profile, sourcePath string) (diagnosticProcessReport, ToolIdentity, error) {
@@ -219,10 +267,14 @@ func observeFixture(b *Bundle, fixturePath string, fixture Fixture) (Observation
 	rel, _ := filepath.Rel(filepath.Dir(filepath.Dir(filepath.Dir(fixturePath))), sourcePath)
 	base.SourcePath = filepath.ToSlash(rel)
 	base.SourceSHA256 = "sha256:" + shaHex(sourceBytes)
+	base.ConfigSHA256, err = profileConfigSHA256(b, profile, configBytes)
+	if err != nil {
+		return providerFailure(base, err)
+	}
 
 	switch profile.Provider {
-	case "language-import-provider":
-		report, toolID, err := runImportAdapter(b, profile, sourcePath)
+	case "astgrep-structure-provider":
+		report, toolID, err := runStructureAdapter(b, profile, sourcePath)
 		if err != nil {
 			return providerFailure(base, err)
 		}

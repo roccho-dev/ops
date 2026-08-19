@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	localIntakeSchema     = "shiftleft-local-intake-receipt/1"
+	localIntakeSchema     = "shiftleft-local-intake-receipt/2"
 	localTaskSchema       = "shiftleft-local-task-contract/1"
 	localCompletionSchema = "shiftleft-local-completion-receipt/1"
 )
@@ -30,18 +30,27 @@ var releaseIDRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{1,255}$`)
 var sha256RE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type LocalIntakeReceipt struct {
-	Schema        string `json:"schema"`
-	Status        string `json:"status"`
-	SourceKind    string `json:"sourceKind"`
-	SourceID      string `json:"sourceId"`
-	SourceSHA256  string `json:"sourceSha256"`
-	PolicyRef     string `json:"policyRef"`
-	PolicyHash    string `json:"policyHash"`
-	RuntimeSHA256 string `json:"runtimeSha256"`
-	PolicyPath    string `json:"policyPath"`
-	AdaptersPath  string `json:"adaptersPath"`
-	RuntimePath   string `json:"runtimePath"`
-	ReceiptDigest string `json:"receiptDigest"`
+	Schema           string `json:"schema"`
+	Status           string `json:"status"`
+	SourceKind       string `json:"sourceKind"`
+	SourceID         string `json:"sourceId"`
+	SourceSHA256     string `json:"sourceSha256"`
+	PolicyRef        string `json:"policyRef"`
+	PolicyHash       string `json:"policyHash"`
+	RuntimeSHA256    string `json:"runtimeSha256"`
+	AstGrepSHA256    string `json:"astGrepSha256"`
+	AdaptersSHA256   string `json:"adaptersSha256"`
+	ProvidersSHA256  string `json:"providersSha256"`
+	RulepacksSHA256  string `json:"rulepacksSha256"`
+	ToolchainsSHA256 string `json:"toolchainsSha256"`
+	PolicyPath       string `json:"policyPath"`
+	AdaptersPath     string `json:"adaptersPath"`
+	ProvidersPath    string `json:"providersPath"`
+	RulepacksPath    string `json:"rulepacksPath"`
+	ToolchainsPath   string `json:"toolchainsPath"`
+	RuntimePath      string `json:"runtimePath"`
+	AstGrepPath      string `json:"astGrepPath"`
+	ReceiptDigest    string `json:"receiptDigest"`
 }
 
 type LocalTest struct {
@@ -387,7 +396,11 @@ func RunLocalIntakeCLI(args []string, stdout, stderr io.Writer) error {
 	policySHA := fs.String("policy-sha256", "", "expected policy bundle SHA-256")
 	policyPath := fs.String("policy-path", "policy", "policy path under source-dir")
 	adaptersPath := fs.String("adapters-path", "adapters", "adapter path under source-dir")
+	providersPath := fs.String("providers-path", "providers", "provider path under source-dir")
+	rulepacksPath := fs.String("rulepacks-path", "rulepacks", "rulepack path under source-dir")
+	toolchainsPath := fs.String("toolchains-path", "toolchains", "toolchain lock path under source-dir")
 	runtimePath := fs.String("runtime-path", "policyctl", "runtime path under source-dir")
+	astGrepPath := fs.String("ast-grep-path", "ast-grep", "ast-grep path under source-dir")
 	outDir := fs.String("out-dir", "", "session output directory")
 	if err := fs.Parse(args); err != nil {
 		return &ExitError{Code: 2, Msg: err.Error()}
@@ -417,6 +430,22 @@ func RunLocalIntakeCLI(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	adaptersSource, err := pathUnder(root, *adaptersPath)
+	if err != nil {
+		return err
+	}
+	providersSource, err := pathUnder(root, *providersPath)
+	if err != nil {
+		return err
+	}
+	rulepacksSource, err := pathUnder(root, *rulepacksPath)
+	if err != nil {
+		return err
+	}
+	toolchainsSource, err := pathUnder(root, *toolchainsPath)
+	if err != nil {
+		return err
+	}
+	astGrepSource, err := pathUnder(root, *astGrepPath)
 	if err != nil {
 		return err
 	}
@@ -471,8 +500,15 @@ func RunLocalIntakeCLI(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
-	if _, err := os.Stat(adaptersSource); err != nil {
-		return fmt.Errorf("ADAPTERS_MISSING: %w", err)
+	for name, path := range map[string]string{
+		"ADAPTERS": adaptersSource, "PROVIDERS": providersSource, "RULEPACKS": rulepacksSource, "TOOLCHAINS": toolchainsSource,
+	} {
+		if info, statErr := os.Stat(path); statErr != nil || !info.IsDir() {
+			return fmt.Errorf("%s_MISSING: %s", name, path)
+		}
+	}
+	if info, statErr := os.Stat(astGrepSource); statErr != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("ASTGREP_MISSING: %s", astGrepSource)
 	}
 	if err := ValidatePolicyRef(resolvedPolicyRef); err != nil {
 		return err
@@ -480,14 +516,30 @@ func RunLocalIntakeCLI(args []string, stdout, stderr io.Writer) error {
 
 	materializedPolicy := filepath.Join(*outDir, "policy")
 	materializedAdapters := filepath.Join(*outDir, "adapters")
+	materializedProviders := filepath.Join(*outDir, "providers")
+	materializedRulepacks := filepath.Join(*outDir, "rulepacks")
+	materializedToolchains := filepath.Join(*outDir, "toolchains")
 	materializedRuntime := filepath.Join(*outDir, "bin", "policyctl")
+	materializedAstGrep := filepath.Join(*outDir, "bin", "ast-grep")
 	if err := copyRegularTree(policySource, materializedPolicy); err != nil {
 		return err
 	}
 	if err := copyRegularTree(adaptersSource, materializedAdapters); err != nil {
 		return err
 	}
+	if err := copyRegularTree(providersSource, materializedProviders); err != nil {
+		return err
+	}
+	if err := copyRegularTree(rulepacksSource, materializedRulepacks); err != nil {
+		return err
+	}
+	if err := copyRegularTree(toolchainsSource, materializedToolchains); err != nil {
+		return err
+	}
 	if err := copyRegularFile(runtimeSource, materializedRuntime, 0o755); err != nil {
+		return err
+	}
+	if err := copyRegularFile(astGrepSource, materializedAstGrep, 0o755); err != nil {
 		return err
 	}
 	materializedBundle, err := LoadBundle(materializedPolicy)
@@ -501,18 +553,47 @@ func RunLocalIntakeCLI(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	astGrepSHA, err := fileSHA(materializedAstGrep)
+	if err != nil {
+		return err
+	}
+	adaptersSHA, err := localSourceDigest(materializedAdapters)
+	if err != nil {
+		return err
+	}
+	providersSHA, err := localSourceDigest(materializedProviders)
+	if err != nil {
+		return err
+	}
+	rulepacksSHA, err := localSourceDigest(materializedRulepacks)
+	if err != nil {
+		return err
+	}
+	toolchainsSHA, err := localSourceDigest(materializedToolchains)
+	if err != nil {
+		return err
+	}
 	receipt, err := finalizeLocalIntakeReceipt(LocalIntakeReceipt{
-		Schema:        localIntakeSchema,
-		Status:        "PASS",
-		SourceKind:    *sourceKind,
-		SourceID:      resolvedSourceID,
-		SourceSHA256:  resolvedSourceSHA,
-		PolicyRef:     resolvedPolicyRef,
-		PolicyHash:    bundle.Hash,
-		RuntimeSHA256: runtimeSHA,
-		PolicyPath:    "policy",
-		AdaptersPath:  "adapters",
-		RuntimePath:   "bin/policyctl",
+		Schema:           localIntakeSchema,
+		Status:           "PASS",
+		SourceKind:       *sourceKind,
+		SourceID:         resolvedSourceID,
+		SourceSHA256:     resolvedSourceSHA,
+		PolicyRef:        resolvedPolicyRef,
+		PolicyHash:       bundle.Hash,
+		RuntimeSHA256:    runtimeSHA,
+		AstGrepSHA256:    astGrepSHA,
+		AdaptersSHA256:   adaptersSHA,
+		ProvidersSHA256:  providersSHA,
+		RulepacksSHA256:  rulepacksSHA,
+		ToolchainsSHA256: toolchainsSHA,
+		PolicyPath:       "policy",
+		AdaptersPath:     "adapters",
+		ProvidersPath:    "providers",
+		RulepacksPath:    "rulepacks",
+		ToolchainsPath:   "toolchains",
+		RuntimePath:      "bin/policyctl",
+		AstGrepPath:      "bin/ast-grep",
 	})
 	if err != nil {
 		return err
@@ -578,9 +659,6 @@ func normalizeLocalTask(task LocalTaskContract, bundle *Bundle) (LocalTaskContra
 			return LocalTaskContract{}, Profile{}, fmt.Errorf("TASK_TEST_INVALID: %s", test.ID)
 		}
 		testSeen[test.ID] = true
-		if test.Command[0] != profile.Tool {
-			return LocalTaskContract{}, Profile{}, fmt.Errorf("TASK_TEST_TOOL_MISMATCH: %s requires %s", test.ID, profile.Tool)
-		}
 		if test.TimeoutSeconds == 0 {
 			test.TimeoutSeconds = 120
 		}
@@ -709,10 +787,14 @@ func observeLocalSource(bundle *Bundle, profile Profile, workspace, rel, package
 		CaseID:       "source:" + rel,
 		SourcePath:   rel,
 		SourceSHA256: "sha256:" + shaHex(data),
-		ConfigSHA256: "sha256:" + shaHex([]byte(profile.ID+"\n"+rel+"\n"+contractDigest+"\n")),
+		ConfigSHA256: "",
 		Evidence:     []Evidence{},
 	}
-	report, tool, err := runImportAdapter(bundle, profile, path)
+	base.ConfigSHA256, err = profileConfigSHA256(bundle, profile, []byte(profile.ID+"\n"+rel+"\n"+contractDigest+"\n"))
+	if err != nil {
+		return providerFailure(base, err)
+	}
+	report, tool, err := runStructureAdapter(bundle, profile, path)
 	if err != nil {
 		base.Status = StatusUnobserved
 		switch {
@@ -753,7 +835,7 @@ func localTestToolIdentity(tool string) (ToolIdentity, error) {
 	if err != nil {
 		return ToolIdentity{}, err
 	}
-	digest := "sha256:" + shaHex([]byte("shiftleft-local-test-tool/1\n" + tool + "\n" + version + "\n"))
+	digest := "sha256:" + shaHex([]byte("shiftleft-local-test-tool/1\n"+tool+"\n"+version+"\n"))
 	return ToolIdentity{Name: tool, Version: version, AdapterSHA256: "native-test", Digest: digest}, nil
 }
 
@@ -942,6 +1024,29 @@ func loadLocalSession(session string) (LocalIntakeReceipt, *Bundle, error) {
 	}
 	if executableSHA != receipt.RuntimeSHA256 {
 		return LocalIntakeReceipt{}, nil, fmt.Errorf("RUNNING_RUNTIME_HASH_MISMATCH: expected %s got %s", receipt.RuntimeSHA256, executableSHA)
+	}
+	astGrepPath, err := pathUnder(session, receipt.AstGrepPath)
+	if err != nil {
+		return LocalIntakeReceipt{}, nil, err
+	}
+	astGrepSHA, err := fileSHA(astGrepPath)
+	if err != nil || astGrepSHA != receipt.AstGrepSHA256 {
+		return LocalIntakeReceipt{}, nil, fmt.Errorf("SESSION_ASTGREP_HASH_MISMATCH: expected %s got %s", receipt.AstGrepSHA256, astGrepSHA)
+	}
+	for name, spec := range map[string]struct{ path, expected string }{
+		"ADAPTERS":   {receipt.AdaptersPath, receipt.AdaptersSHA256},
+		"PROVIDERS":  {receipt.ProvidersPath, receipt.ProvidersSHA256},
+		"RULEPACKS":  {receipt.RulepacksPath, receipt.RulepacksSHA256},
+		"TOOLCHAINS": {receipt.ToolchainsPath, receipt.ToolchainsSHA256},
+	} {
+		dir, pathErr := pathUnder(session, spec.path)
+		if pathErr != nil {
+			return LocalIntakeReceipt{}, nil, pathErr
+		}
+		actual, digestErr := localSourceDigest(dir)
+		if digestErr != nil || actual != spec.expected {
+			return LocalIntakeReceipt{}, nil, fmt.Errorf("SESSION_%s_HASH_MISMATCH: expected %s got %s", name, spec.expected, actual)
+		}
 	}
 	return receipt, bundle, nil
 }

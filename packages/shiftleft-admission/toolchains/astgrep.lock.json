@@ -1,0 +1,15 @@
+{
+  "schema": "shiftleft-toolchain-lock/1",
+  "tool": "ast-grep",
+  "version": "0.42.1",
+  "nixpkgs": {
+    "revision": "1c3fe55ad329cbcb28471bb30f05c9827f724c76",
+    "attribute": "ast-grep"
+  },
+  "portable": {
+    "target": "x86_64-unknown-linux-gnu",
+    "url": "https://github.com/ast-grep/ast-grep/releases/download/0.42.1/app-x86_64-unknown-linux-gnu.zip",
+    "sha256": "5de8b87cba67fc8dc3e239d54b6484802ad745a7ae3de76be4fe89661dc52657",
+    "binarySha256": "eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905"
+  }
+}

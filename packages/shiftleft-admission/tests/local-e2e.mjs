@@ -13,6 +13,7 @@ const packageRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(packageRoot, "../..");
 const fixtureRoot = path.join(packageRoot, "local-fixtures");
 const policyctl = findExecutable(process.env.POLICYCTL_BIN ?? "policyctl");
+const astGrep = findExecutable(process.env.AST_GREP_BIN ?? "ast-grep");
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
@@ -116,10 +117,13 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), "issue161-local-e2e-"));
 try {
   const source = path.join(temp, "source");
   fs.mkdirSync(source);
-  fs.cpSync(path.join(packageRoot, "policy"), path.join(source, "policy"), { recursive: true });
-  fs.cpSync(path.join(packageRoot, "adapters"), path.join(source, "adapters"), { recursive: true });
+  for (const directory of ["policy", "adapters", "providers", "rulepacks", "toolchains"]) {
+    fs.cpSync(path.join(packageRoot, directory), path.join(source, directory), { recursive: true });
+  }
   fs.copyFileSync(policyctl, path.join(source, "policyctl"));
+  fs.copyFileSync(astGrep, path.join(source, "ast-grep"));
   fs.chmodSync(path.join(source, "policyctl"), 0o755);
+  fs.chmodSync(path.join(source, "ast-grep"), 0o755);
   const sourceSHA = writeManifest(source);
   const policyHash = run(policyctl, ["hash", "--bundle", path.join(source, "policy")]).stdout.trim();
   let policyRef = "0123456789abcdef0123456789abcdef01234567";
@@ -202,7 +206,7 @@ try {
 
   const tamperedSource = path.join(temp, "tampered-source");
   fs.cpSync(source, tamperedSource, { recursive: true });
-  fs.appendFileSync(path.join(tamperedSource, "adapters", "python_imports.py"), "\n# tampered\n");
+  fs.appendFileSync(path.join(tamperedSource, "providers", "structure", "astgrep", "normalize.mjs"), "\n// tampered\n");
   const tampered = formalIntake(
     tamperedSource,
     sourceSHA,
@@ -212,6 +216,34 @@ try {
     { sourceID: "162", allowed: [1] },
   );
   assertFailure(tampered, /SOURCE_FILE_SHA256_MISMATCH/);
+
+  const rulepackTamperSession = path.join(temp, "rulepack-tamper-session");
+  fs.cpSync(sessionA, rulepackTamperSession, { recursive: true });
+  fs.appendFileSync(path.join(rulepackTamperSession, "rulepacks", "astgrep", "python", "forbidden-imports.yml"), "\n# tampered\n");
+  const rulepackTamperWorkspace = path.join(temp, "rulepack-tamper-workspace");
+  copyFixture("python", rulepackTamperWorkspace);
+  const rulepackTamper = localRun(
+    rulepackTamperSession,
+    rulepackTamperWorkspace,
+    pyContract,
+    path.join(temp, "rulepack-tamper-out"),
+    { allowed: [1] },
+  );
+  assertFailure(rulepackTamper, /SESSION_RULEPACKS_HASH_MISMATCH/);
+
+  const missingAstGrepSession = path.join(temp, "missing-astgrep-session");
+  fs.cpSync(sessionA, missingAstGrepSession, { recursive: true });
+  fs.rmSync(path.join(missingAstGrepSession, "bin", "ast-grep"));
+  const missingAstGrepWorkspace = path.join(temp, "missing-astgrep-workspace");
+  copyFixture("python", missingAstGrepWorkspace);
+  const missingAstGrep = localRun(
+    missingAstGrepSession,
+    missingAstGrepWorkspace,
+    pyContract,
+    path.join(temp, "missing-astgrep-out"),
+    { allowed: [1] },
+  );
+  assertFailure(missingAstGrep, /SESSION_ASTGREP_HASH_MISMATCH/);
 
   const unmetWorkspace = path.join(temp, "unmet-workspace");
   copyFixture("python", unmetWorkspace);
@@ -267,6 +299,8 @@ try {
     localExperiment: "PASS",
     localExperimentFormalPromotion: "BLOCKED",
     tamper: "BLOCKED",
+    rulepackTamper: "BLOCKED",
+    missingAstGrep: "BLOCKED",
     missingTool: "BLOCKED",
     skippedTest: "BLOCKED",
     unmetRule: "BLOCKED",
