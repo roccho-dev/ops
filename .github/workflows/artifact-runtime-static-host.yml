@@ -120,7 +120,7 @@ jobs:
           assert s['publication']['tag']==p['publication']['tag']
           assert s['publication']['archive']==p['publication']['archive']
           assert s['provider']['kind']=='cloudflare-pages'
-          assert s['provider']['environment']=='production'
+          assert s['provider']['environment']=='cloudflare-production'
           assert s['provider']['project']=='stg-artifact-runtime'
           assert s['provider']['productionBranch']=='proposals'
           tree=s['publication']['treeDigest']; tree_id=tree.removeprefix('sha256:')
@@ -207,7 +207,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment:
-      name: production
+      name: cloudflare-production
     steps:
       - name: Download exact staged site
         uses: actions/download-artifact@v4
