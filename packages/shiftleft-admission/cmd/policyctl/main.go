@@ -9,8 +9,17 @@ import (
 
 func main() {
 	var err error
-	if len(os.Args) > 1 && os.Args[1] == "verify-worktree" {
-		err = admission.RunVerifyWorktreeCLI(os.Args[2:], os.Stdout, os.Stderr)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "verify-worktree":
+			err = admission.RunVerifyWorktreeCLI(os.Args[2:], os.Stdout, os.Stderr)
+		case "intake":
+			err = admission.RunLocalIntakeCLI(os.Args[2:], os.Stdout, os.Stderr)
+		case "run":
+			err = admission.RunLocalRunCLI(os.Args[2:], os.Stdout, os.Stderr)
+		default:
+			err = admission.RunCLI(os.Args[1:], os.Stdout, os.Stderr)
+		}
 	} else {
 		err = admission.RunCLI(os.Args[1:], os.Stdout, os.Stderr)
 	}

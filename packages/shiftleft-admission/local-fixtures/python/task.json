@@ -1,0 +1,72 @@
+{
+  "schema": "shiftleft-local-task-contract/1",
+  "package": {
+    "schema": "shiftleft-package-contract/1",
+    "responsibility": "Parse an external pair once and add the trusted integer values without effects.",
+    "parseBoundary": {
+      "rawInput": "untrusted mapping/object",
+      "parsedInput": "trusted integer pair",
+      "parser": "parse_pair/parsePair",
+      "effectBeforeParseAllowed": false,
+      "rawReuseAllowed": false
+    },
+    "publicContracts": [
+      {
+        "id": "pair.add",
+        "entrypoint": "parse then add",
+        "input": "untrusted pair with integer left/right",
+        "output": "integer sum",
+        "error": "typed parse error before core",
+        "effect": "none",
+        "determinism": "same pair yields same sum",
+        "goldenRoutes": [
+          {
+            "id": "golden",
+            "fixture": "golden",
+            "expected": "42"
+          }
+        ],
+        "negativeRoutes": [
+          {
+            "id": "negative",
+            "fixture": "negative",
+            "expected": "parse error",
+            "effectCount": 0
+          }
+        ],
+        "currentConsumers": [
+          "issue-161 local implementation proof"
+        ]
+      }
+    ],
+    "packageId": "issue161-python"
+  },
+  "taskId": "issue161-python",
+  "language": "python",
+  "profileId": "python.core-imports",
+  "scope": [
+    "core.py"
+  ],
+  "tests": [
+    {
+      "id": "golden",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "test_core.CoreTest.test_golden"
+      ],
+      "timeoutSeconds": 30
+    },
+    {
+      "id": "negative",
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "test_core.CoreTest.test_negative"
+      ],
+      "timeoutSeconds": 30
+    }
+  ]
+}
