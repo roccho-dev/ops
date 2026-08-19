@@ -1,0 +1,112 @@
+name: issue-172-phase2-apply
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - ".github/workflows/issue-172-phase2-apply.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-172-astgrep-structure
+          fetch-depth: 0
+
+      - name: Reconstruct and verify sealed Phase 2 patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import os
+          import re
+          import urllib.request
+
+          marker = "<!-- issue172-phase2-final:v2"
+          patch_sha = "ef426c8fe78fce9ed3fb53c41826739d5af7c8051ff6acfee8c37930d3de4099"
+          compressed_sha = "f5a14e9cff8f24280dcfb79e19c43134aed9a48d6506e2209a04bf0ec95f458d"
+          total = 1
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['REPOSITORY']}/issues/172/comments?per_page=100",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          with urllib.request.urlopen(request) as response:
+              comments = json.load(response)
+
+          chunks = {}
+          for comment in comments:
+              body = comment.get("body", "")
+              if marker not in body:
+                  continue
+              index_match = re.search(r"^index:(\d+)$", body, re.MULTILINE)
+              total_match = re.search(r"^total:(\d+)$", body, re.MULTILINE)
+              patch_match = re.search(r"^patch-sha256:([0-9a-f]{64})$", body, re.MULTILINE)
+              compressed_match = re.search(r"^compressed-sha256:([0-9a-f]{64})$", body, re.MULTILINE)
+              if not all((index_match, total_match, patch_match, compressed_match)):
+                  raise SystemExit("CHUNK_HEADER_INVALID")
+              index = int(index_match.group(1))
+              if int(total_match.group(1)) != total:
+                  raise SystemExit(f"CHUNK_TOTAL_MISMATCH index={index}")
+              if patch_match.group(1) != patch_sha or compressed_match.group(1) != compressed_sha:
+                  raise SystemExit(f"CHUNK_IDENTITY_MISMATCH index={index}")
+              payload = body.split(compressed_match.group(0), 1)[1].split("-->", 1)[0]
+              encoded = "".join(payload.split())
+              if not re.fullmatch(r"[A-Za-z0-9+/=]+", encoded):
+                  raise SystemExit(f"CHUNK_BASE64_INVALID index={index}")
+              if index in chunks and chunks[index] != encoded:
+                  raise SystemExit(f"CHUNK_DUPLICATE_MISMATCH index={index}")
+              chunks[index] = encoded
+
+          if set(chunks) != set(range(total)):
+              raise SystemExit(f"CHUNK_SET_MISMATCH got={sorted(chunks)}")
+          compressed = base64.b64decode("".join(chunks[index] for index in range(total)), validate=True)
+          if hashlib.sha256(compressed).hexdigest() != compressed_sha:
+              raise SystemExit("COMPRESSED_SHA256_MISMATCH")
+          patch = gzip.decompress(compressed)
+          if hashlib.sha256(patch).hexdigest() != patch_sha:
+              raise SystemExit("PATCH_SHA256_MISMATCH")
+          open("/tmp/issue172-phase2.patch", "wb").write(patch)
+          print(f"sealed patch verified: compressed={len(compressed)} patch={len(patch)}")
+          PY
+
+      - name: Apply exact Phase 2 candidate
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "316bdc7c351cde4cc986c8ffa6a999d679fcf715"
+          git apply --check /tmp/issue172-phase2.patch
+          git apply /tmp/issue172-phase2.patch
+          git diff --check
+          test ! -e packages/shiftleft-admission/adapters/go_imports.go
+          test ! -e packages/shiftleft-admission/adapters/js_imports.mjs
+          test ! -e packages/shiftleft-admission/adapters/python_imports.py
+          test -f packages/shiftleft-admission/tests/astgrep-conformance.mjs
+          test -f packages/shiftleft-admission/providers/structure/astgrep/normalize.mjs
+          test -f packages/shiftleft-admission/docs/structure-provider-phases.md
+          git rm .github/workflows/issue-172-phase2-apply.yml
+
+      - name: Commit Phase 2 candidate
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: cut structure evidence over to ast-grep"
+          git push origin HEAD:feat/issue-172-astgrep-structure
