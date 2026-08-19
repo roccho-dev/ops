@@ -11,10 +11,79 @@ on:
     types: [created]
 
 permissions:
+  actions: read
   contents: read
   issues: write
 
 jobs:
+  status:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.number == 160 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == '/artifact-runtime-deploy-status'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve latest deploy comment to workflow run and jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          comments="$RUNNER_TEMP/comments.json"
+          runs="$RUNNER_TEMP/runs.json"
+          report="$RUNNER_TEMP/deploy-status.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/issues/160/comments" > "$comments"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/artifact-runtime-static-host.yml/runs" -f event=issue_comment -f per_page=50 > "$runs"
+          python3 - "$comments" "$runs" "$GITHUB_RUN_ID" "$report" <<'PY'
+          import datetime,json,subprocess,sys
+          comments_path,runs_path,current_run,report_path=sys.argv[1:]
+          comments=json.load(open(comments_path,encoding='utf-8'))
+          runs=json.load(open(runs_path,encoding='utf-8'))['workflow_runs']
+          deploy=[c for c in comments if c.get('body')=='/artifact-runtime-deploy' and c.get('user',{}).get('login')=='roccho-dev']
+          if not deploy: raise SystemExit('no owner /artifact-runtime-deploy comment found')
+          target=max(deploy,key=lambda c:c['created_at'])
+          def dt(value): return datetime.datetime.fromisoformat(value.replace('Z','+00:00'))
+          t=dt(target['created_at'])
+          candidates=[]
+          for run in runs:
+              if str(run['id'])==current_run: continue
+              created=dt(run['created_at'])
+              delta=abs((created-t).total_seconds())
+              candidates.append((delta,run))
+          if not candidates: raise SystemExit('no issue-comment workflow runs found')
+          delta,run=min(candidates,key=lambda x:x[0])
+          if delta>120: raise SystemExit(f'nearest workflow run is {delta}s from deploy comment')
+          jobs=json.loads(subprocess.check_output(['gh','api',f"repos/{run['repository']['full_name']}/actions/runs/{run['id']}/jobs"],text=True))['jobs']
+          result={
+            'schema':'ops.artifactRuntimeDeployStatus/1','authority':False,
+            'deployComment':{'id':target['id'],'createdAt':target['created_at']},
+            'run':{'id':run['id'],'createdAt':run['created_at'],'status':run['status'],'conclusion':run.get('conclusion'),'htmlUrl':run['html_url'],'distanceSeconds':delta},
+            'jobs':[{'id':j['id'],'name':j['name'],'status':j['status'],'conclusion':j.get('conclusion'),'startedAt':j.get('started_at'),'completedAt':j.get('completed_at')} for j in jobs],
+          }
+          open(report_path,'w',encoding='utf-8').write(json.dumps(result,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+          cat "$report"
+          python3 - "$report" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8')); r=x['run']
+          print('## Artifact Runtime deploy status')
+          print()
+          print(f"- deploy comment: `{x['deployComment']['id']}` / `{x['deployComment']['createdAt']}`")
+          print(f"- matched run: `{r['id']}`")
+          print(f"- run status: `{r['status']}`")
+          print(f"- run conclusion: `{r['conclusion']}`")
+          print(f"- run URL: {r['htmlUrl']}")
+          print(f"- comment/run distance: `{r['distanceSeconds']}s`")
+          print('- jobs:')
+          for j in x['jobs']:
+              print(f"  - `{j['name']}`: status=`{j['status']}`, conclusion=`{j['conclusion']}`, job=`{j['id']}`")
+          print()
+          print('This is read-only operational observation; it performs no Cloudflare or repository mutation beyond this Issue comment.')
+          PY
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+
   materialize:
     if: >-
       github.event_name == 'pull_request' ||
