@@ -1,0 +1,14 @@
+{
+  "automaticRetry": false,
+  "branchSetCommit": "f9aaa023f485a486e69fc8d0dea06d672e889ebd",
+  "branchSetRef": "refs/heads/proof-nway-github-6a85fd4d-branch-set",
+  "decisionRequired": true,
+  "effectApplied": false,
+  "error": "BRANCH_SET_REF_DRIFT f495c72b44df33545edc8099aa36acf6a3bf26a3 != f9aaa023f485a486e69fc8d0dea06d672e889ebd",
+  "fault": "none",
+  "schema": "github-nway-attempt/1",
+  "stage": "S3",
+  "stopReason": "PIPELINE_ERROR",
+  "targetRef": "refs/heads/proof-nway-github-6a85fd4d-result",
+  "terminalState": "CURRENT_ATTEMPT_ENDED"
+}
