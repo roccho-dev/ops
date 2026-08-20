@@ -1,0 +1,174 @@
+name: Artifact Runtime readback wiring transport v2
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/artifact-runtime-readback-wiring-transport-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  wire-public-proven-candidate:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == github.repository_owner
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      EXPECTED_HEAD: 10bf53a303267471f414797b451115b9be0cbab0
+      EXPECTED_BASE: e844c4bfb36a1dcd581f26851ba58104486a7267
+      PUBLIC_ROOT: https://f2d0ac3b.stg-artifact-runtime.pages.dev/releases/c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposal/artifact-runtime-readback-curl-browser-260820
+          fetch-depth: 0
+
+      - name: Wire and prove against the real public HTTPS projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse HEAD^^^^)" = "$EXPECTED_BASE"
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          browser = Path('verification/artifact-runtime-static-host/browser_smoke.py')
+          browser_text = browser.read_text(encoding='utf-8')
+          old_profile = 'with tempfile.TemporaryDirectory(prefix="artifact-runtime-chrome-") as profile:'
+          new_profile = 'with tempfile.TemporaryDirectory(prefix="artifact-runtime-chrome-", ignore_cleanup_errors=True) as profile:'
+          assert browser_text.count(old_profile) == 1
+          browser.write_text(browser_text.replace(old_profile, new_profile, 1), encoding='utf-8')
+
+          path = Path('.github/workflows/artifact-runtime-static-host.yml')
+          text = path.read_text(encoding='utf-8')
+          def expr(name: str) -> str:
+              return '$' + '{{ ' + name + ' }}'
+
+          old = "\n".join(["    steps:", "      - name: Download exact staged site", ""])
+          new = "\n".join([
+              "    steps:",
+              "      - uses: actions/checkout@v4",
+              "        with:",
+              f"          ref: {expr('needs.materialize.outputs.source_sha')}",
+              "",
+              "      - name: Download exact staged site",
+              "",
+          ])
+          assert text.count(old) == 1
+          text = text.replace(old, new, 1)
+
+          start_marker = '      - name: Public all-file readback\n'
+          end_marker = '      - name: Upload deployment receipt\n'
+          assert text.count(start_marker) == 1 and text.count(end_marker) == 1
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          replacement = "\n".join([
+              "      - name: Public all-file readback",
+              "        env:",
+              f"          ROOT_URL: {expr('steps.deploy.outputs.root_url')}",
+              f"          TREE_DIGEST: {expr('needs.materialize.outputs.tree_digest')}",
+              f"          TREE_ID: {expr('needs.materialize.outputs.tree_id')}",
+              f"          SOURCE_SHA: {expr('needs.materialize.outputs.source_sha')}",
+              f"          PROJECT: {expr('needs.materialize.outputs.project')}",
+              "        shell: bash",
+              "        run: |",
+              "          set -euo pipefail",
+              '          local_root="$RUNNER_TEMP/deploy/site/releases/$TREE_ID"',
+              '          python3 verification/artifact-runtime-static-host/readback.py "$local_root" "$ROOT_URL" "$TREE_DIGEST" "$SOURCE_SHA" "$PROJECT" "$RUNNER_TEMP/deployment-receipt.json"',
+              '          cat "$RUNNER_TEMP/deployment-receipt.json"',
+              "",
+              "      - name: Public invoke browser smoke",
+              "        env:",
+              f"          ROOT_URL: {expr('steps.deploy.outputs.root_url')}",
+              f"          TREE_DIGEST: {expr('needs.materialize.outputs.tree_digest')}",
+              f"          TREE_ID: {expr('needs.materialize.outputs.tree_id')}",
+              f"          SOURCE_SHA: {expr('needs.materialize.outputs.source_sha')}",
+              f"          PROJECT: {expr('needs.materialize.outputs.project')}",
+              "        shell: bash",
+              "        run: |",
+              "          set -euo pipefail",
+              '          local_root="$RUNNER_TEMP/deploy/site/releases/$TREE_ID"',
+              '          python3 verification/artifact-runtime-static-host/browser_smoke.py "$local_root" "$ROOT_URL" "$TREE_DIGEST" "$SOURCE_SHA" "$PROJECT" "$RUNNER_TEMP/browser-proof.json" "$RUNNER_TEMP/browser-dom.html"',
+              '          cat "$RUNNER_TEMP/browser-proof.json"',
+              "",
+              "",
+          ])
+          text = text[:start] + replacement + text[end:]
+
+          old_upload = f"          path: {expr('runner.temp')}/deployment-receipt.json\n"
+          new_upload = "\n".join([
+              "          path: |",
+              f"            {expr('runner.temp')}/deployment-receipt.json",
+              f"            {expr('runner.temp')}/browser-proof.json",
+              f"            {expr('runner.temp')}/browser-dom.html",
+              "",
+          ])
+          assert text.count(old_upload) == 1
+          text = text.replace(old_upload, new_upload, 1)
+
+          old_receipt = (
+              '          receipt_sha="$(sha256sum "$RUNNER_TEMP/deployment-receipt.json" | cut -d\' \' -f1)"\n'
+              '          cat > "$RUNNER_TEMP/comment.md" <<EOF\n'
+          )
+          new_receipt = (
+              '          receipt_sha="$(sha256sum "$RUNNER_TEMP/deployment-receipt.json" | cut -d\' \' -f1)"\n'
+              '          browser_proof_sha="$(sha256sum "$RUNNER_TEMP/browser-proof.json" | cut -d\' \' -f1)"\n'
+              '          cat > "$RUNNER_TEMP/comment.md" <<EOF\n'
+          )
+          assert text.count(old_receipt) == 1
+          text = text.replace(old_receipt, new_receipt, 1)
+
+          old_comment = (
+              "          - public listed-file size/SHA readback: **45/45 PASS**\n"
+              "          - deployment receipt SHA-256: \\`$receipt_sha\\`\n"
+              "\n"
+              "          Static hosting is a non-authority projection. Git remains source authority. A real public \\`#invoke\\` browser smoke remains the final observation before #160 can close.\n"
+          )
+          new_comment = (
+              "          - public listed-file size/SHA readback: **45/45 PASS**\n"
+              "          - real public \\`#invoke\\` Chrome smoke: **PASS**\n"
+              "          - deployment receipt SHA-256: \\`$receipt_sha\\`\n"
+              "          - browser proof SHA-256: \\`$browser_proof_sha\\`\n"
+              "\n"
+              "          Static hosting is a non-authority projection. Git remains source authority.\n"
+          )
+          assert text.count(old_comment) == 1
+          path.write_text(text.replace(old_comment, new_comment, 1), encoding='utf-8')
+          PY
+
+          python3 -m py_compile \
+            verification/artifact-runtime-static-host/readback.py \
+            verification/artifact-runtime-static-host/browser_smoke.py
+
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          tag="$(python3 -c 'import json; print(json.load(open("verification/artifact-runtime-publication/manifest.json"))["publication"]["tag"])')"
+          archive="$(python3 -c 'import json; print(json.load(open("verification/artifact-runtime-publication/manifest.json"))["publication"]["archive"]["name"])')"
+          tree="$(python3 -c 'import json; print(json.load(open("verification/artifact-runtime-publication/manifest.json"))["publication"]["treeDigest"])')"
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$archive" -o "$tmp/publication.tar.gz"
+          mkdir -p "$tmp/publication"
+          tar -xzf "$tmp/publication.tar.gz" -C "$tmp/publication"
+
+          python3 verification/artifact-runtime-static-host/readback.py \
+            "$tmp/publication" "$PUBLIC_ROOT" "$tree" "$EXPECTED_BASE" "stg-artifact-runtime" "$tmp/readback.json"
+          python3 verification/artifact-runtime-static-host/browser_smoke.py \
+            "$tmp/publication" "$PUBLIC_ROOT" "$tree" "$EXPECTED_BASE" "stg-artifact-runtime" \
+            "$tmp/browser-proof.json" "$tmp/browser-dom.html"
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$tmp/readback.json")" = PASS
+          test "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["status"])' "$tmp/browser-proof.json")" = PASS
+          cat "$tmp/readback.json"
+          cat "$tmp/browser-proof.json"
+
+          git add \
+            verification/artifact-runtime-static-host/browser_smoke.py \
+            .github/workflows/artifact-runtime-static-host.yml
+          git diff --cached --check
+          test "$(git diff --cached --name-only | sort)" = $'.github/workflows/artifact-runtime-static-host.yml\nverification/artifact-runtime-static-host/browser_smoke.py'
+          git config user.name roccho
+          git config user.email '40359643+roccho-dev@users.noreply.github.com'
+          git commit -m 'fix: wire public Artifact Runtime readback and browser smoke'
+          git push origin HEAD:refs/heads/proposal/artifact-runtime-readback-curl-browser-260820
