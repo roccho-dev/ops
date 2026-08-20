@@ -1,41 +1,68 @@
 name: nway-github-proof
 
 on:
-  push:
-    branches: [proof-nway-github-6a85fd4d-branch-set]
-    paths:
-      - 'verification/nway-github-proof/branch-set.json'
-      - 'verification/nway-github-proof/fault.txt'
-      - 'verification/nway-github-proof/expected.json'
-      - 'verification/nway-github-proof/decision.json'
-      - 'verification/nway-github-proof/target-ref.txt'
-  pull_request:
-    branches: [proposals]
-    paths:
-      - 'verification/nway-github-proof/branch-set.json'
-      - 'verification/nway-github-proof/fault.txt'
-      - 'verification/nway-github-proof/expected.json'
-      - 'verification/nway-github-proof/decision.json'
-      - 'verification/nway-github-proof/target-ref.txt'
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
-
-env:
-  BRANCH_SET_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+  issues: write
 
 concurrency:
-  group: nway-github-proof-6a85fd4d
+  group: nway-github-proof-issue-183
   cancel-in-progress: false
 
 jobs:
   prove:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.issue.number == 183 &&
+      github.event.comment.user.login == github.repository_owner &&
+      startsWith(github.event.comment.body, '/nway-admit\n')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - id: request
+        name: Resolve bounded owner request
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          set -euo pipefail
+          python3 - "$GITHUB_OUTPUT" "$RUNNER_TEMP/request.json" <<'PY'
+          import json, os, pathlib, re, sys
+
+          body = os.environ["COMMENT_BODY"].replace("\r\n", "\n")
+          prefix = "/nway-admit\n"
+          if not body.startswith(prefix):
+              raise SystemExit("request must start with /nway-admit followed by JSON")
+          request = json.loads(body[len(prefix):].strip())
+          if request.get("schema") != "ops.nwayGithubAdmissionRequest/1":
+              raise SystemExit("unsupported request schema")
+          commit = request.get("branchSetCommit", "")
+          ref = request.get("branchSetRef", "")
+          if not re.fullmatch(r"[0-9a-f]{40}", commit):
+              raise SystemExit("branchSetCommit must be exact 40-hex")
+          if ref != "refs/heads/proof-nway-github-6a85fd4d-branch-set":
+              raise SystemExit("branchSetRef is outside the bounded canary ref")
+          canonical = {
+              "schema": "ops.nwayGithubAdmissionRequest/1",
+              "branchSetCommit": commit,
+              "branchSetRef": ref,
+          }
+          pathlib.Path(sys.argv[2]).write_text(
+              json.dumps(canonical, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          with open(sys.argv[1], "a", encoding="utf-8") as output:
+              print(f"branch_set_commit={commit}", file=output)
+              print(f"branch_set_ref={ref}", file=output)
+          PY
+
+      - name: Checkout trusted workflow source
+        uses: actions/checkout@v4
         with:
-          ref: ${{ env.BRANCH_SET_COMMIT }}
+          ref: proposals
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -43,7 +70,24 @@ jobs:
           go-version: '1.23.2'
           cache: false
 
-      - name: Materialize exact local-proof Core
+      - name: Resolve exact branch-set data without executing it
+        shell: bash
+        env:
+          BRANCH_SET_COMMIT: ${{ steps.request.outputs.branch_set_commit }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BRANCH_SET_COMMIT"
+          git cat-file -e "$BRANCH_SET_COMMIT^{commit}"
+          for name in fault.txt expected.json target-ref.txt; do
+            git show "$BRANCH_SET_COMMIT:verification/nway-github-proof/$name" > "$RUNNER_TEMP/$name"
+          done
+          target_ref="$(tr -d '\r\n' < "$RUNNER_TEMP/target-ref.txt")"
+          case "$target_ref" in
+            refs/heads/proof-nway-github-6a85fd4d-result|refs/heads/proof-nway-github-6a85fd4d-result-*) ;;
+            *) echo "target ref outside bounded proof namespace" >&2; exit 1 ;;
+          esac
+
+      - name: Materialize trusted exact local-proof Core
         shell: bash
         run: |
           set -euo pipefail
@@ -55,24 +99,27 @@ jobs:
           base64 -d "$RUNNER_TEMP/github_ci.py.b64" > "$RUNNER_TEMP/github_ci.py"
           test "$(sha256sum "$RUNNER_TEMP/core-src.tar.gz" | awk '{print $1}')" = "b02f9115d4e9b26342c6983f596e58ecce250a593c61cca54ff10b6d4b4cba8b"
           tar -xzf "$RUNNER_TEMP/core-src.tar.gz" -C "$src"
+          (cd "$src" && go test ./...)
           (cd "$src" && go build -trimpath -o "$RUNNER_TEMP/nway-evidence" ./cmd/nway-evidence)
           (cd "$src" && go build -trimpath -o "$RUNNER_TEMP/ce-git-effect" ./cmd/ce-git-effect)
           (cd packages/shiftleft-admission && go build -trimpath -o "$RUNNER_TEMP/policyctl" ./cmd/policyctl)
 
-      - name: Run one immutable branch-set attempt
+      - id: attempt
+        name: Run one immutable branch-set attempt
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AUTHORITY: https://github.com/${{ github.repository }}.git
-          BRANCH_SET_REF: refs/heads/proof-nway-github-6a85fd4d-branch-set
+          BRANCH_SET_COMMIT: ${{ steps.request.outputs.branch_set_commit }}
+          BRANCH_SET_REF: ${{ steps.request.outputs.branch_set_ref }}
         run: |
           set -euo pipefail
           auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
           export GIT_CONFIG_COUNT=1
           export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
           export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
-          fault="$(tr -d '\r\n' < verification/nway-github-proof/fault.txt)"
-          target_ref="$(tr -d '\r\n' < verification/nway-github-proof/target-ref.txt)"
+          fault="$(tr -d '\r\n' < "$RUNNER_TEMP/fault.txt")"
+          target_ref="$(tr -d '\r\n' < "$RUNNER_TEMP/target-ref.txt")"
           out="$RUNNER_TEMP/nway-proof"
           python3 "$RUNNER_TEMP/github_ci.py" \
             --authority "$AUTHORITY" \
@@ -86,37 +133,56 @@ jobs:
             --out "$out" \
             --fault "$fault"
           cat "$out/attempt.json"
-          python3 - "$out/attempt.json" verification/nway-github-proof/expected.json <<'PY'
-          import json,sys
-          actual=json.load(open(sys.argv[1])); expected=json.load(open(sys.argv[2]))
-          for key,value in expected.items():
+          python3 - "$out/attempt.json" "$RUNNER_TEMP/expected.json" <<'PY'
+          import json, sys
+          actual = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected = json.load(open(sys.argv[2], encoding="utf-8"))
+          for key, value in expected.items():
               if actual.get(key) != value:
                   raise SystemExit(f"expected {key}={value!r}, got {actual.get(key)!r}")
           PY
 
-      - name: Publish immutable evidence projection
+      - name: Upload attempt evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nway-github-proof-${{ steps.request.outputs.branch_set_commit }}
+          path: ${{ runner.temp }}/nway-proof/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Return bounded result to Issue
         if: ${{ always() }}
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          EVIDENCE_BRANCH: proof-nway-github-6a85fd4d-evidence
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          BRANCH_SET_COMMIT: ${{ steps.request.outputs.branch_set_commit }}
+          ATTEMPT_OUTCOME: ${{ steps.attempt.outcome }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
-          repo="https://github.com/${GITHUB_REPOSITORY}.git"
-          dst="$RUNNER_TEMP/evidence"
-          git clone --quiet --branch "$EVIDENCE_BRANCH" "$repo" "$dst"
-          git -C "$dst" config user.name nway-proof
-          git -C "$dst" config user.email nway-proof@example.invalid
-          path="attempts/$BRANCH_SET_COMMIT"
-          mkdir -p "$dst/$path"
-          if [ -d "$RUNNER_TEMP/nway-proof" ]; then
-            find "$RUNNER_TEMP/nway-proof" -maxdepth 1 -type f -exec cp {} "$dst/$path/" \;
-          fi
-          printf '%s\n' "$BRANCH_SET_COMMIT" > "$dst/$path/branch-set-commit.txt"
-          git -C "$dst" add "$path"
-          git -C "$dst" commit -q -m "proof evidence $BRANCH_SET_COMMIT"
-          git -C "$dst" push --quiet origin HEAD:"refs/heads/$EVIDENCE_BRANCH"
+          python3 - "$RUNNER_TEMP/nway-proof/attempt.json" "$RUNNER_TEMP/comment.md" <<'PY'
+          import json, os, pathlib, sys
+
+          attempt_path = pathlib.Path(sys.argv[1])
+          lines = [
+              "## N-way GitHub admission result",
+              "",
+              f"- branch-set commit: `{os.environ.get('BRANCH_SET_COMMIT') or '<unresolved>'}`",
+              f"- attempt step: `{os.environ.get('ATTEMPT_OUTCOME') or 'not-run'}`",
+              f"- run: {os.environ['RUN_URL']}",
+          ]
+          if attempt_path.is_file():
+              attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+              for key in ("terminalState", "stopReason", "decisionRequired", "effectApplied"):
+                  lines.append(f"- {key}: `{attempt.get(key)}`")
+          else:
+              lines.append("- result: `NO_ATTEMPT_RECEIPT`")
+          lines.extend([
+              "",
+              "A stopped attempt is not resumed. A retry requires a new owner decision and a new exact branch-set commit.",
+          ])
+          pathlib.Path(sys.argv[2]).write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
