@@ -1,0 +1,100 @@
+name: Transport bidirectional Artifact Runtime static-host candidate
+
+on:
+  push:
+    branches:
+      - transport/artifact-runtime-bidirectional-static-host-260821
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_BASE: abd6c3219c8b6be29815d95606a8268c5f7fe5f3
+      TARGET_BRANCH: proposal/artifact-runtime-bidirectional-static-host-260821
+      PATCH_B64_SHA256: a9e90444f35ad12ed38d2faa06b7943fcdaea166b116f1cbb23c3a62679bb03d
+      PATCH_GZ_SHA256: ac5f3265eba4ccf7a3530e37da120829cae30985e9b0b30a9fb450dfaecaa0bf
+      PATCH_SHA256: 359c89f06bf17b8d0cb24509dd215f7cac9e0bcaf7dfff519be093e1f069fce7
+      APP_TAG: artifact-runtime-b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b
+      APP_ARCHIVE: artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz
+      APP_ARCHIVE_SHA256: 571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b
+      APP_TREE: sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct exact candidate from bounded patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=.github/transport/artifact-runtime-bidirectional-static-host.patch.gz.b64
+          test "$(sha256sum "$payload" | awk '{print $1}')" = "$PATCH_B64_SHA256"
+          cp "$payload" "$RUNNER_TEMP/change.patch.gz.b64"
+          base64 --decode "$RUNNER_TEMP/change.patch.gz.b64" > "$RUNNER_TEMP/change.patch.gz"
+          test "$(sha256sum "$RUNNER_TEMP/change.patch.gz" | awk '{print $1}')" = "$PATCH_GZ_SHA256"
+          gzip --decompress --stdout "$RUNNER_TEMP/change.patch.gz" > "$RUNNER_TEMP/change.patch"
+          test "$(sha256sum "$RUNNER_TEMP/change.patch" | awk '{print $1}')" = "$PATCH_SHA256"
+
+          test "$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')" = "$EXPECTED_BASE"
+          test -z "$(git ls-remote origin "refs/heads/$TARGET_BRANCH")"
+          git reset --hard "$EXPECTED_BASE"
+          git clean -fdx
+          git apply --check "$RUNNER_TEMP/change.patch"
+          git apply "$RUNNER_TEMP/change.patch"
+          git diff --check
+          test "$(git diff --name-only | LC_ALL=C sort | paste -sd, -)" = ".github/workflows/artifact-runtime-static-host.yml,ci.intent.v1.jsonl,verification/artifact-runtime-static-host/browser_smoke.py,verification/artifact-runtime-static-host/manifest.json"
+
+          python3 -m py_compile \
+            verification/artifact-runtime-static-host/browser_smoke.py \
+            verification/artifact-runtime-static-host/readback.py
+          python3 - <<'PY'
+          import json
+          s=json.load(open('verification/artifact-runtime-static-host/manifest.json',encoding='utf-8'))
+          p=json.load(open('verification/artifact-runtime-app/manifest.json',encoding='utf-8'))
+          assert s['schema']=='ops.artifactRuntimeStaticHost/1' and s['issue']==193 and s['authority'] is False
+          assert p['schema']=='ops.artifactRuntimeApp/1' and p['issue']==193 and p['authority'] is False
+          assert s['publication']['treeDigest']==p['publication']['treeDigest']=='sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b'
+          assert s['publication']['tag']==p['publication']['tag']
+          assert s['publication']['archive']==p['publication']['archive']
+          assert s['publication']['listedFiles']==p['publication']['listedFiles']==53
+          assert p['publication']['capabilities']==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          assert p['boundaries']['uploadedZipAllowedAsSource'] is False
+          rows=[json.loads(line) for line in open('ci.intent.v1.jsonl',encoding='utf-8') if line.strip()]
+          static=[row for row in rows if row.get('path')=='.github/workflows/artifact-runtime-static-host.yml']
+          assert len(static)==1 and static[0]['exception']['owner']=='ops#193'
+          PY
+
+          gh release download "$APP_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$APP_ARCHIVE" --dir "$RUNNER_TEMP"
+          test "$(sha256sum "$RUNNER_TEMP/$APP_ARCHIVE" | awk '{print $1}')" = "$APP_ARCHIVE_SHA256"
+          mkdir "$RUNNER_TEMP/publication"
+          tar -xzf "$RUNNER_TEMP/$APP_ARCHIVE" -C "$RUNNER_TEMP/publication"
+          python3 - "$RUNNER_TEMP/publication" <<'PY'
+          import hashlib,json,os,sys
+          from pathlib import Path
+          root=Path(sys.argv[1]); m=json.loads((root/'artifact-manifest.json').read_text())
+          assert m['treeDigest']=='sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b'
+          assert len(m['files'])==53
+          for item in m['files']:
+              data=(root/item['path']).read_bytes()
+              assert len(data)==item['bytes']
+              assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256']
+          actual=sorted(str(path.relative_to(root)).replace(os.sep,'/') for path in root.rglob('*') if path.is_file())
+          assert actual==sorted([item['path'] for item in m['files']]+['artifact-manifest.json'])
+          canon=json.dumps(m['files'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+          assert 'sha256:'+hashlib.sha256(canon).hexdigest()==m['treeDigest']
+          PY
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add .github/workflows/artifact-runtime-static-host.yml ci.intent.v1.jsonl \
+            verification/artifact-runtime-static-host/browser_smoke.py \
+            verification/artifact-runtime-static-host/manifest.json
+          git commit -m "feat: prove bidirectional Artifact App on static host"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
