@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      EXPECTED_BASE: abd6c3219c8b6be29815d95606a8268c5f7fe5f3
+      EXPECTED_BASE: 10e64726df069b71a1022d21e195d30427762018
       TARGET_BRANCH: proposal/artifact-runtime-bidirectional-static-host-260821
       PATCH_B64_SHA256: a9e90444f35ad12ed38d2faa06b7943fcdaea166b116f1cbb23c3a62679bb03d
       PATCH_GZ_SHA256: ac5f3265eba4ccf7a3530e37da120829cae30985e9b0b30a9fb450dfaecaa0bf
