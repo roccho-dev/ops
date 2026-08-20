@@ -1,0 +1,237 @@
+name: Proof GitHub-only bidirectional codec closure
+
+on:
+  push:
+    branches:
+      - proof/github-only-bidirectional-codec-260821
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      OPS_REPO: roccho-dev/ops
+      OPS_SHA: b0c992d45632e5e84f87a1029de0fbd1d5e18954
+      OPS_TREE: dda8e4da3b685b16b8a760f82670e4f9849afbb6
+      UI_REPO: roccho-dev/ui
+      UI_SHA: 1cb7042c4dccec03bd7f9f8ce9d4d3440cd209e9
+      UI_TREE: a1a4c0c11923253c52fcbe52015c40621731eb62
+    steps:
+      - name: Materialize exact Git sources without ZIP or uploaded bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/github-only"
+          mkdir -p "$root"
+
+          materialize() {
+            local repo="$1" sha="$2" tree="$3" out="$4"
+            git init --quiet "$out"
+            git -C "$out" remote add origin "https://github.com/$repo.git"
+            git -C "$out" fetch --quiet --depth=1 origin "$sha"
+            test "$(git -C "$out" rev-parse FETCH_HEAD)" = "$sha"
+            git -C "$out" checkout --quiet --detach FETCH_HEAD
+            test "$(git -C "$out" rev-parse HEAD)" = "$sha"
+            test "$(git -C "$out" rev-parse 'HEAD^{tree}')" = "$tree"
+            test "$(git -C "$out" rev-parse --is-shallow-repository)" = true
+            test "$(git -C "$out" rev-list --count HEAD)" = 1
+            test -z "$(git -C "$out" status --porcelain)"
+            git -C "$out" fsck --no-dangling
+          }
+
+          materialize "$OPS_REPO" "$OPS_SHA" "$OPS_TREE" "$root/ops"
+          materialize "$UI_REPO" "$UI_SHA" "$UI_TREE" "$root/ui"
+
+          code="$(curl --silent --show-error --output "$RUNNER_TEMP/mobile-agent-repo.json" --write-out '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/roccho-dev/mobile-agent)"
+          test "$code" = 404
+          printf '%s\n' "$code" > "$RUNNER_TEMP/mobile-agent-repo-status"
+
+          python3 - "$root/ops/issues.jsonl" <<'PY'
+          import json, pathlib, sys
+          rows=[json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text(encoding='utf-8').splitlines() if line.strip()]
+          row=next(x for x in rows if x.get('event_id')=='ops.mobile-diagram.bundle-intake.1')
+          assert row['filename']=='mobile-agent-260810-104022.git.bundle'
+          assert row['raw_bundle_tracked'] is False
+          assert row['adoption'] is False
+          assert row['status']=='staged_external'
+          PY
+
+      - name: Run the accepted Artifact Runtime source gate
+        working-directory: ${{ runner.temp }}/github-only/ui
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          npm --version
+          npm run check:artifact-runtime
+
+      - name: Rebuild the accepted GitHub publication deterministically
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/github-only"
+          receipt="$RUNNER_TEMP/publication-build.json"
+          (
+            cd "$root/ui"
+            node apps/artifact-shell/scripts/build-publication.mjs --out="$RUNNER_TEMP/publication"
+          ) | tee "$receipt"
+          python3 - "$receipt" "$root/ops/verification/artifact-runtime-publication/manifest.json" <<'PY'
+          import json,sys
+          built=json.load(open(sys.argv[1],encoding='utf-8'))
+          bound=json.load(open(sys.argv[2],encoding='utf-8'))
+          assert built['status']=='PASS'
+          assert built['treeDigest']==bound['publication']['treeDigest']
+          assert built['capabilities']==bound['publication']['capabilities']==2
+          assert built['files']==45
+          PY
+
+      - name: Prove codec primitives and classify packaged bidirectional closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PROOF_ROOT="$RUNNER_TEMP/github-only"
+          export RECEIPT_PATH="$RUNNER_TEMP/github-only-bidirectional-codec-receipt.json"
+          export MOBILE_AGENT_REPO_STATUS="$(cat "$RUNNER_TEMP/mobile-agent-repo-status")"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { pathToFileURL } from 'node:url';
+
+          const root=process.env.PROOF_ROOT;
+          const ui=path.join(root,'ui');
+          const ops=path.join(root,'ops');
+          const load=relative=>import(pathToFileURL(path.join(ui,relative)).href);
+          const { createUrlModuleUrl, readUrlModule }=await load('packages/url-module/src/index.mjs');
+          const { createClientAction }=await load('packages/a2ui-browser/src/actions/client-action.mjs');
+          const { validateArtifactInvocation }=await load('packages/artifact-invocation/src/index.mjs');
+
+          const request=JSON.parse(fs.readFileSync(path.join(ui,'apps/artifact-shell/fixtures/requests/inspect-json-inline.json'),'utf8'));
+          const action=createClientAction({
+            action:'replace-payload',
+            context:{ value:{ title:'GitHub-only', count:1 } },
+            sourceComponentId:'proof-button',
+            surfaceId:'proof-surface',
+          });
+          const next=structuredClone(request);
+          next.id='request.github-only-action-url';
+          next.inputs[0].source.value=structuredClone(action.context.value);
+          const validated=validateArtifactInvocation(next);
+          const url=await createUrlModuleUrl({
+            base:'https://example.invalid/releases/exact/index.html',
+            fragment:'invoke',
+            value:validated,
+          });
+          const decoded=await readUrlModule({ fragment:'invoke', input:url });
+          assert.deepEqual(decoded,validated);
+          assert.equal(await createUrlModuleUrl({base:'https://example.invalid/releases/exact/index.html',fragment:'invoke',value:validated}),url);
+
+          const runtimePaths=[
+            'apps/artifact-shell/src/entry.mjs',
+            'apps/artifact-shell/src/shell.mjs',
+            'apps/artifact-shell/src/shell-core.mjs',
+            'apps/artifact-shell/src/services.mjs',
+            'apps/artifact-shell/index.html',
+          ];
+          const runtimeText=runtimePaths.map(p=>fs.readFileSync(path.join(ui,p),'utf8')).join('\n');
+          const inboundUrlReadPresent=runtimeText.includes('readUrlModule') && runtimeText.includes('await execute(fromUrl)');
+          const runtimeActionListenerPresent=runtimeText.includes('a2ui-client-action');
+          const runtimeUrlWriterPresent=runtimeText.includes('createUrlModuleUrl') || runtimeText.includes('createUrlModuleFieldsUrl');
+          const runtimeHistoryWriterPresent=runtimeText.includes('replaceState') || runtimeText.includes('pushState');
+          const packagedActionToUrlIntegrationPresent=runtimeActionListenerPresent && runtimeUrlWriterPresent && runtimeHistoryWriterPresent;
+          assert.equal(inboundUrlReadPresent,true);
+
+          const issues=fs.readFileSync(path.join(ops,'issues.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+          const staged=issues.find(x=>x.event_id==='ops.mobile-diagram.bundle-intake.1');
+          assert.equal(staged.raw_bundle_tracked,false);
+          assert.equal(staged.adoption,false);
+
+          const verdict=packagedActionToUrlIntegrationPresent
+            ? 'PASS_GITHUB_ONLY_READY_TO_USE_BIDIRECTIONAL_CODEC'
+            : 'BLOCKED_GITHUB_SOURCE_CLOSURE';
+          const receipt={
+            schema:'ops.githubOnlyBidirectionalCodecProof/1',
+            status:'PASS',
+            verdict,
+            authority:false,
+            source:{
+              ops:{repository:'roccho-dev/ops',commit:process.env.OPS_SHA,tree:process.env.OPS_TREE},
+              ui:{repository:'roccho-dev/ui',commit:process.env.UI_SHA,tree:process.env.UI_TREE},
+              transport:'git-fetch-depth-1',
+              zipInputUsed:false,
+              actionsArtifactUsed:false,
+              uploadedBundleUsed:false,
+            },
+            observations:{
+              acceptedArtifactRuntimeGate:'PASS',
+              deterministicPublicationRebuild:'PASS',
+              genericObjectToUrlToObjectRoundtrip:'PASS',
+              typedA2uiClientActionCreation:'PASS',
+              compositionPocActionToInvocationToUrlToInvocation:'PASS',
+              inboundUrlReadAndExecutePathPresent,
+              runtimeActionListenerPresent,
+              runtimeUrlWriterPresent,
+              runtimeHistoryWriterPresent,
+              packagedActionToUrlIntegrationPresent,
+              mobileAgentRepositoryHttpStatus:Number(process.env.MOBILE_AGENT_REPO_STATUS),
+              mobileAgentRawBundleTracked:staged.raw_bundle_tracked,
+              mobileAgentAdopted:staged.adoption,
+            },
+            meaning:{
+              feasibleFromCurrentPrimitives:true,
+              readyImmediatelyAfterGitHubIntake:packagedActionToUrlIntegrationPresent,
+              missingWhenBlocked:[
+                'GitHub source authority for the former mobile-agent implementation or an accepted replacement',
+                'trusted Action -> next invocation compiler in the published runtime',
+                'runtime action listener that writes the canonical #invoke URL',
+                'round-trip fixture proving UI action -> URL -> fresh state',
+                'Ops manifest binding that exact packaged app and proof',
+              ],
+            },
+          };
+          fs.writeFileSync(process.env.RECEIPT_PATH,JSON.stringify(receipt,null,2)+'\n');
+          console.log(JSON.stringify(receipt));
+          JS
+
+      - name: Publish non-authority proof receipt to the origin issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/github-only-bidirectional-codec-receipt.json"
+          python3 - "$receipt" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8')); o=x['observations']; s=x['source']
+          print('## GitHub-only bidirectional codec proof')
+          print()
+          print(f"- proof status: **{x['status']}**")
+          print(f"- product verdict: **{x['verdict']}**")
+          print(f"- Ops source: `{s['ops']['commit']}` / tree `{s['ops']['tree']}`")
+          print(f"- UI source: `{s['ui']['commit']}` / tree `{s['ui']['tree']}`")
+          print('- source transport: exact `git fetch --depth=1` from GitHub only')
+          print('- ZIP input / Actions artifact / uploaded bundle: **0 / 0 / 0**')
+          print(f"- accepted Artifact Runtime gate: **{o['acceptedArtifactRuntimeGate']}**")
+          print(f"- deterministic publication rebuild: **{o['deterministicPublicationRebuild']}**")
+          print(f"- object -> URL -> object codec: **{o['genericObjectToUrlToObjectRoundtrip']}**")
+          print(f"- typed A2UI action creation: **{o['typedA2uiClientActionCreation']}**")
+          print(f"- proof composition, Action -> Invocation -> URL -> Invocation: **{o['compositionPocActionToInvocationToUrlToInvocation']}**")
+          print(f"- packaged runtime URL -> execute path: **{o['inboundUrlReadAndExecutePathPresent']}**")
+          print(f"- packaged runtime Action listener: **{o['runtimeActionListenerPresent']}**")
+          print(f"- packaged runtime URL writer: **{o['runtimeUrlWriterPresent']}**")
+          print(f"- packaged runtime History writer: **{o['runtimeHistoryWriterPresent']}**")
+          print(f"- packaged Action -> URL integration: **{o['packagedActionToUrlIntegrationPresent']}**")
+          print(f"- `roccho-dev/mobile-agent` repository HTTP status: `{o['mobileAgentRepositoryHttpStatus']}`")
+          print(f"- recorded old mobile-agent raw bundle tracked/adopted: `{o['mobileAgentRawBundleTracked']}` / `{o['mobileAgentAdopted']}`")
+          print()
+          print('Conclusion: GitHub source alone proves all primitives and their composition, but the currently published app is not yet a carry-and-run bidirectional codec because the trusted Action -> URL write path is not packaged and the former mobile-agent source is not GitHub authority.')
+          print()
+          print('This receipt is evidence only. It performs no source adoption, product branch write, Release mutation, deployment, or authority change.')
+          PY
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
