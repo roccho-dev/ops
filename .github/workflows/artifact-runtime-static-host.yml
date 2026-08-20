@@ -169,6 +169,7 @@ jobs:
           ARCHIVE_NAME: ${{ steps.contract.outputs.archive_name }}
           ARCHIVE_SHA: ${{ steps.contract.outputs.archive_sha }}
           EXPECTED_FILES: ${{ steps.contract.outputs.expected_files }}
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.contract.outputs.tag }}
           TREE_DIGEST: ${{ steps.contract.outputs.tree_digest }}
           TREE_ID: ${{ steps.contract.outputs.tree_id }}
@@ -178,8 +179,8 @@ jobs:
           archive="$RUNNER_TEMP/$ARCHIVE_NAME"
           publication="$RUNNER_TEMP/publication"
           site="$RUNNER_TEMP/site"
-          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
-          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$base/$ARCHIVE_NAME" -o "$archive"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE_NAME" --dir "$RUNNER_TEMP"
+          test -f "$archive"
           test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
           test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
           mkdir -p "$publication"
