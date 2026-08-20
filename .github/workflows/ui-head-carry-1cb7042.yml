@@ -1,0 +1,125 @@
+name: Carry exact UI repository head
+
+on:
+  push:
+    branches:
+      - proof/ui-head-carry-1cb7042-260820
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  carry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SOURCE_REPO: roccho-dev/ui
+      SOURCE_BRANCH: proposals
+      EXPECTED_HEAD: 1cb7042c4dccec03bd7f9f8ce9d4d3440cd209e9
+      ARTIFACT_NAME: ui-repo-head-1cb7042c4dccec03bd7f9f8ce9d4d3440cd209e9
+    steps:
+      - name: Materialize exact one-commit shallow repository
+        id: materialize
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ui"
+          restore="$RUNNER_TEMP/restore"
+          out="$RUNNER_TEMP/out"
+          mkdir -p "$work" "$restore" "$out"
+
+          git init --quiet "$work"
+          git -C "$work" remote add origin "https://github.com/$SOURCE_REPO.git"
+          git -C "$work" fetch --quiet --depth=1 origin "refs/heads/$SOURCE_BRANCH"
+          actual="$(git -C "$work" rev-parse FETCH_HEAD)"
+          test "$actual" = "$EXPECTED_HEAD"
+          git -C "$work" checkout --quiet -b "$SOURCE_BRANCH" FETCH_HEAD
+
+          head="$(git -C "$work" rev-parse HEAD)"
+          tree="$(git -C "$work" rev-parse 'HEAD^{tree}')"
+          shallow="$(git -C "$work" rev-parse --is-shallow-repository)"
+          count="$(git -C "$work" rev-list --count HEAD)"
+          test "$head" = "$EXPECTED_HEAD"
+          test "$shallow" = true
+          test "$count" = 1
+          git -C "$work" fsck --no-dangling
+
+          archive="$out/$head.git.tar.gz"
+          receipt="$out/$head.receipt.json"
+          tar -C "$work" -czf "$archive" .git
+          archive_bytes="$(stat -c %s "$archive")"
+          archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+
+          tar -C "$restore" -xzf "$archive"
+          git -C "$restore" reset --hard HEAD
+          test "$(git -C "$restore" rev-parse HEAD)" = "$head"
+          test "$(git -C "$restore" rev-parse 'HEAD^{tree}')" = "$tree"
+          test "$(git -C "$restore" rev-parse --is-shallow-repository)" = true
+          test "$(git -C "$restore" rev-list --count HEAD)" = 1
+          test -z "$(git -C "$restore" status --porcelain)"
+          git -C "$restore" fsck --no-dangling
+
+          python3 - "$receipt" "$head" "$tree" "$archive" "$archive_bytes" "$archive_sha" <<'PY'
+          import json, pathlib, sys
+          out, head, tree, archive, size, digest = sys.argv[1:]
+          value = {
+              "schema": "ops.repoHeadCarryReceipt/1",
+              "status": "PASS",
+              "authority": False,
+              "sourceRepo": "roccho-dev/ui",
+              "sourceBranch": "proposals",
+              "head": head,
+              "tree": tree,
+              "shallow": True,
+              "commitCount": 1,
+              "archive": {
+                  "name": pathlib.Path(archive).name,
+                  "bytes": int(size),
+                  "sha256": digest,
+              },
+              "workflowRun": "${{ github.run_id }}",
+              "workflowCommit": "${{ github.sha }}",
+          }
+          pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "receipt=$receipt" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+
+      - name: Upload exact repository capsule
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: |
+            ${{ steps.materialize.outputs.archive }}
+            ${{ steps.materialize.outputs.receipt }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Announce materialization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.materialize.outputs.head }}
+          TREE_SHA: ${{ steps.materialize.outputs.tree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          ## UI Repo Head Carry artifact ready
+
+          - status: `PASS`
+          - source: `roccho-dev/ui:proposals`
+          - exact head: `$HEAD_SHA`
+          - exact tree: `$TREE_SHA`
+          - shallow commits: `1`
+          - workflow run: `${{ github.run_id }}`
+          - artifact name: `$ARTIFACT_NAME`
+          - transport branch: `proof/ui-head-carry-1cb7042-260820`
+
+          This is a temporary non-authority byte transport for local inspection. No source/default-branch write was performed.
+          EOF
+          )
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body "$body"
