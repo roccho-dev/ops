@@ -23,13 +23,13 @@ jobs:
 
       - name: Patch and prove exact product candidate
         env:
-          EXPECTED_HEAD: c97830f09dfade2a8704a499d78b4635ae66f80c
+          EXPECTED_HEAD: 10bf53a303267471f414797b451115b9be0cbab0
           EXPECTED_BASE: e844c4bfb36a1dcd581f26851ba58104486a7267
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
-          test "$(git rev-parse HEAD^^)" = "$EXPECTED_BASE"
+          test "$(git rev-parse HEAD^^^^)" = "$EXPECTED_BASE"
           python3 - <<'PY'
           from pathlib import Path
 
