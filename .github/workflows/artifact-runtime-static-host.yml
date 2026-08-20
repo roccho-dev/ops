@@ -209,6 +209,10 @@ jobs:
     environment:
       name: cloudflare-production
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.materialize.outputs.source_sha }}
+
       - name: Download exact staged site
         uses: actions/download-artifact@v4
         with:
@@ -273,7 +277,6 @@ jobs:
 
       - name: Public all-file readback
         env:
-          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
           ROOT_URL: ${{ steps.deploy.outputs.root_url }}
           TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}
           TREE_ID: ${{ needs.materialize.outputs.tree_id }}
@@ -283,49 +286,31 @@ jobs:
         run: |
           set -euo pipefail
           local_root="$RUNNER_TEMP/deploy/site/releases/$TREE_ID"
-          python3 - "$local_root" "$ROOT_URL" "$TREE_DIGEST" "$SOURCE_SHA" "$PROJECT" "$RUNNER_TEMP/deployment-receipt.json" <<'PY'
-          import hashlib,json,sys,time,urllib.parse,urllib.request
-          from pathlib import Path
-          local=Path(sys.argv[1]); root=sys.argv[2].rstrip('/'); tree=sys.argv[3]; source_sha=sys.argv[4]; project=sys.argv[5]; receipt_path=sys.argv[6]
-          def get(url):
-              error=None
-              for attempt in range(6):
-                  try:
-                      request=urllib.request.Request(url,headers={'User-Agent':'artifact-runtime-static-readback/1','Cache-Control':'no-cache'})
-                      with urllib.request.urlopen(request,timeout=30) as response:
-                          if response.status != 200: raise RuntimeError(f'HTTP {response.status}')
-                          return response.read()
-                  except Exception as exc:
-                      error=exc
-                      if attempt < 5: time.sleep(2**attempt)
-              raise error
-          manifest_bytes=(local/'artifact-manifest.json').read_bytes()
-          remote_manifest=get(root+'/artifact-manifest.json')
-          assert remote_manifest==manifest_bytes
-          manifest=json.loads(manifest_bytes)
-          assert manifest['treeDigest']==tree
-          checked=0
-          for item in manifest['files']:
-              encoded=urllib.parse.quote(item['path'],safe='/')
-              data=get(root+'/'+encoded)
-              assert len(data)==item['bytes'], item['path']
-              assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256'], item['path']
-              checked+=1
-          receipt={
-            'schema':'ops.artifactRuntimeStaticHostReceipt/1','status':'PASS','authority':False,
-            'provider':'cloudflare-pages','project':project,'opsCommit':source_sha,
-            'deploymentUrl':sys.argv[2].split('/releases/',1)[0], 'rootUrl':root,
-            'treeDigest':tree,'listedFiles':checked,'allFileHashesVerified':True,
-          }
-          Path(receipt_path).write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
-          PY
+          python3 verification/artifact-runtime-static-host/readback.py "$local_root" "$ROOT_URL" "$TREE_DIGEST" "$SOURCE_SHA" "$PROJECT" "$RUNNER_TEMP/deployment-receipt.json"
           cat "$RUNNER_TEMP/deployment-receipt.json"
+
+      - name: Public invoke browser smoke
+        env:
+          ROOT_URL: ${{ steps.deploy.outputs.root_url }}
+          TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}
+          TREE_ID: ${{ needs.materialize.outputs.tree_id }}
+          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}
+          PROJECT: ${{ needs.materialize.outputs.project }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          local_root="$RUNNER_TEMP/deploy/site/releases/$TREE_ID"
+          python3 verification/artifact-runtime-static-host/browser_smoke.py "$local_root" "$ROOT_URL" "$TREE_DIGEST" "$SOURCE_SHA" "$PROJECT" "$RUNNER_TEMP/browser-proof.json" "$RUNNER_TEMP/browser-dom.html"
+          cat "$RUNNER_TEMP/browser-proof.json"
 
       - name: Upload deployment receipt
         uses: actions/upload-artifact@v4
         with:
           name: artifact-runtime-static-deployment-${{ github.run_id }}
-          path: ${{ runner.temp }}/deployment-receipt.json
+          path: |
+            ${{ runner.temp }}/deployment-receipt.json
+            ${{ runner.temp }}/browser-proof.json
+            ${{ runner.temp }}/browser-dom.html
           if-no-files-found: error
           retention-days: 30
 
@@ -340,6 +325,7 @@ jobs:
         run: |
           set -euo pipefail
           receipt_sha="$(sha256sum "$RUNNER_TEMP/deployment-receipt.json" | cut -d' ' -f1)"
+          browser_proof_sha="$(sha256sum "$RUNNER_TEMP/browser-proof.json" | cut -d' ' -f1)"
           cat > "$RUNNER_TEMP/comment.md" <<EOF
           ## Artifact Runtime static-host result — PASS
 
@@ -351,8 +337,10 @@ jobs:
           - content-addressed root: $ROOT_URL
           - public artifact-manifest readback: **PASS**
           - public listed-file size/SHA readback: **45/45 PASS**
+          - real public \`#invoke\` Chrome smoke: **PASS**
           - deployment receipt SHA-256: \`$receipt_sha\`
+          - browser proof SHA-256: \`$browser_proof_sha\`
 
-          Static hosting is a non-authority projection. Git remains source authority. A real public \`#invoke\` browser smoke remains the final observation before #160 can close.
+          Static hosting is a non-authority projection. Git remains source authority.
           EOF
           gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
