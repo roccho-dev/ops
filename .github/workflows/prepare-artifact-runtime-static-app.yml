@@ -44,11 +44,14 @@ jobs:
               "      - 'verification/artifact-runtime-static-host/**'\n      - 'verification/artifact-runtime-publication/**'\n      - 'verification/artifact-runtime-app/**'\n      - 'ci.intent.v1.jsonl'",
               'workflow paths',
           )
-          replace(
-              '      tree_id: ${{ steps.contract.outputs.tree_id }}\n',
-              '      tree_id: ${{ steps.contract.outputs.tree_id }}\n      expected_files: ${{ steps.contract.outputs.expected_files }}\n',
-              'materialize outputs',
-          )
+
+          lines=source.splitlines()
+          output_indexes=[index for index,line in enumerate(lines) if line.startswith('      tree_id:')]
+          if len(output_indexes) != 1:
+              raise SystemExit(f'materialize outputs: observed {len(output_indexes)} tree_id lines')
+          lines.insert(output_indexes[0]+1, '      expected_files: ' + '$' + '{{ steps.contract.outputs.expected_files }}')
+          source='\n'.join(lines)+'\n'
+
           replace(
               "          s=json.load(open('verification/artifact-runtime-static-host/manifest.json', encoding='utf-8'))\n          p=json.load(open('verification/artifact-runtime-publication/manifest.json', encoding='utf-8'))",
               "          s=json.load(open('verification/artifact-runtime-static-host/manifest.json', encoding='utf-8'))\n          p=json.load(open('verification/artifact-runtime-publication/manifest.json', encoding='utf-8'))\n          a=json.load(open('verification/artifact-runtime-app/manifest.json', encoding='utf-8'))",
@@ -61,7 +64,7 @@ jobs:
           )
           replace(
               "          assert s['publication']['archive']==p['publication']['archive']\n          assert s['provider']['kind']=='cloudflare-pages'",
-              "          assert s['publication']['archive']==p['publication']['archive']\n          assert s['publication']['listedFiles']==p['publication']['listedFiles']\n          source=a['sourceAuthorities'][0]\n          assert p['source']['repository']==source['repository']\n          assert p['source']['commit']==source['commit']\n          assert p['source']['tree']==source['tree']\n          app_publication=a['publication']\n          for key in ('treeDigest','kernelDigest','tag','archive','carrier','listedFiles'):\n              assert p['publication'][key]==app_publication[key], key\n          assert p['publication']['capabilities']==len(app_publication['capabilities'])==3\n          assert app_publication['capabilities']==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']\n          assert s['provider']['kind']=='cloudflare-pages'",
+              "          assert s['publication']['archive']==p['publication']['archive']\n          assert s['publication']['listedFiles']==p['publication']['listedFiles']\n          app_source=a['sourceAuthorities'][0]\n          assert p['source']['repository']==app_source['repository']\n          assert p['source']['commit']==app_source['commit']\n          assert p['source']['tree']==app_source['tree']\n          app_publication=a['publication']\n          for key in ('treeDigest','kernelDigest','tag','archive','carrier','listedFiles'):\n              assert p['publication'][key]==app_publication[key], key\n          assert p['publication']['capabilities']==len(app_publication['capabilities'])==3\n          assert app_publication['capabilities']==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']\n          assert s['provider']['kind']=='cloudflare-pages'",
               'app closure binding',
           )
           replace(
@@ -69,11 +72,18 @@ jobs:
               "          assert s['readback']['required'] is True and s['readback']['verifyAllFileHashes'] is True\n          assert s['readback']['expectedListedFiles']==p['publication']['listedFiles']==53\n          assert s['readback']['browserProof']=={\n            'capability':'render.a2ui.app@1','initialState':0,'nextState':1,\n            'requirements':['click-updates-url','back-restores-state','fresh-open-restores-next-state','reload-preserves-next-state'],\n          }\n          values={",
               'browser proof contract',
           )
-          replace(
-              '          TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}\n          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}\n',
-              '          TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}\n          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}\n          EXPECTED_FILES: ${{ needs.materialize.outputs.expected_files }}\n',
-              'receipt expected files env',
-          )
+
+          lines=source.splitlines()
+          step_indexes=[index for index,line in enumerate(lines) if line == '      - name: Write authoritative provider readback to Issue']
+          if len(step_indexes) != 1:
+              raise SystemExit(f'provider receipt step: observed {len(step_indexes)}')
+          start=step_indexes[0]
+          source_indexes=[index for index in range(start,len(lines)) if lines[index].startswith('          SOURCE_SHA:')]
+          if len(source_indexes) != 1:
+              raise SystemExit(f'provider receipt SOURCE_SHA: observed {len(source_indexes)}')
+          lines.insert(source_indexes[0]+1, '          EXPECTED_FILES: ' + '$' + '{{ needs.materialize.outputs.expected_files }}')
+          source='\n'.join(lines)+'\n'
+
           replace(
               '- public listed-file size/SHA readback: **45/45 PASS**\n          - real public `#invoke` Chrome smoke: **PASS**',
               '- public listed-file size/SHA readback: **$EXPECTED_FILES/$EXPECTED_FILES PASS**\n          - real public click → URL → Back → fresh-open/reload Chrome smoke: **PASS**',
