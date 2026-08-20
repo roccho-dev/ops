@@ -1,0 +1,97 @@
+name: Prepare static bidirectional Artifact App switch
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/prepare-artifact-runtime-static-app.yml'
+      - 'verification/artifact-runtime-publication/**'
+      - 'verification/artifact-runtime-static-host/**'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: github.head_ref == 'proposal/artifact-runtime-static-app-260821'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Patch existing static-host workflow without adding a second adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          target=Path('.github/workflows/artifact-runtime-static-host.yml')
+          source=target.read_text(encoding='utf-8')
+
+          def replace(old,new,label):
+              global source
+              count=source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, observed {count}')
+              source=source.replace(old,new)
+
+          replace(
+              "      - 'verification/artifact-runtime-static-host/**'\n      - 'verification/artifact-runtime-publication/**'\n      - 'ci.intent.v1.jsonl'",
+              "      - 'verification/artifact-runtime-static-host/**'\n      - 'verification/artifact-runtime-publication/**'\n      - 'verification/artifact-runtime-app/**'\n      - 'ci.intent.v1.jsonl'",
+              'workflow paths',
+          )
+          replace(
+              '      tree_id: ${{ steps.contract.outputs.tree_id }}\n',
+              '      tree_id: ${{ steps.contract.outputs.tree_id }}\n      expected_files: ${{ steps.contract.outputs.expected_files }}\n',
+              'materialize outputs',
+          )
+          replace(
+              "          s=json.load(open('verification/artifact-runtime-static-host/manifest.json', encoding='utf-8'))\n          p=json.load(open('verification/artifact-runtime-publication/manifest.json', encoding='utf-8'))",
+              "          s=json.load(open('verification/artifact-runtime-static-host/manifest.json', encoding='utf-8'))\n          p=json.load(open('verification/artifact-runtime-publication/manifest.json', encoding='utf-8'))\n          a=json.load(open('verification/artifact-runtime-app/manifest.json', encoding='utf-8'))",
+              'app manifest load',
+          )
+          replace(
+              "          assert s['schema']=='ops.artifactRuntimeStaticHost/1'\n          assert s['authority'] is False\n          assert s['issue']==160",
+              "          assert s['schema']=='ops.artifactRuntimeStaticHost/1'\n          assert s['authority'] is False\n          assert s['issue']==160 and s['appIssue']==193\n          assert p['schema']=='ops.artifactRuntimePublication/1'\n          assert p['authority'] is False and p['status']=='accepted-source' and p['issue']==193\n          assert a['schema']=='ops.artifactRuntimeApp/1'\n          assert a['authority'] is False and a['status']=='accepted-source' and a['issue']==193\n          assert a['id']=='artifact-runtime' and a['version']=='1'",
+              'contract identities',
+          )
+          replace(
+              "          assert s['publication']['archive']==p['publication']['archive']\n          assert s['provider']['kind']=='cloudflare-pages'",
+              "          assert s['publication']['archive']==p['publication']['archive']\n          assert s['publication']['listedFiles']==p['publication']['listedFiles']\n          source=a['sourceAuthorities'][0]\n          assert p['source']['repository']==source['repository']\n          assert p['source']['commit']==source['commit']\n          assert p['source']['tree']==source['tree']\n          app_publication=a['publication']\n          for key in ('treeDigest','kernelDigest','tag','archive','carrier','listedFiles'):\n              assert p['publication'][key]==app_publication[key], key\n          assert p['publication']['capabilities']==len(app_publication['capabilities'])==3\n          assert app_publication['capabilities']==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']\n          assert s['provider']['kind']=='cloudflare-pages'",
+              'app closure binding',
+          )
+          replace(
+              "          assert s['readback']['required'] is True and s['readback']['verifyAllFileHashes'] is True\n          values={",
+              "          assert s['readback']['required'] is True and s['readback']['verifyAllFileHashes'] is True\n          assert s['readback']['expectedListedFiles']==p['publication']['listedFiles']==53\n          assert s['readback']['browserProof']=={\n            'capability':'render.a2ui.app@1','initialState':0,'nextState':1,\n            'requirements':['click-updates-url','back-restores-state','fresh-open-restores-next-state','reload-preserves-next-state'],\n          }\n          values={",
+              'browser proof contract',
+          )
+          replace(
+              '          TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}\n          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}\n',
+              '          TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}\n          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}\n          EXPECTED_FILES: ${{ needs.materialize.outputs.expected_files }}\n',
+              'receipt expected files env',
+          )
+          replace(
+              '- public listed-file size/SHA readback: **45/45 PASS**\n          - real public `#invoke` Chrome smoke: **PASS**',
+              '- public listed-file size/SHA readback: **$EXPECTED_FILES/$EXPECTED_FILES PASS**\n          - real public click → URL → Back → fresh-open/reload Chrome smoke: **PASS**',
+              'provider receipt wording',
+          )
+          target.write_text(source,encoding='utf-8')
+          PY
+
+          python3 -m py_compile verification/artifact-runtime-static-host/browser_smoke.py
+
+      - name: Commit bounded product diff and retire this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/artifact-runtime-static-host.yml
+          git commit -m 'feat: bind static host to the carryable Artifact App'
+          git rm .github/workflows/prepare-artifact-runtime-static-app.yml
+          git commit -m 'chore: retire static App preparation workflow'
+          git push origin HEAD:${GITHUB_HEAD_REF}
