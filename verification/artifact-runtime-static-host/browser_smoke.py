@@ -169,7 +169,6 @@ def evaluate(cdp: Cdp, expression: str) -> object:
 
 OBSERVATION = """(() => {
   const proof = globalThis.artifactShellProof;
-  const action = globalThis.artifactShellActionProof;
   const request = proof?.request || null;
   const input = request?.inputs?.find(item => item?.schema === 'a2ui-app/1');
   const result = proof?.outcome?.result || null;
@@ -180,8 +179,6 @@ OBSERVATION = """(() => {
     shellStatus: result?.status || null,
     domState: document.getElementById('status')?.dataset?.state || null,
     count: input?.source?.value?.state?.count ?? null,
-    actionStatus: action?.status || null,
-    actionHref: action?.href || null,
     request,
     outputContracts: (result?.outputs || []).map(item => item.contract),
     capability: receipt?.capability ? `${receipt.capability.id}@${receipt.capability.version}` : null,
@@ -212,6 +209,27 @@ def canonical_bytes(value: object) -> bytes:
 
 def canonical_document_path(value: str) -> str:
     return value.removesuffix("index.html") if value.endswith("/index.html") else value
+
+
+def decode_invoke_url(value: str) -> dict[str, object]:
+    parts = urllib.parse.urlsplit(value)
+    try:
+        fields = urllib.parse.parse_qs(parts.fragment, keep_blank_values=True, strict_parsing=True)
+    except ValueError as error:
+        raise RuntimeError(f"artifact-runtime-readback: next URL fragment is invalid: {error}") from error
+    invariant(set(fields) == {"invoke"}, "next URL must contain only the invoke fragment field")
+    values = fields["invoke"]
+    invariant(len(values) == 1 and values[0], "next URL invoke field is missing or duplicated")
+    token = values[0]
+    try:
+        padding = "=" * (-len(token) % 4)
+        compressed = base64.urlsafe_b64decode((token + padding).encode())
+        decoded = gzip.decompress(compressed).decode("utf-8")
+        request = json.loads(decoded)
+    except (ValueError, UnicodeError, gzip.BadGzipFile, json.JSONDecodeError) as error:
+        raise RuntimeError(f"artifact-runtime-readback: next URL invoke payload is invalid: {error}") from error
+    invariant(isinstance(request, dict), "next URL invoke payload is not an object")
+    return request
 
 
 def main(argv: list[str]) -> int:
@@ -262,7 +280,7 @@ def main(argv: list[str]) -> int:
             sockets.append(first_socket)
             initial = wait_for(
                 first,
-                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 0,
+                lambda observed: observed.get("shellStatus") == "PASS" and observed.get("count") == 0,
                 "initial app state",
             )
             initial_url = initial.get("href")
@@ -282,21 +300,21 @@ def main(argv: list[str]) -> int:
             invariant(clicked is True, "increment button is missing")
             next_state = wait_for(
                 first,
-                lambda value: value.get("shellStatus") == "PASS" and value.get("actionStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url,
+                lambda observed: observed.get("shellStatus") == "PASS" and observed.get("count") == 1 and observed.get("href") != initial_url,
                 "clicked next app state",
             )
             next_url = next_state.get("href")
             invariant(isinstance(next_url, str), "next URL is missing")
-            invariant(next_state.get("actionHref") == next_url, "action proof URL differs from browser URL")
             invariant(next_state.get("capability") == "render.a2ui.app@1", "next capability is not render.a2ui.app@1")
             invariant("a2ui-app-render-receipt/1" in next_state.get("outputContracts", []), "next output contract is missing")
             next_request = next_state.get("request")
             invariant(isinstance(next_request, dict), "next request is missing")
+            invariant(decode_invoke_url(next_url) == next_request, "next URL did not decode to the exact next request")
 
             invariant(evaluate(first, "(() => { history.back(); return true; })()") is True, "history.back failed")
             back = wait_for(
                 first,
-                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 0 and value.get("href") == initial_url,
+                lambda observed: observed.get("shellStatus") == "PASS" and observed.get("count") == 0 and observed.get("href") == initial_url,
                 "Back-restored initial app state",
             )
             invariant(back.get("request") == request, "Back did not restore the exact initial request")
@@ -305,14 +323,14 @@ def main(argv: list[str]) -> int:
             sockets.append(fresh_socket)
             fresh_state = wait_for(
                 fresh,
-                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") == next_url,
+                lambda observed: observed.get("shellStatus") == "PASS" and observed.get("count") == 1 and observed.get("href") == next_url,
                 "fresh-open next app state",
             )
             invariant(fresh_state.get("request") == next_request, "fresh-open did not restore the exact next request")
             fresh.call("Page.reload", {"ignoreCache": True})
             reloaded = wait_for(
                 fresh,
-                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") == next_url,
+                lambda observed: observed.get("shellStatus") == "PASS" and observed.get("count") == 1 and observed.get("href") == next_url,
                 "reloaded next app state",
             )
             invariant(reloaded.get("request") == next_request, "reload did not preserve the exact next request")
@@ -359,6 +377,7 @@ def main(argv: list[str]) -> int:
         },
         "roundTrip": {
             "clickUpdatesUrl": True,
+            "nextUrlDecodesExactRequest": True,
             "backRestoresInitialState": True,
             "freshOpenRestoresNextState": True,
             "reloadPreservesNextState": True,
