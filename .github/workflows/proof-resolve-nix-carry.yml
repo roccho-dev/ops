@@ -149,9 +149,9 @@ jobs:
           actual_sha256="$(sha256sum "$tarball" | cut -d' ' -f1)"
           test "$actual_sha256" = "$EXPECTED_SHA256"
 
-          root="$(tar -tJf "$tarball" | sed -n '1{s,/.*,,;p;q;}')"
-          test -n "$root"
           tar -tJf "$tarball" > "$out/archive.inventory.txt"
+          root="$(sed -n '1{s,/.*,,;p;}' "$out/archive.inventory.txt")"
+          test -n "$root"
           grep -Fx "$root/install" "$out/archive.inventory.txt"
           grep -Eq "^$root/store/[a-z0-9]{32}-nix-$VERSION/" "$out/archive.inventory.txt"
 
@@ -167,10 +167,12 @@ jobs:
           test "$(sha256sum "$RUNNER_TEMP/readback.tar.xz" | cut -d' ' -f1)" = "$EXPECTED_SHA256"
 
           # Negative controls: wrong expected digest and one-character carrier tamper.
-          if test "$actual_sha256" = "${EXPECTED_SHA256%?}0"; then
-            echo "wrong digest fixture unexpectedly matched" >&2
-            exit 1
-          fi
+          last="${EXPECTED_SHA256: -1}"
+          replacement="0"
+          test "$last" != "0" || replacement="1"
+          wrong_expected="${EXPECTED_SHA256%?}${replacement}"
+          test "$actual_sha256" != "$wrong_expected"
+
           python3 - "$carrier" "$RUNNER_TEMP/tampered.b64.txt" <<'PY'
           import pathlib, sys
           source = pathlib.Path(sys.argv[1]).read_text(encoding="ascii")
@@ -270,11 +272,6 @@ jobs:
           output_path.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n")
           PY
 
-          sha256sum \
-            "$out/resolver.json" \
-            "$out/carry.receipt.json" \
-            "$out/runtime.receipt.json" \
-            "$out/$VERSION"* 2>/dev/null || true
           (cd "$out" && sha256sum resolver.json carry.receipt.json runtime.receipt.json archive.inventory.txt \
             "nix-$VERSION-x86_64-linux.tar.xz" \
             "nix-$VERSION-x86_64-linux.tar.xz.b64.txt" > SHA256SUMS)
