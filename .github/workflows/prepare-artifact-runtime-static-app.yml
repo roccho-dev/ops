@@ -82,13 +82,18 @@ jobs:
           if len(source_indexes) != 1:
               raise SystemExit(f'provider receipt SOURCE_SHA: observed {len(source_indexes)}')
           lines.insert(source_indexes[0]+1, '          EXPECTED_FILES: ' + '$' + '{{ needs.materialize.outputs.expected_files }}')
-          source='\n'.join(lines)+'\n'
 
-          replace(
-              '- public listed-file size/SHA readback: **45/45 PASS**\n          - real public `#invoke` Chrome smoke: **PASS**',
-              '- public listed-file size/SHA readback: **$EXPECTED_FILES/$EXPECTED_FILES PASS**\n          - real public click → URL → Back → fresh-open/reload Chrome smoke: **PASS**',
-              'provider receipt wording',
-          )
+          listed_indexes=[index for index,line in enumerate(lines) if 'public listed-file size/SHA readback:' in line]
+          if len(listed_indexes) != 1:
+              raise SystemExit(f'provider listed-file receipt: observed {len(listed_indexes)}')
+          lines[listed_indexes[0]]='          - public listed-file size/SHA readback: **$EXPECTED_FILES/$EXPECTED_FILES PASS**'
+
+          browser_indexes=[index for index,line in enumerate(lines) if 'real public' in line and 'Chrome smoke:' in line]
+          if len(browser_indexes) != 1:
+              raise SystemExit(f'provider browser receipt: observed {len(browser_indexes)}')
+          lines[browser_indexes[0]]='          - real public click → URL → Back → fresh-open/reload Chrome smoke: **PASS**'
+
+          source='\n'.join(lines)+'\n'
           target.write_text(source,encoding='utf-8')
           PY
 
