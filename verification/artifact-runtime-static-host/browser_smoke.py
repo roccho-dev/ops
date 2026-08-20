@@ -141,11 +141,73 @@ def reserve_port() -> int:
 
 
 def fetch_json(url: str, *, method: str = "GET") -> dict[str, object]:
-    request = urllib.request.Request(url, method=method, headers={"User-Agent": "artifact-runtime-browser-proof/2"})
+    request = urllib.request.Request(url, method=method, headers={"User-Agent": "artifact-runtime-browser-proof/3"})
     with urllib.request.urlopen(request, timeout=10) as response:
         value = json.loads(response.read())
     invariant(isinstance(value, dict), "CDP endpoint returned invalid JSON")
     return value
+
+
+def open_page(port: int, url: str) -> tuple[WebSocket, Cdp]:
+    page = fetch_json(f"http://127.0.0.1:{port}/json/new?{urllib.parse.quote(url, safe='')}", method="PUT")
+    web_socket_url = page.get("webSocketDebuggerUrl")
+    invariant(isinstance(web_socket_url, str), "page WebSocket URL is missing")
+    socket_ = WebSocket(web_socket_url)
+    cdp = Cdp(socket_)
+    cdp.call("Runtime.enable")
+    cdp.call("Page.enable")
+    return socket_, cdp
+
+
+def evaluate(cdp: Cdp, expression: str) -> object:
+    evaluated = cdp.call("Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True})
+    remote = evaluated.get("result", {})
+    invariant(isinstance(remote, dict), "Runtime.evaluate result is invalid")
+    invariant("exceptionDetails" not in evaluated, f"Runtime.evaluate raised: {evaluated.get('exceptionDetails')}")
+    return remote.get("value")
+
+
+OBSERVATION = """(() => {
+  const proof = globalThis.artifactShellProof;
+  const action = globalThis.artifactShellActionProof;
+  const request = proof?.request || null;
+  const input = request?.inputs?.find(item => item?.schema === 'a2ui-app/1');
+  const result = proof?.outcome?.result || null;
+  const receipt = proof?.outcome?.receipt || null;
+  return {
+    readyState: document.readyState,
+    href: location.href,
+    shellStatus: result?.status || null,
+    domState: document.getElementById('status')?.dataset?.state || null,
+    count: input?.source?.value?.state?.count ?? null,
+    actionStatus: action?.status || null,
+    actionHref: action?.href || null,
+    request,
+    outputContracts: (result?.outputs || []).map(item => item.contract),
+    capability: receipt?.capability ? `${receipt.capability.id}@${receipt.capability.version}` : null,
+    progress: document.getElementById('progress')?.textContent || '',
+  };
+})()"""
+
+
+def wait_for(cdp: Cdp, predicate, label: str, timeout: float = 75) -> dict[str, object]:
+    deadline = time.monotonic() + timeout
+    latest: dict[str, object] | None = None
+    while time.monotonic() < deadline:
+        value = evaluate(cdp, OBSERVATION)
+        if isinstance(value, dict):
+            latest = value
+            state = latest.get("domState")
+            if state in {"fail", "inconclusive"}:
+                raise RuntimeError(f"artifact-runtime-readback: browser stopped with {state}: {latest}")
+            if predicate(latest):
+                return latest
+        time.sleep(0.25)
+    raise RuntimeError(f"artifact-runtime-readback: timed out waiting for {label}: {latest}")
+
+
+def canonical_bytes(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 def main(argv: list[str]) -> int:
@@ -158,16 +220,17 @@ def main(argv: list[str]) -> int:
     proof_path = Path(argv[6])
     dom_path = Path(argv[7])
 
-    fixtures = sorted(local_root.glob("capabilities/inspect-json/*/fixtures/pass.json"))
-    invariant(len(fixtures) == 1, "inspect-json pass fixture is not unique")
+    fixtures = sorted(local_root.glob("capabilities/render-a2ui-app/*/fixtures/pass.json"))
+    invariant(len(fixtures) == 1, "render-a2ui-app pass fixture is not unique")
     request = json.loads(fixtures[0].read_text(encoding="utf-8"))["request"]
-    canonical = json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    canonical = canonical_bytes(request)
     token = base64.urlsafe_b64encode(gzip.compress(canonical, mtime=0)).decode().rstrip("=")
-    invoke_url = f"{root}/index.html#invoke={token}"
+    initial_url = f"{root}/index.html#invoke={token}"
 
     browser = next((value for name in ("google-chrome", "chromium", "chromium-browser") if (value := shutil.which(name))), None)
     invariant(browser is not None, "Chromium browser is unavailable")
     port = reserve_port()
+    sockets: list[WebSocket] = []
     with tempfile.TemporaryDirectory(prefix="artifact-runtime-chrome-", ignore_cleanup_errors=True) as profile:
         process = subprocess.Popen([
             browser,
@@ -180,7 +243,6 @@ def main(argv: list[str]) -> int:
             f"--user-data-dir={profile}",
             "about:blank",
         ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-        socket_: WebSocket | None = None
         try:
             deadline = time.monotonic() + 30
             version: dict[str, object] | None = None
@@ -191,50 +253,63 @@ def main(argv: list[str]) -> int:
                 except Exception:
                     time.sleep(0.25)
             invariant(version is not None, "Chrome DevTools endpoint did not start")
-            page = fetch_json(f"http://127.0.0.1:{port}/json/new?{urllib.parse.quote(invoke_url, safe='')}", method="PUT")
-            web_socket_url = page.get("webSocketDebuggerUrl")
-            invariant(isinstance(web_socket_url, str), "page WebSocket URL is missing")
-            socket_ = WebSocket(web_socket_url)
-            cdp = Cdp(socket_)
-            cdp.call("Runtime.enable")
-            cdp.call("Page.enable")
 
-            expression = """(() => {
-              const status = document.getElementById('status');
-              const value = id => document.getElementById(id)?.textContent || '';
-              return {readyState: document.readyState, state: status?.dataset?.state || null, status: status?.textContent || '', progress: value('progress'), result: value('result'), receipt: value('receipt')};
-            })()"""
-            observation: dict[str, object] | None = None
-            deadline = time.monotonic() + 75
-            while time.monotonic() < deadline:
-                evaluated = cdp.call("Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True})
-                remote = evaluated.get("result", {})
-                if isinstance(remote, dict) and isinstance(remote.get("value"), dict):
-                    observation = remote["value"]
-                    state = observation.get("state")
-                    if state == "pass":
-                        break
-                    if state in {"fail", "inconclusive"}:
-                        raise RuntimeError(f"artifact-runtime-readback: browser stopped with {state}: {observation}")
-                time.sleep(0.5)
-            invariant(observation is not None and observation.get("state") == "pass", f"browser did not reach PASS: {observation}")
+            first_socket, first = open_page(port, initial_url)
+            sockets.append(first_socket)
+            initial = wait_for(
+                first,
+                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 0,
+                "initial app state",
+            )
+            invariant(initial.get("href") == initial_url, "initial browser URL changed unexpectedly")
+            invariant(initial.get("capability") == "render.a2ui.app@1", "initial capability is not render.a2ui.app@1")
+            invariant("a2ui-app-render-receipt/1" in initial.get("outputContracts", []), "initial output contract is missing")
+            invariant("INCONCLUSIVE" not in str(initial.get("progress", "")), "initial browser produced INCONCLUSIVE")
 
-            result = json.loads(str(observation.get("result", "")))
-            receipt = json.loads(str(observation.get("receipt", "")))
-            invariant(result.get("status") == "PASS", "result status is not PASS")
-            invariant(receipt.get("result", {}).get("status") == "PASS", "receipt result status is not PASS")
-            invariant(any(item.get("contract") == "json-inspection/1" for item in result.get("outputs", [])), "output contract is missing")
-            capability = receipt.get("capability") or {}
-            invariant(capability.get("id") == "inspect.json" and capability.get("version") == "1", "selected capability is missing")
-            invariant("INCONCLUSIVE" not in str(observation.get("progress", "")), "browser produced INCONCLUSIVE")
+            clicked = evaluate(first, "(() => { const button=document.querySelector('[data-a2ui-id=\"increment\"]'); if (!button) return false; button.click(); return true; })()")
+            invariant(clicked is True, "increment button is missing")
+            next_state = wait_for(
+                first,
+                lambda value: value.get("shellStatus") == "PASS" and value.get("actionStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url,
+                "clicked next app state",
+            )
+            next_url = next_state.get("href")
+            invariant(isinstance(next_url, str), "next URL is missing")
+            invariant(next_state.get("actionHref") == next_url, "action proof URL differs from browser URL")
+            invariant(next_state.get("capability") == "render.a2ui.app@1", "next capability is not render.a2ui.app@1")
+            invariant("a2ui-app-render-receipt/1" in next_state.get("outputContracts", []), "next output contract is missing")
+            next_request = next_state.get("request")
+            invariant(isinstance(next_request, dict), "next request is missing")
 
-            evaluated = cdp.call("Runtime.evaluate", {"expression": "document.documentElement.outerHTML", "returnByValue": True})
-            remote = evaluated.get("result", {})
-            dom = remote.get("value") if isinstance(remote, dict) else None
+            invariant(evaluate(first, "(() => { history.back(); return true; })()") is True, "history.back failed")
+            back = wait_for(
+                first,
+                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 0 and value.get("href") == initial_url,
+                "Back-restored initial app state",
+            )
+            invariant(back.get("request") == request, "Back did not restore the exact initial request")
+
+            fresh_socket, fresh = open_page(port, next_url)
+            sockets.append(fresh_socket)
+            fresh_state = wait_for(
+                fresh,
+                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") == next_url,
+                "fresh-open next app state",
+            )
+            invariant(fresh_state.get("request") == next_request, "fresh-open did not restore the exact next request")
+            fresh.call("Page.reload", {"ignoreCache": True})
+            reloaded = wait_for(
+                fresh,
+                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") == next_url,
+                "reloaded next app state",
+            )
+            invariant(reloaded.get("request") == next_request, "reload did not preserve the exact next request")
+
+            dom = evaluate(fresh, "document.documentElement.outerHTML")
             invariant(isinstance(dom, str), "browser DOM is unavailable")
             dom_path.write_text(dom, encoding="utf-8")
         finally:
-            if socket_ is not None:
+            for socket_ in sockets:
                 socket_.close()
             process.terminate()
             try:
@@ -243,21 +318,38 @@ def main(argv: list[str]) -> int:
                 process.kill()
                 process.wait(timeout=5)
 
+    initial_request_digest = f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+    next_canonical = canonical_bytes(next_request)
     proof = {
-        "schema": "ops.artifactRuntimePublicBrowserProof/1",
+        "schema": "ops.artifactRuntimePublicBrowserProof/2",
         "status": "PASS",
         "authority": False,
         "opsCommit": source_sha,
         "project": project,
         "treeDigest": tree_digest,
         "rootUrl": root,
-        "invokeUrl": invoke_url,
-        "requestDigest": f"sha256:{hashlib.sha256(canonical).hexdigest()}",
-        "resultDigest": receipt["result"]["digest"],
-        "domSha256": f"sha256:{hashlib.sha256(dom.encode()).hexdigest()}",
         "browser": subprocess.check_output([browser, "--version"], text=True).strip(),
-        "capability": "inspect.json@1",
-        "outputContract": "json-inspection/1",
+        "capability": "render.a2ui.app@1",
+        "outputContract": "a2ui-app-render-receipt/1",
+        "initial": {
+            "count": 0,
+            "url": initial_url,
+            "urlSha256": f"sha256:{hashlib.sha256(initial_url.encode()).hexdigest()}",
+            "requestSha256": initial_request_digest,
+        },
+        "next": {
+            "count": 1,
+            "url": next_url,
+            "urlSha256": f"sha256:{hashlib.sha256(next_url.encode()).hexdigest()}",
+            "requestSha256": f"sha256:{hashlib.sha256(next_canonical).hexdigest()}",
+        },
+        "roundTrip": {
+            "clickUpdatesUrl": True,
+            "backRestoresInitialState": True,
+            "freshOpenRestoresNextState": True,
+            "reloadPreservesNextState": True,
+        },
+        "domSha256": f"sha256:{hashlib.sha256(dom.encode()).hexdigest()}",
     }
     proof_path.write_text(json.dumps(proof, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     return 0

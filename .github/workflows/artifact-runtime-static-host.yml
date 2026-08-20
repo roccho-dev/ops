@@ -6,6 +6,7 @@ on:
       - '.github/workflows/artifact-runtime-static-host.yml'
       - 'verification/artifact-runtime-static-host/**'
       - 'verification/artifact-runtime-publication/**'
+      - 'verification/artifact-runtime-app/**'
       - 'ci.intent.v1.jsonl'
   issue_comment:
     types: [created]
@@ -98,6 +99,7 @@ jobs:
       source_sha: ${{ steps.contract.outputs.source_sha }}
       tree_digest: ${{ steps.contract.outputs.tree_digest }}
       tree_id: ${{ steps.contract.outputs.tree_id }}
+      expected_files: ${{ steps.contract.outputs.expected_files }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,13 +114,29 @@ jobs:
           import json
           s=json.load(open('verification/artifact-runtime-static-host/manifest.json', encoding='utf-8'))
           p=json.load(open('verification/artifact-runtime-publication/manifest.json', encoding='utf-8'))
+          a=json.load(open('verification/artifact-runtime-app/manifest.json', encoding='utf-8'))
           assert s['schema']=='ops.artifactRuntimeStaticHost/1'
           assert s['authority'] is False
-          assert s['issue']==160
+          assert s['issue']==160 and s['appIssue']==193
+          assert p['schema']=='ops.artifactRuntimePublication/1'
+          assert p['authority'] is False and p['status']=='accepted-source' and p['issue']==193
+          assert a['schema']=='ops.artifactRuntimeApp/1'
+          assert a['authority'] is False and a['status']=='accepted-source' and a['issue']==193
+          assert a['id']=='artifact-runtime' and a['version']=='1'
           assert s['trigger']=={'kind':'owner-issue-comment','issue':160,'command':'/artifact-runtime-deploy'}
           assert s['publication']['treeDigest']==p['publication']['treeDigest']
           assert s['publication']['tag']==p['publication']['tag']
           assert s['publication']['archive']==p['publication']['archive']
+          assert s['publication']['listedFiles']==p['publication']['listedFiles']
+          app_source=a['sourceAuthorities'][0]
+          assert p['source']['repository']==app_source['repository']
+          assert p['source']['commit']==app_source['commit']
+          assert p['source']['tree']==app_source['tree']
+          app_publication=a['publication']
+          for key in ('treeDigest','kernelDigest','tag','archive','carrier','listedFiles'):
+              assert p['publication'][key]==app_publication[key], key
+          assert p['publication']['capabilities']==len(app_publication['capabilities'])==3
+          assert app_publication['capabilities']==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
           assert s['provider']['kind']=='cloudflare-pages'
           assert s['provider']['environment']=='cloudflare-production'
           assert s['provider']['project']=='stg-artifact-runtime'
@@ -126,6 +144,11 @@ jobs:
           tree=s['publication']['treeDigest']; tree_id=tree.removeprefix('sha256:')
           assert s['provider']['pathPrefix']==f'releases/{tree_id}'
           assert s['readback']['required'] is True and s['readback']['verifyAllFileHashes'] is True
+          assert s['readback']['expectedListedFiles']==p['publication']['listedFiles']==53
+          assert s['readback']['browserProof']=={
+            'capability':'render.a2ui.app@1','initialState':0,'nextState':1,
+            'requirements':['click-updates-url','back-restores-state','fresh-open-restores-next-state','reload-preserves-next-state'],
+          }
           values={
             'tree_digest':tree,
             'tree_id':tree_id,
@@ -321,6 +344,7 @@ jobs:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
           TREE_DIGEST: ${{ needs.materialize.outputs.tree_digest }}
           SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}
+          EXPECTED_FILES: ${{ needs.materialize.outputs.expected_files }}
         shell: bash
         run: |
           set -euo pipefail
@@ -336,8 +360,8 @@ jobs:
           - deployment URL: $DEPLOYMENT_URL
           - content-addressed root: $ROOT_URL
           - public artifact-manifest readback: **PASS**
-          - public listed-file size/SHA readback: **45/45 PASS**
-          - real public \`#invoke\` Chrome smoke: **PASS**
+          - public listed-file size/SHA readback: **$EXPECTED_FILES/$EXPECTED_FILES PASS**
+          - real public click → URL → Back → fresh-open/reload Chrome smoke: **PASS**
           - deployment receipt SHA-256: \`$receipt_sha\`
           - browser proof SHA-256: \`$browser_proof_sha\`
 

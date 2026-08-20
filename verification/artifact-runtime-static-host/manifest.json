@@ -3,22 +3,23 @@
   "authority": false,
   "status": "planned-provider-effect",
   "issue": 160,
+  "appIssue": 193,
   "publication": {
-    "treeDigest": "sha256:c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
-    "tag": "artifact-runtime-c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
+    "treeDigest": "sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
+    "tag": "artifact-runtime-b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
     "archive": {
-      "name": "artifact-runtime.c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928.tar.gz",
-      "bytes": 32825,
-      "sha256": "sha256:a47f2520a360b74b519b923808aa9345f0c7ae51d58f0d7f202d5a1d664f0975"
+      "name": "artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz",
+      "bytes": 37333,
+      "sha256": "sha256:571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b"
     },
-    "listedFiles": 45
+    "listedFiles": 53
   },
   "provider": {
     "kind": "cloudflare-pages",
     "environment": "cloudflare-production",
     "project": "stg-artifact-runtime",
     "productionBranch": "proposals",
-    "pathPrefix": "releases/c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928"
+    "pathPrefix": "releases/b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b"
   },
   "trigger": {
     "kind": "owner-issue-comment",
@@ -29,7 +30,18 @@
     "required": true,
     "verifyTreeDigest": true,
     "verifyAllFileHashes": true,
-    "expectedListedFiles": 45
+    "expectedListedFiles": 53,
+    "browserProof": {
+      "capability": "render.a2ui.app@1",
+      "initialState": 0,
+      "nextState": 1,
+      "requirements": [
+        "click-updates-url",
+        "back-restores-state",
+        "fresh-open-restores-next-state",
+        "reload-preserves-next-state"
+      ]
+    }
   },
   "boundaries": {
     "gitSourceAuthority": true,
@@ -37,6 +49,7 @@
     "staticHostIsProjection": true,
     "deploymentReceiptIsAuthority": false,
     "mutableLatestAllowed": false,
-    "existingCloudflareProjectOverwriteAllowed": false
+    "existingCloudflareProjectOverwriteAllowed": false,
+    "staticHostServesSamePublicationBytes": true
   }
 }
