@@ -53,14 +53,58 @@ jobs:
           )
           PY
 
+      - name: Bind authenticated same-repository Release sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          bound="$RUNNER_TEMP/authenticated-sources"
+          bindings="$RUNNER_TEMP/release-bindings.tsv"
+          mkdir -p "$bound"
+          python3 - "$RUNNER_TEMP/request.json" "$GITHUB_REPOSITORY" > "$bindings" <<'PY'
+          import json, re, sys, urllib.parse
+
+          request = json.load(open(sys.argv[1], encoding="utf-8"))
+          expected_repo = sys.argv[2]
+          for source in request["sources"]:
+              url = urllib.parse.urlsplit(source["url"])
+              if url.scheme != "https" or url.netloc != "github.com":
+                  continue
+              parts = [urllib.parse.unquote(value) for value in url.path.split("/") if value]
+              if len(parts) != 6 or parts[2:4] != ["releases", "download"]:
+                  continue
+              repository = "/".join(parts[:2])
+              if repository != expected_repo:
+                  continue
+              tag, asset = parts[4:]
+              if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}", tag):
+                  raise SystemExit(f"unsupported same-repository Release tag: {tag}")
+              if asset != source["name"]:
+                  raise SystemExit(f"Release asset basename does not match source.name: {asset}")
+              print("\t".join((tag, asset, source["name"])))
+          PY
+
+          while IFS=$'\t' read -r tag asset name; do
+            test -n "$tag"
+            test ! -e "$bound/$name"
+            gh release download "$tag" \
+              --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$bound"
+            test -f "$bound/$name"
+          done < "$bindings"
+
       - name: Materialize and self-verify exact sources
         shell: bash
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/carrier-job"
           verified="$RUNNER_TEMP/verified.receipt.json"
-          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize --request "$RUNNER_TEMP/request.json" --out "$out"
-          node packages/chatgpt-capability/ingress/carrier-job.mjs verify --input "$out" --receipt "$verified"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize \
+            --request "$RUNNER_TEMP/request.json" --out "$out" \
+            --source-dir "$RUNNER_TEMP/authenticated-sources"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify \
+            --input "$out" --receipt "$verified"
           cmp "$out/receipt.json" "$verified"
 
       - name: Upload provider-neutral result directory
