@@ -1,0 +1,728 @@
+name: Build carryable bidirectional Artifact app candidate
+
+on:
+  push:
+    branches:
+      - proof/build-artifact-runtime-app-260821
+
+permissions:
+  contents: write
+
+jobs:
+  build-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BASE_SHA: b0c992d45632e5e84f87a1029de0fbd1d5e18954
+      TARGET_BRANCH: proposal/artifact-runtime-app-closure-260821
+      UI_PR: "159"
+    steps:
+      - name: Checkout exact accepted Ops base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_SHA }}
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Refuse stale base or existing target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$BASE_SHA"
+          current="$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')"
+          test "$current" = "$BASE_SHA"
+          if git ls-remote --exit-code origin "refs/heads/$TARGET_BRANCH" >/dev/null 2>&1; then
+            echo "target branch already exists: $TARGET_BRANCH" >&2
+            exit 1
+          fi
+          git switch -c "$TARGET_BRANCH"
+
+      - name: Resolve the exact accepted UI source from GitHub
+        id: ui
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/roccho-dev/ui/pulls/$UI_PR" > "$RUNNER_TEMP/ui-pr.json"
+          python3 - "$RUNNER_TEMP/ui-pr.json" <<'PY' >> "$GITHUB_OUTPUT"
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['state']=='closed' and x['merged'] is True
+          assert x['base']['ref']=='proposals'
+          commit=x['merge_commit_sha']
+          print(f'commit={commit}')
+          PY
+          commit="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/ui-pr.json"))["merge_commit_sha"])')"
+          curl --fail --silent --show-error --location \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/roccho-dev/ui/git/commits/$commit" > "$RUNNER_TEMP/ui-commit.json"
+          tree="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/ui-commit.json"))["tree"]["sha"])')"
+          test "${#tree}" -eq 40
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize exact UI Git source and rebuild publication
+        shell: bash
+        env:
+          UI_COMMIT: ${{ steps.ui.outputs.commit }}
+          UI_TREE: ${{ steps.ui.outputs.tree }}
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          publication="$RUNNER_TEMP/publication"
+          git clone --filter=blob:none --no-checkout https://github.com/roccho-dev/ui.git "$ui"
+          git -C "$ui" fetch --depth=1 origin "$UI_COMMIT"
+          git -C "$ui" checkout --detach "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse HEAD)" = "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse 'HEAD^{tree}')" = "$UI_TREE"
+          test -z "$(git -C "$ui" status --porcelain)"
+          git -C "$ui" fsck --no-dangling
+          (
+            cd "$ui"
+            npm run check:artifact-runtime
+            node apps/artifact-shell/scripts/build-publication.mjs --out="$publication" | tee "$RUNNER_TEMP/publication-build.json"
+          )
+
+          find "$publication" -type d -exec chmod 0755 {} +
+          find "$publication" -type f -exec chmod 0644 {} +
+          tree_id="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/publication-build.json"))["treeDigest"].removeprefix("sha256:"))')"
+          archive="$RUNNER_TEMP/artifact-runtime.$tree_id.tar.gz"
+          carrier="$archive.b64.txt"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf "$archive" -C "$publication" .
+          base64 -w0 "$archive" > "$carrier"
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.tar.gz"
+          printf '%s\n' "$archive" > "$RUNNER_TEMP/archive-path"
+          printf '%s\n' "$carrier" > "$RUNNER_TEMP/carrier-path"
+
+      - name: Generate the app closure, resolver, verifier and Carry workflow
+        shell: bash
+        env:
+          UI_COMMIT: ${{ steps.ui.outputs.commit }}
+          UI_TREE: ${{ steps.ui.outputs.tree }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import copy, hashlib, json, os, pathlib
+
+          root=pathlib.Path('.')
+          publication=pathlib.Path(os.environ['RUNNER_TEMP'])/'publication'
+          build=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'publication-build.json').read_text(encoding='utf-8'))
+          artifact=json.loads((publication/'artifact-manifest.json').read_text(encoding='utf-8'))
+          archive=pathlib.Path((pathlib.Path(os.environ['RUNNER_TEMP'])/'archive-path').read_text().strip())
+          carrier=pathlib.Path((pathlib.Path(os.environ['RUNNER_TEMP'])/'carrier-path').read_text().strip())
+          tree_digest=build['treeDigest']
+          tree_id=tree_digest.removeprefix('sha256:')
+
+          def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
+          def item_for_suffix(suffix):
+              rows=[x for x in artifact['files'] if x['path'].endswith(suffix)]
+              assert len(rows)==1,(suffix,[x['path'] for x in rows])
+              return rows[0]
+          codec=item_for_suffix('packages/url-module/src/index.mjs')
+          shell=item_for_suffix('apps/artifact-shell/src/shell-core.mjs')
+          invocation=item_for_suffix('packages/artifact-invocation/src/index.mjs')
+
+          def find_kernel(value):
+              if isinstance(value,dict):
+                  if value.get('id')=='artifact-shell' and isinstance(value.get('digest'),str): return value
+                  for child in value.values():
+                      found=find_kernel(child)
+                      if found: return found
+              if isinstance(value,list):
+                  for child in value:
+                      found=find_kernel(child)
+                      if found: return found
+              return None
+          kernel=find_kernel(artifact)
+          if kernel is None:
+              catalog=json.loads((publication/'catalog.json').read_text(encoding='utf-8'))
+              kernel=find_kernel(catalog)
+          assert kernel is not None
+
+          pub_path=root/'verification/artifact-runtime-publication/manifest.json'
+          pub=json.loads(pub_path.read_text(encoding='utf-8'))
+          assert pub['schema']=='ops.artifactRuntimePublication/1'
+          pub['source']['repository']='roccho-dev/ui'
+          pub['source']['commit']=os.environ['UI_COMMIT']
+          pub['source']['tree']=os.environ['UI_TREE']
+          pub['publication']['treeDigest']=tree_digest
+          pub['publication']['kernel']=kernel
+          pub['publication']['capabilities']=build['capabilities']
+          pub['publication']['archive']={
+              'name':archive.name,'bytes':archive.stat().st_size,'sha256':'sha256:'+sha(archive)
+          }
+          pub['publication']['carrier']={
+              'name':carrier.name,'bytes':carrier.stat().st_size,'sha256':'sha256:'+sha(carrier),
+              'codec':'standard-base64','decodedSha256':'sha256:'+sha(archive),
+          }
+          pub['publication']['tag']='artifact-runtime-'+tree_id
+          pub_path.write_text(json.dumps(pub,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+
+          static_path=root/'verification/artifact-runtime-static-host/manifest.json'
+          static=json.loads(static_path.read_text(encoding='utf-8'))
+          static['publication']={
+              'treeDigest':pub['publication']['treeDigest'],
+              'tag':pub['publication']['tag'],
+              'archive':pub['publication']['archive'],
+          }
+          static['provider']['pathPrefix']='releases/'+tree_id
+          static['readback']['expectedListedFiles']=len(artifact['files'])
+          static_path.write_text(json.dumps(static,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+
+          package=root/'packages/artifact-runtime-app'
+          (package/'bin').mkdir(parents=True,exist_ok=True)
+          (package/'tests').mkdir(parents=True,exist_ok=True)
+          app={
+              'schema':'ops.artifactAppClosure/1',
+              'id':'artifact-runtime.bidirectional',
+              'version':'1',
+              'bindingAuthority':'ops-git-commit-containing-this-file',
+              'generatedArtifactsAreAuthority':False,
+              'sourceAuthorities':[
+                  {'role':'runtime-ui-codec-action','repository':'roccho-dev/ui','commit':os.environ['UI_COMMIT'],'tree':os.environ['UI_TREE']},
+                  {'role':'assembly-carry-deploy','repository':'roccho-dev/ops','binding':'commit-containing-this-file'},
+              ],
+              'publication':{
+                  **pub['publication'],
+                  'repository':'roccho-dev/ops',
+                  'manifestPath':'artifact-manifest.json',
+              },
+              'entry':{'kind':'static-html','path':'index.html','fragment':'invoke'},
+              'ports':{
+                  'encode':{'modulePath':codec['path'],'sha256':codec['sha256'],'export':'createUrlModuleUrl'},
+                  'decode':{'modulePath':codec['path'],'sha256':codec['sha256'],'export':'readUrlModule'},
+                  'execute':{'modulePath':invocation['path'],'sha256':invocation['sha256'],'contract':'artifact-invocation/2'},
+                  'applyAction':{
+                      'modulePath':shell['path'],'sha256':shell['sha256'],'export':'applyArtifactClientAction',
+                      'action':'artifact.invoke','contextContract':'exactly { invocation: artifact-invocation/2 }',
+                      'historyWrite':'pushState','historyRestore':'popstate',
+                  },
+              },
+              'carry':{
+                  'resolver':'packages/artifact-runtime-app/bin/artifact-runtime-app.mjs',
+                  'requestSchema':'carrier-job/1','input':'app_id + request_id',
+                  'sourceCloneRequiredAfterCarry':False,'sourceBuildRequiredAfterCarry':False,
+              },
+              'staticHost':{'provider':'cloudflare-pages','project':'stg-artifact-runtime','pathPrefix':'releases/'+tree_id},
+              'proof':{
+                  'required':['publication-integrity','encode-decode','execute','action-url','destructive-action'],
+                  'receiptSchema':'ops.artifactAppCarryReceipt/1',
+              },
+          }
+          (package/'app.json').write_text(json.dumps(app,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          (package/'registry.jsonl').write_text(json.dumps({'id':app['id'],'manifest':'app.json','status':'active'},sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+
+          cat > packages/artifact-runtime-app/bin/artifact-runtime-app.mjs <<'EOF'
+          #!/usr/bin/env node
+          import crypto from "node:crypto";
+          import fs from "node:fs";
+          import path from "node:path";
+          import process from "node:process";
+          import { spawnSync } from "node:child_process";
+          import { fileURLToPath, pathToFileURL } from "node:url";
+
+          const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+          const fail = message => { throw new Error(message); };
+          const invariant = (condition, message) => { if (!condition) fail(message); };
+          const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
+          const canonical = value => {
+            if (value === null || typeof value !== "object") return JSON.stringify(value);
+            if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+            return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+          };
+          const writeJson = (target, value) => fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+          const hex = (value, label) => {
+            invariant(typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value), `${label} must be sha256`);
+            return value.slice(7);
+          };
+          const readJson = target => JSON.parse(fs.readFileSync(target, "utf8"));
+          const parse = (argv, allowed) => {
+            const result = {};
+            while (argv.length) {
+              const key = argv.shift();
+              const value = argv.shift();
+              invariant(allowed.includes(key) && value && result[key] === undefined, "invalid options");
+              result[key] = value;
+            }
+            return result;
+          };
+          const resolveManifest = options => {
+            if (options["--manifest"]) return path.resolve(options["--manifest"]);
+            const appId = options["--app-id"];
+            invariant(typeof appId === "string" && /^[a-z0-9.-]+$/u.test(appId), "app id is required");
+            const rows = fs.readFileSync(path.join(packageRoot, "registry.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+            const row = rows.find(item => item.id === appId && item.status === "active");
+            invariant(row, `unknown app: ${appId}`);
+            return path.join(packageRoot, row.manifest);
+          };
+          const loadClosure = target => {
+            const value = readJson(target);
+            invariant(value.schema === "ops.artifactAppClosure/1", "invalid app closure schema");
+            invariant(typeof value.id === "string" && value.id.length > 0, "app id is missing");
+            invariant(value.generatedArtifactsAreAuthority === false, "generated artifacts must be non-authority");
+            invariant(Array.isArray(value.sourceAuthorities) && value.sourceAuthorities.length >= 2, "source authorities are incomplete");
+            invariant(value.publication?.tag === `artifact-runtime-${value.publication.treeDigest?.replace("sha256:", "")}`, "publication tag mismatch");
+            hex(value.publication.treeDigest, "publication tree");
+            hex(value.publication.archive.sha256, "archive");
+            hex(value.publication.carrier.sha256, "carrier");
+            invariant(value.publication.carrier.decodedSha256 === value.publication.archive.sha256, "carrier payload mismatch");
+            invariant(value.ports?.applyAction?.action === "artifact.invoke", "action contract mismatch");
+            invariant(value.ports.applyAction.historyWrite === "pushState" && value.ports.applyAction.historyRestore === "popstate", "history contract mismatch");
+            invariant(value.carry.sourceCloneRequiredAfterCarry === false && value.carry.sourceBuildRequiredAfterCarry === false, "carry must be ready-to-use");
+            return value;
+          };
+          const carryRequest = (closure, requestId) => {
+            invariant(typeof requestId === "string" && /^[A-Za-z0-9._-]{1,128}$/u.test(requestId), "request id is invalid");
+            const carrier = closure.publication.carrier;
+            const tag = closure.publication.tag;
+            return {
+              schema: "carrier-job/1",
+              request_id: requestId,
+              sources: [{
+                name: carrier.name,
+                url: `https://github.com/${closure.publication.repository}/releases/download/${tag}/${carrier.name}`,
+                sha256: hex(carrier.sha256, "carrier"),
+              }],
+              carrier_name: carrier.name,
+              payload_sha256: hex(closure.publication.archive.sha256, "archive"),
+            };
+          };
+          const run = (program, args, options = {}) => {
+            const result = spawnSync(program, args, { encoding: "utf8", ...options });
+            invariant(result.status === 0, `${program} failed: ${result.stderr || result.stdout}`);
+            return result.stdout;
+          };
+          const safeExtract = (archive, out) => {
+            invariant(!fs.existsSync(out), `out exists: ${out}`);
+            const names = run("tar", ["-tzf", archive]).trim().split("\n").filter(Boolean);
+            invariant(names.length > 0 && names.length <= 10000, "archive inventory is invalid");
+            for (const name of names) {
+              const normalized = name.replace(/^\.\//u, "");
+              invariant(normalized && !path.posix.isAbsolute(normalized), `unsafe archive path: ${name}`);
+              invariant(!normalized.split("/").includes("..") && !/\s/u.test(normalized), `unsafe archive path: ${name}`);
+            }
+            const verbose = run("tar", ["-tvzf", archive]).trim().split("\n").filter(Boolean);
+            for (const line of verbose) invariant(line.startsWith("-") || line.startsWith("d"), `unsupported archive entry: ${line}`);
+            fs.mkdirSync(out, { recursive: true });
+            run("tar", ["-xzf", archive, "-C", out, "--no-same-owner", "--no-same-permissions"]);
+          };
+          const walk = root => {
+            const result = [];
+            const visit = current => {
+              for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+                const target = path.join(current, entry.name);
+                if (entry.isDirectory()) visit(target);
+                else {
+                  invariant(entry.isFile(), `unsupported extracted entry: ${target}`);
+                  result.push(path.relative(root, target).split(path.sep).join("/"));
+                }
+              }
+            };
+            visit(root);
+            return result.sort();
+          };
+          const verifyPublication = (root, closure) => {
+            const manifestPath = path.join(root, closure.publication.manifestPath);
+            const manifest = readJson(manifestPath);
+            invariant(manifest.schema === "artifact-shell-publication-artifact/2", "invalid publication manifest");
+            invariant(manifest.treeDigest === closure.publication.treeDigest, "publication tree mismatch");
+            for (const item of manifest.files) {
+              const target = path.join(root, ...item.path.split("/"));
+              const bytes = fs.readFileSync(target);
+              invariant(bytes.length === item.bytes, `file size mismatch: ${item.path}`);
+              invariant(`sha256:${sha256(bytes)}` === item.sha256, `file digest mismatch: ${item.path}`);
+            }
+            const expected = [...manifest.files.map(item => item.path), closure.publication.manifestPath].sort();
+            invariant(JSON.stringify(walk(root)) === JSON.stringify(expected), "publication inventory mismatch");
+            invariant(`sha256:${sha256(Buffer.from(canonical(manifest.files)))}` === closure.publication.treeDigest, "tree digest mismatch");
+            for (const port of Object.values(closure.ports)) {
+              if (!port.modulePath) continue;
+              const target = path.join(root, ...port.modulePath.split("/"));
+              invariant(`sha256:${sha256(fs.readFileSync(target))}` === port.sha256, `port digest mismatch: ${port.modulePath}`);
+            }
+            return manifest;
+          };
+          const proof = async (root, closure, manifest) => {
+            const load = port => import(pathToFileURL(path.join(root, ...port.modulePath.split("/"))).href);
+            const codec = await load(closure.ports.encode);
+            const shell = await load(closure.ports.applyAction);
+            const invocation = {
+              schema: "artifact-invocation/2",
+              id: "request.artifact-app-carry.pass",
+              intent: "inspect",
+              inputs: [{
+                id: "payload",
+                mediaType: "application/json",
+                schema: "artifact-app-carry-proof/1",
+                source: { kind: "inline", value: { carried: true, count: 1 } },
+              }],
+              constraints: { allowedRuntimes: ["browser", "node"], noUpload: true },
+              expects: ["json-inspection/1"],
+            };
+            const base = "https://example.invalid/app/index.html";
+            const url = await codec.createUrlModuleUrl({ base, fragment: "invoke", value: invocation });
+            const decoded = await codec.readUrlModule({ fragment: "invoke", input: url });
+            invariant(canonical(decoded) === canonical(invocation), "codec round-trip mismatch");
+            invariant(await codec.createUrlModuleUrl({ base, fragment: "invoke", value: invocation }) === url, "codec is not deterministic");
+
+            const scope = {
+              location: { href: base },
+              history: { calls: [], pushState(_state, _title, href) { this.calls.push(href); scope.location.href = href; } },
+            };
+            let executed = null;
+            const action = {
+              action: "artifact.invoke",
+              context: { invocation },
+              sourceComponentId: "carry-proof",
+              surfaceId: "carry-proof",
+              version: "v0.9.1",
+            };
+            const applied = await shell.applyArtifactClientAction({
+              detail: action,
+              execute: async value => { executed = value; return Object.freeze({ status: "PASS" }); },
+              scope,
+            });
+            invariant(applied.url === scope.location.href && scope.history.calls.length === 1, "action URL write failed");
+            invariant(canonical(executed) === canonical(invocation), "action execution mismatch");
+            invariant(canonical(await codec.readUrlModule({ fragment: "invoke", input: applied.url })) === canonical(invocation), "fresh URL restore mismatch");
+            invariant(await shell.applyArtifactClientAction({ detail: { ...action, action: "other.action" }, execute: async () => fail("unexpected execute"), scope }) === null, "unsupported action must be ignored");
+            let destructive = false;
+            try { shell.compileArtifactClientAction({ ...action, context: { invocation, extra: true } }); } catch { destructive = true; }
+            invariant(destructive, "malformed action must reject");
+
+            let inspect = null;
+            for (const item of manifest.files.filter(row => row.path.endsWith("engine.mjs"))) {
+              const module = await import(pathToFileURL(path.join(root, ...item.path.split("/"))).href);
+              if (module.capability?.id === "inspect.json") { inspect = module.capability; break; }
+            }
+            invariant(inspect, "inspect capability is missing");
+            const result = await inspect.run({
+              input: { readJson: id => { invariant(id === "payload", "unexpected input"); return invocation.inputs[0].source.value; } },
+              invocation,
+              services: {},
+            });
+            invariant(result.status === "PASS", "carried execution failed");
+            invariant(result.outputs?.[0]?.contract === "json-inspection/1", "carried output contract mismatch");
+            return {
+              codecRoundTrip: "PASS",
+              deterministicUrl: "PASS",
+              actionToUrl: "PASS",
+              freshUrlRestore: "PASS",
+              destructiveAction: "PASS",
+              execute: "PASS",
+              outputContract: "json-inspection/1",
+              urlLength: url.length,
+            };
+          };
+          const materialize = async (closure, input, out, receiptPath) => {
+            const carrierReceipt = readJson(path.join(input, "receipt.json"));
+            invariant(carrierReceipt.status === "PASS", "carrier receipt is not PASS");
+            invariant(`sha256:${carrierReceipt.payload.sha256}` === closure.publication.archive.sha256, "carrier payload identity mismatch");
+            const payload = path.join(input, "payload.bin");
+            const bytes = fs.readFileSync(payload);
+            invariant(bytes.length === closure.publication.archive.bytes, "archive byte count mismatch");
+            invariant(`sha256:${sha256(bytes)}` === closure.publication.archive.sha256, "archive digest mismatch");
+            safeExtract(payload, out);
+            const manifest = verifyPublication(out, closure);
+            const observed = await proof(out, closure, manifest);
+            const receipt = {
+              schema: "ops.artifactAppCarryReceipt/1",
+              status: "PASS",
+              authority: false,
+              appId: closure.id,
+              publicationTree: closure.publication.treeDigest,
+              sourceAuthorities: closure.sourceAuthorities,
+              sourceCloneUsedAfterCarry: false,
+              sourceBuildUsedAfterCarry: false,
+              observations: observed,
+            };
+            writeJson(receiptPath, receipt);
+            return receipt;
+          };
+
+          async function main() {
+            const [command, ...argv] = process.argv.slice(2);
+            invariant(command, "command is required");
+            if (command === "check") {
+              const options = parse(argv, ["--app-id", "--manifest"]);
+              const target = resolveManifest(options);
+              const closure = loadClosure(target);
+              const request = carryRequest(closure, "check");
+              console.log(JSON.stringify({ schema: "ops.artifactAppCheck/1", status: "PASS", appId: closure.id, request }));
+              return;
+            }
+            if (command === "resolve") {
+              const options = parse(argv, ["--app-id", "--manifest", "--request-id"]);
+              const closure = loadClosure(resolveManifest(options));
+              console.log(JSON.stringify(carryRequest(closure, options["--request-id"])));
+              return;
+            }
+            if (command === "materialize") {
+              const options = parse(argv, ["--app-id", "--manifest", "--input", "--out", "--receipt"]);
+              const closure = loadClosure(resolveManifest(options));
+              console.log(JSON.stringify(await materialize(closure, path.resolve(options["--input"]), path.resolve(options["--out"]), path.resolve(options["--receipt"]))));
+              return;
+            }
+            fail("usage: artifact-runtime-app.mjs check|resolve|materialize");
+          }
+          main().catch(error => { console.error(`artifact-runtime-app: ${error.message}`); process.exit(1); });
+          EOF
+          chmod +x packages/artifact-runtime-app/bin/artifact-runtime-app.mjs
+
+          cat > packages/artifact-runtime-app/tests/e2e.mjs <<'EOF'
+          import assert from "node:assert/strict";
+          import fs from "node:fs";
+          import os from "node:os";
+          import path from "node:path";
+          import { spawnSync } from "node:child_process";
+          import { fileURLToPath } from "node:url";
+
+          const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+          const bin = path.join(root, "bin/artifact-runtime-app.mjs");
+          const run = args => spawnSync(process.execPath, [bin, ...args], { encoding: "utf8" });
+          const checked = run(["check", "--app-id", "artifact-runtime.bidirectional"]);
+          assert.equal(checked.status, 0, checked.stderr);
+          const check = JSON.parse(checked.stdout);
+          assert.equal(check.status, "PASS");
+          assert.equal(check.request.schema, "carrier-job/1");
+          const resolved = run(["resolve", "--app-id", "artifact-runtime.bidirectional", "--request-id", "e2e"]);
+          assert.equal(resolved.status, 0, resolved.stderr);
+          const request = JSON.parse(resolved.stdout);
+          assert.equal(request.request_id, "e2e");
+          assert.equal(request.sources.length, 1);
+          assert.match(request.sources[0].url, /^https:\/\/github\.com\/roccho-dev\/ops\/releases\/download\/artifact-runtime-[0-9a-f]{64}\//u);
+
+          const temp = fs.mkdtempSync(path.join(os.tmpdir(), "artifact-runtime-app-"));
+          const manifest = JSON.parse(fs.readFileSync(path.join(root, "app.json"), "utf8"));
+          manifest.publication.carrier.decodedSha256 = "sha256:" + "0".repeat(64);
+          const tampered = path.join(temp, "tampered.json");
+          fs.writeFileSync(tampered, JSON.stringify(manifest));
+          const rejected = run(["check", "--manifest", tampered]);
+          assert.notEqual(rejected.status, 0);
+          assert.match(rejected.stderr, /carrier payload mismatch/u);
+          fs.rmSync(temp, { recursive: true, force: true });
+          console.log(JSON.stringify({ schema: "ops.artifactRuntimeAppE2e/1", status: "PASS", positive: 2, negative: 1 }));
+          EOF
+
+          cat > packages/artifact-runtime-app/README.md <<'EOF'
+          # Artifact Runtime app closure
+
+          `artifact-runtime.bidirectional` is the one GitHub-owned, carryable application closure for the accepted Artifact Runtime.
+
+          A caller supplies only `app_id` and `request_id`. The resolver reads the exact Ops binding and emits the existing `carrier-job/1` request. After materialization, verification runs only from the carried publication bytes: codec round-trip, typed `artifact.invoke` to canonical URL, fresh URL restoration, destructive-action rejection and real capability execution.
+
+          Git commits remain source authority. The app manifest is the accepted cross-repository binding. Release, Carrier, Actions artifact, static host and receipts remain non-authority projections. No historical `mobile-merge` ZIP or unadopted `mobile-agent` bundle is an input.
+          EOF
+
+          cp packages/ops-capability-loop/default.nix packages/artifact-runtime-app/default.nix
+          sed -i 's/ops-capability-loop/artifact-runtime-app/g' packages/artifact-runtime-app/default.nix
+
+          cat > .github/workflows/artifact-runtime-app-carry.yml <<'EOF'
+          name: Artifact Runtime app carry
+
+          on:
+            pull_request:
+              paths:
+                - '.github/workflows/artifact-runtime-app-carry.yml'
+                - 'packages/artifact-runtime-app/**'
+                - 'packages/chatgpt-capability/ingress/carrier-job.mjs'
+                - 'verification/artifact-runtime-publication/**'
+                - 'ci.intent.v1.jsonl'
+                - 'build/packages.jsonl'
+                - 'build/checks.jsonl'
+            workflow_dispatch:
+              inputs:
+                app_id:
+                  description: Registered app identity
+                  required: true
+                  default: artifact-runtime.bidirectional
+                  type: string
+                request_id:
+                  description: Carry request identity
+                  required: true
+                  type: string
+            issue_comment:
+              types: [created]
+
+          permissions:
+            contents: read
+
+          jobs:
+            proof:
+              if: github.event_name == 'pull_request'
+              runs-on: ubuntu-24.04
+              timeout-minutes: 5
+              steps:
+                - uses: actions/checkout@v4
+                - run: node packages/artifact-runtime-app/tests/e2e.mjs
+
+            carry:
+              if: >-
+                github.event_name == 'workflow_dispatch' ||
+                (github.event_name == 'issue_comment' &&
+                 github.event.issue.pull_request == null &&
+                 github.event.comment.user.login == github.repository_owner &&
+                 startsWith(github.event.comment.body, '/artifact-app-carry'))
+              permissions:
+                contents: read
+                issues: write
+              runs-on: ubuntu-24.04
+              timeout-minutes: 15
+              steps:
+                - uses: actions/checkout@v4
+                  with:
+                    ref: proposals
+
+                - name: Resolve app identity only
+                  shell: bash
+                  env:
+                    EVENT_NAME: ${{ github.event_name }}
+                    COMMENT_BODY: ${{ github.event.comment.body }}
+                    DISPATCH_APP_ID: ${{ inputs.app_id }}
+                    DISPATCH_REQUEST_ID: ${{ inputs.request_id }}
+                  run: |
+                    set -euo pipefail
+                    python3 - "$RUNNER_TEMP/app-request.json" <<'PY'
+                    import json,os,pathlib,sys
+                    if os.environ['EVENT_NAME']=='issue_comment':
+                        body=os.environ.get('COMMENT_BODY','').replace('\r\n','\n')
+                        prefix='/artifact-app-carry\n'
+                        if not body.startswith(prefix): raise SystemExit('comment must contain raw artifact-app-carry/1 JSON')
+                        x=json.loads(body[len(prefix):].strip())
+                        assert x['schema']=='artifact-app-carry/1'
+                        app_id=x['app_id']; request_id=x['request_id']
+                    else:
+                        app_id=os.environ['DISPATCH_APP_ID']; request_id=os.environ['DISPATCH_REQUEST_ID']
+                    pathlib.Path(sys.argv[1]).write_text(json.dumps({'app_id':app_id,'request_id':request_id})+'\n')
+                    PY
+                    app_id="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/app-request.json"))["app_id"])')"
+                    request_id="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/app-request.json"))["request_id"])')"
+                    node packages/artifact-runtime-app/bin/artifact-runtime-app.mjs resolve \
+                      --app-id "$app_id" --request-id "$request_id" > "$RUNNER_TEMP/carrier-request.json"
+
+                - name: Materialize exact Carrier and ready app
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    node packages/chatgpt-capability/ingress/carrier-job.mjs materialize \
+                      --request "$RUNNER_TEMP/carrier-request.json" --out "$RUNNER_TEMP/carrier"
+                    node packages/chatgpt-capability/ingress/carrier-job.mjs verify \
+                      --input "$RUNNER_TEMP/carrier" --receipt "$RUNNER_TEMP/carrier-verified.json"
+                    cmp "$RUNNER_TEMP/carrier/receipt.json" "$RUNNER_TEMP/carrier-verified.json"
+                    app_id="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/app-request.json"))["app_id"])')"
+                    node packages/artifact-runtime-app/bin/artifact-runtime-app.mjs materialize \
+                      --app-id "$app_id" --input "$RUNNER_TEMP/carrier" \
+                      --out "$RUNNER_TEMP/result/app" --receipt "$RUNNER_TEMP/result/receipt.json"
+
+                - name: Upload ready-to-use app closure
+                  id: artifact
+                  uses: actions/upload-artifact@v4
+                  with:
+                    name: artifact-runtime-app-${{ github.run_id }}
+                    path: ${{ runner.temp }}/result/
+                    if-no-files-found: error
+                    retention-days: 30
+
+                - name: Return app and artifact identity
+                  if: ${{ always() && github.event_name == 'issue_comment' }}
+                  env:
+                    GH_TOKEN: ${{ github.token }}
+                    ISSUE_NUMBER: ${{ github.event.issue.number }}
+                    ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+                    ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+                    ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+                    JOB_STATUS: ${{ job.status }}
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    app_id="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/app-request.json"))["app_id"])')"
+                    request_id="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/app-request.json"))["request_id"])')"
+                    cat > "$RUNNER_TEMP/comment.md" <<COMMENT
+                    ## Artifact Runtime app carry result
+
+                    - status: \`$JOB_STATUS\`
+                    - app: \`$app_id\`
+                    - request: \`$request_id\`
+                    - artifact ID: \`$ARTIFACT_ID\`
+                    - artifact digest: \`$ARTIFACT_DIGEST\`
+                    - artifact: $ARTIFACT_URL
+                    COMMENT
+                    gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          EOF
+
+          python3 - <<'PY'
+          import json,pathlib
+          def rows(path): return [json.loads(x) for x in pathlib.Path(path).read_text(encoding='utf-8').splitlines() if x.strip()]
+          def write(path,values): pathlib.Path(path).write_text('\n'.join(json.dumps(x,sort_keys=True,separators=(',',':')) for x in values)+'\n',encoding='utf-8')
+          def replace(value,old,new):
+              if isinstance(value,str): return value.replace(old,new)
+              if isinstance(value,list): return [replace(x,old,new) for x in value]
+              if isinstance(value,dict): return {k:replace(v,old,new) for k,v in value.items()}
+              return value
+
+          packages=rows('build/packages.jsonl')
+          assert not any(x.get('path')=='packages/artifact-runtime-app' for x in packages)
+          template=next(x for x in packages if x.get('path')=='packages/ops-capability-loop')
+          new=replace(template,'ops-capability-loop','artifact-runtime-app')
+          if 'name' in new: new['name']='artifact-runtime-app'
+          if 'path' in new: new['path']='packages/artifact-runtime-app'
+          packages.append(new)
+          packages.sort(key=lambda x:(str(x.get('name','')),str(x.get('path',''))))
+          write('build/packages.jsonl',packages)
+
+          checks=rows('build/checks.jsonl')
+          assert not any('artifact-runtime-app' in json.dumps(x) for x in checks)
+          template=next(x for x in checks if 'packages/ops-capability-loop/tests/e2e.mjs' in json.dumps(x))
+          new=replace(template,'ops-capability-loop','artifact-runtime-app')
+          checks.append(new)
+          checks.sort(key=lambda x:json.dumps(x,sort_keys=True))
+          write('build/checks.jsonl',checks)
+
+          intents=rows('ci.intent.v1.jsonl')
+          assert not any('artifact-runtime-app-carry.yml' in json.dumps(x) for x in intents)
+          template=next(x for x in intents if 'release-carrier-materialize.yml' in json.dumps(x))
+          new=replace(template,'release-carrier-materialize','artifact-runtime-app-carry')
+          new=replace(new,'Carrier job materialize','Artifact Runtime app carry')
+          intents.append(new)
+          intents.sort(key=lambda x:json.dumps(x,sort_keys=True))
+          write('ci.intent.v1.jsonl',intents)
+          PY
+
+      - name: Run bounded local checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check packages/artifact-runtime-app/bin/artifact-runtime-app.mjs
+          node packages/artifact-runtime-app/tests/e2e.mjs
+          node packages/chatgpt-capability/ingress/carrier-job.mjs selftest
+          git diff --check
+
+      - name: Commit and publish exact Ops candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            .github/workflows/artifact-runtime-app-carry.yml \
+            packages/artifact-runtime-app \
+            verification/artifact-runtime-publication/manifest.json \
+            verification/artifact-runtime-static-host/manifest.json \
+            build/packages.jsonl build/checks.jsonl ci.intent.v1.jsonl
+          git diff --cached --check
+          git commit -m "feat: add one carryable bidirectional Artifact app closure"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+      - name: Upload bounded generation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-runtime-app-candidate-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/publication-build.json
+            ${{ runner.temp }}/ui-pr.json
+            ${{ runner.temp }}/ui-commit.json
+          if-no-files-found: error
+          retention-days: 30
