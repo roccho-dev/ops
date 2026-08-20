@@ -1,14 +1,14 @@
 {
   "schema": "shiftleft-nway-branch-set/2",
-  "setId": "github-proof.6a85fd4d.r1",
+  "setId": "github-proof.6a85fd4d.r2",
   "baseCommit": "b0c992d45632e5e84f87a1029de0fbd1d5e18954",
   "baseTree": "dda8e4da3b685b16b8a760f82670e4f9849afbb6",
   "closedWorld": true,
-  "refPrefix": "refs/heads/proof-nway-github-6a85fd4d-candidate-",
+  "refPrefix": "refs/heads/proof/nway-github-6a85fd4d/candidates/",
   "members": [
     {
       "id": "provider",
-      "ref": "refs/heads/proof-nway-github-6a85fd4d-candidate-provider",
+      "ref": "refs/heads/proof/nway-github-6a85fd4d/candidates/provider",
       "candidateCommit": "8adb42d731906d5c9e0677819916c7a24e1e636c",
       "candidateTree": "02522f0620d054f33df7a76621957879a199a69c",
       "required": true,
@@ -17,7 +17,7 @@
     },
     {
       "id": "consumer",
-      "ref": "refs/heads/proof-nway-github-6a85fd4d-candidate-consumer",
+      "ref": "refs/heads/proof/nway-github-6a85fd4d/candidates/consumer",
       "candidateCommit": "306d03da8a1cd01c707ceb99c58e02d12d723641",
       "candidateTree": "caefb0f22545481a2ebc4b9dc3ea6a6541c055c8",
       "required": true,
@@ -26,7 +26,7 @@
     },
     {
       "id": "independent",
-      "ref": "refs/heads/proof-nway-github-6a85fd4d-candidate-independent",
+      "ref": "refs/heads/proof/nway-github-6a85fd4d/candidates/independent",
       "candidateCommit": "1233d84512335d79ecaa0bf42579e8a47333a81e",
       "candidateTree": "8e34acbe8c83b8d155c451361011c72b6faefeef",
       "required": true,
