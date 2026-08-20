@@ -64,16 +64,29 @@ function sums(root, paths) {
   fs.writeFileSync(path.join(root, "SHA256SUMS"), `${paths.map((p) => `${sha(fs.readFileSync(path.join(root, p)))}  ${p.replaceAll(path.sep, "/")}`).join("\n")}\n`);
 }
 
-async function materialize(reqFile, out) {
+function validateSourceDir(sourceDir, sources) {
+  if (!sourceDir) return null;
+  if (!fs.lstatSync(sourceDir).isDirectory()) fail("source-dir must be a directory");
+  const allowed = new Set(sources.map((source) => source.name));
+  for (const entry of fs.readdirSync(sourceDir)) {
+    if (!allowed.has(entry)) fail(`unexpected source-dir entry: ${entry}`);
+    if (!fs.lstatSync(path.join(sourceDir, entry)).isFile()) fail(`source-dir entry must be a regular file: ${entry}`);
+  }
+  return sourceDir;
+}
+
+async function materialize(reqFile, out, sourceDirInput = null) {
   if (fs.existsSync(out)) fail(`out exists: ${out}`);
   const r = request(reqFile);
+  const sourceDir = validateSourceDir(sourceDirInput, r.sources);
   fs.mkdirSync(path.join(out, "files"), { recursive: true });
   const req = Buffer.from(json(r));
   fs.writeFileSync(path.join(out, "request.json"), req);
   const bytes = new Map();
   const rows = [];
   for (const s of r.sources) {
-    const b = await source(new URL(s.url));
+    const bound = sourceDir ? path.join(sourceDir, s.name) : null;
+    const b = bound && fs.existsSync(bound) ? fs.readFileSync(bound) : await source(new URL(s.url));
     if (sha(b) !== s.sha256) fail(`source sha256 mismatch: ${s.name}`);
     fs.writeFileSync(path.join(out, "files", s.name), b);
     bytes.set(s.name, b);
@@ -124,10 +137,11 @@ function verify(root) {
   return observed;
 }
 
-function options(a, keys) {
+function options(a, required, optional = []) {
   const x = {};
-  while (a.length) { const k = a.shift(), v = a.shift(); if (!keys.includes(k) || !v || x[k]) fail("invalid options"); x[k] = v; }
-  if (keys.some((k) => !x[k])) fail("missing options");
+  const allowed = [...required, ...optional];
+  while (a.length) { const k = a.shift(), v = a.shift(); if (!allowed.includes(k) || !v || x[k]) fail("invalid options"); x[k] = v; }
+  if (required.some((k) => !x[k])) fail("missing options");
   return x;
 }
 
@@ -146,19 +160,32 @@ async function selftest() {
     const rf = path.join(root, "request.json"); fs.writeFileSync(rf, json(r));
     const out = path.join(root, "out"); await materialize(rf, out); verify(out);
     const moved = path.join(root, "moved"); fs.cpSync(out, moved, { recursive: true }); verify(moved);
+
+    const boundDir = path.join(root, "bound"); fs.mkdirSync(boundDir);
+    fs.writeFileSync(path.join(boundDir, "c.b64.txt"), carrier);
+    fs.writeFileSync(path.join(boundDir, "m.json"), meta);
+    const privateRequest = { ...r, request_id: "private-release", sources: r.sources.map((item) => ({ ...item, url: `https://github.example.invalid/private/${item.name}` })) };
+    const privateFile = path.join(root, "private.json"); fs.writeFileSync(privateFile, json(privateRequest));
+    const privateOut = path.join(root, "private-out"); await materialize(privateFile, privateOut, boundDir); verify(privateOut);
+
     fs.appendFileSync(path.join(moved, "files", "c.b64.txt"), "A"); rejects(() => verify(moved), /checksum mismatch/);
-    rejects(() => decode(Buffer.from(`${carrier}\n`)), /Base64/);
+    rejects(() => decode(Buffer.concat([carrier, Buffer.from("\n")])), /Base64/);
     rejects(() => request((() => { const f = path.join(root, "bad.json"); fs.writeFileSync(f, json({ ...r, sources: [{ ...r.sources[0], name: "../x" }] })); return f; })()), /safe basename/);
-    console.log(JSON.stringify({ schema: "carrier-job-selftest/1", status: "PASS", positive: 2, negative: 3 }));
+    fs.writeFileSync(path.join(boundDir, "unexpected"), "x");
+    rejects(() => validateSourceDir(boundDir, privateRequest.sources), /unexpected source-dir entry/);
+    fs.rmSync(path.join(boundDir, "unexpected"));
+    fs.writeFileSync(path.join(boundDir, "c.b64.txt"), Buffer.from("tampered"));
+    await (async () => { try { await materialize(privateFile, path.join(root, "private-tampered"), boundDir); } catch (error) { if (/source sha256 mismatch/.test(error.message)) return; throw error; } fail("expected source sha256 mismatch"); })();
+    console.log(JSON.stringify({ schema: "carrier-job-selftest/1", status: "PASS", positive: 3, negative: 5 }));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 
 async function main() {
   const [cmd, ...a] = process.argv.slice(2);
   if (!cmd || cmd === "selftest") return selftest();
-  if (cmd === "materialize") { const o = options(a, ["--request", "--out"]); console.log(JSON.stringify(await materialize(o["--request"], o["--out"]))); return; }
+  if (cmd === "materialize") { const o = options(a, ["--request", "--out"], ["--source-dir"]); console.log(JSON.stringify(await materialize(o["--request"], o["--out"], o["--source-dir"] ?? null))); return; }
   if (cmd === "verify") { const o = options(a, ["--input", "--receipt"]); const x = verify(o["--input"]); fs.writeFileSync(o["--receipt"], json(x)); console.log(JSON.stringify(x)); return; }
-  fail("usage: carrier-job.mjs [selftest] | materialize --request FILE --out DIR | verify --input DIR --receipt FILE");
+  fail("usage: carrier-job.mjs [selftest] | materialize --request FILE --out DIR [--source-dir DIR] | verify --input DIR --receipt FILE");
 }
 
 main().catch((e) => { console.error(`carrier-job: ${e.message}`); process.exit(1); });
