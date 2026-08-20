@@ -225,7 +225,7 @@ def main(argv: list[str]) -> int:
     request = json.loads(fixtures[0].read_text(encoding="utf-8"))["request"]
     canonical = canonical_bytes(request)
     token = base64.urlsafe_b64encode(gzip.compress(canonical, mtime=0)).decode().rstrip("=")
-    initial_url = f"{root}/index.html#invoke={token}"
+    initial_url = f"{root}/#invoke={token}"
 
     browser = next((value for name in ("google-chrome", "chromium", "chromium-browser") if (value := shutil.which(name))), None)
     invariant(browser is not None, "Chromium browser is unavailable")
