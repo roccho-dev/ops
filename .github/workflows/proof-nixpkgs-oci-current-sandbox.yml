@@ -1,0 +1,307 @@
+name: Proof nixpkgs OCI current sandbox
+
+on:
+  push:
+    branches:
+      - proof/nixpkgs-oci-current-sandbox-20260820
+    paths:
+      - .github/workflows/proof-nixpkgs-oci-current-sandbox.yml
+      - proofs/issue-187/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      ISSUE_NUMBER: "187"
+      MUTABLE_NIXPKGS_REF: github:NixOS/nixpkgs/nixos-unstable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            always-allow-substitutes = true
+
+      - name: Resolve mutable nixpkgs once and seal exact identity
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/issue-187"
+          artifact="$RUNNER_TEMP/nixpkgs-oci-proof"
+          mkdir -p "$work" "$artifact/ci-output"
+
+          nix flake metadata --json "$MUTABLE_NIXPKGS_REF" > "$work/mutable-metadata.json"
+          rev="$(jq -r '.locked.rev' "$work/mutable-metadata.json")"
+          test "$(printf '%s' "$rev" | wc -c)" -eq 40
+          printf '%s' "$rev" | grep -Eq '^[0-9a-f]{40}$'
+
+          exact_ref="github:NixOS/nixpkgs/$rev"
+          nix flake metadata --json "$exact_ref" > "$work/exact-metadata.json"
+          test "$(jq -r '.locked.rev' "$work/exact-metadata.json")" = "$rev"
+
+          nix flake archive --json "$exact_ref" > "$work/archive.json"
+          source_path="$(jq -r '.path' "$work/archive.json")"
+          test -d "$source_path"
+          case "$source_path" in /nix/store/*-source) ;; *) echo "unexpected nixpkgs source path: $source_path" >&2; exit 1 ;; esac
+
+          nixpkgs_version="$(nix eval --raw --impure --expr "let pkgs = import (builtins.storePath \"$source_path\") { system = \"x86_64-linux\"; }; in pkgs.lib.version")"
+          busybox_path="$(nix build --no-link --print-out-paths "$exact_ref#busybox")"
+          skopeo_path="$(nix build --no-link --print-out-paths "$exact_ref#skopeo")"
+          busybox_version="$($busybox_path/bin/busybox | sed -n '1s/^BusyBox v\([^ ]*\).*/\1/p')"
+          skopeo_version="$($skopeo_path/bin/skopeo --version | sed 's/^skopeo version //')"
+          test -n "$nixpkgs_version"
+          test -n "$busybox_version"
+          test -n "$skopeo_version"
+          test "$($busybox_path/bin/busybox sh -c 'printf nixpkgs-package-exec')" = "nixpkgs-package-exec"
+
+          cp proofs/issue-187/oci.nix "$work/oci.nix"
+          cp proofs/issue-187/verify_oci.py "$work/verify_oci.py"
+          cat > "$work/resolved.nix" <<EOF
+          import ./oci.nix {
+            nixpkgsSrc = builtins.storePath "$source_path";
+            nixpkgsRev = "$rev";
+            system = "x86_64-linux";
+          }
+          EOF
+
+          cat > "$artifact/resolution.json" <<EOF
+          {
+            "schema": "ops-nixpkgs-resolution/1",
+            "status": "PASS",
+            "mutableRef": "$MUTABLE_NIXPKGS_REF",
+            "exactRef": "$exact_ref",
+            "revision": "$rev",
+            "sourcePath": "$source_path",
+            "nixpkgsVersion": "$nixpkgs_version",
+            "hostSystem": "x86_64-linux",
+            "packages": {
+              "busybox": {"path": "$busybox_path", "version": "$busybox_version"},
+              "skopeo": {"path": "$skopeo_path", "version": "$skopeo_version"}
+            }
+          }
+          EOF
+
+          cp "$work/oci.nix" "$work/verify_oci.py" "$work/resolved.nix" "$artifact/"
+          cp "$work/mutable-metadata.json" "$work/exact-metadata.json" "$work/archive.json" "$artifact/ci-output/"
+
+          {
+            echo "revision=$rev"
+            echo "short_rev=${rev:0:12}"
+            echo "exact_ref=$exact_ref"
+            echo "source_path=$source_path"
+            echo "nixpkgs_version=$nixpkgs_version"
+            echo "busybox_path=$busybox_path"
+            echo "busybox_version=$busybox_version"
+            echo "skopeo_path=$skopeo_path"
+            echo "skopeo_version=$skopeo_version"
+            echo "work=$work"
+            echo "artifact=$artifact"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker projection and OCI archive with pinned nixpkgs
+        id: build
+        shell: bash
+        env:
+          REVISION: ${{ steps.resolve.outputs.revision }}
+          SHORT_REV: ${{ steps.resolve.outputs.short_rev }}
+          WORK: ${{ steps.resolve.outputs.work }}
+          ARTIFACT: ${{ steps.resolve.outputs.artifact }}
+          SKOPEO_PATH: ${{ steps.resolve.outputs.skopeo_path }}
+        run: |
+          set -euo pipefail
+          oci_out="$(nix build --no-link --print-out-paths --file "$WORK/resolved.nix")"
+          oci_drv="$(nix path-info --derivation "$oci_out")"
+          test -d "$oci_out"
+          test -f "$oci_out/docker-image.tar"
+          test -f "$oci_out/image.oci.tar"
+
+          python3 "$WORK/verify_oci.py" "$oci_out/image.oci.tar" \
+            --expect-revision "$REVISION" \
+            --receipt "$ARTIFACT/ci-output/oci-verification.json"
+          cp -a "$oci_out/." "$ARTIFACT/ci-output/"
+
+          expected="nixpkgs-oci-proof:$SHORT_REV"
+          docker load --input "$oci_out/docker-image.tar" > "$ARTIFACT/ci-output/docker-load.txt"
+          docker_output="$(docker run --rm "ops-nixpkgs-proof:$SHORT_REV")"
+          test "$docker_output" = "$expected"
+
+          "$SKOPEO_PATH/bin/skopeo" copy --insecure-policy \
+            "oci-archive:$oci_out/image.oci.tar" \
+            "docker-daemon:ops-nixpkgs-proof:oci-$SHORT_REV" \
+            > "$ARTIFACT/ci-output/skopeo-to-daemon.txt"
+          oci_runtime_output="$(docker run --rm "ops-nixpkgs-proof:oci-$SHORT_REV")"
+          test "$oci_runtime_output" = "$expected"
+
+          # Destructive controls: a wrong expected revision and a one-byte blob mutation must fail.
+          if python3 "$WORK/verify_oci.py" "$oci_out/image.oci.tar" \
+              --expect-revision 0000000000000000000000000000000000000000 >/dev/null 2>&1; then
+            echo "wrong revision unexpectedly passed" >&2
+            exit 1
+          fi
+
+          python3 - "$oci_out/image.oci.tar" "$WORK/tampered.oci.tar" <<'PY'
+          import io, json, pathlib, tarfile, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          with tarfile.open(source, "r:*") as src, tarfile.open(target, "w") as dst:
+              mutated = False
+              for member in src.getmembers():
+                  if member.isdir():
+                      dst.addfile(member)
+                      continue
+                  stream = src.extractfile(member)
+                  data = stream.read() if stream is not None else b""
+                  name = member.name.removeprefix("./")
+                  if not mutated and name.startswith("blobs/sha256/"):
+                      data = bytes([data[0] ^ 1]) + data[1:]
+                      mutated = True
+                  member.size = len(data)
+                  dst.addfile(member, io.BytesIO(data))
+          if not mutated:
+              raise SystemExit("no OCI blob available for mutation")
+          PY
+          if python3 "$WORK/verify_oci.py" "$WORK/tampered.oci.tar" \
+              --expect-revision "$REVISION" >/dev/null 2>&1; then
+            echo "tampered OCI unexpectedly passed" >&2
+            exit 1
+          fi
+
+          python3 - "$ARTIFACT/ci-output/oci-verification.json" "$ARTIFACT/ci-runtime.json" \
+            "$docker_output" "$oci_runtime_output" "$oci_out" "$oci_drv" <<'PY'
+          import json, pathlib, sys
+          verification = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          output = {
+              "schema": "ops-nixpkgs-oci-ci-runtime/1",
+              "status": "PASS",
+              "dockerArchiveRun": sys.argv[3],
+              "ociArchiveRun": sys.argv[4],
+              "ociOutputPath": sys.argv[5],
+              "ociDerivationPath": sys.argv[6],
+              "manifestDigest": verification["manifest"]["digest"],
+              "configDigest": verification["config"]["digest"],
+              "layerDigests": [row["digest"] for row in verification["layers"]],
+              "negativeControls": {
+                  "wrongRevisionRejected": True,
+                  "tamperedBlobRejected": True
+              }
+          }
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(output, indent=2, sort_keys=True) + "\n")
+          PY
+
+          {
+            echo "oci_out=$oci_out"
+            echo "oci_drv=$oci_drv"
+            echo "manifest_digest=$(jq -r '.manifest.digest' "$ARTIFACT/ci-output/oci-verification.json")"
+            echo "config_digest=$(jq -r '.config.digest' "$ARTIFACT/ci-output/oci-verification.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Export exact nixpkgs source and all offline rebuild inputs
+        shell: bash
+        env:
+          ARTIFACT: ${{ steps.resolve.outputs.artifact }}
+          SOURCE_PATH: ${{ steps.resolve.outputs.source_path }}
+          BUSYBOX_PATH: ${{ steps.resolve.outputs.busybox_path }}
+          SKOPEO_PATH: ${{ steps.resolve.outputs.skopeo_path }}
+          OCI_OUT: ${{ steps.build.outputs.oci_out }}
+          OCI_DRV: ${{ steps.build.outputs.oci_drv }}
+        run: |
+          set -euo pipefail
+          cache="$ARTIFACT/nix-cache"
+          mkdir -p "$cache"
+
+          {
+            nix-store --query --requisites --include-outputs "$OCI_DRV"
+            nix-store --query --requisites "$SOURCE_PATH"
+            nix-store --query --requisites "$BUSYBOX_PATH"
+            nix-store --query --requisites "$SKOPEO_PATH"
+            printf '%s\n' "$SOURCE_PATH" "$BUSYBOX_PATH" "$SKOPEO_PATH" "$OCI_DRV"
+          } | sort -u | grep -Fxv "$OCI_OUT" > "$ARTIFACT/offline-input-paths.txt"
+
+          if grep -Fxq "$OCI_OUT" "$ARTIFACT/offline-input-paths.txt"; then
+            echo "final OCI output leaked into offline input cache" >&2
+            exit 1
+          fi
+          grep -Fxq "$OCI_DRV" "$ARTIFACT/offline-input-paths.txt"
+          grep -Fxq "$SOURCE_PATH" "$ARTIFACT/offline-input-paths.txt"
+
+          mapfile -t paths < "$ARTIFACT/offline-input-paths.txt"
+          nix copy --to "file://$cache" "${paths[@]}"
+
+          cat > "$ARTIFACT/offline-roots.json" <<EOF
+          {
+            "schema": "ops-nixpkgs-offline-roots/1",
+            "status": "PASS",
+            "sourcePath": "$SOURCE_PATH",
+            "busyboxPath": "$BUSYBOX_PATH",
+            "skopeoPath": "$SKOPEO_PATH",
+            "ociDerivationPath": "$OCI_DRV",
+            "expectedOciOutputPath": "$OCI_OUT",
+            "pathCount": ${#paths[@]}
+          }
+          EOF
+
+          (cd "$ARTIFACT" && sha256sum \
+            resolution.json resolved.nix oci.nix verify_oci.py \
+            ci-runtime.json ci-output/image.oci.tar \
+            ci-output/docker-image.tar ci-output/oci-verification.json \
+            offline-input-paths.txt offline-roots.json > SHA256SUMS)
+
+          du -sh "$ARTIFACT" "$cache"
+          find "$ARTIFACT" -type f | wc -l
+
+      - name: Upload complete offline replay artifact
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nixpkgs-oci-offline-replay-${{ steps.resolve.outputs.short_rev }}
+          path: ${{ steps.resolve.outputs.artifact }}/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Return proof identity to Issue 187
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WORKFLOW_COMMIT: ${{ github.sha }}
+          REVISION: ${{ steps.resolve.outputs.revision }}
+          NIXPKGS_VERSION: ${{ steps.resolve.outputs.nixpkgs_version }}
+          BUSYBOX_VERSION: ${{ steps.resolve.outputs.busybox_version }}
+          SKOPEO_VERSION: ${{ steps.resolve.outputs.skopeo_version }}
+          MANIFEST_DIGEST: ${{ steps.build.outputs.manifest_digest }}
+          CONFIG_DIGEST: ${{ steps.build.outputs.config_digest }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## nixpkgs + OCI CI proof result
+
+          status: \`$JOB_STATUS\`
+          nixpkgs-revision: \`${REVISION:-unresolved}\`
+          nixpkgs-version: \`${NIXPKGS_VERSION:-unresolved}\`
+          busybox-version: \`${BUSYBOX_VERSION:-unresolved}\`
+          skopeo-version: \`${SKOPEO_VERSION:-unresolved}\`
+          OCI-manifest-digest: \`${MANIFEST_DIGEST:-not-built}\`
+          OCI-config-digest: \`${CONFIG_DIGEST:-not-built}\`
+          workflow-run: $RUN_URL
+          workflow-commit: \`$WORKFLOW_COMMIT\`
+          artifact: ${ARTIFACT_URL:-not-created}
+          artifact-id: \`${ARTIFACT_ID:-not-created}\`
+          artifact-digest: \`${ARTIFACT_DIGEST:-not-created}\`
+          EOF
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
