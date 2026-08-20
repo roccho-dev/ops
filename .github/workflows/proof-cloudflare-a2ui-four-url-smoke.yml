@@ -1,0 +1,191 @@
+name: Proof Cloudflare A2UI four URL smoke
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-cloudflare-a2ui-four-url-smoke.yml'
+      - 'verification/cloudflare-a2ui-four-url-smoke/**'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Verify stable Cloudflare publication identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture=verification/cloudflare-a2ui-four-url-smoke/fixture.json
+          stable_base="$(node -e 'const x=require("./'"$fixture"'"); process.stdout.write(x.stableBase)')"
+          expected_tree="$(node -e 'const x=require("./'"$fixture"'"); process.stdout.write(x.publicationTree)')"
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error \
+            "${stable_base}artifact-manifest.json" -o "$RUNNER_TEMP/artifact-manifest.json"
+          node - "$RUNNER_TEMP/artifact-manifest.json" "$expected_tree" <<'JS'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (value.schema !== 'artifact-shell-publication-artifact/2') throw new Error('manifest schema mismatch');
+          if (value.treeDigest !== process.argv[3]) throw new Error('publication tree mismatch');
+          if (value.files.length !== 53) throw new Error(`expected 53 files, observed ${value.files.length}`);
+          console.log(JSON.stringify({ status: 'PASS', treeDigest: value.treeDigest, files: value.files.length }));
+          JS
+
+      - name: Install exact proof-only browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/proof"
+          mkdir -p "$proof"
+          cd "$proof"
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          printf '%s\n' "$chrome" > "$RUNNER_TEMP/chrome-bin"
+          "$chrome" --version | tee "$RUNNER_TEMP/chrome-version"
+
+      - name: Open and observe all four Cloudflare URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/proof"
+          cat > "$proof/smoke.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import process from 'node:process';
+          import { chromium } from 'playwright-core';
+
+          const workspace = process.env.GITHUB_WORKSPACE;
+          const fixture = JSON.parse(fs.readFileSync(path.join(workspace, 'verification/cloudflare-a2ui-four-url-smoke/fixture.json'), 'utf8'));
+          assert.equal(fixture.schema, 'cloudflare-a2ui-four-url-smoke/1');
+          assert.equal(fixture.cases.length, 4);
+          assert.deepEqual(fixture.cases.map(value => value.id), ['base', 'graph', 'map', 'seq']);
+          const executablePath = fs.readFileSync(process.env.RUNNER_TEMP + '/chrome-bin', 'utf8').trim();
+          const browser = await chromium.launch({
+            executablePath,
+            headless: true,
+            args: ['--no-sandbox', '--disable-dev-shm-usage'],
+          });
+          const receipt = {
+            schema: 'ops.cloudflareA2uiFourUrlSmokeReceipt/1',
+            status: 'PASS',
+            authority: false,
+            publicationTree: fixture.publicationTree,
+            stableBase: fixture.stableBase,
+            proofBoundary: 'A2UI base components only; Graph/Map/Seq are visual connectivity smoke, not dedicated semantic renderers',
+            cases: [],
+          };
+          try {
+            for (const item of fixture.cases) {
+              assert.ok(item.urlLength < 8192, `${item.id}: URL exceeds limit`);
+              const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+              const errors = [];
+              page.on('pageerror', error => errors.push(String(error)));
+              page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+              await page.goto(item.stableUrl, { waitUntil: 'networkidle', timeout: 75_000 });
+              await page.waitForFunction(() => document.querySelector('#status')?.textContent?.trim() === 'PASS', null, { timeout: 75_000 });
+              await page.waitForFunction(({ title, expectedText }) => {
+                const text = document.querySelector('#surface')?.textContent ?? '';
+                return text.includes(title) && text.includes(expectedText);
+              }, { title: item.title, expectedText: item.expectedText }, { timeout: 30_000 });
+
+              const observation = await page.evaluate(() => {
+                const result = JSON.parse(document.querySelector('#result')?.textContent || 'null');
+                const receipt = JSON.parse(document.querySelector('#receipt')?.textContent || 'null');
+                const surface = document.querySelector('#surface');
+                return {
+                  href: location.href,
+                  status: document.querySelector('#status')?.textContent?.trim() ?? null,
+                  surfaceText: surface?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+                  componentCount: surface?.querySelectorAll('[data-a2ui-component]').length ?? 0,
+                  result,
+                  receipt,
+                };
+              });
+              assert.equal(observation.status, 'PASS');
+              assert.equal(observation.result.status, 'PASS');
+              assert.equal(observation.result.outputs?.[0]?.contract, 'a2ui-render-receipt/1');
+              assert.equal(observation.receipt.capability?.id, 'render.a2ui');
+              assert.equal(observation.receipt.capability?.version, '1');
+              assert.ok(observation.surfaceText.includes(item.title));
+              assert.ok(observation.surfaceText.includes(item.expectedText));
+              assert.ok(observation.componentCount >= 4);
+              assert.deepEqual(errors, []);
+              const observed = new URL(observation.href);
+              const requested = new URL(item.stableUrl);
+              assert.equal(observed.origin, requested.origin);
+              assert.equal(observed.hash, requested.hash);
+              assert.ok(observed.pathname.startsWith('/releases/b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b/'));
+              await page.screenshot({ path: path.join(process.env.RUNNER_TEMP, `${item.id}.png`), fullPage: true });
+              fs.writeFileSync(path.join(process.env.RUNNER_TEMP, `${item.id}.html`), await page.content());
+              receipt.cases.push({
+                id: item.id,
+                status: 'PASS',
+                title: item.title,
+                expectedText: item.expectedText,
+                url: item.stableUrl,
+                observedUrl: observation.href,
+                urlLength: item.urlLength,
+                componentCount: observation.componentCount,
+                capability: 'render.a2ui@1',
+                outputContract: 'a2ui-render-receipt/1',
+                browserErrors: 0,
+              });
+              await page.close();
+            }
+          } finally {
+            await browser.close();
+          }
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/smoke-receipt.json', JSON.stringify(receipt, null, 2) + '\n');
+          fs.writeFileSync(process.env.RUNNER_TEMP + '/four-urls.json', JSON.stringify({
+            schema: 'cloudflare-a2ui-four-urls/1',
+            publicationTree: fixture.publicationTree,
+            urls: Object.fromEntries(fixture.cases.map(item => [item.id, item.stableUrl])),
+          }, null, 2) + '\n');
+          console.log(JSON.stringify(receipt));
+          JS
+          cd "$proof"
+          RUNNER_TEMP="$RUNNER_TEMP" GITHUB_WORKSPACE="$GITHUB_WORKSPACE" node smoke.mjs
+
+      - name: Write proof summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat "$RUNNER_TEMP/smoke-receipt.json"
+          node - "$RUNNER_TEMP/four-urls.json" >> "$GITHUB_STEP_SUMMARY" <<'JS'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          console.log('## Cloudflare A2UI four URL smoke — PASS\n');
+          for (const [name, url] of Object.entries(value.urls)) console.log(`- ${name}: ${url}`);
+          JS
+
+      - name: Upload non-authority smoke evidence
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-a2ui-four-url-smoke-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/smoke-receipt.json
+            ${{ runner.temp }}/four-urls.json
+            ${{ runner.temp }}/artifact-manifest.json
+            ${{ runner.temp }}/chrome-version
+            ${{ runner.temp }}/base.png
+            ${{ runner.temp }}/graph.png
+            ${{ runner.temp }}/map.png
+            ${{ runner.temp }}/seq.png
+            ${{ runner.temp }}/base.html
+            ${{ runner.temp }}/graph.html
+            ${{ runner.temp }}/map.html
+            ${{ runner.temp }}/seq.html
+          if-no-files-found: error
+          retention-days: 7
