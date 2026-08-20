@@ -175,6 +175,7 @@ def main(argv: list[str]) -> int:
             "--no-sandbox",
             "--disable-gpu",
             "--disable-dev-shm-usage",
+            "--remote-allow-origins=*",
             f"--remote-debugging-port={port}",
             f"--user-data-dir={profile}",
             "about:blank",
