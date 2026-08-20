@@ -22,14 +22,21 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Patch existing static-host workflow without adding a second adapter
+      - name: Generate the bounded static-host workflow as a regular bridge file
         shell: bash
         run: |
           set -euo pipefail
+          generated=verification/artifact-runtime-static-host/generated-workflow.yml
+          if test -f "$generated"; then
+            echo "generated bridge already exists"
+            exit 0
+          fi
+
           python3 - <<'PY'
           from pathlib import Path
 
           target=Path('.github/workflows/artifact-runtime-static-host.yml')
+          generated=Path('verification/artifact-runtime-static-host/generated-workflow.yml')
           source=target.read_text(encoding='utf-8')
 
           def replace(old,new,label):
@@ -93,20 +100,12 @@ jobs:
               raise SystemExit(f'provider browser receipt: observed {len(browser_indexes)}')
           lines[browser_indexes[0]]='          - real public click → URL → Back → fresh-open/reload Chrome smoke: **PASS**'
 
-          source='\n'.join(lines)+'\n'
-          target.write_text(source,encoding='utf-8')
+          generated.write_text('\n'.join(lines)+'\n',encoding='utf-8')
           PY
 
           python3 -m py_compile verification/artifact-runtime-static-host/browser_smoke.py
-
-      - name: Commit bounded product diff and retire this workflow
-        shell: bash
-        run: |
-          set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .github/workflows/artifact-runtime-static-host.yml
-          git commit -m 'feat: bind static host to the carryable Artifact App'
-          git rm .github/workflows/prepare-artifact-runtime-static-app.yml
-          git commit -m 'chore: retire static App preparation workflow'
+          git add "$generated"
+          git commit -m 'chore: materialize static App workflow bridge'
           git push origin HEAD:${GITHUB_HEAD_REF}
