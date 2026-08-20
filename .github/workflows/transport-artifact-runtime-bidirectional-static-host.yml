@@ -14,9 +14,9 @@ jobs:
     env:
       EXPECTED_BASE: 10e64726df069b71a1022d21e195d30427762018
       TARGET_BRANCH: proposal/artifact-runtime-bidirectional-static-host-260821
-      PATCH_B64_SHA256: 4c9b302ebf74d2d5735f9bd5460d7ab8647d8534fda3a70a202f5feb2ea0b5e0
-      PATCH_GZ_SHA256: 81feb8592c0a5da675593c982d169fb47da1a41282bfc8db9558d1e34b5f4af0
-      PATCH_SHA256: 22be99f1c04bbdfbd7ca9373c6de76f75565d2bab532f806080168cfe53bfd8d
+      PATCH_B64_SHA256: 5d9b853d41a3d29a8d9a97f288d26fee3b3e640c094e51b1844fd7643efa24f6
+      PATCH_GZ_SHA256: 33c6e0b6994f0cf23c331ae724a13b9be39d443055161d1e3e5203ceb690fd35
+      PATCH_SHA256: 6e4c7400e42bc73a18befc48f3716d80339e8edf8196d5b10b0fc9671807c29c
       APP_TAG: artifact-runtime-b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b
       APP_ARCHIVE: artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz
       APP_ARCHIVE_SHA256: 571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b
@@ -33,13 +33,21 @@ jobs:
         run: |
           set -euo pipefail
           cat .github/transport/artifact-runtime-bidirectional-static-host.current.part{0,1,2,3} > "$RUNNER_TEMP/change.patch.gz.b64"
-          test "$(sha256sum "$RUNNER_TEMP/change.patch.gz.b64" | awk '{print $1}')" = "$PATCH_B64_SHA256"
+          observed_b64="$(sha256sum "$RUNNER_TEMP/change.patch.gz.b64" | awk '{print $1}')"
+          echo "patch-base64: $observed_b64"
+          test "$observed_b64" = "$PATCH_B64_SHA256"
           base64 --decode "$RUNNER_TEMP/change.patch.gz.b64" > "$RUNNER_TEMP/change.patch.gz"
-          test "$(sha256sum "$RUNNER_TEMP/change.patch.gz" | awk '{print $1}')" = "$PATCH_GZ_SHA256"
+          observed_gz="$(sha256sum "$RUNNER_TEMP/change.patch.gz" | awk '{print $1}')"
+          echo "patch-gzip: $observed_gz"
+          test "$observed_gz" = "$PATCH_GZ_SHA256"
           gzip --decompress --stdout "$RUNNER_TEMP/change.patch.gz" > "$RUNNER_TEMP/change.patch"
-          test "$(sha256sum "$RUNNER_TEMP/change.patch" | awk '{print $1}')" = "$PATCH_SHA256"
+          observed_patch="$(sha256sum "$RUNNER_TEMP/change.patch" | awk '{print $1}')"
+          echo "patch-raw: $observed_patch"
+          test "$observed_patch" = "$PATCH_SHA256"
 
-          test "$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')" = "$EXPECTED_BASE"
+          remote_base="$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')"
+          echo "remote-base: $remote_base"
+          test "$remote_base" = "$EXPECTED_BASE"
           test -z "$(git ls-remote origin "refs/heads/$TARGET_BRANCH")"
           git reset --hard "$EXPECTED_BASE"
           git clean -fdx
