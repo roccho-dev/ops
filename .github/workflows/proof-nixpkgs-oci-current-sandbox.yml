@@ -20,6 +20,7 @@ jobs:
     env:
       ISSUE_NUMBER: "187"
       MUTABLE_NIXPKGS_REF: github:NixOS/nixpkgs/nixos-unstable
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +44,6 @@ jobs:
 
           nix flake metadata --json "$MUTABLE_NIXPKGS_REF" > "$work/mutable-metadata.json"
           rev="$(jq -r '.locked.rev' "$work/mutable-metadata.json")"
-          test "$(printf '%s' "$rev" | wc -c)" -eq 40
           printf '%s' "$rev" | grep -Eq '^[0-9a-f]{40}$'
 
           exact_ref="github:NixOS/nixpkgs/$rev"
@@ -53,10 +53,14 @@ jobs:
           nix flake archive --json "$exact_ref" > "$work/archive.json"
           source_path="$(jq -r '.path' "$work/archive.json")"
           test -d "$source_path"
-          case "$source_path" in /nix/store/*-source) ;; *) echo "unexpected nixpkgs source path: $source_path" >&2; exit 1 ;; esac
+          case "$source_path" in
+            /nix/store/*-source) ;;
+            *) echo "unexpected nixpkgs source path: $source_path" >&2; exit 1 ;;
+          esac
 
           nixpkgs_version="$(nix eval --raw --impure --expr "let pkgs = import (builtins.storePath \"$source_path\") { system = \"x86_64-linux\"; }; in pkgs.lib.version")"
           busybox_path="$(nix build --no-link --print-out-paths "$exact_ref#busybox")"
+
           mapfile -t skopeo_candidates < <(nix build --no-link --print-out-paths "$exact_ref#skopeo")
           skopeo_path=""
           for candidate in "${skopeo_candidates[@]}"; do
@@ -66,6 +70,7 @@ jobs:
             fi
           done
           test -n "$skopeo_path"
+
           busybox_version="$($busybox_path/bin/busybox | sed -n '1s/^BusyBox v\([^ ]*\).*/\1/p')"
           skopeo_version="$($skopeo_path/bin/skopeo --version | sed 's/^skopeo version //')"
           test -n "$nixpkgs_version"
@@ -83,25 +88,41 @@ jobs:
           }
           EOF
 
-          cat > "$artifact/resolution.json" <<EOF
-          {
-            "schema": "ops-nixpkgs-resolution/1",
-            "status": "PASS",
-            "mutableRef": "$MUTABLE_NIXPKGS_REF",
-            "exactRef": "$exact_ref",
-            "revision": "$rev",
-            "sourcePath": "$source_path",
-            "nixpkgsVersion": "$nixpkgs_version",
-            "hostSystem": "x86_64-linux",
-            "packages": {
-              "busybox": {"path": "$busybox_path", "version": "$busybox_version"},
-              "skopeo": {"path": "$skopeo_path", "version": "$skopeo_version"}
-            }
+          python3 - "$artifact/resolution.json" "$MUTABLE_NIXPKGS_REF" "$exact_ref" "$rev" \
+            "$source_path" "$nixpkgs_version" "$busybox_path" "$busybox_version" \
+            "$skopeo_path" "$skopeo_version" <<'PY'
+          import json, pathlib, sys
+          (
+              output_path,
+              mutable_ref,
+              exact_ref,
+              revision,
+              source_path,
+              nixpkgs_version,
+              busybox_path,
+              busybox_version,
+              skopeo_path,
+              skopeo_version,
+          ) = sys.argv[1:]
+          receipt = {
+              "schema": "ops-nixpkgs-resolution/1",
+              "status": "PASS",
+              "mutableRef": mutable_ref,
+              "exactRef": exact_ref,
+              "revision": revision,
+              "sourcePath": source_path,
+              "nixpkgsVersion": nixpkgs_version,
+              "hostSystem": "x86_64-linux",
+              "packages": {
+                  "busybox": {"path": busybox_path, "version": busybox_version},
+                  "skopeo": {"path": skopeo_path, "version": skopeo_version},
+              },
           }
-          EOF
+          pathlib.Path(output_path).write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
+          PY
 
-          cp "$work/oci.nix" "$work/verify_oci.py" "$work/resolved.nix" "$artifact/"
-          cp "$work/mutable-metadata.json" "$work/exact-metadata.json" "$work/archive.json" "$artifact/ci-output/"
+          install -m 0644 "$work/oci.nix" "$work/verify_oci.py" "$work/resolved.nix" "$artifact/"
+          install -m 0644 "$work/mutable-metadata.json" "$work/exact-metadata.json" "$work/archive.json" "$artifact/ci-output/"
 
           {
             echo "revision=$rev"
@@ -130,28 +151,32 @@ jobs:
           set -euo pipefail
           oci_out="$(nix build --no-link --print-out-paths --file "$WORK/resolved.nix")"
           oci_drv="$(nix path-info --derivation "$oci_out")"
-          test -d "$oci_out"
           test -f "$oci_out/docker-image.tar"
           test -f "$oci_out/image.oci.tar"
 
           python3 "$WORK/verify_oci.py" "$oci_out/image.oci.tar" \
             --expect-revision "$REVISION" \
             --receipt "$ARTIFACT/ci-output/oci-verification.json"
-          cp -a "$oci_out/." "$ARTIFACT/ci-output/"
+
+          for name in docker-image.tar image.oci.tar manifest.raw.json inspect.json \
+            nixpkgs.rev nixpkgs.version image.ref SHA256SUMS; do
+            install -m 0644 "$oci_out/$name" "$ARTIFACT/ci-output/$name"
+          done
 
           expected="nixpkgs-oci-proof:$SHORT_REV"
           docker load --input "$oci_out/docker-image.tar" > "$ARTIFACT/ci-output/docker-load.txt"
           docker_output="$(docker run --rm "ops-nixpkgs-proof:$SHORT_REV")"
           test "$docker_output" = "$expected"
 
-          "$SKOPEO_PATH/bin/skopeo" copy --insecure-policy \
+          runtime_tmp="$RUNNER_TEMP/skopeo-runtime"
+          mkdir -p "$runtime_tmp"
+          "$SKOPEO_PATH/bin/skopeo" --tmpdir "$runtime_tmp" copy --insecure-policy \
             "oci-archive:$oci_out/image.oci.tar" \
             "docker-daemon:ops-nixpkgs-proof:oci-$SHORT_REV" \
             > "$ARTIFACT/ci-output/skopeo-to-daemon.txt"
           oci_runtime_output="$(docker run --rm "ops-nixpkgs-proof:oci-$SHORT_REV")"
           test "$oci_runtime_output" = "$expected"
 
-          # Destructive controls: a wrong expected revision and a one-byte blob mutation must fail.
           if python3 "$WORK/verify_oci.py" "$oci_out/image.oci.tar" \
               --expect-revision 0000000000000000000000000000000000000000 >/dev/null 2>&1; then
             echo "wrong revision unexpectedly passed" >&2
@@ -200,8 +225,8 @@ jobs:
               "layerDigests": [row["digest"] for row in verification["layers"]],
               "negativeControls": {
                   "wrongRevisionRejected": True,
-                  "tamperedBlobRejected": True
-              }
+                  "tamperedBlobRejected": True,
+              },
           }
           pathlib.Path(sys.argv[2]).write_text(json.dumps(output, indent=2, sort_keys=True) + "\n")
           PY
@@ -235,28 +260,29 @@ jobs:
             printf '%s\n' "$SOURCE_PATH" "$BUSYBOX_PATH" "$SKOPEO_PATH" "$OCI_DRV"
           } | sort -u | grep -Fxv "$OCI_OUT" > "$ARTIFACT/offline-input-paths.txt"
 
-          if grep -Fxq "$OCI_OUT" "$ARTIFACT/offline-input-paths.txt"; then
-            echo "final OCI output leaked into offline input cache" >&2
-            exit 1
-          fi
+          ! grep -Fxq "$OCI_OUT" "$ARTIFACT/offline-input-paths.txt"
           grep -Fxq "$OCI_DRV" "$ARTIFACT/offline-input-paths.txt"
           grep -Fxq "$SOURCE_PATH" "$ARTIFACT/offline-input-paths.txt"
 
           mapfile -t paths < "$ARTIFACT/offline-input-paths.txt"
           nix copy --to "file://$cache" "${paths[@]}"
 
-          cat > "$ARTIFACT/offline-roots.json" <<EOF
-          {
-            "schema": "ops-nixpkgs-offline-roots/1",
-            "status": "PASS",
-            "sourcePath": "$SOURCE_PATH",
-            "busyboxPath": "$BUSYBOX_PATH",
-            "skopeoPath": "$SKOPEO_PATH",
-            "ociDerivationPath": "$OCI_DRV",
-            "expectedOciOutputPath": "$OCI_OUT",
-            "pathCount": ${#paths[@]}
+          python3 - "$ARTIFACT/offline-roots.json" "$SOURCE_PATH" "$BUSYBOX_PATH" \
+            "$SKOPEO_PATH" "$OCI_DRV" "$OCI_OUT" "${#paths[@]}" <<'PY'
+          import json, pathlib, sys
+          output_path, source, busybox, skopeo, drv, expected, count = sys.argv[1:]
+          data = {
+              "schema": "ops-nixpkgs-offline-roots/1",
+              "status": "PASS",
+              "sourcePath": source,
+              "busyboxPath": busybox,
+              "skopeoPath": skopeo,
+              "ociDerivationPath": drv,
+              "expectedOciOutputPath": expected,
+              "pathCount": int(count),
           }
-          EOF
+          pathlib.Path(output_path).write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+          PY
 
           (cd "$ARTIFACT" && sha256sum \
             resolution.json resolved.nix oci.nix verify_oci.py \
