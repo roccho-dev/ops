@@ -128,6 +128,7 @@ class Cdp:
     def __init__(self, socket_: WebSocket) -> None:
         self.socket = socket_
         self.sequence = 0
+        self.events: list[dict[str, object]] = []
 
     def call(self, method: str, params: dict[str, object] | None = None) -> dict[str, object]:
         self.sequence += 1
@@ -135,7 +136,10 @@ class Cdp:
         self.socket.send_json({"id": identity, "method": method, "params": params or {}})
         while True:
             message = self.socket.receive_json()
-            if not isinstance(message, dict) or message.get("id") != identity:
+            if not isinstance(message, dict):
+                continue
+            if message.get("id") != identity:
+                self.events.append(message)
                 continue
             invariant("error" not in message, f"CDP {method} failed: {message.get('error')}")
             result = message.get("result", {})
@@ -177,7 +181,16 @@ def wait_value(cdp: Cdp, expression: str, expected: object, timeout: float = 60)
         if state in ("fail", "inconclusive"):
             raise RuntimeError(f"artifact-app-browser: application stopped with {state}: {evaluate(cdp, 'document.body.innerText')}")
         time.sleep(0.25)
-    raise RuntimeError(f"artifact-app-browser: timeout waiting for {expected!r}; observed {observed!r}")
+    diagnostics = {
+        "observed": observed,
+        "url": evaluate(cdp, "location.href"),
+        "readyState": evaluate(cdp, "document.readyState"),
+        "app": evaluate(cdp, "typeof globalThis.artifactApp"),
+        "proof": evaluate(cdp, "globalThis.artifactAppProof ?? null"),
+        "body": evaluate(cdp, "document.body?.innerText || null"),
+        "events": [event for event in cdp.events if event.get("method") in ("Runtime.exceptionThrown", "Runtime.consoleAPICalled", "Log.entryAdded")][-20:],
+    }
+    raise RuntimeError(f"artifact-app-browser: timeout waiting for {expected!r}; diagnostics={json.dumps(diagnostics, sort_keys=True)}")
 
 
 def main(argv: list[str]) -> int:
@@ -223,13 +236,15 @@ def main(argv: list[str]) -> int:
                 except Exception:
                     time.sleep(0.25)
             invariant(version is not None, "Chrome DevTools endpoint did not start")
-            page = fetch_json(f"http://127.0.0.1:{port}/json/new?{urllib.parse.quote(app_url, safe='')}", method="PUT")
+            page = fetch_json(f"http://127.0.0.1:{port}/json/new?{urllib.parse.quote('about:blank', safe='')}", method="PUT")
             web_socket_url = page.get("webSocketDebuggerUrl")
             invariant(isinstance(web_socket_url, str), "page WebSocket URL is missing")
             socket_ = WebSocket(web_socket_url)
             cdp = Cdp(socket_)
             cdp.call("Runtime.enable")
             cdp.call("Page.enable")
+            cdp.call("Log.enable")
+            cdp.call("Page.navigate", {"url": app_url})
 
             wait_value(cdp, "document.querySelector('#status')?.dataset.state || null", "pass")
             wait_value(cdp, "document.querySelector('[data-a2ui-id=title]')?.textContent || null", "State A")
