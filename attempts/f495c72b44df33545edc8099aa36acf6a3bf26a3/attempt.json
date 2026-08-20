@@ -1,0 +1,15 @@
+{
+  "automaticRetry": false,
+  "branchSetCommit": "f495c72b44df33545edc8099aa36acf6a3bf26a3",
+  "branchSetRef": "refs/heads/proof-nway-github-6a85fd4d-branch-set",
+  "decisionRequired": true,
+  "effectApplied": false,
+  "error": "PROVIDER_FAILED: manifest: refPrefix must be a refs/.../ prefix ending in '/'\n",
+  "fault": "none",
+  "manifestSha256": "sha256:7e0b4a5b4fbe2d5e1fc3f3f8535de232a79d5ece67db573ea73e6def47356af3",
+  "schema": "github-nway-attempt/1",
+  "stage": "S4",
+  "stopReason": "PIPELINE_ERROR",
+  "targetRef": "refs/heads/proof-nway-github-6a85fd4d-result",
+  "terminalState": "CURRENT_ATTEMPT_ENDED"
+}

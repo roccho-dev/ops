@@ -1,0 +1,1 @@
+manifest: refPrefix must be a refs/.../ prefix ending in '/'
