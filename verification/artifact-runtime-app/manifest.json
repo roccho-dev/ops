@@ -1,0 +1,145 @@
+{
+  "schema": "ops.artifactRuntimeApp/1",
+  "authority": false,
+  "status": "accepted-source",
+  "issue": 193,
+  "id": "artifact-runtime",
+  "version": "1",
+  "assemblyAuthority": {
+    "repository": "roccho-dev/ops",
+    "path": "verification/artifact-runtime-app/manifest.json",
+    "revision": "self"
+  },
+  "sourceAuthorities": [
+    {
+      "repository": "roccho-dev/ui",
+      "commit": "3a6eaeeb77aef568987add668f5c9b6aa426f74e",
+      "tree": "dfe8814083abc1faadfc67a6fdc93d180c723244",
+      "roles": [
+        "browser-runtime",
+        "url-codec",
+        "invocation-runtime",
+        "trusted-renderer",
+        "action-compiler",
+        "capabilities"
+      ]
+    }
+  ],
+  "publication": {
+    "treeDigest": "sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
+    "kernelDigest": "sha256:50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320",
+    "listedFiles": 53,
+    "capabilities": [
+      "inspect.json@1",
+      "render.a2ui@1",
+      "render.a2ui.app@1"
+    ],
+    "tag": "artifact-runtime-b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
+    "archive": {
+      "name": "artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz",
+      "bytes": 37333,
+      "sha256": "sha256:571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b"
+    },
+    "carrier": {
+      "name": "artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz.b64.txt",
+      "bytes": 49780,
+      "sha256": "sha256:7105c25d4e278d008c7abb2b2ac5530957b037c088868b2940f6fb65013d003f",
+      "codec": "standard-base64-no-whitespace"
+    }
+  },
+  "entrypoints": {
+    "browser": "index.html",
+    "catalog": "catalog.json",
+    "artifactManifest": "artifact-manifest.json",
+    "codec": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/packages/url-module/src/index.mjs",
+    "invocation": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/packages/artifact-invocation/src/index.mjs",
+    "actionCompiler": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/apps/artifact-shell/src/invocation-action.mjs",
+    "shell": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/apps/artifact-shell/src/shell-core.mjs"
+  },
+  "contracts": {
+    "invocation": "artifact-invocation/2",
+    "app": "a2ui-app/1",
+    "url": {
+      "fragment": "invoke",
+      "maximumCharacters": 8192,
+      "stateModes": [
+        "inline"
+      ]
+    },
+    "action": {
+      "name": "artifact.state.patch",
+      "schema": "artifact-state-action/1",
+      "stateRoot": "/state",
+      "operations": [
+        "replace",
+        "increment"
+      ],
+      "historyModes": [
+        "replace",
+        "push"
+      ],
+      "maximumOperations": 16
+    }
+  },
+  "operations": {
+    "encode": {
+      "module": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/packages/url-module/src/index.mjs",
+      "export": "createUrlModuleUrl"
+    },
+    "decode": {
+      "module": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/packages/url-module/src/index.mjs",
+      "export": "readUrlModule"
+    },
+    "validateInvocation": {
+      "module": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/packages/artifact-invocation/src/index.mjs",
+      "export": "validateArtifactInvocation"
+    },
+    "execute": {
+      "module": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/packages/artifact-invocation/src/index.mjs",
+      "export": "createArtifactInvocationRuntime"
+    },
+    "applyAction": {
+      "module": "kernel/50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320/apps/artifact-shell/src/invocation-action.mjs",
+      "export": "applyArtifactStateAction"
+    }
+  },
+  "carry": {
+    "releaseRepository": "roccho-dev/ops",
+    "sourceCloneRequiredForUse": false,
+    "consumerBuildRequired": false,
+    "repairAllowed": false,
+    "requiredAssets": [
+      "archive",
+      "carrier",
+      "app-manifest",
+      "publication-manifest",
+      "publication-receipt",
+      "carry-receipt"
+    ]
+  },
+  "improvementSources": [
+    {
+      "repository": "roccho-dev/ui",
+      "commit": "3a6eaeeb77aef568987add668f5c9b6aa426f74e",
+      "tree": "dfe8814083abc1faadfc67a6fdc93d180c723244",
+      "acquire": "exact-git-or-repo-head-carrier"
+    },
+    {
+      "repository": "roccho-dev/ops",
+      "revision": "release-target",
+      "acquire": "exact-git-or-repo-head-carrier"
+    }
+  ],
+  "boundaries": {
+    "gitIsSourceAuthority": true,
+    "releaseIsImmutableProjection": true,
+    "carrierIsByteTransport": true,
+    "staticHostServesSamePublication": true,
+    "urlIsTransactionAuthority": false,
+    "receiptIsAuthority": false,
+    "mutableLatestAllowed": false,
+    "uploadedZipAllowedAsSource": false,
+    "arbitraryJavaScriptAllowed": false,
+    "referenceStateMutationAllowed": false
+  }
+}
