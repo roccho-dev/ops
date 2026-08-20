@@ -1,0 +1,87 @@
+{
+  "app": {
+    "definition": "apps/artifact-runtime-interactive/app.json",
+    "id": "artifact-runtime.interactive",
+    "interfaces": {
+      "agent": "app/bin/artifact-app.mjs",
+      "browser": "index.html"
+    },
+    "version": "1"
+  },
+  "authority": false,
+  "boundaries": {
+    "appReceiptIsAuthority": false,
+    "carrierIsTransportProjection": true,
+    "gitSourceAuthority": true,
+    "mutableLatestAllowed": false,
+    "releaseIsProjection": true,
+    "sourceBuildRequiredForUse": false,
+    "sourceCloneRequiredForUse": false
+  },
+  "contracts": {
+    "action": "artifact.invoke",
+    "actionContext": "artifact-app-action/1",
+    "actionVersion": "v0.9.1",
+    "history": "push",
+    "invocation": "artifact-invocation/2",
+    "urlFragment": "invoke"
+  },
+  "publication": {
+    "archive": {
+      "bytes": 47421,
+      "name": "artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.tar.gz",
+      "sha256": "sha256:c5070a8c814166ee683dd7c55c8280cf71428a01481dde8e6cfec0234e1f139d",
+      "url": "https://github.com/roccho-dev/ops/releases/download/artifact-app-artifact-runtime-interactive-4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784/artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.tar.gz"
+    },
+    "carrier": {
+      "bytes": 63228,
+      "codec": "standard-base64-no-whitespace",
+      "name": "artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.tar.gz.b64.txt",
+      "sha256": "sha256:75d1becc1aaf77c2ed71981c7aec0fa206ce0b70c61c2ce8c3e0d0f317c47824",
+      "url": "https://github.com/roccho-dev/ops/releases/download/artifact-app-artifact-runtime-interactive-4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784/artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.tar.gz.b64.txt"
+    },
+    "manifest": {
+      "name": "artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.manifest.json",
+      "url": "https://github.com/roccho-dev/ops/releases/download/artifact-app-artifact-runtime-interactive-4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784/artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.manifest.json"
+    },
+    "receipt": {
+      "name": "artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.receipt.json",
+      "url": "https://github.com/roccho-dev/ops/releases/download/artifact-app-artifact-runtime-interactive-4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784/artifact-app.artifact-runtime-interactive.4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784.receipt.json"
+    },
+    "tag": "artifact-app-artifact-runtime-interactive-4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784",
+    "treeDigest": "sha256:4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784"
+  },
+  "runtime": {
+    "publicationManifest": "verification/artifact-runtime-publication/manifest.json",
+    "tag": "artifact-runtime-c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
+    "treeDigest": "sha256:c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928"
+  },
+  "schema": "ops.artifactAppPublication/1",
+  "sources": [
+    {
+      "carry": {
+        "identity": "commit",
+        "kind": "repo-head"
+      },
+      "commit": "126226fb666e71b395af172e3b9068c89f267ef5",
+      "repository": "roccho-dev/ui",
+      "role": "runtime",
+      "tree": "a1a4c0c11923253c52fcbe52015c40621731eb62"
+    },
+    {
+      "carry": {
+        "identity": "release.target",
+        "kind": "repo-head"
+      },
+      "commitBinding": "release.target",
+      "paths": [
+        "apps/artifact-runtime-interactive",
+        "packages/artifact-app",
+        "verification/artifact-app-publication"
+      ],
+      "repository": "roccho-dev/ops",
+      "role": "assembly"
+    }
+  ],
+  "status": "accepted-source"
+}

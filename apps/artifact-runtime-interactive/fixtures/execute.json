@@ -1,0 +1,32 @@
+{
+  "schema": "artifact-invocation/2",
+  "id": "request.inspect-json.pass",
+  "intent": "inspect",
+  "inputs": [
+    {
+      "id": "payload",
+      "mediaType": "application/json",
+      "schema": "example-data/1",
+      "source": {
+        "kind": "inline",
+        "value": {
+          "title": "One core",
+          "items": [
+            "human",
+            "agent"
+          ]
+        }
+      }
+    }
+  ],
+  "constraints": {
+    "allowedRuntimes": [
+      "browser",
+      "node"
+    ],
+    "noUpload": true
+  },
+  "expects": [
+    "json-inspection/1"
+  ]
+}

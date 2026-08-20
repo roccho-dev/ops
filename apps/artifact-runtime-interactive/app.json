@@ -1,0 +1,173 @@
+{
+  "schema": "artifact-app-definition/1",
+  "id": "artifact-runtime.interactive",
+  "version": "1",
+  "title": "Interactive Artifact Runtime",
+  "runtime": {
+    "publicationManifest": "verification/artifact-runtime-publication/manifest.json",
+    "requiredCapabilities": [
+      {
+        "id": "inspect.json",
+        "version": "1"
+      },
+      {
+        "id": "render.a2ui",
+        "version": "1"
+      }
+    ]
+  },
+  "codec": {
+    "fragment": "invoke",
+    "invocationSchema": "artifact-invocation/2"
+  },
+  "action": {
+    "event": "a2ui-client-action",
+    "name": "artifact.invoke",
+    "contextSchema": "artifact-app-action/1",
+    "history": "push",
+    "version": "v0.9.1"
+  },
+  "sourceAuthorities": [
+    {
+      "role": "runtime",
+      "repository": "roccho-dev/ui",
+      "commit": "126226fb666e71b395af172e3b9068c89f267ef5",
+      "tree": "a1a4c0c11923253c52fcbe52015c40621731eb62",
+      "carry": {
+        "kind": "repo-head",
+        "identity": "commit"
+      }
+    },
+    {
+      "role": "assembly",
+      "repository": "roccho-dev/ops",
+      "commitBinding": "release.target",
+      "paths": [
+        "apps/artifact-runtime-interactive",
+        "packages/artifact-app",
+        "verification/artifact-app-publication"
+      ],
+      "carry": {
+        "kind": "repo-head",
+        "identity": "release.target"
+      }
+    }
+  ],
+  "defaultInvocation": {
+    "schema": "artifact-invocation/2",
+    "id": "request.interactive-a2ui.state-a",
+    "intent": "render",
+    "inputs": [
+      {
+        "id": "surface",
+        "mediaType": "application/vnd.roccho.a2ui-surface+json",
+        "schema": "a2ui-surface/1",
+        "source": {
+          "kind": "inline",
+          "value": {
+            "rootId": "root",
+            "surfaceId": "interactive-artifact-app",
+            "dataModel": {
+              "state": "A"
+            },
+            "components": [
+              {
+                "id": "root",
+                "component": "Column",
+                "children": [
+                  "title",
+                  "body",
+                  "next"
+                ]
+              },
+              {
+                "id": "title",
+                "component": "Text",
+                "text": "State A",
+                "variant": "h1"
+              },
+              {
+                "id": "body",
+                "component": "Text",
+                "text": "This state came from the canonical URL invocation."
+              },
+              {
+                "id": "next",
+                "component": "Button",
+                "label": "Compile State B to URL",
+                "action": "artifact.invoke",
+                "context": {
+                  "schema": "artifact-app-action/1",
+                  "nextInvocation": {
+                    "schema": "artifact-invocation/2",
+                    "id": "request.interactive-a2ui.state-b",
+                    "intent": "render",
+                    "inputs": [
+                      {
+                        "id": "surface",
+                        "mediaType": "application/vnd.roccho.a2ui-surface+json",
+                        "schema": "a2ui-surface/1",
+                        "source": {
+                          "kind": "inline",
+                          "value": {
+                            "rootId": "root",
+                            "surfaceId": "interactive-artifact-app",
+                            "dataModel": {
+                              "state": "B"
+                            },
+                            "components": [
+                              {
+                                "id": "root",
+                                "component": "Column",
+                                "children": [
+                                  "title",
+                                  "body"
+                                ]
+                              },
+                              {
+                                "id": "title",
+                                "component": "Text",
+                                "text": "State B",
+                                "variant": "h1"
+                              },
+                              {
+                                "id": "body",
+                                "component": "Text",
+                                "text": "UI action → typed invocation → URL → restored UI is closed."
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "constraints": {
+                      "allowedRuntimes": [
+                        "browser"
+                      ],
+                      "noUpload": true
+                    },
+                    "expects": [
+                      "a2ui-render-receipt/1"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "constraints": {
+      "allowedRuntimes": [
+        "browser"
+      ],
+      "noUpload": true
+    },
+    "expects": [
+      "a2ui-render-receipt/1"
+    ]
+  },
+  "fixtures": {
+    "execute": "apps/artifact-runtime-interactive/fixtures/execute.json"
+  }
+}

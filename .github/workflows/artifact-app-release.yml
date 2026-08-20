@@ -1,0 +1,260 @@
+name: Artifact App release projection
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/artifact-app-release.yml'
+      - 'apps/artifact-runtime-interactive/**'
+      - 'packages/artifact-app/**'
+      - 'verification/artifact-app-publication/**'
+      - 'verification/artifact-runtime-publication/**'
+      - 'packages/chatgpt-capability/ingress/carrier-job.mjs'
+      - 'build/packages.jsonl'
+      - 'build/checks.jsonl'
+      - 'ci.intent.v1.jsonl'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/artifact-app-release.yml'
+      - 'apps/artifact-runtime-interactive/**'
+      - 'packages/artifact-app/**'
+      - 'verification/artifact-app-publication/**'
+      - 'verification/artifact-runtime-publication/**'
+      - 'packages/chatgpt-capability/ingress/carrier-job.mjs'
+      - 'build/packages.jsonl'
+      - 'build/checks.jsonl'
+      - 'ci.intent.v1.jsonl'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: false
+
+      - name: Resolve exact application and runtime contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          app=json.load(open('verification/artifact-app-publication/manifest.json',encoding='utf-8'))
+          runtime=json.load(open('verification/artifact-runtime-publication/manifest.json',encoding='utf-8'))
+          assert app['schema']=='ops.artifactAppPublication/1' and app['status']=='accepted-source' and app['authority'] is False
+          assert runtime['schema']=='ops.artifactRuntimePublication/1' and runtime['status']=='accepted-source'
+          assert app['runtime']['treeDigest']==runtime['publication']['treeDigest']
+          p=app['publication']; r=runtime['publication']
+          values={
+            'APP_TREE':p['treeDigest'], 'APP_TREE_ID':p['treeDigest'].removeprefix('sha256:'), 'APP_TAG':p['tag'],
+            'APP_ARCHIVE_NAME':p['archive']['name'], 'APP_ARCHIVE_BYTES':str(p['archive']['bytes']), 'APP_ARCHIVE_SHA':p['archive']['sha256'].removeprefix('sha256:'),
+            'APP_CARRIER_NAME':p['carrier']['name'], 'APP_CARRIER_BYTES':str(p['carrier']['bytes']), 'APP_CARRIER_SHA':p['carrier']['sha256'].removeprefix('sha256:'),
+            'APP_MANIFEST_NAME':p['manifest']['name'], 'APP_RECEIPT_NAME':p['receipt']['name'],
+            'RUNTIME_TREE':r['treeDigest'], 'RUNTIME_TAG':r['tag'],
+            'RUNTIME_ARCHIVE_NAME':r['archive']['name'], 'RUNTIME_ARCHIVE_BYTES':str(r['archive']['bytes']), 'RUNTIME_ARCHIVE_SHA':r['archive']['sha256'].removeprefix('sha256:'),
+          }
+          for key,value in values.items(): print(f'{key}={value}')
+          PY
+
+      - name: Acquire exact accepted runtime only from GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/$RUNTIME_ARCHIVE_NAME"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RUNTIME_TAG"
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$base/$RUNTIME_ARCHIVE_NAME" -o "$archive"
+          test "$(wc -c < "$archive")" -eq "$RUNTIME_ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$RUNTIME_ARCHIVE_SHA"
+          python3 - "$archive" "$RUNNER_TEMP/runtime" <<'PY'
+          import pathlib,sys,tarfile
+          archive,dest=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]); dest.mkdir()
+          with tarfile.open(archive,'r:gz') as tf:
+              members=tf.getmembers(); assert members
+              for item in members:
+                  p=pathlib.PurePosixPath(item.name)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert not item.issym() and not item.islnk()
+                  assert item.isdir() or item.isfile()
+              tf.extractall(dest,filter='data')
+          PY
+          test -f "$RUNNER_TEMP/runtime/artifact-manifest.json"
+
+      - name: Test action compiler and complete App contract
+        env:
+          ARTIFACT_RUNTIME_DIR: ${{ runner.temp }}/runtime
+          ARTIFACT_RUNTIME_MANIFEST: ${{ github.workspace }}/verification/artifact-runtime-publication/manifest.json
+          ARTIFACT_APP_PUBLICATION: ${{ github.workspace }}/verification/artifact-app-publication/manifest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/artifact-app/tests/controller.mjs | tee "$RUNNER_TEMP/controller-proof.json"
+          node packages/artifact-app/tests/e2e.mjs | tee "$RUNNER_TEMP/e2e-proof.json"
+
+      - name: Build exact carryable application
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/app"
+          node packages/artifact-app/bin/artifact-app.mjs build \
+            --definition apps/artifact-runtime-interactive/app.json \
+            --runtime-dir "$RUNNER_TEMP/runtime" \
+            --runtime-manifest verification/artifact-runtime-publication/manifest.json \
+            --controller packages/artifact-app/runtime/controller.mjs \
+            --out "$app" | tee "$RUNNER_TEMP/build-proof.json"
+          node "$app/app/bin/artifact-app.mjs" verify --input "$app" | tee "$RUNNER_TEMP/verify-proof.json"
+          test "$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/build-proof.json"))["treeDigest"])')" = "$APP_TREE"
+
+      - name: Prove real UI action to URL and browser history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 packages/artifact-app/tests/browser_smoke.py \
+            "$RUNNER_TEMP/app" "$RUNNER_TEMP/browser-proof.json" "$RUNNER_TEMP/browser-dom.html"
+          test "$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/browser-proof.json"))["treeDigest"])')" = "$APP_TREE"
+
+      - name: Build and verify exact archive and Carrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/$APP_ARCHIVE_NAME"
+          carrier="$RUNNER_TEMP/$APP_CARRIER_NAME"
+          (cd "$RUNNER_TEMP/app" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          test "$(wc -c < "$archive")" -eq "$APP_ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$APP_ARCHIVE_SHA"
+          base64 -w0 "$archive" > "$carrier"
+          test "$(wc -c < "$carrier")" -eq "$APP_CARRIER_BYTES"
+          test "$(sha256sum "$carrier" | cut -d' ' -f1)" = "$APP_CARRIER_SHA"
+          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$carrier")"
+          base64 --decode "$carrier" | cmp - "$archive"
+          cp verification/artifact-app-publication/manifest.json "$RUNNER_TEMP/$APP_MANIFEST_NAME"
+          node packages/artifact-app/bin/artifact-app.mjs carry-request \
+            --publication verification/artifact-app-publication/manifest.json > "$RUNNER_TEMP/app-carry-request.json"
+
+      - name: Prove App Carry and all immediate interfaces without source checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/app-carry-request.json" "$RUNNER_TEMP/$APP_CARRIER_NAME" "$RUNNER_TEMP/$APP_MANIFEST_NAME" "$RUNNER_TEMP/local-carry-request.json" <<'PY'
+          import json,pathlib,sys
+          request=json.load(open(sys.argv[1],encoding='utf-8'))
+          files={pathlib.Path(sys.argv[2]).name:pathlib.Path(sys.argv[2]).resolve().as_uri(),pathlib.Path(sys.argv[3]).name:pathlib.Path(sys.argv[3]).resolve().as_uri()}
+          for source in request['sources']: source['url']=files[source['name']]
+          pathlib.Path(sys.argv[4]).write_text(json.dumps(request,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize \
+            --request "$RUNNER_TEMP/local-carry-request.json" --out "$RUNNER_TEMP/local-carry"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify \
+            --input "$RUNNER_TEMP/local-carry" --receipt "$RUNNER_TEMP/local-carry-verified.json"
+          cmp "$RUNNER_TEMP/local-carry/receipt.json" "$RUNNER_TEMP/local-carry-verified.json"
+          mkdir "$RUNNER_TEMP/carried-app"
+          tar -xzf "$RUNNER_TEMP/local-carry/payload.bin" -C "$RUNNER_TEMP/carried-app"
+          cli="$RUNNER_TEMP/carried-app/app/bin/artifact-app.mjs"
+          node "$cli" verify --input "$RUNNER_TEMP/carried-app" > "$RUNNER_TEMP/carried-verify.json"
+          encoded="$(node "$cli" encode --input "$RUNNER_TEMP/carried-app" --request "$RUNNER_TEMP/carried-app/app/fixtures/default-invocation.json" --base https://example.invalid/app/)"
+          printf '%s\n' "$encoded" > "$RUNNER_TEMP/carried-encode.json"
+          url="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/carried-encode.json"))["url"])')"
+          node "$cli" decode --input "$RUNNER_TEMP/carried-app" --url "$url" > "$RUNNER_TEMP/carried-decode.json"
+          node "$cli" execute --input "$RUNNER_TEMP/carried-app" --request "$RUNNER_TEMP/carried-app/app/fixtures/execute.json" > "$RUNNER_TEMP/carried-execute.json"
+          node "$cli" apply-action --input "$RUNNER_TEMP/carried-app" --detail "$RUNNER_TEMP/carried-app/app/fixtures/action.json" --base "$url" > "$RUNNER_TEMP/carried-action.json"
+          node "$cli" source-plan --input "$RUNNER_TEMP/carried-app" --publication "$RUNNER_TEMP/local-carry/files/$APP_MANIFEST_NAME" > "$RUNNER_TEMP/carried-source-plan.json"
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          assert json.load(open(root/'carried-verify.json'))['status']=='PASS'
+          assert json.load(open(root/'carried-decode.json'))['request']['id']=='request.interactive-a2ui.state-a'
+          assert json.load(open(root/'carried-execute.json'))['status']=='PASS'
+          assert json.load(open(root/'carried-action.json'))['next']['id']=='request.interactive-a2ui.state-b'
+          assert len(json.load(open(root/'carried-source-plan.json'))['sources'])==2
+          PY
+
+      - name: Write non-authority publication receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/$APP_MANIFEST_NAME" ".github/workflows/artifact-app-release.yml" "$RUNNER_TEMP/browser-proof.json" "$RUNNER_TEMP/local-carry/receipt.json" "$RUNNER_TEMP/$APP_RECEIPT_NAME" "$GITHUB_SHA" <<'PY'
+          import hashlib,json,sys
+          def digest(path): return 'sha256:'+hashlib.sha256(open(path,'rb').read()).hexdigest()
+          manifest_path,workflow_path,browser_path,carry_path,out,commit=sys.argv[1:]
+          m=json.load(open(manifest_path,encoding='utf-8'))
+          receipt={
+            'schema':'ops.artifactAppPublicationReceipt/1','status':'PASS','authority':False,
+            'opsCommit':commit,'app':m['app'],'sources':m['sources'],'publication':m['publication'],
+            'manifestSha256':digest(manifest_path),'workflowSha256':digest(workflow_path),
+            'browserProofSha256':digest(browser_path),'localCarryReceiptSha256':digest(carry_path),
+            'observations':{'encode':True,'decode':True,'execute':True,'uiActionToUrl':True,'reload':True,'back':True,'forward':True,'sourcePlan':True},
+          }
+          open(out,'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+
+      - name: Publish immutable GitHub App Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$APP_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            target="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$APP_TAG" --jq .target_commitish)"
+            test "$target" = "$GITHUB_SHA"
+          else
+            gh release create "$APP_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Artifact App $APP_TREE" \
+              --notes "Immutable non-authority application closure over exact UI runtime and Ops assembly sources." \
+              "$RUNNER_TEMP/$APP_ARCHIVE_NAME" "$RUNNER_TEMP/$APP_CARRIER_NAME" \
+              "$RUNNER_TEMP/$APP_MANIFEST_NAME" "$RUNNER_TEMP/$APP_RECEIPT_NAME"
+          fi
+
+      - name: Public readback and GitHub-only Carry proof
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$APP_TAG"
+          for name in "$APP_ARCHIVE_NAME" "$APP_CARRIER_NAME" "$APP_MANIFEST_NAME" "$APP_RECEIPT_NAME"; do
+            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$RUNNER_TEMP/public-$name"
+          done
+          cmp "$RUNNER_TEMP/$APP_ARCHIVE_NAME" "$RUNNER_TEMP/public-$APP_ARCHIVE_NAME"
+          cmp "$RUNNER_TEMP/$APP_CARRIER_NAME" "$RUNNER_TEMP/public-$APP_CARRIER_NAME"
+          cmp "$RUNNER_TEMP/$APP_MANIFEST_NAME" "$RUNNER_TEMP/public-$APP_MANIFEST_NAME"
+          cmp "$RUNNER_TEMP/$APP_RECEIPT_NAME" "$RUNNER_TEMP/public-$APP_RECEIPT_NAME"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize \
+            --request "$RUNNER_TEMP/app-carry-request.json" --out "$RUNNER_TEMP/public-carry"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify \
+            --input "$RUNNER_TEMP/public-carry" --receipt "$RUNNER_TEMP/public-carry-verified.json"
+          cmp "$RUNNER_TEMP/public-carry/receipt.json" "$RUNNER_TEMP/public-carry-verified.json"
+          mkdir "$RUNNER_TEMP/public-carried-app"
+          tar -xzf "$RUNNER_TEMP/public-carry/payload.bin" -C "$RUNNER_TEMP/public-carried-app"
+          cli="$RUNNER_TEMP/public-carried-app/app/bin/artifact-app.mjs"
+          node "$cli" verify --input "$RUNNER_TEMP/public-carried-app"
+          node "$cli" execute --input "$RUNNER_TEMP/public-carried-app" --request "$RUNNER_TEMP/public-carried-app/app/fixtures/execute.json" | grep -q '"status":"PASS"'
+          node "$cli" source-plan --input "$RUNNER_TEMP/public-carried-app" --publication "$RUNNER_TEMP/public-carry/files/$APP_MANIFEST_NAME" | grep -q '"status":"PASS"'
+
+      - name: Upload non-authority application evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-app-publication-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/build-proof.json
+            ${{ runner.temp }}/verify-proof.json
+            ${{ runner.temp }}/controller-proof.json
+            ${{ runner.temp }}/e2e-proof.json
+            ${{ runner.temp }}/browser-proof.json
+            ${{ runner.temp }}/browser-dom.html
+            ${{ runner.temp }}/app-carry-request.json
+            ${{ runner.temp }}/local-carry/receipt.json
+            ${{ runner.temp }}/local-carry/SHA256SUMS
+            ${{ runner.temp }}/${{ env.APP_MANIFEST_NAME }}
+            ${{ runner.temp }}/${{ env.APP_RECEIPT_NAME }}
+            ${{ runner.temp }}/${{ env.APP_ARCHIVE_NAME }}
+            ${{ runner.temp }}/${{ env.APP_CARRIER_NAME }}
+          if-no-files-found: warn
+          retention-days: 30

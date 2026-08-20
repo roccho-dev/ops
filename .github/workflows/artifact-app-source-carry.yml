@@ -1,0 +1,195 @@
+name: Artifact App source carry
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      request:
+        description: Exact artifact-app-source-carry/1 JSON
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  carry:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request == null &&
+       github.event.comment.user.login == github.repository_owner &&
+       startsWith(github.event.comment.body, '/artifact-app-source-carry'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve exact source-carry request
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          DISPATCH_REQUEST: ${{ inputs.request }}
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/request.json" <<'PY'
+          import json,os,pathlib,re,sys,urllib.parse
+          if os.environ['EVENT_NAME']=='issue_comment':
+              body=os.environ.get('COMMENT_BODY','').replace('\r\n','\n')
+              prefix='/artifact-app-source-carry\n'
+              if not body.startswith(prefix): raise SystemExit('comment must contain command then raw JSON')
+              raw=body[len(prefix):].strip()
+          else:
+              raw=os.environ.get('DISPATCH_REQUEST','').strip()
+          value=json.loads(raw)
+          if set(value)!={'app','manifest','publicationTag','request_id','role','schema'}: raise SystemExit('request keys are invalid')
+          if value['schema']!='artifact-app-source-carry/1': raise SystemExit('request schema is invalid')
+          if not re.fullmatch(r'[A-Za-z0-9._-]{1,128}',value['request_id']): raise SystemExit('request_id is invalid')
+          if value['role'] not in ('runtime','assembly'): raise SystemExit('role is invalid')
+          if not re.fullmatch(r'[a-z0-9._-]+@[a-z0-9._-]+',value['app']): raise SystemExit('app is invalid')
+          if not re.fullmatch(r'artifact-app-[A-Za-z0-9._-]+',value['publicationTag']): raise SystemExit('publicationTag is invalid')
+          manifest=value['manifest']
+          if set(manifest)!={'name','sha256','url'}: raise SystemExit('manifest keys are invalid')
+          if not re.fullmatch(r'[A-Za-z0-9._-]+',manifest['name']): raise SystemExit('manifest name is invalid')
+          if not re.fullmatch(r'[0-9a-f]{64}',manifest['sha256']): raise SystemExit('manifest sha256 is invalid')
+          parsed=urllib.parse.urlsplit(manifest['url'])
+          expected=f'/roccho-dev/ops/releases/download/{value["publicationTag"]}/{manifest["name"]}'
+          if parsed.scheme!='https' or parsed.netloc!='github.com' or parsed.path!=expected or parsed.query or parsed.fragment: raise SystemExit('manifest URL is not exact allowed GitHub Release URL')
+          pathlib.Path(sys.argv[1]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+
+      - name: Read exact App manifest and resolve one source authority
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/request.json"))["manifest"]["url"])')"
+          expected_sha="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/request.json"))["manifest"]["sha256"])')"
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$url" -o "$RUNNER_TEMP/app-manifest.json"
+          test "$(sha256sum "$RUNNER_TEMP/app-manifest.json" | cut -d' ' -f1)" = "$expected_sha"
+          python3 - "$RUNNER_TEMP/request.json" "$RUNNER_TEMP/app-manifest.json" <<'PY' > "$RUNNER_TEMP/source.json"
+          import json,sys
+          request=json.load(open(sys.argv[1],encoding='utf-8')); manifest=json.load(open(sys.argv[2],encoding='utf-8'))
+          assert manifest['schema']=='ops.artifactAppPublication/1' and manifest['status']=='accepted-source' and manifest['authority'] is False
+          assert manifest['publication']['tag']==request['publicationTag']
+          assert f"{manifest['app']['id']}@{manifest['app']['version']}"==request['app']
+          matches=[source for source in manifest['sources'] if source['role']==request['role']]
+          assert len(matches)==1
+          source=matches[0]
+          assert source['repository'] in ('roccho-dev/ui','roccho-dev/ops')
+          print(json.dumps(source,sort_keys=True,separators=(',',':')))
+          PY
+          repository="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/source.json"))["repository"])')"
+          role="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/request.json"))["role"])')"
+          if python3 -c 'import json,sys; sys.exit(0 if "commit" in json.load(open(sys.argv[1])) else 1)' "$RUNNER_TEMP/source.json"; then
+            commit="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/source.json"))["commit"])')"
+            expected_tree="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/source.json"))["tree"])')"
+          else
+            test "$repository" = "roccho-dev/ops"
+            tag="$(python3 -c 'import json; print(json.load(open("'$RUNNER_TEMP'/request.json"))["publicationTag"])')"
+            commit="$(git ls-remote "https://github.com/$repository.git" "refs/tags/$tag^{}" "refs/tags/$tag" | awk 'NR==1 {print $1}')"
+            expected_tree=""
+          fi
+          test "${#commit}" -eq 40
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "role=$role" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "expected_tree=$expected_tree" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize, verify, and package exact one-commit source
+        id: build
+        env:
+          SOURCE_REPO: ${{ steps.source.outputs.repository }}
+          SOURCE_ROLE: ${{ steps.source.outputs.role }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          EXPECTED_TREE: ${{ steps.source.outputs.expected_tree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/source-repo"
+          restore="$RUNNER_TEMP/restored"
+          out="$RUNNER_TEMP/out"
+          mkdir -p "$work" "$restore" "$out"
+          git init --quiet "$work"
+          git -C "$work" remote add origin "https://github.com/$SOURCE_REPO.git"
+          git -C "$work" fetch --quiet --depth=1 origin "$SOURCE_COMMIT"
+          test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$SOURCE_COMMIT"
+          git -C "$work" checkout --quiet --detach FETCH_HEAD
+          tree="$(git -C "$work" rev-parse HEAD^{tree})"
+          if [ -n "$EXPECTED_TREE" ]; then test "$tree" = "$EXPECTED_TREE"; fi
+          test "$(git -C "$work" rev-parse --is-shallow-repository)" = true
+          test "$(git -C "$work" rev-list --count HEAD)" = 1
+          test -z "$(git -C "$work" status --porcelain)"
+          git -C "$work" fsck --no-dangling
+
+          archive="$out/$SOURCE_ROLE.$SOURCE_COMMIT.git.tar.gz"
+          carrier="$archive.b64.txt"
+          receipt="$out/$SOURCE_ROLE.$SOURCE_COMMIT.receipt.json"
+          tar -C "$work" -czf "$archive" .git
+          base64 -w0 "$archive" > "$carrier"
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.tar.gz"
+          tar -C "$restore" -xzf "$archive"
+          git -C "$restore" reset --hard HEAD
+          test "$(git -C "$restore" rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test "$(git -C "$restore" rev-parse HEAD^{tree})" = "$tree"
+          test "$(git -C "$restore" rev-parse --is-shallow-repository)" = true
+          test "$(git -C "$restore" rev-list --count HEAD)" = 1
+          git -C "$restore" fsck --no-dangling
+          python3 - "$RUNNER_TEMP/request.json" "$receipt" "$SOURCE_REPO" "$SOURCE_ROLE" "$SOURCE_COMMIT" "$tree" "$archive" "$carrier" <<'PY'
+          import hashlib,json,pathlib,sys
+          request_path,out,repo,role,commit,tree,archive,carrier=sys.argv[1:]
+          def row(path):
+              data=pathlib.Path(path).read_bytes()
+              return {'name':pathlib.Path(path).name,'bytes':len(data),'sha256':'sha256:'+hashlib.sha256(data).hexdigest()}
+          receipt={'schema':'artifact-app-source-carry-receipt/1','status':'PASS','authority':False,'request':json.load(open(request_path,encoding='utf-8')),'source':{'repository':repo,'role':role,'commit':commit,'tree':tree,'shallow':True,'commitCount':1},'archive':row(archive),'carrier':{**row(carrier),'codec':'standard-base64-no-whitespace'}}
+          pathlib.Path(out).write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+
+      - name: Upload one selected source as temporary transport
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-app-source-${{ steps.source.outputs.role }}-${{ steps.source.outputs.commit }}
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Return source identity and artifact location
+        if: ${{ always() && github.event_name == 'issue_comment' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REQUEST_COMMENT_URL: ${{ github.event.comment.html_url }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          SOURCE_REPO: ${{ steps.source.outputs.repository }}
+          SOURCE_ROLE: ${{ steps.source.outputs.role }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          SOURCE_TREE: ${{ steps.build.outputs.tree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Artifact App source carry result
+
+          - status: \`$JOB_STATUS\`
+          - role: \`$SOURCE_ROLE\`
+          - source: \`$SOURCE_REPO@$SOURCE_COMMIT\`
+          - tree: \`$SOURCE_TREE\`
+          - shallow / commit count: \`true / 1\`
+          - run: $RUN_URL
+          - artifact ID: \`$ARTIFACT_ID\`
+          - artifact URL: $ARTIFACT_URL
+          - artifact digest: \`$ARTIFACT_DIGEST\`
+          - request: $REQUEST_COMMENT_URL
+
+          The artifact is temporary transport. Git remains source authority.
+          EOF
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
