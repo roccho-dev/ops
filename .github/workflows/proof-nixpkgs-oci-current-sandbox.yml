@@ -57,7 +57,15 @@ jobs:
 
           nixpkgs_version="$(nix eval --raw --impure --expr "let pkgs = import (builtins.storePath \"$source_path\") { system = \"x86_64-linux\"; }; in pkgs.lib.version")"
           busybox_path="$(nix build --no-link --print-out-paths "$exact_ref#busybox")"
-          skopeo_path="$(nix build --no-link --print-out-paths "$exact_ref#skopeo")"
+          mapfile -t skopeo_candidates < <(nix build --no-link --print-out-paths "$exact_ref#skopeo")
+          skopeo_path=""
+          for candidate in "${skopeo_candidates[@]}"; do
+            if test -x "$candidate/bin/skopeo"; then
+              skopeo_path="$candidate"
+              break
+            fi
+          done
+          test -n "$skopeo_path"
           busybox_version="$($busybox_path/bin/busybox | sed -n '1s/^BusyBox v\([^ ]*\).*/\1/p')"
           skopeo_version="$($skopeo_path/bin/skopeo --version | sed 's/^skopeo version //')"
           test -n "$nixpkgs_version"
@@ -151,7 +159,7 @@ jobs:
           fi
 
           python3 - "$oci_out/image.oci.tar" "$WORK/tampered.oci.tar" <<'PY'
-          import io, json, pathlib, tarfile, sys
+          import io, pathlib, tarfile, sys
           source, target = map(pathlib.Path, sys.argv[1:])
           with tarfile.open(source, "r:*") as src, tarfile.open(target, "w") as dst:
               mutated = False
