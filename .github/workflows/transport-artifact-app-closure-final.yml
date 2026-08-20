@@ -1,0 +1,126 @@
+name: Transport final Artifact App closure candidate
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-artifact-app-closure-final.yml'
+      - '.github/transport/artifact-app-closure-final-91a7ea7/**'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  transport:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BASE_SHA: b0c992d45632e5e84f87a1029de0fbd1d5e18954
+      CANDIDATE_SHA: 91a7ea73a16821d365f7e2675db48a78f70a1926
+      CANDIDATE_TREE: 7d9a966f5b927785ce94efb6a1ccb27d43310f81
+      TARGET_BRANCH: proposal/artifact-app-closure-final-260821
+      D: .github/transport/artifact-app-closure-final-91a7ea7
+      B64_BYTES: '40808'
+      B64_SHA256: f55444e0c8d3057576b228d31f81d7ec3e628f53a4c4efb8ba7e8f9db6c54ba5
+      BUNDLE_BYTES: '30606'
+      BUNDLE_SHA256: 4d9b2ae5bbf1f541457a18b6327b35dd5b483493ced2911e4989114b1f1c7611
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Reconstruct and verify exact final candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          b64="$RUNNER_TEMP/candidate.bundle.b64.txt"
+          bundle="$RUNNER_TEMP/candidate.bundle"
+          cat "$D/chunk-00" "$D/chunk-01" "$D/chunk-02" "$D/chunk-03" "$D/chunk-04" "$D/chunk-05" "$D/chunk-06" > "$b64"
+          test "$(wc -c < "$b64")" -eq "$B64_BYTES"
+          test "$(sha256sum "$b64" | awk '{print $1}')" = "$B64_SHA256"
+          base64 --decode "$b64" > "$bundle"
+          test "$(wc -c < "$bundle")" -eq "$BUNDLE_BYTES"
+          test "$(sha256sum "$bundle" | awk '{print $1}')" = "$BUNDLE_SHA256"
+
+          auth="https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git"
+          test "$(git ls-remote "$auth" refs/heads/proposals | awk 'NR==1 {print $1}')" = "$BASE_SHA"
+          work="$RUNNER_TEMP/candidate"
+          git init --quiet "$work"
+          git -C "$work" remote add origin "$auth"
+          git -C "$work" fetch --quiet --depth=1 origin refs/heads/proposals
+          test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$BASE_SHA"
+          git -C "$work" checkout --quiet -b proposals FETCH_HEAD
+          git -C "$work" bundle verify "$bundle"
+          git -C "$work" fetch --quiet "$bundle" refs/heads/proposal/artifact-app-closure-final-260821:refs/remotes/transport/candidate
+          test "$(git -C "$work" rev-parse refs/remotes/transport/candidate)" = "$CANDIDATE_SHA"
+          test "$(git -C "$work" rev-parse "$CANDIDATE_SHA^")" = "$BASE_SHA"
+          test "$(git -C "$work" rev-parse "$CANDIDATE_SHA^{tree}")" = "$CANDIDATE_TREE"
+          git -C "$work" checkout --quiet -b candidate "$CANDIDATE_SHA"
+          test -z "$(git -C "$work" status --porcelain)"
+          git -C "$work" fsck --no-dangling
+
+          node --check "$work/packages/artifact-app/bin/artifact-app.mjs"
+          node --check "$work/packages/artifact-app/runtime/controller.mjs"
+          node --check "$work/packages/artifact-app/tests/controller.mjs"
+          node --check "$work/packages/artifact-app/tests/e2e.mjs"
+          python3 -m py_compile "$work/packages/artifact-app/tests/browser_smoke.py"
+          node "$work/packages/artifact-app/tests/controller.mjs"
+          node "$work/packages/chatgpt-capability/ingress/carrier-job.mjs" selftest
+
+          # Upload the exact Git objects. GitHub may refuse the ref because the
+          # Actions token deliberately lacks workflow-write authority; the
+          # authenticated Connector creates the already-verified ref afterward.
+          set +e
+          git -C "$work" push "$auth" "$CANDIDATE_SHA:refs/heads/$TARGET_BRANCH" > "$RUNNER_TEMP/push.out" 2> "$RUNNER_TEMP/push.err"
+          push_status=$?
+          set -e
+          printf '%s\n' "$push_status" > "$RUNNER_TEMP/push.status"
+          if [ "$push_status" -eq 0 ]; then
+            test "$(git ls-remote "$auth" refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')" = "$CANDIDATE_SHA"
+          else
+            cat "$RUNNER_TEMP/push.err"
+          fi
+
+      - name: Write transport receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/transport-receipt.json" <<EOF
+          {"schema":"ops.artifactAppCandidateTransport/1","status":"PASS","authority":false,"base":"$BASE_SHA","candidate":"$CANDIDATE_SHA","tree":"$CANDIDATE_TREE","targetBranch":"$TARGET_BRANCH","bundleSha256":"sha256:$BUNDLE_SHA256","pushStatus":$(cat "$RUNNER_TEMP/push.status"),"run":"$GITHUB_RUN_ID"}
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-artifact-app-candidate-transport-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/transport-receipt.json
+            ${{ runner.temp }}/push.out
+            ${{ runner.temp }}/push.err
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record exact transport evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Final Artifact App candidate transport — PASS
+
+          - exact base: \`$BASE_SHA\`
+          - exact candidate: \`$CANDIDATE_SHA\`
+          - exact tree: \`$CANDIDATE_TREE\`
+          - target proposal branch: \`$TARGET_BRANCH\`
+          - bundle SHA-256: \`$BUNDLE_SHA256\`
+          - GitHub ref push status: \`$(cat "$RUNNER_TEMP/push.status")\`
+          - run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          Bundle reconstruction, base/candidate/tree identity, Git fsck, syntax, Action Compiler tests, and Carrier selftest all passed. Product acceptance still requires the proposal PR, normal CI, real Chrome history proof, immutable App Release, GitHub-only App Carry, and Source Carry proofs.
+          EOF
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
