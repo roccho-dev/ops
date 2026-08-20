@@ -40,11 +40,13 @@ pkgs.runCommand "${imageName}-oci-${shortRev}" {
   export TMPDIR="$NIX_BUILD_TOP/tmp"
   mkdir -p "$TMPDIR" "$out"
   cp ${dockerImage} "$out/docker-image.tar"
-  skopeo copy --insecure-policy \
+  skopeo --tmpdir "$TMPDIR" copy --insecure-policy \
     "docker-archive:${dockerImage}" \
     "oci-archive:$out/image.oci.tar:${imageName}:${imageTag}"
-  skopeo inspect --raw "oci-archive:$out/image.oci.tar" > "$out/manifest.raw.json"
-  skopeo inspect "oci-archive:$out/image.oci.tar" > "$out/inspect.json"
+  skopeo --tmpdir "$TMPDIR" inspect --raw \
+    "oci-archive:$out/image.oci.tar" > "$out/manifest.raw.json"
+  skopeo --tmpdir "$TMPDIR" inspect \
+    "oci-archive:$out/image.oci.tar" > "$out/inspect.json"
   printf '%s\n' '${nixpkgsRev}' > "$out/nixpkgs.rev"
   printf '%s\n' '${pkgs.lib.version}' > "$out/nixpkgs.version"
   printf '%s\n' '${imageName}:${imageTag}' > "$out/image.ref"
