@@ -37,7 +37,8 @@ pkgs.runCommand "${imageName}-oci-${shortRev}" {
   };
 } ''
   set -euo pipefail
-  mkdir -p "$out"
+  export TMPDIR="$NIX_BUILD_TOP/tmp"
+  mkdir -p "$TMPDIR" "$out"
   cp ${dockerImage} "$out/docker-image.tar"
   skopeo copy --insecure-policy \
     "docker-archive:${dockerImage}" \
