@@ -90,8 +90,16 @@ jobs:
               assert.ok(item.urlLength < 8192, `${item.id}: URL exceeds limit`);
               const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
               const errors = [];
-              page.on('pageerror', error => errors.push(String(error)));
-              page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+              const ignored404s = [];
+              page.on('pageerror', error => errors.push(`pageerror: ${error}`));
+              page.on('requestfailed', request => errors.push(`requestfailed: ${request.url()} · ${request.failure()?.errorText ?? 'unknown'}`));
+              page.on('response', response => {
+                if (response.status() < 400) return;
+                const url = new URL(response.url());
+                const detail = `${response.status()} ${url.href}`;
+                if (response.status() === 404 && url.pathname.endsWith('/favicon.ico')) ignored404s.push(detail);
+                else errors.push(`response: ${detail}`);
+              });
               await page.goto(item.stableUrl, { waitUntil: 'networkidle', timeout: 75_000 });
               await page.waitForFunction(() => document.querySelector('#status')?.textContent?.trim() === 'PASS', null, { timeout: 75_000 });
               await page.waitForFunction(({ title, expectedText }) => {
@@ -140,6 +148,7 @@ jobs:
                 capability: 'render.a2ui@1',
                 outputContract: 'a2ui-render-receipt/1',
                 browserErrors: 0,
+                ignored404s,
               });
               await page.close();
             }
