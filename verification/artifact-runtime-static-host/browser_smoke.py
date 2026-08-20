@@ -210,6 +210,10 @@ def canonical_bytes(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
 
 
+def canonical_document_path(value: str) -> str:
+    return value.removesuffix("index.html") if value.endswith("/index.html") else value
+
+
 def main(argv: list[str]) -> int:
     invariant(len(argv) == 8, "expected local_root root_url tree_digest source_sha project proof_path dom_path")
     local_root = Path(argv[1]).resolve()
@@ -225,7 +229,7 @@ def main(argv: list[str]) -> int:
     request = json.loads(fixtures[0].read_text(encoding="utf-8"))["request"]
     canonical = canonical_bytes(request)
     token = base64.urlsafe_b64encode(gzip.compress(canonical, mtime=0)).decode().rstrip("=")
-    initial_url = f"{root}/index.html#invoke={token}"
+    requested_initial_url = f"{root}/index.html#invoke={token}"
 
     browser = next((value for name in ("google-chrome", "chromium", "chromium-browser") if (value := shutil.which(name))), None)
     invariant(browser is not None, "Chromium browser is unavailable")
@@ -254,14 +258,22 @@ def main(argv: list[str]) -> int:
                     time.sleep(0.25)
             invariant(version is not None, "Chrome DevTools endpoint did not start")
 
-            first_socket, first = open_page(port, initial_url)
+            first_socket, first = open_page(port, requested_initial_url)
             sockets.append(first_socket)
             initial = wait_for(
                 first,
                 lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 0,
                 "initial app state",
             )
-            invariant(initial.get("href") == initial_url, "initial browser URL changed unexpectedly")
+            initial_url = initial.get("href")
+            invariant(isinstance(initial_url, str), "initial browser URL is missing")
+            requested_parts = urllib.parse.urlsplit(requested_initial_url)
+            initial_parts = urllib.parse.urlsplit(initial_url)
+            invariant((initial_parts.scheme, initial_parts.netloc) == (requested_parts.scheme, requested_parts.netloc), "initial browser origin changed unexpectedly")
+            invariant(canonical_document_path(initial_parts.path) == canonical_document_path(requested_parts.path), "initial browser document path changed unexpectedly")
+            invariant(initial_parts.query == requested_parts.query, "initial browser query changed unexpectedly")
+            invariant(initial_parts.fragment == requested_parts.fragment, "initial browser fragment changed unexpectedly")
+            invariant(initial.get("request") == request, "initial browser did not restore the exact request")
             invariant(initial.get("capability") == "render.a2ui.app@1", "initial capability is not render.a2ui.app@1")
             invariant("a2ui-app-render-receipt/1" in initial.get("outputContracts", []), "initial output contract is missing")
             invariant("INCONCLUSIVE" not in str(initial.get("progress", "")), "initial browser produced INCONCLUSIVE")
@@ -333,6 +345,8 @@ def main(argv: list[str]) -> int:
         "outputContract": "a2ui-app-render-receipt/1",
         "initial": {
             "count": 0,
+            "requestedUrl": requested_initial_url,
+            "requestedUrlSha256": f"sha256:{hashlib.sha256(requested_initial_url.encode()).hexdigest()}",
             "url": initial_url,
             "urlSha256": f"sha256:{hashlib.sha256(initial_url.encode()).hexdigest()}",
             "requestSha256": initial_request_digest,
