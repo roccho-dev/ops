@@ -1,0 +1,269 @@
+name: Proof public Artifact Action URL round-trip
+
+on:
+  push:
+    branches:
+      - proof/public-artifact-action-roundtrip-260821
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout the current accepted Ops binding
+        uses: actions/checkout@v4
+        with:
+          ref: proposals
+          path: current
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Materialize the exact published app from GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          closure="$GITHUB_WORKSPACE/current/packages/artifact-runtime-app/app.json"
+          python3 - "$closure" "$RUNNER_TEMP" <<'PY'
+          import hashlib,json,pathlib,sys,urllib.request
+          closure_path,out_dir=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2])
+          x=json.loads(closure_path.read_text(encoding='utf-8')); p=x['publication']
+          assert x['schema']=='ops.artifactAppClosure/1'
+          assert x['id']=='artifact-runtime.bidirectional'
+          url=f"https://github.com/{p['repository']}/releases/download/{p['tag']}/{p['archive']['name']}"
+          data=urllib.request.urlopen(url,timeout=60).read()
+          assert len(data)==p['archive']['bytes']
+          assert 'sha256:'+hashlib.sha256(data).hexdigest()==p['archive']['sha256']
+          archive=out_dir/p['archive']['name']; archive.write_bytes(data)
+          ui=next(s for s in x['sourceAuthorities'] if s['repository']=='roccho-dev/ui')
+          (out_dir/'proof-meta.json').write_text(json.dumps({
+            'appId':x['id'],'treeDigest':p['treeDigest'],'archive':str(archive),
+            'uiCommit':ui['commit'],'uiTree':ui['tree'],
+            'staticBase':'https://stg-artifact-runtime.pages.dev/'+x['staticHost']['pathPrefix'].strip('/')+'/',
+          },sort_keys=True)+'\n',encoding='utf-8')
+          PY
+
+          python3 - "$RUNNER_TEMP/proof-meta.json" "$RUNNER_TEMP/app" <<'PY'
+          import json,pathlib,sys,tarfile
+          meta=json.load(open(sys.argv[1],encoding='utf-8')); dest=pathlib.Path(sys.argv[2]); dest.mkdir()
+          with tarfile.open(meta['archive'],'r:gz') as tf:
+            members=tf.getmembers(); assert members and len(members)<=10000
+            for m in members:
+              p=pathlib.PurePosixPath(m.name)
+              assert not p.is_absolute() and '..' not in p.parts
+              assert m.isdir() or m.isfile()
+            tf.extractall(dest)
+          PY
+
+          ui_commit="$(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/proof-meta.json"))["uiCommit"])')"
+          for spec in \
+            'apps/artifact-shell/fixtures/requests/render-a2ui-inline.json:render.json' \
+            'apps/artifact-shell/fixtures/requests/inspect-json-inline.json:inspect.json'; do
+            source="${spec%%:*}"; target="${spec##*:}"
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+              "https://raw.githubusercontent.com/roccho-dev/ui/$ui_commit/$source" \
+              -o "$RUNNER_TEMP/$target"
+          done
+
+      - name: Verify hosted bytes and generate the initial canonical URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/generate.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {pathToFileURL} from 'node:url';
+
+          const temp=process.env.RUNNER_TEMP;
+          const root=path.join(temp,'app');
+          const meta=JSON.parse(fs.readFileSync(path.join(temp,'proof-meta.json'),'utf8'));
+          const manifestBytes=fs.readFileSync(path.join(root,'artifact-manifest.json'));
+          const manifest=JSON.parse(manifestBytes);
+          assert.equal(manifest.treeDigest,meta.treeDigest);
+          const remote=Buffer.from(await (await fetch(meta.staticBase+'artifact-manifest.json',{cache:'no-store'})).arrayBuffer());
+          assert.deepEqual(remote,manifestBytes);
+          const find=suffix=>{
+            const rows=manifest.files.filter(x=>x.path.endsWith(suffix));
+            assert.equal(rows.length,1,`${suffix}: ${rows.map(x=>x.path)}`);
+            return path.join(root,...rows[0].path.split('/'));
+          };
+          const codec=await import(pathToFileURL(find('packages/url-module/src/index.mjs')).href);
+          const invocationModule=await import(pathToFileURL(find('packages/artifact-invocation/src/index.mjs')).href);
+          const a2ui=await import(pathToFileURL(find('packages/a2ui-browser/src/index.mjs')).href);
+          const initial=JSON.parse(fs.readFileSync(path.join(temp,'render.json'),'utf8'));
+          const next=JSON.parse(fs.readFileSync(path.join(temp,'inspect.json'),'utf8'));
+          next.id='request.public-action-url.pass';
+          next.inputs[0].source.value={carried:true,count:2,title:'Public Action URL'};
+          const validNext=invocationModule.validateArtifactInvocation(next);
+          const surface=initial.inputs[0].source.value;
+          surface.surfaceId='public-action-url-proof';
+          const context={invocation:validNext};
+          const candidates=[];
+          for(const labelKey of ['label','text','title','value']) for(const actionKey of ['action','onPress','onClick']){
+            candidates.push({id:'proof-next',component:'Button',[labelKey]:'Next',[actionKey]:'artifact.invoke',context});
+          }
+          const catalog=a2ui.createBaseCatalog();
+          let button=null;
+          for(const candidate of candidates){
+            try{catalog.validateComponent(candidate);button=candidate;break}catch{}
+          }
+          assert.ok(button,'no valid Button candidate');
+          const rootComponent=surface.components.find(x=>x.id===(surface.rootId??'root'));
+          assert.ok(rootComponent && Array.isArray(rootComponent.children));
+          assert.equal(surface.components.some(x=>x.id===button.id),false);
+          rootComponent.children.push(button.id);
+          surface.components.push(button);
+          for(const component of surface.components) catalog.validateComponent(component);
+          initial.id='request.public-action-url.render';
+          const validInitial=invocationModule.validateArtifactInvocation(initial);
+          const base=meta.staticBase+'index.html';
+          const url=await codec.createUrlModuleUrl({base,fragment:'invoke',value:validInitial});
+          assert.deepEqual(await codec.readUrlModule({fragment:'invoke',input:url}),validInitial);
+          fs.writeFileSync(path.join(temp,'browser-input.json'),JSON.stringify({meta,base,url,initial:validInitial,next:validNext,button},null,2)+'\n');
+          console.log(JSON.stringify({status:'PASS',urlLength:url.length,base}));
+          JS
+          RUNNER_TEMP="$RUNNER_TEMP" node "$RUNNER_TEMP/generate.mjs"
+
+      - name: Install exact browser proof driver
+        working-directory: ${{ runner.temp }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          printf '%s\n' "$chrome" > "$RUNNER_TEMP/chrome-bin"
+          "$chrome" --version | tee "$RUNNER_TEMP/chrome-version"
+
+      - name: Click, rewrite URL, restore fresh state, and traverse History
+        working-directory: ${{ runner.temp }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/browser-proof.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import {chromium} from 'playwright-core';
+
+          const input=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/browser-input.json','utf8'));
+          const executablePath=fs.readFileSync(process.env.RUNNER_TEMP+'/chrome-bin','utf8').trim();
+          const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+          const page=await browser.newPage({viewport:{width:1280,height:900}});
+          const errors=[];
+          page.on('pageerror',error=>errors.push(String(error)));
+          page.on('console',message=>{if(message.type()==='error')errors.push(message.text())});
+          const waitPass=target=>target.waitForFunction(()=>document.querySelector('#status')?.textContent?.trim()==='PASS');
+          const waitInspection=target=>target.waitForFunction(()=>document.querySelector('#result')?.textContent?.includes('json-inspection/1'));
+
+          await page.goto(input.url,{waitUntil:'networkidle'});
+          await waitPass(page);
+          const button=page.locator('[data-a2ui-id="proof-next"]');
+          await button.waitFor({state:'visible'});
+          const initialUrl=page.url();
+          await page.screenshot({path:process.env.RUNNER_TEMP+'/initial.png',fullPage:true});
+          await button.click();
+          await page.waitForFunction(previous=>location.href!==previous,initialUrl);
+          await waitPass(page);
+          await waitInspection(page);
+          const changedUrl=page.url();
+          assert.notEqual(changedUrl,initialUrl);
+          assert.ok(changedUrl.includes('#invoke='));
+          const changedResult=JSON.parse(await page.locator('#result').textContent());
+          assert.equal(changedResult.status,'PASS');
+          assert.equal(changedResult.outputs[0].contract,'json-inspection/1');
+          await page.screenshot({path:process.env.RUNNER_TEMP+'/changed.png',fullPage:true});
+
+          const fresh=await browser.newPage({viewport:{width:1280,height:900}});
+          const freshErrors=[];
+          fresh.on('pageerror',error=>freshErrors.push(String(error)));
+          fresh.on('console',message=>{if(message.type()==='error')freshErrors.push(message.text())});
+          await fresh.goto(changedUrl,{waitUntil:'networkidle'});
+          await waitPass(fresh);
+          await waitInspection(fresh);
+          const freshResult=JSON.parse(await fresh.locator('#result').textContent());
+          assert.deepEqual(freshResult,changedResult);
+          await fresh.reload({waitUntil:'networkidle'});
+          await waitPass(fresh);
+          await waitInspection(fresh);
+          assert.deepEqual(JSON.parse(await fresh.locator('#result').textContent()),changedResult);
+
+          await page.goBack();
+          await page.waitForFunction(expected=>location.href===expected,initialUrl);
+          await waitPass(page);
+          await page.locator('[data-a2ui-id="proof-next"]').waitFor({state:'visible'});
+          await page.goForward();
+          await page.waitForFunction(expected=>location.href===expected,changedUrl);
+          await waitPass(page);
+          await waitInspection(page);
+          assert.deepEqual(JSON.parse(await page.locator('#result').textContent()),changedResult);
+          assert.deepEqual(errors,[]);
+          assert.deepEqual(freshErrors,[]);
+
+          const receipt={
+            schema:'ops.artifactAppPublicBrowserReceipt/1',status:'PASS',authority:false,
+            appId:input.meta.appId,publicationTree:input.meta.treeDigest,
+            base:input.base,initialUrlLength:initialUrl.length,changedUrlLength:changedUrl.length,
+            observations:{
+              publicManifestByteReadback:'PASS',initialRender:'PASS',realButtonClick:'PASS',
+              actionToCanonicalUrl:'PASS',nextExecution:'PASS',freshUrlRestore:'PASS',
+              reloadRestore:'PASS',backRestore:'PASS',forwardRestore:'PASS',browserErrors:0,
+            },
+            browser:{driver:'playwright-core@1.55.0',executablePath},
+          };
+          fs.writeFileSync(process.env.RUNNER_TEMP+'/public-browser-receipt.json',JSON.stringify(receipt,null,2)+'\n');
+          console.log(JSON.stringify(receipt));
+          await browser.close();
+          JS
+          RUNNER_TEMP="$RUNNER_TEMP" node "$RUNNER_TEMP/browser-proof.mjs"
+
+      - name: Upload non-authority browser evidence
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-runtime-public-action-proof-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/public-browser-receipt.json
+            ${{ runner.temp }}/browser-input.json
+            ${{ runner.temp }}/chrome-version
+            ${{ runner.temp }}/initial.png
+            ${{ runner.temp }}/changed.png
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write the public round-trip receipt to the app-closure Issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/public-browser-receipt.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8')); o=x['observations']
+          print('## Public Artifact Action URL round-trip — PASS')
+          print()
+          print(f"- app: `{x['appId']}`")
+          print(f"- publication tree: `{x['publicationTree']}`")
+          print(f"- public base: {x['base']}")
+          print(f"- initial render / real Button click: **{o['initialRender']} / {o['realButtonClick']}**")
+          print(f"- Action → canonical URL / next execution: **{o['actionToCanonicalUrl']} / {o['nextExecution']}**")
+          print(f"- Fresh URL / reload: **{o['freshUrlRestore']} / {o['reloadRestore']}**")
+          print(f"- Back / Forward: **{o['backRestore']} / {o['forwardRestore']}**")
+          print(f"- browser errors: `{o['browserErrors']}`")
+          print(f"- run: {os.environ['RUN_URL']}")
+          print(f"- artifact ID / digest: `{os.environ['ARTIFACT_ID']}` / `{os.environ['ARTIFACT_DIGEST']}`")
+          print()
+          print('Git commits remain source authority; hosted bytes and this receipt are non-authority projections.')
+          PY
+          gh issue comment 193 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
