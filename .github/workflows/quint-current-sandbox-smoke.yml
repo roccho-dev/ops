@@ -12,13 +12,14 @@ permissions:
 jobs:
   materialize:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       QUINT_VERSION: '0.32.0'
       QUINT_URL: https://github.com/quint-co/quint/releases/download/v0.32.0/quint-linux-amd64
       QUINT_SHA256: 939b64095b706017f2f202c6f99c860c40be7c31bddc2b98557316e50f42cd7f
+      APALACHE_VERSION: '0.56.1'
     steps:
-      - name: Acquire exact Quint binary and run bounded fixtures
+      - name: Acquire exact Quint runtime and run simulator plus TLC fixtures
         shell: bash
         run: |
           set -euo pipefail
@@ -26,7 +27,8 @@ jobs:
 
           out="$RUNNER_TEMP/quint-v${QUINT_VERSION}-smoke"
           bin="$out/bin/quint"
-          mkdir -p "$out/bin" "$out/models" "$out/probes"
+          quint_home="$RUNNER_TEMP/quint-home"
+          mkdir -p "$out/bin" "$out/models" "$out/probes" "$out/runtime" "$quint_home"
 
           curl \
             --proto '=https' \
@@ -50,6 +52,7 @@ jobs:
 
           timeout 20s "$bin" --version > "$out/probes/version.txt" 2>&1
           grep -F "$QUINT_VERSION" "$out/probes/version.txt"
+          java -version > "$out/probes/java-version.txt" 2>&1
 
           cat > "$out/models/bad.qnt" <<'QNT'
           module bad {
@@ -83,6 +86,14 @@ jobs:
           }
           QNT
 
+          cat > "$out/models/tlc-config.json" <<'JSON'
+          {
+            "maxHeap": "-Xmx1G",
+            "stackSize": "-Xss64m",
+            "workers": 1
+          }
+          JSON
+
           timeout 30s "$bin" typecheck "$out/models/bad.qnt" > "$out/probes/typecheck-bad.txt" 2>&1
           timeout 30s "$bin" typecheck "$out/models/good.qnt" > "$out/probes/typecheck-good.txt" 2>&1
 
@@ -94,9 +105,9 @@ jobs:
             --seed=0x1 \
             --invariant=staysZero \
             "$out/models/bad.qnt" > "$out/probes/bad-run.txt" 2>&1
-          bad_exit=$?
+          bad_run_exit=$?
           set -e
-          test "$bad_exit" -eq 1
+          test "$bad_run_exit" -eq 1
           grep -F 'Invariant violated' "$out/probes/bad-run.txt"
           grep -F '[violation] Found an issue' "$out/probes/bad-run.txt"
 
@@ -107,11 +118,60 @@ jobs:
             --seed=0x1 \
             --invariant=staysZero \
             "$out/models/good.qnt" > "$out/probes/good-run.txt" 2>&1
-          good_exit=$?
-          test "$good_exit" -eq 0
+          good_run_exit=$?
+          test "$good_run_exit" -eq 0
           grep -F '[ok] No violation found' "$out/probes/good-run.txt"
 
-          python3 - "$out" "$bad_exit" "$good_exit" <<'PY'
+          export HOME="$quint_home"
+          export TERM=xterm
+
+          set +e
+          timeout 300s "$bin" verify \
+            --backend=tlc \
+            --tlc-config="$out/models/tlc-config.json" \
+            --verbosity=3 \
+            --invariant=staysZero \
+            "$out/models/bad.qnt" > "$out/probes/bad-tlc.txt" 2>&1
+          bad_tlc_exit=$?
+          set -e
+          test "$bad_tlc_exit" -eq 1
+          grep -Ei 'counterexample|Invariant.*violat' "$out/probes/bad-tlc.txt"
+
+          timeout 300s "$bin" verify \
+            --backend=tlc \
+            --tlc-config="$out/models/tlc-config.json" \
+            --verbosity=3 \
+            --invariant=staysZero \
+            "$out/models/good.qnt" > "$out/probes/good-tlc.txt" 2>&1
+          good_tlc_exit=$?
+          test "$good_tlc_exit" -eq 0
+
+          apalache_root="$HOME/.quint/apalache-dist-${APALACHE_VERSION}"
+          apalache_jar="$apalache_root/apalache/lib/apalache.jar"
+          test -f "$apalache_jar"
+          test -s "$apalache_jar"
+          (
+            cd "$HOME/.quint"
+            find "apalache-dist-${APALACHE_VERSION}" -type f -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > "$out/probes/apalache-tree.SHA256SUMS"
+            tar \
+              --sort=name \
+              --mtime='UTC 1970-01-01' \
+              --owner=0 \
+              --group=0 \
+              --numeric-owner \
+              -cf - "apalache-dist-${APALACHE_VERSION}" \
+              | gzip -n > "$out/runtime/apalache-dist-${APALACHE_VERSION}.tar.gz"
+          )
+
+          python3 - \
+            "$out" \
+            "$bad_run_exit" \
+            "$good_run_exit" \
+            "$bad_tlc_exit" \
+            "$good_tlc_exit" \
+            "$apalache_jar" <<'PY'
           import hashlib
           import json
           import os
@@ -119,9 +179,11 @@ jobs:
           import sys
 
           root = pathlib.Path(sys.argv[1])
+          apalache_jar = pathlib.Path(sys.argv[6])
+          apalache_archive = root / f"runtime/apalache-dist-{os.environ['APALACHE_VERSION']}.tar.gz"
           sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
           receipt = {
-              "schema": "ops.quint-current-sandbox-smoke/1",
+              "schema": "ops.quint-current-sandbox-smoke/2",
               "status": "PASS",
               "source": {
                   "repository": "quint-co/quint",
@@ -135,24 +197,33 @@ jobs:
                   "bytes": (root / "bin/quint").stat().st_size,
                   "versionText": (root / "probes/version.txt").read_text(encoding="utf-8").strip(),
               },
+              "verificationRuntime": {
+                  "backend": "tlc",
+                  "apalacheVersion": os.environ["APALACHE_VERSION"],
+                  "apalacheJarSha256": sha(apalache_jar),
+                  "apalacheArchiveSha256": sha(apalache_archive),
+                  "apalacheArchiveBytes": apalache_archive.stat().st_size,
+                  "javaVersionText": (root / "probes/java-version.txt").read_text(encoding="utf-8").strip(),
+              },
               "fixtures": {
                   "badModelSha256": sha(root / "models/bad.qnt"),
                   "goodModelSha256": sha(root / "models/good.qnt"),
+                  "tlcConfigSha256": sha(root / "models/tlc-config.json"),
                   "typecheck": "PASS",
-                  "knownViolation": {"exit": int(sys.argv[2]), "status": "PASS"},
-                  "knownSafeBoundedRun": {"exit": int(sys.argv[3]), "status": "PASS"},
+                  "simulatorKnownViolation": {"exit": int(sys.argv[2]), "status": "PASS"},
+                  "simulatorKnownSafeBoundedRun": {"exit": int(sys.argv[3]), "status": "PASS"},
+                  "tlcKnownViolation": {"exit": int(sys.argv[4]), "status": "PASS"},
+                  "tlcKnownSafeFiniteModel": {"exit": int(sys.argv[5]), "status": "PASS"},
               },
               "execution": {
-                  "backend": "typescript",
-                  "maxSamples": 1,
-                  "maxSteps": 2,
-                  "seed": "0x1",
+                  "simulator": {"backend": "typescript", "maxSamples": 1, "maxSteps": 2, "seed": "0x1"},
+                  "verifier": {"backend": "tlc", "workers": 1, "maxHeap": "-Xmx1G", "stackSize": "-Xss64m"},
               },
               "boundary": {
                   "topicIndependent": True,
                   "implementationMapping": False,
-                  "exhaustiveModelChecking": False,
-                  "claim": "bounded simulator smoke only",
+                  "generalSystemProof": False,
+                  "claim": "topic-independent Quint simulator and TLC verifier smoke",
               },
           }
           (root / "receipt.json").write_text(
@@ -169,7 +240,7 @@ jobs:
             sha256sum --check SHA256SUMS
           )
 
-      - name: Upload exact Quint runtime and smoke evidence
+      - name: Upload exact Quint runtime and verification evidence
         uses: actions/upload-artifact@v4
         with:
           name: quint-v0.32.0-current-sandbox-smoke-${{ github.run_id }}
