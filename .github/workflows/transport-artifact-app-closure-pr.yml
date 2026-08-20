@@ -31,9 +31,12 @@ jobs:
           fetch-depth: 1
 
       - name: Reconstruct and verify exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+          auth="https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git"
           b64="$RUNNER_TEMP/candidate.bundle.b64.txt"
           bundle="$RUNNER_TEMP/candidate.bundle"
           cat "$D/chunk-00" "$D/chunk-01-0" "$D/chunk-01-1" "$D/chunk-02" "$D/chunk-03-0" "$D/chunk-03-1" "$D/chunk-04" "$D/chunk-05" > "$b64"
@@ -42,11 +45,11 @@ jobs:
           base64 --decode "$b64" > "$bundle"
           test "$(wc -c < "$bundle")" -eq 29534
           test "$(sha256sum "$bundle" | awk '{print $1}')" = "$BUNDLE_SHA256"
-          test "$(git ls-remote https://github.com/$GITHUB_REPOSITORY.git refs/heads/proposals | awk 'NR==1 {print $1}')" = "$BASE_SHA"
+          test "$(git ls-remote "$auth" refs/heads/proposals | awk 'NR==1 {print $1}')" = "$BASE_SHA"
 
           work="$RUNNER_TEMP/candidate"
           git init --quiet "$work"
-          git -C "$work" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C "$work" remote add origin "$auth"
           git -C "$work" fetch --quiet --depth=1 origin refs/heads/proposals
           test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$BASE_SHA"
           git -C "$work" checkout --quiet -b proposals FETCH_HEAD
@@ -67,13 +70,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          existing="$(git ls-remote https://github.com/$GITHUB_REPOSITORY.git refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')"
+          auth="https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git"
+          existing="$(git ls-remote "$auth" refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')"
           if [ -n "$existing" ]; then
             test "$existing" = "$CANDIDATE_SHA"
           else
-            git -C "$RUNNER_TEMP/candidate" push --quiet "https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git" "$CANDIDATE_SHA:refs/heads/$TARGET_BRANCH"
+            git -C "$RUNNER_TEMP/candidate" push --quiet "$auth" "$CANDIDATE_SHA:refs/heads/$TARGET_BRANCH"
           fi
-          test "$(git ls-remote https://github.com/$GITHUB_REPOSITORY.git refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')" = "$CANDIDATE_SHA"
+          test "$(git ls-remote "$auth" refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')" = "$CANDIDATE_SHA"
 
       - name: Record receipt
         env:
