@@ -1,0 +1,57 @@
+name: Transport Artifact Runtime clean public URL fix
+
+on:
+  pull_request:
+    branches: [proposals]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_BASE: 530a58e25bb12c63ed39d18415d7a3dc705d1f9e
+      TARGET_BRANCH: fix/artifact-runtime-browser-clean-url-260821
+      TARGET_PATH: verification/artifact-runtime-static-host/browser_smoke.py
+      EXPECTED_BLOB: 7be627493cd7b81912f5ea07141146fe339351ba
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_BASE }}
+          fetch-depth: 1
+
+      - name: Apply the one-line canonical public entry fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_base="$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')"
+          remote_target="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test "$remote_base" = "$EXPECTED_BASE"
+          test "$remote_target" = "$EXPECTED_BASE"
+          test "$(git hash-object "$TARGET_PATH")" = "$EXPECTED_BLOB"
+
+          python3 - "$TARGET_PATH" <<'PY'
+          from pathlib import Path
+          import sys
+          path=Path(sys.argv[1])
+          source=path.read_text(encoding='utf-8')
+          old='    initial_url = f"{root}/index.html#invoke={token}"\n'
+          new='    initial_url = f"{root}/#invoke={token}"\n'
+          assert source.count(old)==1
+          path.write_text(source.replace(old,new),encoding='utf-8')
+          PY
+
+          python3 -m py_compile "$TARGET_PATH"
+          git diff --check
+          test "$(git diff --name-only)" = "$TARGET_PATH"
+          test "$(git diff --numstat | awk '{print $1, $2}')" = "1 1"
+          grep -Fx '    initial_url = f"{root}/#invoke={token}"' "$TARGET_PATH"
+          ! grep -F 'initial_url = f"{root}/index.html#invoke={token}"' "$TARGET_PATH"
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add "$TARGET_PATH"
+          git commit -m "fix: use canonical directory URL in public browser proof"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
