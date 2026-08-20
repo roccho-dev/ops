@@ -1,0 +1,183 @@
+{
+  "ci": {
+    "artifactDigest": "3b4ba91c55769c9af1509b47b2d09e98f0ff85d3f51b4bebf5cfe6b8542f4a48",
+    "artifactId": 9395914433,
+    "artifactLocalSha256": "3b4ba91c55769c9af1509b47b2d09e98f0ff85d3f51b4bebf5cfe6b8542f4a48",
+    "branch": "proof/resolve-nix-carry-20260820",
+    "carryReceipt": {
+      "carrier": {
+        "bytes": 36175640,
+        "codec": "standard-base64-single-line",
+        "decodeByteEquality": true,
+        "name": "nix-2.35.2-x86_64-linux.tar.xz.b64.txt",
+        "sha256": "d72ab9ae51f4544fb65405d7abc190930d53a1b8832ebce24a4427c533041320"
+      },
+      "negativeControls": {
+        "tamperedCarrierPayloadDigestRejected": true,
+        "wrongExpectedDigestRejected": true
+      },
+      "payload": {
+        "archiveEntries": 2280,
+        "bytes": 27131728,
+        "name": "nix-2.35.2-x86_64-linux.tar.xz",
+        "sha256": "0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158"
+      },
+      "resolution": {
+        "authority": {
+          "currentInstaller": "https://nixos.org/nix/install",
+          "downloadPage": "https://nixos.org/download/",
+          "effectiveInstaller": "https://releases.nixos.org/nix/nix-2.35.2/install"
+        },
+        "canonicalProduct": "Nix package manager",
+        "observedHost": {
+          "machine": "x86_64",
+          "os": "Linux",
+          "target": "x86_64-linux"
+        },
+        "order": "nix",
+        "rejectedMeanings": [
+          "NixOS operating system",
+          "nixpkgs package collection",
+          "third-party portable Nix distribution",
+          "installer binary as the requested runtime"
+        ],
+        "schema": "abstract-capability-resolution/1",
+        "selected": {
+          "name": "nix-2.35.2-x86_64-linux.tar.xz",
+          "officialCachePath": "3d229fmjbbhn74zwp21z6rfx2a35ryy8/nix-2.35.2-x86_64-linux.tar.xz",
+          "sha256": "0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158",
+          "url": "https://releases.nixos.org/nix/nix-2.35.2/nix-2.35.2-x86_64-linux.tar.xz",
+          "version": "2.35.2"
+        },
+        "selectionPolicy": "current stable official upstream binary distribution for observed host",
+        "status": "PASS"
+      },
+      "schema": "resolved-asset-carry-receipt/1",
+      "status": "PASS"
+    },
+    "issue": 186,
+    "repository": "roccho-dev/ops",
+    "runId": 32339735429,
+    "runtimeReceipt": {
+      "carryReceiptSha256": "f606fc7daca1aa52609d96ef472c6e4dedd914260925859866b65c06ff8053c5",
+      "localStore": {
+        "content": "nix-carry-store-proof",
+        "operation": "nix store add-file + path-info + byte readback",
+        "readbackMatch": true,
+        "storePath": "/nix/store/f97x0anfcxz9diqhj2mw9viblzcpp6zd-store-proof.txt"
+      },
+      "offlineEval": {
+        "expression": "1 + 1",
+        "output": "2"
+      },
+      "resolverSha256": "fdabdae49af2c29fda527a71a4023e81e91149c5f9df210963ae2c025d0636f3",
+      "schema": "nix-current-sandbox-ci-runtime-receipt/1",
+      "status": "PASS",
+      "versionOutput": "nix (Nix) 2.35.2"
+    },
+    "workflowCommit": "a9330b2d53e71b210c32b10bab441a0fb0b7cd8c"
+  },
+  "claimCeiling": {
+    "notProven": [
+      "persistent installation across future conversations",
+      "network access to nixpkgs/cache.nixos.org in this sandbox",
+      "multi-user daemon operation",
+      "arbitrary ambiguous product name resolution without a product catalog"
+    ],
+    "proven": [
+      "abstract name resolved to exact official current artifact",
+      "official digest verified before carry",
+      "multi-file Nix closure carried and replayed",
+      "current sandbox can evaluate, mutate/read local store, and build offline"
+    ]
+  },
+  "currentSandbox": {
+    "artifactReadback": {
+      "archiveEntries": 2280,
+      "carrierBytes": 36175640,
+      "carrierDecodeByteEquality": true,
+      "carrierSha256": "d72ab9ae51f4544fb65405d7abc190930d53a1b8832ebce24a4427c533041320",
+      "payloadBytes": 27131728,
+      "payloadSha256": "0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158",
+      "sha256SumsVerified": true,
+      "zipSha256MatchesGitHubDigest": true
+    },
+    "host": {
+      "machine": "x86_64",
+      "os": "Linux",
+      "uid": "0"
+    },
+    "installation": {
+      "command": "/usr/local/bin/nix",
+      "home": "/mnt/data/nix-2.35.2-home",
+      "launcher": "/mnt/data/bin/nix-launcher",
+      "mode": "official single-user installer under dedicated ephemeral user",
+      "store": "/nix/store",
+      "user": "nixproof"
+    },
+    "runtime": {
+      "eval": {
+        "expression": "40 + 2",
+        "output": "42"
+      },
+      "offlineBuild": {
+        "content": "nix-offline-build-proof",
+        "match": true,
+        "networkDisabled": true,
+        "path": "/nix/store/il9w5860wq8y69ncw5ydzh73sj5nrgp4-nix-carry-offline-build-proof",
+        "substituters": []
+      },
+      "storeAddReadback": {
+        "content": "nix-current-sandbox-store-proof",
+        "match": true,
+        "path": "/nix/store/rd8wyxjnja6f1l7g8ib8hf1fz8l10g1r-store-proof.current-sandbox.txt"
+      },
+      "storeInfo": [],
+      "versionOutput": "nix (Nix) 2.35.2"
+    }
+  },
+  "negativeControls": {
+    "tamperedCarrierPayloadDigestRejected": true,
+    "unsupportedMeaningsNotSelected": [
+      "NixOS operating system",
+      "nixpkgs package collection",
+      "third-party portable Nix distribution",
+      "installer binary as the requested runtime"
+    ],
+    "wrongExpectedDigestRejected": true
+  },
+  "observedAt": "2026-08-20T06:34:01.519830+00:00",
+  "order": "nix",
+  "resolution": {
+    "authority": {
+      "currentInstaller": "https://nixos.org/nix/install",
+      "downloadPage": "https://nixos.org/download/",
+      "effectiveInstaller": "https://releases.nixos.org/nix/nix-2.35.2/install"
+    },
+    "canonicalProduct": "Nix package manager",
+    "observedHost": {
+      "machine": "x86_64",
+      "os": "Linux",
+      "target": "x86_64-linux"
+    },
+    "order": "nix",
+    "rejectedMeanings": [
+      "NixOS operating system",
+      "nixpkgs package collection",
+      "third-party portable Nix distribution",
+      "installer binary as the requested runtime"
+    ],
+    "schema": "abstract-capability-resolution/1",
+    "selected": {
+      "name": "nix-2.35.2-x86_64-linux.tar.xz",
+      "officialCachePath": "3d229fmjbbhn74zwp21z6rfx2a35ryy8/nix-2.35.2-x86_64-linux.tar.xz",
+      "sha256": "0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158",
+      "url": "https://releases.nixos.org/nix/nix-2.35.2/nix-2.35.2-x86_64-linux.tar.xz",
+      "version": "2.35.2"
+    },
+    "selectionPolicy": "current stable official upstream binary distribution for observed host",
+    "status": "PASS"
+  },
+  "schema": "abstract-order-current-sandbox-proof/1",
+  "status": "PASS"
+}
