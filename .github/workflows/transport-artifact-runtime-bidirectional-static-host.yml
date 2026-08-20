@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      EXPECTED_BASE: 10e64726df069b71a1022d21e195d30427762018
+      EXPECTED_BASE: ${{ github.event.pull_request.base.sha }}
       TARGET_BRANCH: proposal/artifact-runtime-bidirectional-static-host-260821
       PATCH_B64_SHA256: 5d9b853d41a3d29a8d9a97f288d26fee3b3e640c094e51b1844fd7643efa24f6
       PATCH_GZ_SHA256: 33c6e0b6994f0cf23c331ae724a13b9be39d443055161d1e3e5203ceb690fd35
@@ -46,6 +46,7 @@ jobs:
           test "$observed_patch" = "$PATCH_SHA256"
 
           remote_base="$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')"
+          echo "event-base: $EXPECTED_BASE"
           echo "remote-base: $remote_base"
           test "$remote_base" = "$EXPECTED_BASE"
           test -z "$(git ls-remote origin "refs/heads/$TARGET_BRANCH")"
