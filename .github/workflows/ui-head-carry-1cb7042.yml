@@ -107,19 +107,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body=$(cat <<EOF
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
           ## UI Repo Head Carry artifact ready
 
-          - status: `PASS`
-          - source: `roccho-dev/ui:proposals`
-          - exact head: `$HEAD_SHA`
-          - exact tree: `$TREE_SHA`
-          - shallow commits: `1`
-          - workflow run: `${{ github.run_id }}`
-          - artifact name: `$ARTIFACT_NAME`
-          - transport branch: `proof/ui-head-carry-1cb7042-260820`
+          - status: PASS
+          - source: roccho-dev/ui:proposals
+          - exact head: $HEAD_SHA
+          - exact tree: $TREE_SHA
+          - shallow commits: 1
+          - workflow run: ${{ github.run_id }}
+          - artifact name: $ARTIFACT_NAME
+          - transport branch: proof/ui-head-carry-1cb7042-260820
 
           This is a temporary non-authority byte transport for local inspection. No source/default-branch write was performed.
           EOF
-          )
-          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body "$body"
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
