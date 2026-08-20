@@ -1,0 +1,85 @@
+name: Transport Artifact App candidate from draft PR
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-artifact-app-closure-pr.yml'
+      - '.github/transport/artifact-app-closure-c42300d/**'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  transport:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BASE_SHA: b0c992d45632e5e84f87a1029de0fbd1d5e18954
+      CANDIDATE_SHA: c42300db0a0d97d2cac5adb70fc265550a50540f
+      CANDIDATE_TREE: 99d027d23a86cde57df58f1cd4737d48e3657576
+      TARGET_BRANCH: proposal/artifact-app-closure-260821
+      D: .github/transport/artifact-app-closure-c42300d
+      B64_SHA256: 2447eafec56e0716c284c29577d80d2188ac9dd41ff22a9d9597a8bcedd09d84
+      BUNDLE_SHA256: 4e7462065b3c05919a2eca13683000d01e1925ec74b3e694e98f88193f91292b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Reconstruct and verify exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          b64="$RUNNER_TEMP/candidate.bundle.b64.txt"
+          bundle="$RUNNER_TEMP/candidate.bundle"
+          cat "$D/chunk-00" "$D/chunk-01-0" "$D/chunk-01-1" "$D/chunk-02" "$D/chunk-03-0" "$D/chunk-03-1" "$D/chunk-04" "$D/chunk-05" > "$b64"
+          test "$(wc -c < "$b64")" -eq 39380
+          test "$(sha256sum "$b64" | awk '{print $1}')" = "$B64_SHA256"
+          base64 --decode "$b64" > "$bundle"
+          test "$(wc -c < "$bundle")" -eq 29534
+          test "$(sha256sum "$bundle" | awk '{print $1}')" = "$BUNDLE_SHA256"
+          test "$(git ls-remote https://github.com/$GITHUB_REPOSITORY.git refs/heads/proposals | awk 'NR==1 {print $1}')" = "$BASE_SHA"
+
+          work="$RUNNER_TEMP/candidate"
+          git init --quiet "$work"
+          git -C "$work" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C "$work" fetch --quiet --depth=1 origin refs/heads/proposals
+          test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$BASE_SHA"
+          git -C "$work" checkout --quiet -b proposals FETCH_HEAD
+          git -C "$work" bundle verify "$bundle"
+          git -C "$work" fetch --quiet "$bundle" HEAD:refs/remotes/transport/candidate
+          test "$(git -C "$work" rev-parse refs/remotes/transport/candidate)" = "$CANDIDATE_SHA"
+          test "$(git -C "$work" rev-parse "$CANDIDATE_SHA^")" = "$BASE_SHA"
+          test "$(git -C "$work" rev-parse "$CANDIDATE_SHA^{tree}")" = "$CANDIDATE_TREE"
+          git -C "$work" checkout --quiet -b "$TARGET_BRANCH" "$CANDIDATE_SHA"
+          git -C "$work" fsck --no-dangling
+          node --check "$work/packages/artifact-app/bin/artifact-app.mjs"
+          node "$work/packages/artifact-app/tests/controller.mjs"
+          node "$work/packages/chatgpt-capability/ingress/carrier-job.mjs" selftest
+
+      - name: Publish exact proposal ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(git ls-remote https://github.com/$GITHUB_REPOSITORY.git refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')"
+          if [ -n "$existing" ]; then
+            test "$existing" = "$CANDIDATE_SHA"
+          else
+            git -C "$RUNNER_TEMP/candidate" push --quiet "https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git" "$CANDIDATE_SHA:refs/heads/$TARGET_BRANCH"
+          fi
+          test "$(git ls-remote https://github.com/$GITHUB_REPOSITORY.git refs/heads/$TARGET_BRANCH | awk 'NR==1 {print $1}')" = "$CANDIDATE_SHA"
+
+      - name: Record receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "## Artifact App candidate transport — PASS" '' "- base: \`$BASE_SHA\`" "- candidate: \`$CANDIDATE_SHA\`" "- tree: \`$CANDIDATE_TREE\`" "- proposal branch: \`$TARGET_BRANCH\`" "- run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$RUNNER_TEMP/comment.md"
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
