@@ -1,0 +1,325 @@
+name: Proof resolve and carry Nix
+
+on:
+  push:
+    branches:
+      - proof/resolve-nix-carry-20260820
+    paths:
+      - .github/workflows/proof-resolve-nix-carry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  resolve-carry-prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ORDER: nix
+      ISSUE_NUMBER: "186"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve abstract order through the official current installer
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/nix-carry"
+          mkdir -p "$out"
+
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            --output "$RUNNER_TEMP/nix-install" \
+            --write-out '%{url_effective}' \
+            https://nixos.org/nix/install > "$RUNNER_TEMP/nix-install.effective-url"
+
+          python3 - "$RUNNER_TEMP/nix-install" "$RUNNER_TEMP/nix-install.effective-url" "$out/resolver.json" <<'PY'
+          import json
+          import pathlib
+          import platform
+          import re
+          import sys
+
+          install_path, effective_path, output_path = map(pathlib.Path, sys.argv[1:])
+          script = install_path.read_text(encoding="utf-8")
+          effective = effective_path.read_text(encoding="utf-8").strip()
+
+          if platform.system() != "Linux" or platform.machine() != "x86_64":
+              raise SystemExit(f"unsupported proof host: {platform.system()}.{platform.machine()}")
+
+          version_match = re.fullmatch(
+              r"https://releases\.nixos\.org/nix/nix-([0-9]+(?:\.[0-9]+)+)/install",
+              effective,
+          )
+          if not version_match:
+              raise SystemExit(f"unexpected official installer redirect: {effective}")
+          version = version_match.group(1)
+
+          block_match = re.search(r"Linux\.x86_64\)\s*(.*?)\s*;;", script, re.S)
+          if not block_match:
+              raise SystemExit("official installer has no Linux.x86_64 mapping")
+          block = block_match.group(1)
+
+          def field(name: str, pattern: str) -> str:
+              match = re.search(pattern, block)
+              if not match:
+                  raise SystemExit(f"missing {name} in official installer mapping")
+              return match.group(1)
+
+          expected_sha256 = field("hash", r"\bhash=([0-9a-f]{64})\b")
+          target = field("system", r"\bsystem=([A-Za-z0-9_-]+)\b")
+          cache_path = field("path", r"\bpath=([^\s]+)\b")
+          expected_name = f"nix-{version}-{target}.tar.xz"
+          if not cache_path.endswith("/" + expected_name):
+              raise SystemExit(f"installer cache path does not match resolved version/target: {cache_path}")
+
+          canonical_url = f"https://releases.nixos.org/nix/nix-{version}/{expected_name}"
+          if canonical_url not in script.replace("$system", target):
+              raise SystemExit("canonical release URL is not represented by the official installer")
+
+          output = {
+              "schema": "abstract-capability-resolution/1",
+              "status": "PASS",
+              "order": "nix",
+              "canonicalProduct": "Nix package manager",
+              "authority": {
+                  "downloadPage": "https://nixos.org/download/",
+                  "currentInstaller": "https://nixos.org/nix/install",
+                  "effectiveInstaller": effective,
+              },
+              "selectionPolicy": "current stable official upstream binary distribution for observed host",
+              "observedHost": {
+                  "os": platform.system(),
+                  "machine": platform.machine(),
+                  "target": target,
+              },
+              "selected": {
+                  "version": version,
+                  "name": expected_name,
+                  "url": canonical_url,
+                  "sha256": expected_sha256,
+                  "officialCachePath": cache_path,
+              },
+              "rejectedMeanings": [
+                  "NixOS operating system",
+                  "nixpkgs package collection",
+                  "third-party portable Nix distribution",
+                  "installer binary as the requested runtime",
+              ],
+          }
+          output_path.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(f"version={version}")
+          print(f"target={target}")
+          print(f"url={canonical_url}")
+          print(f"sha256={expected_sha256}")
+          print(f"name={expected_name}")
+          PY
+
+          python3 - "$out/resolver.json" "$GITHUB_OUTPUT" <<'PY'
+          import json, pathlib, sys
+          data = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          selected = data["selected"]
+          with pathlib.Path(sys.argv[2]).open("a", encoding="utf-8") as f:
+              for key in ("version", "url", "sha256", "name"):
+                  f.write(f"{key}={selected[key]}\n")
+              f.write(f"target={data['observedHost']['target']}\n")
+          PY
+
+      - name: Acquire, verify, inspect, and project the official binary distribution
+        shell: bash
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+          TARGET: ${{ steps.resolve.outputs.target }}
+          URL: ${{ steps.resolve.outputs.url }}
+          EXPECTED_SHA256: ${{ steps.resolve.outputs.sha256 }}
+          ASSET_NAME: ${{ steps.resolve.outputs.name }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/nix-carry"
+          tarball="$out/$ASSET_NAME"
+          carrier="$out/$ASSET_NAME.b64.txt"
+
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+            "$URL" --output "$tarball"
+
+          actual_sha256="$(sha256sum "$tarball" | cut -d' ' -f1)"
+          test "$actual_sha256" = "$EXPECTED_SHA256"
+
+          root="$(tar -tJf "$tarball" | sed -n '1{s,/.*,,;p;q;}')"
+          test -n "$root"
+          tar -tJf "$tarball" > "$out/archive.inventory.txt"
+          grep -Fx "$root/install" "$out/archive.inventory.txt"
+          grep -Eq "^$root/store/[a-z0-9]{32}-nix-$VERSION/" "$out/archive.inventory.txt"
+
+          base64 -w0 "$tarball" > "$carrier"
+          test -s "$carrier"
+          if grep -q '[[:space:]]' "$carrier"; then
+            echo "carrier contains whitespace" >&2
+            exit 1
+          fi
+
+          base64 --decode "$carrier" > "$RUNNER_TEMP/readback.tar.xz"
+          cmp "$tarball" "$RUNNER_TEMP/readback.tar.xz"
+          test "$(sha256sum "$RUNNER_TEMP/readback.tar.xz" | cut -d' ' -f1)" = "$EXPECTED_SHA256"
+
+          # Negative controls: wrong expected digest and one-character carrier tamper.
+          if test "$actual_sha256" = "${EXPECTED_SHA256%?}0"; then
+            echo "wrong digest fixture unexpectedly matched" >&2
+            exit 1
+          fi
+          python3 - "$carrier" "$RUNNER_TEMP/tampered.b64.txt" <<'PY'
+          import pathlib, sys
+          source = pathlib.Path(sys.argv[1]).read_text(encoding="ascii")
+          replacement = "B" if source[0] != "B" else "C"
+          pathlib.Path(sys.argv[2]).write_text(replacement + source[1:], encoding="ascii")
+          PY
+          base64 --decode "$RUNNER_TEMP/tampered.b64.txt" > "$RUNNER_TEMP/tampered.tar.xz"
+          test "$(sha256sum "$RUNNER_TEMP/tampered.tar.xz" | cut -d' ' -f1)" != "$EXPECTED_SHA256"
+
+          tar -xJf "$tarball" -C "$RUNNER_TEMP"
+          printf '%s\n' "$root" > "$RUNNER_TEMP/nix-root-name"
+
+          python3 - "$out/resolver.json" "$tarball" "$carrier" "$out/archive.inventory.txt" "$out/carry.receipt.json" <<'PY'
+          import hashlib, json, pathlib, sys
+          resolver_path, tarball_path, carrier_path, inventory_path, output_path = map(pathlib.Path, sys.argv[1:])
+          resolver = json.loads(resolver_path.read_text())
+          tarball = tarball_path.read_bytes()
+          carrier = carrier_path.read_bytes()
+          inventory = inventory_path.read_text().splitlines()
+          output = {
+              "schema": "resolved-asset-carry-receipt/1",
+              "status": "PASS",
+              "resolution": resolver,
+              "payload": {
+                  "name": tarball_path.name,
+                  "bytes": len(tarball),
+                  "sha256": hashlib.sha256(tarball).hexdigest(),
+                  "archiveEntries": len(inventory),
+              },
+              "carrier": {
+                  "name": carrier_path.name,
+                  "bytes": len(carrier),
+                  "sha256": hashlib.sha256(carrier).hexdigest(),
+                  "codec": "standard-base64-single-line",
+                  "decodeByteEquality": True,
+              },
+              "negativeControls": {
+                  "wrongExpectedDigestRejected": True,
+                  "tamperedCarrierPayloadDigestRejected": True,
+              },
+          }
+          output_path.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Install carried Nix and prove offline runtime plus local store
+        shell: bash
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/nix-carry"
+          root="$(cat "$RUNNER_TEMP/nix-root-name")"
+
+          export NIX_INSTALLER_NO_MODIFY_PROFILE=1
+          sh "$RUNNER_TEMP/$root/install" \
+            --no-daemon \
+            --yes \
+            --no-channel-add \
+            --no-modify-profile
+
+          # shellcheck disable=SC1090
+          . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+
+          version_output="$(nix --version)"
+          test "$version_output" = "nix (Nix) $VERSION"
+
+          eval_output="$(nix --extra-experimental-features nix-command eval --expr '1 + 1')"
+          test "$eval_output" = "2"
+
+          printf 'nix-carry-store-proof\n' > "$RUNNER_TEMP/store-proof.txt"
+          store_path="$(nix --extra-experimental-features nix-command store add-file "$RUNNER_TEMP/store-proof.txt")"
+          test -f "$store_path"
+          test "$(cat "$store_path")" = "nix-carry-store-proof"
+
+          store_path_info="$(nix --extra-experimental-features nix-command path-info "$store_path")"
+          test "$store_path_info" = "$store_path"
+
+          python3 - "$out/resolver.json" "$out/carry.receipt.json" "$out/runtime.receipt.json" \
+            "$version_output" "$eval_output" "$store_path" <<'PY'
+          import json, pathlib, sys
+          resolver_path, carry_path, output_path = map(pathlib.Path, sys.argv[1:4])
+          version_output, eval_output, store_path = sys.argv[4:]
+          output = {
+              "schema": "nix-current-sandbox-ci-runtime-receipt/1",
+              "status": "PASS",
+              "resolverSha256": __import__("hashlib").sha256(resolver_path.read_bytes()).hexdigest(),
+              "carryReceiptSha256": __import__("hashlib").sha256(carry_path.read_bytes()).hexdigest(),
+              "versionOutput": version_output,
+              "offlineEval": {"expression": "1 + 1", "output": eval_output},
+              "localStore": {
+                  "operation": "nix store add-file + path-info + byte readback",
+                  "storePath": store_path,
+                  "content": "nix-carry-store-proof",
+                  "readbackMatch": True,
+              },
+          }
+          output_path.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n")
+          PY
+
+          sha256sum \
+            "$out/resolver.json" \
+            "$out/carry.receipt.json" \
+            "$out/runtime.receipt.json" \
+            "$out/$VERSION"* 2>/dev/null || true
+          (cd "$out" && sha256sum resolver.json carry.receipt.json runtime.receipt.json archive.inventory.txt \
+            "nix-$VERSION-x86_64-linux.tar.xz" \
+            "nix-$VERSION-x86_64-linux.tar.xz.b64.txt" > SHA256SUMS)
+
+      - name: Upload resolved Nix carry
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-nix-${{ steps.resolve.outputs.version }}-x86_64-linux-carry
+          path: ${{ runner.temp }}/nix-carry/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Return proof identity to Issue 186
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WORKFLOW_COMMIT: ${{ github.sha }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+          TARGET: ${{ steps.resolve.outputs.target }}
+          URL: ${{ steps.resolve.outputs.url }}
+          PAYLOAD_SHA256: ${{ steps.resolve.outputs.sha256 }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Abstract order → Nix carry proof result
+
+          status: \`$JOB_STATUS\`
+          order: \`nix\`
+          resolved-product: \`Nix package manager\`
+          resolved-version: \`$VERSION\`
+          resolved-target: \`$TARGET\`
+          official-url: $URL
+          official-payload-sha256: \`$PAYLOAD_SHA256\`
+          workflow-run: $RUN_URL
+          workflow-commit: \`$WORKFLOW_COMMIT\`
+          artifact: ${ARTIFACT_URL:-not-created}
+          artifact-id: \`${ARTIFACT_ID:-not-created}\`
+          artifact-digest: \`${ARTIFACT_DIGEST:-not-created}\`
+          EOF
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
