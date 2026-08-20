@@ -64,12 +64,14 @@ jobs:
           PY
 
       - name: Acquire exact accepted runtime only from GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           archive="$RUNNER_TEMP/$RUNTIME_ARCHIVE_NAME"
-          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RUNTIME_TAG"
-          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$base/$RUNTIME_ARCHIVE_NAME" -o "$archive"
+          gh release download "$RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$RUNTIME_ARCHIVE_NAME" --dir "$RUNNER_TEMP"
+          test -f "$archive"
           test "$(wc -c < "$archive")" -eq "$RUNTIME_ARCHIVE_BYTES"
           test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$RUNTIME_ARCHIVE_SHA"
           python3 - "$archive" "$RUNNER_TEMP/runtime" <<'PY'
