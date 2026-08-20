@@ -93,7 +93,9 @@ const runtime = await createArtifactInvocationRuntime({
   engineBaseUrl: "https://artifact-app.invalid/catalog.json",
   environment: Object.freeze({ runtime: "browser", features: Object.freeze(["crypto.subtle", "dom", "fetch", "file", "wasm", "worker"]) }),
   fetchEngine: async href => {
-    const bytes = engineBytes.get(String(href));
+    const normalized = new URL(String(href));
+    normalized.search = "";
+    const bytes = engineBytes.get(normalized.href);
     return bytes
       ? new Response(bytes, { status: 200, headers: { "content-type": "text/javascript" } })
       : new Response("missing", { status: 404 });
@@ -113,7 +115,7 @@ const runtime = await createArtifactInvocationRuntime({
 
 const initialRequest = validateArtifactInvocation(appFixture.request);
 const initialOutcome = await runtime.execute({ request: initialRequest });
-invariant(initialOutcome.result.status === "PASS", "initial carried execution did not pass");
+invariant(initialOutcome.result.status === "PASS", `initial carried execution did not pass: ${JSON.stringify(initialOutcome.result)}`);
 invariant(initialOutcome.result.outputs.some(output => output.contract === "a2ui-app-render-receipt/1"), "initial app output is missing");
 const appInput = initialRequest.inputs.find(input => input.schema === app.contracts.app);
 invariant(appInput?.source?.kind === "inline", "app fixture is not inline");
@@ -144,7 +146,7 @@ assert.deepEqual(decodedNext, compiled.request);
 assert.equal(await createUrlModuleUrl({ base, fragment: app.contracts.url.fragment, value: compiled.request }), nextUrl);
 
 const nextOutcome = await runtime.execute({ request: decodedNext });
-invariant(nextOutcome.result.status === "PASS", "next carried execution did not pass");
+invariant(nextOutcome.result.status === "PASS", `next carried execution did not pass: ${JSON.stringify(nextOutcome.result)}`);
 invariant(nextOutcome.result.outputs.some(output => output.contract === "a2ui-app-render-receipt/1"), "next app output is missing");
 
 const receipt = Object.freeze({
