@@ -1,0 +1,224 @@
+name: Herdr v0.8.0 carry proof
+
+on:
+  push:
+    branches:
+      - proof/herdr-v0.8.0-carry-20260820
+    paths:
+      - .github/workflows/herdr-v0.8.0-carry-proof.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  carry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ISSUE_NUMBER: "185"
+      HERDR_VERSION: "0.8.0"
+      HERDR_URL: https://github.com/herdrdev/herdr/releases/download/v0.8.0/herdr-linux-x86_64
+      HERDR_SHA256: b872ea7e40fa2cb17e857ac9b62b1bf26db7b403c622f5d2f3f5b35f6e9acd28
+    steps:
+      - name: Acquire, verify, carry, and probe exact release bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          out="$RUNNER_TEMP/herdr-v${HERDR_VERSION}-linux-x86_64-carry"
+          raw="$out/herdr-linux-x86_64"
+          installed="$out/bin/herdr"
+          carrier="$out/herdr-linux-x86_64.${HERDR_SHA256}.b64.txt"
+          decoded="$RUNNER_TEMP/herdr-decoded"
+          tampered_carrier="$RUNNER_TEMP/herdr-tampered.b64.txt"
+          tampered_payload="$RUNNER_TEMP/herdr-tampered"
+
+          mkdir -p "$out/bin" "$out/probes"
+
+          curl \
+            --proto '=https' \
+            --tlsv1.2 \
+            --fail-with-body \
+            --location \
+            --retry 3 \
+            --retry-all-errors \
+            --connect-timeout 20 \
+            --max-time 180 \
+            --output "$raw" \
+            "$HERDR_URL"
+
+          actual_sha="$(sha256sum "$raw" | cut -d' ' -f1)"
+          test "$actual_sha" = "$HERDR_SHA256"
+          test -s "$raw"
+
+          file -b "$raw" | tee "$out/probes/file.txt"
+          grep -F 'ELF 64-bit LSB' "$out/probes/file.txt"
+          grep -F 'x86-64' "$out/probes/file.txt"
+          if readelf -l "$raw" | grep -q 'INTERP'; then
+            echo 'unexpected dynamic interpreter' >&2
+            exit 1
+          fi
+
+          chmod 0555 "$raw"
+          cp "$raw" "$installed"
+          chmod 0555 "$installed"
+
+          timeout 10s "$installed" --version >"$out/probes/version.stdout.txt" 2>"$out/probes/version.stderr.txt"
+          grep -F "$HERDR_VERSION" "$out/probes/version.stdout.txt" "$out/probes/version.stderr.txt"
+
+          timeout 10s "$installed" --help >"$out/probes/help.stdout.txt" 2>"$out/probes/help.stderr.txt"
+          test -s "$out/probes/help.stdout.txt"
+
+          timeout 10s "$installed" --skill >"$out/probes/skill.stdout.md" 2>"$out/probes/skill.stderr.txt"
+          test -s "$out/probes/skill.stdout.md"
+
+          base64 --wrap=0 "$raw" > "$carrier"
+          test -s "$carrier"
+          base64 --decode "$carrier" > "$decoded"
+          cmp "$raw" "$decoded"
+          test "$(sha256sum "$decoded" | cut -d' ' -f1)" = "$HERDR_SHA256"
+
+          python3 - "$carrier" "$tampered_carrier" <<'PY'
+          import pathlib, sys
+          source = pathlib.Path(sys.argv[1]).read_text(encoding="ascii")
+          replacement = "A" if source[0] != "A" else "B"
+          pathlib.Path(sys.argv[2]).write_text(replacement + source[1:], encoding="ascii")
+          PY
+          base64 --decode "$tampered_carrier" > "$tampered_payload"
+          if test "$(sha256sum "$tampered_payload" | cut -d' ' -f1)" = "$HERDR_SHA256"; then
+            echo 'tampered Carrier unexpectedly retained payload identity' >&2
+            exit 1
+          fi
+          printf 'PASS: tampered Carrier rejected by payload SHA-256\n' > "$out/probes/negative.txt"
+
+          raw_bytes="$(stat -c '%s' "$raw")"
+          carrier_bytes="$(stat -c '%s' "$carrier")"
+          skill_bytes="$(stat -c '%s' "$out/probes/skill.stdout.md")"
+          skill_sha="$(sha256sum "$out/probes/skill.stdout.md" | cut -d' ' -f1)"
+          version_text="$(cat "$out/probes/version.stdout.txt" "$out/probes/version.stderr.txt" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+          file_text="$(cat "$out/probes/file.txt")"
+
+          jq -n \
+            --arg version "$HERDR_VERSION" \
+            --arg url "$HERDR_URL" \
+            --arg sha256 "$HERDR_SHA256" \
+            --arg versionText "$version_text" \
+            --arg fileText "$file_text" \
+            --arg skillSha256 "$skill_sha" \
+            --argjson rawBytes "$raw_bytes" \
+            --argjson carrierBytes "$carrier_bytes" \
+            --argjson skillBytes "$skill_bytes" \
+            '{
+              schema: "ops.carried-native/1",
+              source: {
+                repository: "herdrdev/herdr",
+                release: ("v" + $version),
+                asset: "herdr-linux-x86_64",
+                url: $url
+              },
+              payload: {
+                name: "herdr-linux-x86_64",
+                sha256: $sha256,
+                bytes: $rawBytes,
+                kind: "native",
+                os: "linux",
+                architecture: "x86_64",
+                abi: "musl-static"
+              },
+              carrier: {
+                codec: "standard-base64",
+                bytes: $carrierBytes,
+                filename: ("herdr-linux-x86_64." + $sha256 + ".b64.txt")
+              },
+              probes: {
+                version: $versionText,
+                file: $fileText,
+                help: "PASS",
+                skill: {status: "PASS", bytes: $skillBytes, sha256: $skillSha256},
+                tamper_rejection: "PASS"
+              },
+              status: "PASS"
+            }' > "$out/manifest.json"
+
+          jq -n \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            --arg workflowSha "$GITHUB_SHA" \
+            --arg payloadSha256 "$HERDR_SHA256" \
+            --arg carrierFile "$(basename "$carrier")" \
+            '{
+              schema: "ops.herdr-carry-proof-receipt/1",
+              status: "PASS",
+              run_id: $runId,
+              run_attempt: $runAttempt,
+              workflow_commit: $workflowSha,
+              upstream_release: "v0.8.0",
+              upstream_asset: "herdr-linux-x86_64",
+              payload_sha256: $payloadSha256,
+              carrier_file: $carrierFile,
+              source_build_required: false,
+              source_clone_required: false,
+              local_execution_probe: ["--version", "--help", "--skill"],
+              negative_probe: "tampered-carrier-payload-sha-mismatch"
+            }' > "$out/receipt.json"
+
+          (
+            cd "$out"
+            find . -type f ! -name SHA256SUMS -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Upload exact payload, Carrier, probes, and receipt
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: herdr-v0.8.0-linux-x86_64-carry-${{ github.run_id }}
+          path: ${{ runner.temp }}/herdr-v0.8.0-linux-x86_64-carry/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Return run and artifact identity
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          artifact_id="${ARTIFACT_ID:-not-created}"
+          artifact_url="${ARTIFACT_URL:-not-created}"
+          artifact_digest="${ARTIFACT_DIGEST:-not-created}"
+          body="$(cat <<EOF
+          ## Herdr carry proof result
+
+          status: \`${JOB_STATUS}\`
+          release: \`v${HERDR_VERSION}\`
+          asset: \`herdr-linux-x86_64\`
+          expected-payload-sha256: \`${HERDR_SHA256}\`
+          run: ${run_url}
+          workflow-commit: \`${GITHUB_SHA}\`
+          artifact: ${artifact_url}
+          artifact-id: \`${artifact_id}\`
+          artifact-digest: \`${artifact_digest}\`
+          EOF
+          )"
+          jq -n --arg body "$body" '{body: $body}' > "$RUNNER_TEMP/issue-comment.json"
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            -X POST \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            --data-binary @"$RUNNER_TEMP/issue-comment.json" >/dev/null
