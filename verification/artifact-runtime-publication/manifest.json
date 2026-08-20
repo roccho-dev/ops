@@ -2,28 +2,28 @@
   "schema": "ops.artifactRuntimePublication/1",
   "authority": false,
   "status": "accepted-source",
+  "issue": 193,
   "source": {
     "repository": "roccho-dev/ui",
-    "commit": "126226fb666e71b395af172e3b9068c89f267ef5",
-    "tree": "a1a4c0c11923253c52fcbe52015c40621731eb62",
-    "sourcePackageSha256": "sha256:845cf4d89b4d1dbe935523f4fb4ff86c005503371b98fd2264bbbad9492034e0",
-    "sourceUiHead": "715b01cac02397e325d4cb64edc3d58464ddf914",
-    "sourceUiBundleSha256": "sha256:f156e0bf36bcdd99e2466258ea0f09d9dfa7d7a2cbc9891cbe3cc752b33aea90"
+    "commit": "3a6eaeeb77aef568987add668f5c9b6aa426f74e",
+    "tree": "dfe8814083abc1faadfc67a6fdc93d180c723244",
+    "acceptedPullRequest": 159
   },
   "publication": {
-    "treeDigest": "sha256:c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
-    "kernelDigest": "sha256:8c13b8f353c067e7b3c02da30ab09d1b0870ee8619403e6c335e5bfe4106408b",
-    "capabilities": 2,
-    "tag": "artifact-runtime-c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928",
+    "treeDigest": "sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
+    "kernelDigest": "sha256:50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320",
+    "capabilities": 3,
+    "listedFiles": 53,
+    "tag": "artifact-runtime-b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
     "archive": {
-      "name": "artifact-runtime.c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928.tar.gz",
-      "bytes": 32825,
-      "sha256": "sha256:a47f2520a360b74b519b923808aa9345f0c7ae51d58f0d7f202d5a1d664f0975"
+      "name": "artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz",
+      "bytes": 37333,
+      "sha256": "sha256:571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b"
     },
     "carrier": {
-      "name": "artifact-runtime.c7b0da3fecceefc75eac5998de7610deef3484b21251140019455761deddf928.tar.gz.b64.txt",
-      "bytes": 43768,
-      "sha256": "sha256:3bb01cf35101881d31b1c6014d229b3d4396178f188cd193839f7166f104787e",
+      "name": "artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz.b64.txt",
+      "bytes": 49780,
+      "sha256": "sha256:7105c25d4e278d008c7abb2b2ac5530957b037c088868b2940f6fb65013d003f",
       "codec": "standard-base64-no-whitespace"
     }
   },
@@ -32,6 +32,8 @@
     "releaseIsProjection": true,
     "carrierIsTransportProjection": true,
     "receiptIsAuthority": false,
+    "consumerSourceCloneRequired": false,
+    "consumerBuildRequired": false,
     "mutableLatestAllowed": false
   }
 }
