@@ -18,7 +18,7 @@ jobs:
       github.event.issue.pull_request == null &&
       github.event.issue.number == 183 &&
       github.event.comment.user.login == github.repository_owner &&
-      startsWith(github.event.comment.body, '/nway-admit\n')
+      startsWith(github.event.comment.body, '/nway-admit')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -62,7 +62,7 @@ jobs:
       - name: Checkout trusted workflow source
         uses: actions/checkout@v4
         with:
-          ref: proposals
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
