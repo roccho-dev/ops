@@ -1,0 +1,24 @@
+name: Trigger accepted Artifact Runtime deployment
+
+on:
+  push:
+    branches:
+      - proof/trigger-artifact-runtime-deploy-260821
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Trigger the merged static-host workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' '/artifact-runtime-deploy' > "$RUNNER_TEMP/request.md"
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/request.md"
