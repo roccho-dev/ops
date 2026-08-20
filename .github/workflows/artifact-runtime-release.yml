@@ -36,26 +36,21 @@ jobs:
           set -euo pipefail
           python3 - <<'PY' >> "$GITHUB_ENV"
           import json
-          publication=json.load(open('verification/artifact-runtime-publication/manifest.json', encoding='utf-8'))
           app=json.load(open('verification/artifact-runtime-app/manifest.json', encoding='utf-8'))
-          assert publication['schema']=='ops.artifactRuntimePublication/1'
-          assert publication['authority'] is False and publication['status']=='accepted-source'
-          assert publication['issue']==193
           assert app['schema']=='ops.artifactRuntimeApp/1'
           assert app['authority'] is False and app['status']=='accepted-source'
           assert app['issue']==193 and app['id']=='artifact-runtime' and app['version']=='1'
-          source=publication['source']; projected=publication['publication']
           authorities=app['sourceAuthorities']
           assert len(authorities)==1
-          assert authorities[0]['repository']==source['repository']
-          assert authorities[0]['commit']==source['commit']
-          assert authorities[0]['tree']==source['tree']
-          app_publication=app['publication']
-          for key in ('treeDigest','kernelDigest','capabilities','listedFiles','tag','archive','carrier'):
-              assert app_publication[key]==projected[key], key
-          assert projected['capabilities']==3
+          source=authorities[0]
+          assert source['repository']=='roccho-dev/ui'
+          assert source['commit']=='3a6eaeeb77aef568987add668f5c9b6aa426f74e'
+          assert source['tree']=='dfe8814083abc1faadfc67a6fdc93d180c723244'
+          projected=app['publication']
+          assert projected['treeDigest']=='sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b'
+          assert projected['kernelDigest']=='sha256:50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320'
           assert projected['listedFiles']==53
-          assert app_publication['capabilities']==[
+          assert projected['capabilities']==[
               'inspect.json@1','render.a2ui@1','render.a2ui.app@1'
           ]
           assert app['contracts']['invocation']=='artifact-invocation/2'
@@ -71,11 +66,12 @@ jobs:
           assert app['carry']['consumerBuildRequired'] is False
           assert app['carry']['repairAllowed'] is False
           values={
+            'UI_REPOSITORY':source['repository'],
             'UI_COMMIT':source['commit'],
             'UI_TREE':source['tree'],
             'TREE_DIGEST':projected['treeDigest'],
             'KERNEL_DIGEST':projected['kernelDigest'],
-            'EXPECTED_CAPABILITIES':str(projected['capabilities']),
+            'EXPECTED_CAPABILITIES':str(len(projected['capabilities'])),
             'EXPECTED_FILES':str(projected['listedFiles']),
             'TAG':projected['tag'],
             'ARCHIVE_NAME':projected['archive']['name'],
@@ -96,7 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --filter=blob:none --no-checkout https://github.com/roccho-dev/ui.git "$RUNNER_TEMP/ui"
+          git clone --filter=blob:none --no-checkout "https://github.com/$UI_REPOSITORY.git" "$RUNNER_TEMP/ui"
           git -C "$RUNNER_TEMP/ui" fetch --depth=1 origin "$UI_COMMIT"
           git -C "$RUNNER_TEMP/ui" checkout --detach "$UI_COMMIT"
           test "$(git -C "$RUNNER_TEMP/ui" rev-parse HEAD)" = "$UI_COMMIT"
@@ -130,8 +126,7 @@ jobs:
           assert len(artifact['files'])==int(sys.argv[5])
           assert catalog['schema']=='artifact-capability-catalog/2'
           assert catalog['kernel']['digest']==sys.argv[3]
-          expected=int(sys.argv[4])
-          assert len(catalog['capabilities'])==expected
+          assert len(catalog['capabilities'])==int(sys.argv[4])
           ids=[f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]
           assert ids==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
           PY
@@ -146,7 +141,34 @@ jobs:
           base64 --decode "$carrier" | cmp - "$archive"
 
           cp verification/artifact-runtime-app/manifest.json "$app_manifest"
-          cp verification/artifact-runtime-publication/manifest.json "$publication_manifest"
+          python3 - "$app_manifest" "$publication_manifest" <<'PY'
+          import json,sys
+          app=json.load(open(sys.argv[1],encoding='utf-8'))
+          source=app['sourceAuthorities'][0]
+          projected=app['publication']
+          value={
+            'schema':'ops.artifactRuntimePublication/1',
+            'authority':False,
+            'status':'accepted-source',
+            'issue':app['issue'],
+            'source':{
+              'repository':source['repository'],'commit':source['commit'],'tree':source['tree']
+            },
+            'publication':{
+              'treeDigest':projected['treeDigest'],'kernelDigest':projected['kernelDigest'],
+              'capabilities':len(projected['capabilities']),'listedFiles':projected['listedFiles'],
+              'tag':projected['tag'],'archive':projected['archive'],'carrier':projected['carrier'],
+            },
+            'boundaries':{
+              'gitSourceAuthority':True,'releaseIsProjection':True,
+              'carrierIsTransportProjection':True,'receiptIsAuthority':False,
+              'consumerSourceCloneRequired':False,'consumerBuildRequired':False,
+              'mutableLatestAllowed':False,
+            },
+          }
+          open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(value,indent=2,sort_keys=True)+'\n')
+          PY
+
           mkdir -p "$carried"
           tar -xzf "$archive" -C "$carried"
           node verification/artifact-runtime-app/carry-smoke.mjs "$carried" "$app_manifest" "$carry_receipt"
@@ -196,7 +218,7 @@ jobs:
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --title "Bidirectional Artifact App $TREE_DIGEST" \
-              --notes "Immutable non-authority App projection of roccho-dev/ui@$UI_COMMIT. Git remains source authority. No uploaded ZIP was used." \
+              --notes "Immutable non-authority App projection of $UI_REPOSITORY@$UI_COMMIT. Git remains source authority. No uploaded ZIP was used." \
               "$archive" "$carrier" "$app_manifest" "$publication_manifest" "$publication_receipt" "$carry_receipt"
           fi
 
