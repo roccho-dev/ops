@@ -1,0 +1,66 @@
+name: Retire Source Carry proof workflows
+
+on:
+  push:
+    branches:
+      - proof/cleanup-artifact-source-carry-260821
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Close the completed Source Carry proof Issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'proof: source carry artifact-runtime.bidirectional from app ID only in:title' --json number,title --jq '.[] | select(.title=="proof: source carry artifact-runtime.bidirectional from app ID only") | .number' | head -n1)"
+          if [ -n "$issue" ]; then
+            gh issue close "$issue" --repo "$GITHUB_REPOSITORY" --reason completed
+          fi
+
+      - name: Remove one-shot workflows and self-retire
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          root="$RUNNER_TEMP/cleanup"
+          mkdir -p "$root"
+
+          clean_branch() {
+            local branch="$1"; shift
+            if ! git ls-remote --exit-code "$remote" "refs/heads/$branch" >/dev/null 2>&1; then
+              echo "branch absent: $branch"
+              return
+            fi
+            local dir="$root/${branch//\//_}"
+            git clone --quiet --depth=1 --branch "$branch" "$remote" "$dir"
+            git -C "$dir" config user.name github-actions[bot]
+            git -C "$dir" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            local changed=0
+            for file in "$@"; do
+              if [ -e "$dir/$file" ]; then
+                git -C "$dir" rm --quiet "$file"
+                changed=1
+              fi
+            done
+            if [ "$changed" -eq 1 ]; then
+              git -C "$dir" commit --quiet -m "chore: retire temporary Source Carry proof workflow"
+              git -C "$dir" push --quiet origin "$branch"
+            else
+              echo "already clean: $branch"
+            fi
+          }
+
+          clean_branch proof/trigger-live-artifact-source-carry-260821 \
+            .github/workflows/proof-trigger-live-artifact-source-carry.yml
+          clean_branch proof/build-artifact-app-source-carry-260821 \
+            .github/workflows/proof-build-artifact-app-source-carry.yml
+          clean_branch proof/cleanup-artifact-source-carry-260821 \
+            .github/workflows/proof-cleanup-artifact-source-carry.yml
