@@ -1,0 +1,151 @@
+name: Transport Artifact App closure candidate
+
+on:
+  push:
+    branches:
+      - transport/artifact-app-closure-c42300d-260821
+    paths:
+      - '.github/workflows/transport-artifact-app-closure.yml'
+      - '.github/transport/artifact-app-closure-c42300d/**'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  transport:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BASE_SHA: b0c992d45632e5e84f87a1029de0fbd1d5e18954
+      CANDIDATE_SHA: c42300db0a0d97d2cac5adb70fc265550a50540f
+      CANDIDATE_TREE: 99d027d23a86cde57df58f1cd4737d48e3657576
+      TARGET_BRANCH: proposal/artifact-app-closure-260821
+      TRANSPORT_DIR: .github/transport/artifact-app-closure-c42300d
+      B64_BYTES: '39380'
+      B64_SHA256: 2447eafec56e0716c284c29577d80d2188ac9dd41ff22a9d9597a8bcedd09d84
+      BUNDLE_BYTES: '29534'
+      BUNDLE_SHA256: 4e7462065b3c05919a2eca13683000d01e1925ec74b3e694e98f88193f91292b
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Reconstruct exact candidate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          b64="$RUNNER_TEMP/candidate.bundle.b64.txt"
+          bundle="$RUNNER_TEMP/candidate.bundle"
+          cat \
+            "$TRANSPORT_DIR/chunk-00" \
+            "$TRANSPORT_DIR/chunk-01-0" \
+            "$TRANSPORT_DIR/chunk-01-1" \
+            "$TRANSPORT_DIR/chunk-02" \
+            "$TRANSPORT_DIR/chunk-03-0" \
+            "$TRANSPORT_DIR/chunk-03-1" \
+            "$TRANSPORT_DIR/chunk-04" \
+            "$TRANSPORT_DIR/chunk-05" > "$b64"
+          test "$(wc -c < "$b64")" -eq "$B64_BYTES"
+          test "$(sha256sum "$b64" | awk '{print $1}')" = "$B64_SHA256"
+          base64 --decode "$b64" > "$bundle"
+          test "$(wc -c < "$bundle")" -eq "$BUNDLE_BYTES"
+          test "$(sha256sum "$bundle" | awk '{print $1}')" = "$BUNDLE_SHA256"
+
+      - name: Materialize exact current base and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/candidate.bundle"
+          work="$RUNNER_TEMP/candidate"
+          remote_head="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/proposals | awk 'NR==1 {print $1}')"
+          test "$remote_head" = "$BASE_SHA"
+          git init --quiet "$work"
+          git -C "$work" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git -C "$work" fetch --quiet --depth=1 origin refs/heads/proposals
+          test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$BASE_SHA"
+          git -C "$work" checkout --quiet -b proposals FETCH_HEAD
+          git -C "$work" bundle verify "$bundle"
+          git -C "$work" fetch --quiet "$bundle" HEAD:refs/remotes/transport/candidate
+          candidate="$(git -C "$work" rev-parse refs/remotes/transport/candidate)"
+          test "$candidate" = "$CANDIDATE_SHA"
+          test "$(git -C "$work" rev-parse "$candidate^")" = "$BASE_SHA"
+          test "$(git -C "$work" rev-parse "$candidate^{tree}")" = "$CANDIDATE_TREE"
+          git -C "$work" checkout --quiet -b "$TARGET_BRANCH" "$candidate"
+          test -z "$(git -C "$work" status --porcelain)"
+          git -C "$work" fsck --no-dangling
+
+      - name: Run bounded candidate checks before ref write
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/candidate"
+          node --check "$work/packages/artifact-app/bin/artifact-app.mjs"
+          node --check "$work/packages/artifact-app/runtime/controller.mjs"
+          node --check "$work/packages/artifact-app/tests/controller.mjs"
+          node --check "$work/packages/artifact-app/tests/e2e.mjs"
+          python3 -m py_compile "$work/packages/artifact-app/tests/browser_smoke.py"
+          node "$work/packages/artifact-app/tests/controller.mjs"
+          node "$work/packages/chatgpt-capability/ingress/carrier-job.mjs" selftest
+          python3 - "$work" <<'PY'
+          import json, pathlib, sys
+          root=pathlib.Path(sys.argv[1])
+          app=json.loads((root/'apps/artifact-runtime-interactive/app.json').read_text())
+          pub=json.loads((root/'verification/artifact-app-publication/manifest.json').read_text())
+          assert app['schema']=='artifact-app-definition/1'
+          assert app['id']=='artifact-runtime.interactive'
+          assert pub['schema']=='ops.artifactAppPublication/1'
+          assert pub['app']['id']==app['id']
+          assert pub['publication']['treeDigest']=='sha256:4d7c4d9ed50b706ea35b6e44406aca413d60678a17fcd93888e3f68d75dd4784'
+          PY
+
+      - name: Create proposal ref only from exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          if [ -n "$existing" ]; then
+            test "$existing" = "$CANDIDATE_SHA"
+          else
+            git -C "$RUNNER_TEMP/candidate" push --quiet \
+              "https://x-access-token:${GH_TOKEN}@github.com/$GITHUB_REPOSITORY.git" \
+              "$CANDIDATE_SHA:refs/heads/$TARGET_BRANCH"
+          fi
+          test "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')" = "$CANDIDATE_SHA"
+
+      - name: Write transport receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/transport-receipt.json" <<EOF
+          {"schema":"ops.artifactAppCandidateTransport/1","status":"PASS","authority":false,"base":"$BASE_SHA","candidate":"$CANDIDATE_SHA","tree":"$CANDIDATE_TREE","branch":"$TARGET_BRANCH","bundleSha256":"sha256:$BUNDLE_SHA256","run":"$GITHUB_RUN_ID"}
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artifact-app-candidate-transport-${{ github.run_id }}
+          path: ${{ runner.temp }}/transport-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record candidate identity on issue 160
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Artifact App candidate transport — PASS
+
+          - exact base: \`$BASE_SHA\`
+          - exact candidate: \`$CANDIDATE_SHA\`
+          - exact tree: \`$CANDIDATE_TREE\`
+          - proposal branch: \`$TARGET_BRANCH\`
+          - bundle SHA-256: \`$BUNDLE_SHA256\`
+          - run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          This is byte transport evidence only. The proposal requires normal CI, browser proof, review, merge, immutable App Release, public App Carry, and source-carry proofs before completion.
+          EOF
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
