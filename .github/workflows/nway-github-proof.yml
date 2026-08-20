@@ -1,0 +1,110 @@
+name: nway-github-proof
+
+on:
+  push:
+    branches: [proof-nway-github-6a85fd4d-branch-set]
+    paths:
+      - 'verification/nway-github-proof/branch-set.json'
+      - 'verification/nway-github-proof/fault.txt'
+      - 'verification/nway-github-proof/expected.json'
+      - 'verification/nway-github-proof/decision.json'
+      - 'verification/nway-github-proof/target-ref.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nway-github-proof-6a85fd4d
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.2'
+          cache: false
+
+      - name: Materialize exact local-proof Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/nway-src"
+          mkdir -p "$src"
+          cat verification/nway-github-proof/core.part.* > "$RUNNER_TEMP/core-src.tar.gz.b64.txt"
+          base64 -d "$RUNNER_TEMP/core-src.tar.gz.b64.txt" > "$RUNNER_TEMP/core-src.tar.gz"
+          cat verification/nway-github-proof/script.part.* > "$RUNNER_TEMP/github_ci.py.b64"
+          base64 -d "$RUNNER_TEMP/github_ci.py.b64" > "$RUNNER_TEMP/github_ci.py"
+          test "$(sha256sum "$RUNNER_TEMP/core-src.tar.gz" | awk '{print $1}')" = "b02f9115d4e9b26342c6983f596e58ecce250a593c61cca54ff10b6d4b4cba8b"
+          tar -xzf "$RUNNER_TEMP/core-src.tar.gz" -C "$src"
+          (cd "$src" && go build -trimpath -o "$RUNNER_TEMP/nway-evidence" ./cmd/nway-evidence)
+          (cd "$src" && go build -trimpath -o "$RUNNER_TEMP/ce-git-effect" ./cmd/ce-git-effect)
+          (cd packages/shiftleft-admission && go build -trimpath -o "$RUNNER_TEMP/policyctl" ./cmd/policyctl)
+
+      - name: Run one immutable branch-set attempt
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AUTHORITY: https://github.com/${{ github.repository }}.git
+          BRANCH_SET_REF: refs/heads/proof-nway-github-6a85fd4d-branch-set
+        run: |
+          set -euo pipefail
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+          fault="$(tr -d '\r\n' < verification/nway-github-proof/fault.txt)"
+          target_ref="$(tr -d '\r\n' < verification/nway-github-proof/target-ref.txt)"
+          out="$RUNNER_TEMP/nway-proof"
+          python3 "$RUNNER_TEMP/github_ci.py" \
+            --authority "$AUTHORITY" \
+            --branch-set-ref "$BRANCH_SET_REF" \
+            --branch-set-commit "$GITHUB_SHA" \
+            --target-ref "$target_ref" \
+            --source "$RUNNER_TEMP/nway-src" \
+            --policyctl "$RUNNER_TEMP/policyctl" \
+            --nway "$RUNNER_TEMP/nway-evidence" \
+            --ce "$RUNNER_TEMP/ce-git-effect" \
+            --out "$out" \
+            --fault "$fault"
+          cat "$out/attempt.json"
+          python3 - "$out/attempt.json" verification/nway-github-proof/expected.json <<'PY'
+          import json,sys
+          actual=json.load(open(sys.argv[1])); expected=json.load(open(sys.argv[2]))
+          for key,value in expected.items():
+              if actual.get(key) != value:
+                  raise SystemExit(f"expected {key}={value!r}, got {actual.get(key)!r}")
+          PY
+
+      - name: Publish immutable evidence projection
+        if: ${{ always() }}
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVIDENCE_BRANCH: proof-nway-github-6a85fd4d-evidence
+        run: |
+          set -euo pipefail
+          auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+          repo="https://github.com/${GITHUB_REPOSITORY}.git"
+          dst="$RUNNER_TEMP/evidence"
+          git clone --quiet --branch "$EVIDENCE_BRANCH" "$repo" "$dst"
+          git -C "$dst" config user.name nway-proof
+          git -C "$dst" config user.email nway-proof@example.invalid
+          path="attempts/$GITHUB_SHA"
+          mkdir -p "$dst/$path"
+          if [ -d "$RUNNER_TEMP/nway-proof" ]; then
+            find "$RUNNER_TEMP/nway-proof" -maxdepth 1 -type f -exec cp {} "$dst/$path/" \;
+          fi
+          printf '%s\n' "$GITHUB_SHA" > "$dst/$path/branch-set-commit.txt"
+          git -C "$dst" add "$path"
+          git -C "$dst" commit -q -m "proof evidence $GITHUB_SHA"
+          git -C "$dst" push --quiet origin HEAD:"refs/heads/$EVIDENCE_BRANCH"
