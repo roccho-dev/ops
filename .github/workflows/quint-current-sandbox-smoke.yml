@@ -1,0 +1,179 @@
+name: Quint v0.32.0 current-sandbox smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/quint-current-sandbox-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      QUINT_VERSION: '0.32.0'
+      QUINT_URL: https://github.com/quint-co/quint/releases/download/v0.32.0/quint-linux-amd64
+      QUINT_SHA256: 939b64095b706017f2f202c6f99c860c40be7c31bddc2b98557316e50f42cd7f
+    steps:
+      - name: Acquire exact Quint binary and run bounded fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 022
+
+          out="$RUNNER_TEMP/quint-v${QUINT_VERSION}-smoke"
+          bin="$out/bin/quint"
+          mkdir -p "$out/bin" "$out/models" "$out/probes"
+
+          curl \
+            --proto '=https' \
+            --tlsv1.2 \
+            --fail-with-body \
+            --location \
+            --retry 3 \
+            --retry-all-errors \
+            --connect-timeout 20 \
+            --max-time 240 \
+            --output "$bin" \
+            "$QUINT_URL"
+
+          test -s "$bin"
+          actual_sha="$(sha256sum "$bin" | cut -d' ' -f1)"
+          test "$actual_sha" = "$QUINT_SHA256"
+          file -b "$bin" | tee "$out/probes/file.txt"
+          grep -F 'ELF 64-bit LSB' "$out/probes/file.txt"
+          grep -F 'x86-64' "$out/probes/file.txt"
+          chmod 0555 "$bin"
+
+          timeout 20s "$bin" --version > "$out/probes/version.txt" 2>&1
+          grep -F "$QUINT_VERSION" "$out/probes/version.txt"
+
+          cat > "$out/models/bad.qnt" <<'QNT'
+          module bad {
+            var n: int
+
+            action init = {
+              n' = 0
+            }
+
+            action step = {
+              n' = n + 1
+            }
+
+            val staysZero = n == 0
+          }
+          QNT
+
+          cat > "$out/models/good.qnt" <<'QNT'
+          module good {
+            var n: int
+
+            action init = {
+              n' = 0
+            }
+
+            action step = {
+              n' = n
+            }
+
+            val staysZero = n == 0
+          }
+          QNT
+
+          timeout 30s "$bin" typecheck "$out/models/bad.qnt" > "$out/probes/typecheck-bad.txt" 2>&1
+          timeout 30s "$bin" typecheck "$out/models/good.qnt" > "$out/probes/typecheck-good.txt" 2>&1
+
+          set +e
+          timeout 30s "$bin" run \
+            --backend=typescript \
+            --max-samples=1 \
+            --max-steps=2 \
+            --seed=0x1 \
+            --invariant=staysZero \
+            "$out/models/bad.qnt" > "$out/probes/bad-run.txt" 2>&1
+          bad_exit=$?
+          set -e
+          test "$bad_exit" -eq 1
+          grep -F 'Invariant violated' "$out/probes/bad-run.txt"
+          grep -F '[violation] Found an issue' "$out/probes/bad-run.txt"
+
+          timeout 30s "$bin" run \
+            --backend=typescript \
+            --max-samples=1 \
+            --max-steps=2 \
+            --seed=0x1 \
+            --invariant=staysZero \
+            "$out/models/good.qnt" > "$out/probes/good-run.txt" 2>&1
+          good_exit=$?
+          test "$good_exit" -eq 0
+          grep -F '[ok] No violation found' "$out/probes/good-run.txt"
+
+          python3 - "$out" "$bad_exit" "$good_exit" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1])
+          sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+          receipt = {
+              "schema": "ops.quint-current-sandbox-smoke/1",
+              "status": "PASS",
+              "source": {
+                  "repository": "quint-co/quint",
+                  "release": "v" + os.environ["QUINT_VERSION"],
+                  "asset": "quint-linux-amd64",
+                  "url": os.environ["QUINT_URL"],
+              },
+              "binary": {
+                  "sha256": sha(root / "bin/quint"),
+                  "expectedSha256": os.environ["QUINT_SHA256"],
+                  "bytes": (root / "bin/quint").stat().st_size,
+                  "versionText": (root / "probes/version.txt").read_text(encoding="utf-8").strip(),
+              },
+              "fixtures": {
+                  "badModelSha256": sha(root / "models/bad.qnt"),
+                  "goodModelSha256": sha(root / "models/good.qnt"),
+                  "typecheck": "PASS",
+                  "knownViolation": {"exit": int(sys.argv[2]), "status": "PASS"},
+                  "knownSafeBoundedRun": {"exit": int(sys.argv[3]), "status": "PASS"},
+              },
+              "execution": {
+                  "backend": "typescript",
+                  "maxSamples": 1,
+                  "maxSteps": 2,
+                  "seed": "0x1",
+              },
+              "boundary": {
+                  "topicIndependent": True,
+                  "implementationMapping": False,
+                  "exhaustiveModelChecking": False,
+                  "claim": "bounded simulator smoke only",
+              },
+          }
+          (root / "receipt.json").write_text(
+              json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          (
+            cd "$out"
+            find . -type f ! -name SHA256SUMS -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Upload exact Quint runtime and smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: quint-v0.32.0-current-sandbox-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/quint-v0.32.0-smoke/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
