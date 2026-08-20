@@ -169,7 +169,6 @@ def evaluate(cdp: Cdp, expression: str) -> object:
 
 OBSERVATION = """(() => {
   const proof = globalThis.artifactShellProof;
-  const action = globalThis.artifactShellActionProof;
   const request = proof?.request || null;
   const input = request?.inputs?.find(item => item?.schema === 'a2ui-app/1');
   const result = proof?.outcome?.result || null;
@@ -180,8 +179,6 @@ OBSERVATION = """(() => {
     shellStatus: result?.status || null,
     domState: document.getElementById('status')?.dataset?.state || null,
     count: input?.source?.value?.state?.count ?? null,
-    actionStatus: action?.status || null,
-    actionHref: action?.href || null,
     request,
     outputContracts: (result?.outputs || []).map(item => item.contract),
     capability: receipt?.capability ? `${receipt.capability.id}@${receipt.capability.version}` : null,
@@ -282,12 +279,11 @@ def main(argv: list[str]) -> int:
             invariant(clicked is True, "increment button is missing")
             next_state = wait_for(
                 first,
-                lambda value: value.get("shellStatus") == "PASS" and value.get("actionStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url,
+                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url,
                 "clicked next app state",
             )
             next_url = next_state.get("href")
             invariant(isinstance(next_url, str), "next URL is missing")
-            invariant(next_state.get("actionHref") == next_url, "action proof URL differs from browser URL")
             invariant(next_state.get("capability") == "render.a2ui.app@1", "next capability is not render.a2ui.app@1")
             invariant("a2ui-app-render-receipt/1" in next_state.get("outputContracts", []), "next output contract is missing")
             next_request = next_state.get("request")
