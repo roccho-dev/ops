@@ -1,0 +1,106 @@
+name: Proof bidirectional Artifact App identities
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-artifact-app-identities.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      UI_COMMIT: 3a6eaeeb77aef568987add668f5c9b6aa426f74e
+      UI_TREE: dfe8814083abc1faadfc67a6fdc93d180c723244
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Materialize exact accepted UI and compute publication identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          out="$RUNNER_TEMP/publication"
+          archive="$RUNNER_TEMP/artifact-runtime.tar.gz"
+          carrier="$RUNNER_TEMP/artifact-runtime.tar.gz.b64.txt"
+          report="$RUNNER_TEMP/identities.json"
+
+          git clone --filter=blob:none --no-checkout https://github.com/roccho-dev/ui.git "$ui"
+          git -C "$ui" fetch --depth=1 origin "$UI_COMMIT"
+          git -C "$ui" checkout --detach "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse HEAD)" = "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse 'HEAD^{tree}')" = "$UI_TREE"
+          test -z "$(git -C "$ui" status --porcelain)"
+
+          (cd "$ui" && npm run check:artifact-runtime)
+          (cd "$ui" && node apps/artifact-shell/scripts/build-publication.mjs --out="$out")
+          (cd "$out" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          base64 -w0 "$archive" > "$carrier"
+          base64 --decode "$carrier" | cmp - "$archive"
+
+          python3 - "$out" "$archive" "$carrier" "$report" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); archive=pathlib.Path(sys.argv[2]); carrier=pathlib.Path(sys.argv[3]); report=pathlib.Path(sys.argv[4])
+          artifact=json.loads((root/'artifact-manifest.json').read_text(encoding='utf-8'))
+          catalog=json.loads((root/'catalog.json').read_text(encoding='utf-8'))
+          kernel=catalog['kernel']; kernel_id=kernel['digest'].removeprefix('sha256:')
+          data={
+            'schema':'ops.artifactRuntimeAppIdentityProof/1','status':'PASS','authority':False,
+            'source':{'repository':'roccho-dev/ui','commit':'3a6eaeeb77aef568987add668f5c9b6aa426f74e','tree':'dfe8814083abc1faadfc67a6fdc93d180c723244'},
+            'publication':{
+              'treeDigest':artifact['treeDigest'],
+              'kernelDigest':kernel['digest'],
+              'kernelId':kernel_id,
+              'listedFiles':len(artifact['files']),
+              'capabilities':[f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']],
+              'archive':{'bytes':archive.stat().st_size,'sha256':'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()},
+              'carrier':{'bytes':carrier.stat().st_size,'sha256':'sha256:'+hashlib.sha256(carrier.read_bytes()).hexdigest(),'codec':'standard-base64-no-whitespace'},
+            },
+            'entrypoints':{
+              'browser':'index.html',
+              'catalog':'catalog.json',
+              'artifactManifest':'artifact-manifest.json',
+              'codec':f'kernel/{kernel_id}/packages/url-module/src/index.mjs',
+              'invocation':f'kernel/{kernel_id}/packages/artifact-invocation/src/index.mjs',
+              'actionCompiler':f'kernel/{kernel_id}/apps/artifact-shell/src/invocation-action.mjs',
+              'shell':f'kernel/{kernel_id}/apps/artifact-shell/src/shell-core.mjs',
+            },
+          }
+          report.write_text(json.dumps(data,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          print(json.dumps(data,indent=2,sort_keys=True))
+          PY
+
+      - name: Write exact identities to Issue 193
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/identities.json"
+          python3 - "$report" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8')); p=x['publication']; e=x['entrypoints']; s=x['source']
+          print('## Exact bidirectional Artifact App identities — PASS')
+          print()
+          print(f"- UI source: `{s['commit']}` / tree `{s['tree']}`")
+          print(f"- publication tree: `{p['treeDigest']}`")
+          print(f"- kernel: `{p['kernelDigest']}`")
+          print(f"- capabilities: `{len(p['capabilities'])}` — `{', '.join(p['capabilities'])}`")
+          print(f"- listed files: `{p['listedFiles']}`")
+          print(f"- archive: `{p['archive']['bytes']}` bytes / `{p['archive']['sha256']}`")
+          print(f"- Carrier: `{p['carrier']['bytes']}` bytes / `{p['carrier']['sha256']}`")
+          print('- entrypoints:')
+          for key,value in e.items(): print(f"  - `{key}`: `{value}`")
+          print()
+          print('Source input was exact GitHub Git only; uploaded ZIP input was not used. This is non-authority evidence for the focused Ops app-closure candidate.')
+          PY
+          gh issue comment 193 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
