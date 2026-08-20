@@ -1,0 +1,146 @@
+name: Proof carry exact OPS repo head
+
+on:
+  push:
+    branches:
+      - proof/carry-ops-head-b0c992d-260820
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  carry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Build and verify exact one-commit shallow Git capsule
+        id: build
+        env:
+          TARGET_REPO: roccho-dev/ops
+          TARGET_BRANCH: proposals
+          EXPECTED_HEAD: b0c992d45632e5e84f87a1029de0fbd1d5e18954
+          EXPECTED_TREE: dda8e4da3b685b16b8a760f82670e4f9849afbb6
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ops-repo"
+          restore="$RUNNER_TEMP/restored"
+          out="$RUNNER_TEMP/out"
+          mkdir -p "$work" "$restore" "$out"
+
+          git init --quiet "$work"
+          git -C "$work" remote add origin "https://github.com/$TARGET_REPO.git"
+          remote_head="$(git ls-remote "https://github.com/$TARGET_REPO.git" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git -C "$work" fetch --quiet --depth=1 origin "refs/heads/$TARGET_BRANCH"
+          test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$EXPECTED_HEAD"
+          git -C "$work" checkout --quiet -b "$TARGET_BRANCH" FETCH_HEAD
+
+          head="$(git -C "$work" rev-parse HEAD)"
+          tree="$(git -C "$work" rev-parse 'HEAD^{tree}')"
+          test "$head" = "$EXPECTED_HEAD"
+          test "$tree" = "$EXPECTED_TREE"
+          test "$(git -C "$work" rev-parse --is-shallow-repository)" = true
+          test "$(git -C "$work" rev-list --count HEAD)" = 1
+          test "$(git -C "$work" branch --show-current)" = "$TARGET_BRANCH"
+          test "$(git -C "$work" remote get-url origin)" = "https://github.com/$TARGET_REPO.git"
+          test -z "$(git -C "$work" status --porcelain)"
+          git -C "$work" fsck --no-dangling
+
+          archive="$out/$head.git.tar.gz"
+          carrier="$archive.b64.txt"
+          receipt="$out/$head.receipt.json"
+          tar -C "$work" -czf "$archive" .git
+          base64 -w0 "$archive" > "$carrier"
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.git.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.git.tar.gz"
+          base64 -w0 "$RUNNER_TEMP/decoded.git.tar.gz" | cmp - "$carrier"
+
+          tar -C "$restore" -xzf "$archive"
+          git -C "$restore" reset --hard HEAD
+          test "$(git -C "$restore" rev-parse HEAD)" = "$head"
+          test "$(git -C "$restore" rev-parse 'HEAD^{tree}')" = "$tree"
+          test "$(git -C "$restore" rev-parse --is-shallow-repository)" = true
+          test "$(git -C "$restore" rev-list --count HEAD)" = 1
+          test "$(git -C "$restore" branch --show-current)" = "$TARGET_BRANCH"
+          test "$(git -C "$restore" remote get-url origin)" = "https://github.com/$TARGET_REPO.git"
+          test -z "$(git -C "$restore" status --porcelain)"
+          git -C "$restore" fsck --no-dangling
+
+          archive_bytes="$(stat -c %s "$archive")"
+          archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          carrier_bytes="$(stat -c %s "$carrier")"
+          carrier_sha="$(sha256sum "$carrier" | awk '{print $1}')"
+          python3 - "$receipt" "$TARGET_REPO" "$TARGET_BRANCH" "$head" "$tree" "$archive" "$archive_bytes" "$archive_sha" "$carrier" "$carrier_bytes" "$carrier_sha" <<'PY'
+          import json, pathlib, sys
+          receipt, repo, branch, head, tree, archive, archive_bytes, archive_sha, carrier, carrier_bytes, carrier_sha = sys.argv[1:]
+          value = {
+              "schema": "repo-head-actions-artifact/1",
+              "status": "PASS",
+              "authority": False,
+              "source_repo": repo,
+              "source_branch": branch,
+              "head": head,
+              "tree": tree,
+              "shallow": True,
+              "commit_count": 1,
+              "archive": {
+                  "name": pathlib.Path(archive).name,
+                  "bytes": int(archive_bytes),
+                  "sha256": archive_sha,
+              },
+              "carrier": {
+                  "name": pathlib.Path(carrier).name,
+                  "bytes": int(carrier_bytes),
+                  "sha256": carrier_sha,
+                  "codec": "standard-base64",
+                  "decoded_sha256": archive_sha,
+              },
+              "transport": "github-actions-artifact",
+          }
+          pathlib.Path(receipt).write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "archive_sha=$archive_sha" >> "$GITHUB_OUTPUT"
+          echo "carrier_sha=$carrier_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Upload exact capsule, Carrier, and receipt
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-head-ops-${{ steps.build.outputs.head }}
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Report artifact identity to ops issue 117
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.build.outputs.head }}
+          TREE_SHA: ${{ steps.build.outputs.tree }}
+          ARCHIVE_SHA: ${{ steps.build.outputs.archive_sha }}
+          CARRIER_SHA: ${{ steps.build.outputs.carrier_sha }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## OPS Repo Head Carrier proof result — PASS
+
+          - source: \`roccho-dev/ops:proposals\`
+          - exact HEAD: \`$HEAD_SHA\`
+          - exact tree: \`$TREE_SHA\`
+          - shallow / commit count: \`true / 1\`
+          - raw capsule SHA-256: \`$ARCHIVE_SHA\`
+          - Carrier SHA-256: \`$CARRIER_SHA\`
+          - Actions run: $RUN_URL
+          - artifact ID: \`$ARTIFACT_ID\`
+          - artifact digest: \`$ARTIFACT_DIGEST\`
+          - authority: \`false\`; Git commit remains source authority
+          EOF
+          gh issue comment 117 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
