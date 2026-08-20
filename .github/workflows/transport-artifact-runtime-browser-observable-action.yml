@@ -1,0 +1,66 @@
+name: Transport Artifact Runtime observable-action browser proof fix
+
+on:
+  pull_request:
+    branches: [proposals]
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_BASE: d7e324bba9b280cf9b2a7e2fb043c80e1fdcbed6
+      TARGET_BRANCH: fix/artifact-runtime-browser-observable-action-260821
+      TARGET_PATH: verification/artifact-runtime-static-host/browser_smoke.py
+      EXPECTED_BLOB: 249e630eccdd37ad8846dbcfb12f0ab8c3b2d1a2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.EXPECTED_BASE }}
+          fetch-depth: 1
+
+      - name: Remove the nonexistent internal action-proof dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_base="$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')"
+          remote_target="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test "$remote_base" = "$EXPECTED_BASE"
+          test "$remote_target" = "$EXPECTED_BASE"
+          test "$(git hash-object "$TARGET_PATH")" = "$EXPECTED_BLOB"
+
+          python3 - "$TARGET_PATH" <<'PY'
+          from pathlib import Path
+          import sys
+          path=Path(sys.argv[1])
+          source=path.read_text(encoding='utf-8')
+          replacements={
+              '  const action = globalThis.artifactShellActionProof;\n':'',
+              '    actionStatus: action?.status || null,\n':'',
+              '    actionHref: action?.href || null,\n':'',
+              '                lambda value: value.get("shellStatus") == "PASS" and value.get("actionStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url,\n':'                lambda value: value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url,\n',
+              '            invariant(next_state.get("actionHref") == next_url, "action proof URL differs from browser URL")\n':'',
+          }
+          for old,new in replacements.items():
+              assert source.count(old)==1, old
+              source=source.replace(old,new)
+          path.write_text(source,encoding='utf-8')
+          PY
+
+          python3 -m py_compile "$TARGET_PATH"
+          git diff --check
+          test "$(git diff --name-only)" = "$TARGET_PATH"
+          test "$(git diff --numstat | awk '{print $1, $2}')" = "1 5"
+          ! grep -F 'artifactShellActionProof' "$TARGET_PATH"
+          ! grep -F 'actionStatus' "$TARGET_PATH"
+          ! grep -F 'actionHref' "$TARGET_PATH"
+          grep -F 'value.get("shellStatus") == "PASS" and value.get("count") == 1 and value.get("href") != initial_url' "$TARGET_PATH"
+
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add "$TARGET_PATH"
+          git commit -m "fix: prove action through public state and URL"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
