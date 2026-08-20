@@ -72,7 +72,7 @@ for (const entry of catalog.capabilities) {
   invariant(publication.schema === "artifact-capability-publication/2", "capability publication schema is unsupported");
   invariant(publication.releaseHash === entry.releaseHash, "capability release hash differs from catalog");
   const enginePath = path.join(capabilityRoot, "engine.mjs");
-  const engineHref = pathToFileURL(enginePath).href;
+  const engineHref = `https://artifact-app.invalid/engines/${encodeURIComponent(publication.capability.id)}-${encodeURIComponent(publication.capability.version)}.mjs`;
   const bytes = fs.readFileSync(enginePath);
   invariant(publication.capability.engine.digest === sha(bytes), "capability engine digest mismatch");
   engineBytes.set(engineHref, bytes);
@@ -90,7 +90,7 @@ for (const entry of catalog.capabilities) {
 invariant(appFixture?.request, "A2UI app pass fixture is missing");
 
 const runtime = await createArtifactInvocationRuntime({
-  engineBaseUrl: pathToFileURL(catalogPath).href,
+  engineBaseUrl: "https://artifact-app.invalid/catalog.json",
   environment: Object.freeze({ runtime: "browser", features: Object.freeze(["crypto.subtle", "dom", "fetch", "file", "wasm", "worker"]) }),
   fetchEngine: async href => {
     const bytes = engineBytes.get(String(href));
@@ -171,6 +171,6 @@ const receipt = Object.freeze({
   }),
   consumer: Object.freeze({ sourceCloneUsed: false, sourceBuildUsed: false, repairUsed: false }),
 });
-const canonicalJson = (await importFromApp({ module: app.entrypoints.codec, export: "canonicalJson" }));
+const canonicalJson = await importFromApp({ module: app.entrypoints.codec, export: "canonicalJson" });
 fs.writeFileSync(receiptPath, `${canonicalJson(receipt)}\n`, "utf8");
 console.log(JSON.stringify(receipt));
