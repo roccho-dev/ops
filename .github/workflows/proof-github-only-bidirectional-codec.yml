@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - proof/github-only-bidirectional-codec-260821
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - .github/workflows/proof-github-only-bidirectional-codec.yml
 
 permissions:
   contents: read
