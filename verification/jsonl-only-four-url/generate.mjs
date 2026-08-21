@@ -47,15 +47,26 @@ const decode = await load(app.operations.decode);
 const validateInvocation = await load(app.operations.validateInvocation);
 const canonicalJson = await load({ module: app.entrypoints.codec, export: "canonicalJson" });
 
+const readPointer = (value, pointer) => {
+  if (typeof pointer !== "string" || !pointer.startsWith("/")) return undefined;
+  let current = value;
+  for (const raw of pointer.split("/").slice(1)) {
+    const key = raw.replaceAll("~1", "/").replaceAll("~0", "~");
+    if (current === null || typeof current !== "object" || !Object.hasOwn(current, key)) return undefined;
+    current = current[key];
+  }
+  return current;
+};
 const collectVisibleLabels = surface => {
   const labels = new Set();
+  const add = value => {
+    if (typeof value === "string" && value.trim()) labels.add(value.trim());
+    if (Array.isArray(value)) for (const item of value) add(item);
+  };
   for (const component of surface.components) {
-    for (const key of ["text", "label", "title"]) {
-      if (typeof component[key] === "string" && component[key].trim()) labels.add(component[key].trim());
-    }
-    for (const node of component.nodes ?? []) {
-      if (typeof node.label === "string" && node.label.trim()) labels.add(node.label.trim());
-    }
+    for (const key of ["text", "label", "title"]) add(component[key]);
+    add(readPointer(surface.dataModel, component.path));
+    for (const node of component.nodes ?? []) add(node.label);
   }
   return [...labels];
 };
