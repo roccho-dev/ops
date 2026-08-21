@@ -105,7 +105,6 @@ jobs:
                 '',
                 `status: \`${{ job.status }}\``,
                 `run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-                `artifact ID: \`${{ steps.upload.outputs.artifact-id }}\``,
-                `artifact digest: \`${{ steps.upload.outputs.artifact-digest }}\``
+                'artifact name: `vim-hq-source-complete`'
               ].join('\n')
             });
