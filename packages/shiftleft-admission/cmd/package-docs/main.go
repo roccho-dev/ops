@@ -13,7 +13,11 @@ func usage() {
 
 commands:
   project  render contract-projection Markdown in one package
-  observe  emit language-neutral package documentation observations`)
+  observe  emit language-neutral package documentation observations
+
+observe phases:
+  full       observe source, routes, and declared package-output surfaces
+  preflight  observe source and routes; package-output surfaces are deferred`)
 }
 
 func fail(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
@@ -40,6 +44,7 @@ func main() {
 		repo := fs.String("repo", ".", "repository root")
 		catalog := fs.String("catalog", "build/packages.jsonl", "package catalog")
 		baseline := fs.String("baseline-catalog", "", "optional base catalog; new packages must have a contract")
+		phase := fs.String("phase", packagedocs.PhaseFull, "observation phase: full or preflight")
 		out := fs.String("out", "", "observations JSONL")
 		surfaces := packagedocs.SurfaceRoots{}
 		fs.Var(&surfaces, "surface", "named projection root name=path; repeatable")
@@ -51,10 +56,14 @@ func main() {
 		if err != nil {
 			fail(err)
 		}
+		obs, err = packagedocs.ApplyPhase(obs, *phase)
+		if err != nil {
+			fail(err)
+		}
 		if err := packagedocs.WriteObservations(*out, obs); err != nil {
 			fail(err)
 		}
-		fmt.Printf("observations=%d\n", len(obs))
+		fmt.Printf("phase=%s observations=%d\n", *phase, len(obs))
 	case "-h", "--help", "help":
 		usage()
 	default:
