@@ -1,6 +1,8 @@
 name: nway-runbook-nix-carry-proof
 
 on:
+  pull_request:
+    branches: [proposals]
   push:
     branches:
       - proof/nway-runbook-nix-carry-6a85fd4d
