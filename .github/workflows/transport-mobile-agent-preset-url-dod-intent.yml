@@ -1,0 +1,67 @@
+name: Transport Mobile Agent preset URL DoD CI intent
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-mobile-agent-preset-url-dod-intent.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_BRANCH: proposal/mobile-agent-preset-url-dod-260821
+    steps:
+      - name: Append exactly one checked-in CI intent row
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          target_sha="$(git ls-remote "$remote" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test -n "$target_sha"
+          git clone --quiet --depth=1 --branch "$TARGET_BRANCH" "$remote" product
+          test "$(git -C product rev-parse HEAD)" = "$target_sha"
+          python3 - product/ci.intent.v1.jsonl <<'PY'
+          import json,pathlib,sys
+          path=pathlib.Path(sys.argv[1])
+          rows=[json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+          target='.github/workflows/mobile-agent-preset-url-dod.yml'
+          assert not any(row.get('path')==target for row in rows)
+          rows.append({
+            'kind':'ci.intent.v1',
+            'path':target,
+            'provider':'github-actions',
+            'role':'bootstrap_exception',
+            'entrypoint':'PR fixed-SHA existing preset App materialization and real Chrome proof; proposals push immutable Release; owner /mobile-agent-preset-deploy issue comment -> dedicated Cloudflare Pages deployment -> stable and deployment-specific Graph/Map/Seq URL readback',
+            'source':'verification/mobile-agent-preset-url-dod/cases.json plus fixed existing App HTML SHA; historical source authority promotion remains ops#233',
+            'authority':False,
+            'dispatch':['pull_request','push','issue_comment'],
+            'push_branches':['proposals'],
+            'generation_mode':'checked_in',
+            'workflow_definition':'checked_in',
+            'artifact_source':'fixed-SHA existing preset maxGraph App HTML, immutable Release, Pages URLs and browser receipts',
+            'artifact_generation':'generated',
+            'final_role':'mobile_agent_preset_public_url_projection',
+            'all_repositories_enforced':False,
+            'exception':{
+              'owner':'ops#233',
+              'reason':'bounded URL DoD bootstrap using fixed existing App bytes; no graph/map/seq preset, renderer, layout, shell or codec is reimplemented',
+              'expiry':'2027-08-21',
+              'return_condition':'replace only the bootstrap App source after exact historical Git source is promoted; retain URL and provider contracts',
+            },
+          })
+          path.write_text('\n'.join(json.dumps(row,sort_keys=True,separators=(',',':'),ensure_ascii=False) for row in rows)+'\n',encoding='utf-8')
+          PY
+          git -C product diff --check
+          test "$(git -C product diff --name-only)" = ci.intent.v1.jsonl
+          git -C product config user.name github-actions[bot]
+          git -C product config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C product add ci.intent.v1.jsonl
+          git -C product commit --quiet -m 'chore: register preset URL DoD workflow intent'
+          git -C product push --quiet origin "$TARGET_BRANCH"
