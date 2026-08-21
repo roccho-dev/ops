@@ -20,7 +20,7 @@ jobs:
   status:
     if: >-
       github.event_name == 'issue_comment' &&
-      github.event.issue.number == 160 &&
+      github.event.issue.number == 230 &&
       github.event.comment.user.login == github.repository_owner &&
       github.event.comment.body == '/artifact-runtime-deploy-status'
     runs-on: ubuntu-24.04
@@ -35,7 +35,7 @@ jobs:
           comments="$RUNNER_TEMP/comments.json"
           runs="$RUNNER_TEMP/runs.json"
           report="$RUNNER_TEMP/deploy-status.json"
-          gh api --paginate "repos/$GITHUB_REPOSITORY/issues/160/comments" > "$comments"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/issues/230/comments" > "$comments"
           gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/artifact-runtime-static-host.yml/runs" -f event=issue_comment -f per_page=50 > "$runs"
           python3 - "$comments" "$runs" "$GITHUB_RUN_ID" "$report" <<'PY'
           import datetime,json,subprocess,sys
@@ -83,13 +83,13 @@ jobs:
           print()
           print('This is read-only operational observation; it performs no Cloudflare or repository mutation beyond this Issue comment.')
           PY
-          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue comment 230 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
 
   materialize:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
-       github.event.issue.number == 160 &&
+       github.event.issue.number == 230 &&
        github.event.comment.user.login == github.repository_owner &&
        github.event.comment.body == '/artifact-runtime-deploy')
     runs-on: ubuntu-24.04
@@ -127,7 +127,7 @@ jobs:
           assert a['schema']=='ops.artifactRuntimeApp/1'
           assert a['authority'] is False and a['status']=='accepted-source' and a['issue']==193
           assert a['id']=='artifact-runtime' and a['version']=='1'
-          assert s['trigger']=={'kind':'owner-issue-comment','issue':160,'command':'/artifact-runtime-deploy'}
+          assert s['trigger']=={'kind':'owner-issue-comment','issue':230,'command':'/artifact-runtime-deploy'}
           assert s['publication']['treeDigest']==p['publication']['treeDigest']
           assert s['publication']['tag']==p['publication']['tag']
           assert s['publication']['archive']==p['publication']['archive']
@@ -248,7 +248,7 @@ jobs:
     needs: materialize
     if: >-
       github.event_name == 'issue_comment' &&
-      github.event.issue.number == 160 &&
+      github.event.issue.number == 230 &&
       github.event.comment.user.login == github.repository_owner &&
       github.event.comment.body == '/artifact-runtime-deploy'
     runs-on: ubuntu-24.04
@@ -391,4 +391,4 @@ jobs:
 
           Static hosting is a non-authority projection. Git remains source authority.
           EOF
-          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue comment 230 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"

@@ -2,7 +2,7 @@
   "schema": "ops.artifactRuntimeStaticHost/1",
   "authority": false,
   "status": "planned-provider-effect",
-  "issue": 160,
+  "issue": 230,
   "appIssue": 193,
   "jsonlIssue": 223,
   "publication": {
@@ -24,7 +24,7 @@
   },
   "trigger": {
     "kind": "owner-issue-comment",
-    "issue": 160,
+    "issue": 230,
     "command": "/artifact-runtime-deploy"
   },
   "readback": {
