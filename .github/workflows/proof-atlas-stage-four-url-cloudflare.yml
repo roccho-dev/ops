@@ -1,0 +1,358 @@
+name: Proof AtlasStage four Cloudflare URLs
+
+on:
+  push:
+    branches:
+      - proof/atlas-stage-four-url-cloudflare-260821
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      TAG: artifact-runtime-ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      TREE_DIGEST: sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      TREE_ID: ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      KERNEL_ID: 707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610
+      ARCHIVE_NAME: artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz
+      ARCHIVE_BYTES: "39822"
+      ARCHIVE_SHA: 06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9
+      STABLE_BASE: https://stg-artifact-runtime.pages.dev/releases/ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposals
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Wait for and verify the immutable AtlasStage Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=false
+          for _ in $(seq 1 120); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 5
+          done
+          test "$ready" = true
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE_NAME" --dir "$RUNNER_TEMP"
+          archive="$RUNNER_TEMP/$ARCHIVE_NAME"
+          test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
+          mkdir -p "$RUNNER_TEMP/publication"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/publication"
+          python3 - "$RUNNER_TEMP/publication" <<'PY'
+          import hashlib,json,os,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          artifact=json.loads((root/'artifact-manifest.json').read_text(encoding='utf-8'))
+          catalog=json.loads((root/'catalog.json').read_text(encoding='utf-8'))
+          assert artifact['schema']=='artifact-shell-publication-artifact/2'
+          assert artifact['treeDigest']==os.environ['TREE_DIGEST']
+          assert len(artifact['files'])==54
+          assert catalog['kernel']['digest']=='sha256:'+os.environ['KERNEL_ID']
+          assert [f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]==[
+            'inspect.json@1','render.a2ui@1','render.a2ui.app@1'
+          ]
+          atlas=[x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')]
+          assert len(atlas)==1
+          for item in artifact['files']:
+            data=(root/item['path']).read_bytes()
+            assert len(data)==item['bytes']
+            assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256']
+          actual=sorted(str(path.relative_to(root)).replace(os.sep,'/') for path in root.rglob('*') if path.is_file())
+          expected=sorted([x['path'] for x in artifact['files']]+['artifact-manifest.json'])
+          assert actual==expected
+          canonical=json.dumps(artifact['files'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+          assert 'sha256:'+hashlib.sha256(canonical).hexdigest()==artifact['treeDigest']
+          print(json.dumps({'status':'PASS','treeDigest':artifact['treeDigest'],'files':len(artifact['files']),'atlasStage':atlas[0]}))
+          PY
+
+      - name: Generate Base, Graph, Map and Seq URLs with the exact codec
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/generate.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import process from 'node:process';
+          import {pathToFileURL} from 'node:url';
+
+          const root=path.join(process.env.RUNNER_TEMP,'publication');
+          const codec=await import(pathToFileURL(path.join(root,'kernel',process.env.KERNEL_ID,'packages/url-module/src/index.mjs')).href);
+          const invocationModule=await import(pathToFileURL(path.join(root,'kernel',process.env.KERNEL_ID,'packages/artifact-invocation/src/index.mjs')).href);
+          const stableBase=process.env.STABLE_BASE;
+          const ordinary=(id,title,text)=>({
+            rootId:'root',surfaceId:id,dataModel:{},components:[
+              {id:'root',component:'Column',children:['title','card']},
+              {id:'title',component:'Text',text:title,variant:'h1'},
+              {id:'card',component:'Card',children:['body']},
+              {id:'body',component:'Text',text},
+            ],
+          });
+          const canvasSurface=(id,title,ariaLabel,viewBox,nodes,edges)=>({
+            rootId:'root',surfaceId:id,dataModel:{},components:[
+              {id:'root',component:'Column',children:['title','canvas']},
+              {id:'title',component:'Text',text:title,variant:'h1'},
+              {id:'canvas',component:'AtlasStage',ariaLabel,viewBox,nodes,edges},
+            ],
+          });
+          const cases=[
+            {
+              id:'base',title:'A2UI Base',expectedLabels:['A2UI Base','A2UI only · no canvas'],nodes:0,edges:0,canvas:false,
+              surface:ordinary('base-proof','A2UI Base','A2UI only · no canvas'),
+            },
+            {
+              id:'graph',title:'Graph Canvas',expectedLabels:['Source','Compiler','URL','Browser'],nodes:4,edges:3,canvas:true,
+              surface:canvasSurface('graph-proof','Graph Canvas','Graph Canvas proof',{x:0,y:0,width:800,height:360},[
+                {id:'source',label:'Source',kind:'data',x:40,y:140,width:140,height:72},
+                {id:'compiler',label:'Compiler',kind:'system',x:230,y:140,width:140,height:72},
+                {id:'url',label:'URL',kind:'data',x:420,y:140,width:140,height:72},
+                {id:'browser',label:'Browser',kind:'system',x:610,y:140,width:140,height:72},
+              ],[
+                {id:'g1',from:'source',to:'compiler',kind:'flow',label:'compile'},
+                {id:'g2',from:'compiler',to:'url',kind:'flow',label:'encode'},
+                {id:'g3',from:'url',to:'browser',kind:'flow',label:'open'},
+              ]),
+            },
+            {
+              id:'map',title:'Semantic Map Canvas',expectedLabels:['Product Value','Request','State','Canvas','Receipt'],nodes:5,edges:4,canvas:true,
+              surface:canvasSurface('map-proof','Semantic Map Canvas','Semantic Map Canvas proof',{x:0,y:0,width:820,height:440},[
+                {id:'value',label:'Product Value',kind:'region',x:20,y:20,width:780,height:400},
+                {id:'request',label:'Request',kind:'event',parentId:'value',x:70,y:160,width:130,height:72},
+                {id:'state',label:'State',kind:'data',parentId:'value',x:245,y:160,width:130,height:72},
+                {id:'canvas',label:'Canvas',kind:'system',parentId:'value',x:420,y:160,width:130,height:72},
+                {id:'receipt',label:'Receipt',kind:'data',parentId:'value',x:595,y:160,width:130,height:72},
+              ],[
+                {id:'m1',from:'request',to:'state',kind:'relation',label:'reduce'},
+                {id:'m2',from:'state',to:'canvas',kind:'relation',label:'project'},
+                {id:'m3',from:'canvas',to:'receipt',kind:'relation',label:'observe'},
+                {id:'m4',from:'receipt',to:'request',kind:'association',label:'iterate'},
+              ]),
+            },
+            {
+              id:'seq',title:'Sequence Canvas',expectedLabels:['User','Browser','Runtime','Open URL','Render','Update URL'],nodes:6,edges:5,canvas:true,
+              surface:canvasSurface('seq-proof','Sequence Canvas','Sequence Canvas proof',{x:0,y:0,width:860,height:480},[
+                {id:'user',label:'User',kind:'actor',x:60,y:40,width:150,height:58},
+                {id:'browser',label:'Browser',kind:'actor',x:355,y:40,width:150,height:58},
+                {id:'runtime',label:'Runtime',kind:'actor',x:650,y:40,width:150,height:58},
+                {id:'open',label:'Open URL',kind:'step',x:60,y:230,width:150,height:64},
+                {id:'render',label:'Render',kind:'step',x:355,y:230,width:150,height:64},
+                {id:'update',label:'Update URL',kind:'step',x:650,y:230,width:150,height:64},
+              ],[
+                {id:'s1',from:'user',to:'open',kind:'message',label:'share'},
+                {id:'s2',from:'open',to:'browser',kind:'message',label:'navigate'},
+                {id:'s3',from:'browser',to:'render',kind:'message',label:'decode'},
+                {id:'s4',from:'render',to:'runtime',kind:'message',label:'execute'},
+                {id:'s5',from:'runtime',to:'update',kind:'message',label:'compile'},
+              ]),
+            },
+          ];
+          const output=[];
+          for(const item of cases){
+            const request=invocationModule.validateArtifactInvocation({
+              schema:'artifact-invocation/2',id:`request.atlas-stage.${item.id}`,intent:'render',
+              inputs:[{id:'surface',mediaType:'application/vnd.roccho.a2ui-surface+json',schema:'a2ui-surface/1',source:{kind:'inline',value:item.surface}}],
+              constraints:{allowedRuntimes:['browser'],noUpload:true},expects:['a2ui-render-receipt/1'],
+            });
+            const url=await codec.createUrlModuleUrl({base:stableBase,fragment:'invoke',value:request});
+            assert.ok(url.length<8192,`${item.id}: URL too long`);
+            assert.deepEqual(await codec.readUrlModule({fragment:'invoke',input:url}),request);
+            output.push({...item,url,urlLength:url.length,request});
+          }
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'four-cases.json'),JSON.stringify({schema:'ops.atlasStageFourUrlCases/1',publicationTree:process.env.TREE_DIGEST,stableBase,cases:output},null,2)+'\n');
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'four-urls.json'),JSON.stringify({schema:'ops.atlasStageFourUrls/1',publicationTree:process.env.TREE_DIGEST,urls:Object.fromEntries(output.map(item=>[item.id,item.url]))},null,2)+'\n');
+          console.log(JSON.stringify({status:'PASS',urls:Object.fromEntries(output.map(item=>[item.id,{length:item.urlLength,url:item.url}]))}));
+          JS
+          RUNNER_TEMP="$RUNNER_TEMP" KERNEL_ID="$KERNEL_ID" STABLE_BASE="$STABLE_BASE" TREE_DIGEST="$TREE_DIGEST" node "$RUNNER_TEMP/generate.mjs"
+
+      - name: Trigger the accepted static-host deployment once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' '/artifact-runtime-deploy' > "$RUNNER_TEMP/deploy.md"
+          gh issue comment 160 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/deploy.md"
+
+      - name: Wait for the stable Cloudflare alias to serve the exact 54-file publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=false
+          for _ in $(seq 1 150); do
+            if curl --fail --silent --show-error --location "${STABLE_BASE}artifact-manifest.json" -o "$RUNNER_TEMP/public-manifest.json"; then
+              if python3 - "$RUNNER_TEMP/public-manifest.json" <<'PY'
+          import json,os,sys
+          try: x=json.load(open(sys.argv[1],encoding='utf-8'))
+          except Exception: raise SystemExit(1)
+          assert x.get('treeDigest')==os.environ['TREE_DIGEST']
+          assert len(x.get('files',[]))==54
+          PY
+              then
+                ready=true
+                break
+              fi
+            fi
+            sleep 6
+          done
+          test "$ready" = true
+          cmp "$RUNNER_TEMP/publication/artifact-manifest.json" "$RUNNER_TEMP/public-manifest.json"
+
+      - name: Install exact proof-only browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/proof"
+          mkdir -p "$proof"
+          cd "$proof"
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          printf '%s\n' "$chrome" > "$RUNNER_TEMP/chrome-bin"
+          "$chrome" --version | tee "$RUNNER_TEMP/chrome-version"
+
+      - name: Open and observe Base, Graph, Map and Seq in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/proof/smoke.mjs" <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import process from 'node:process';
+          import {chromium} from 'playwright-core';
+
+          const fixture=JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP,'four-cases.json'),'utf8'));
+          assert.equal(fixture.schema,'ops.atlasStageFourUrlCases/1');
+          assert.equal(fixture.cases.length,4);
+          const executablePath=fs.readFileSync(path.join(process.env.RUNNER_TEMP,'chrome-bin'),'utf8').trim();
+          const browser=await chromium.launch({executablePath,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+          const receipt={schema:'ops.atlasStageFourUrlSmokeReceipt/1',status:'PASS',authority:false,publicationTree:fixture.publicationTree,stableBase:fixture.stableBase,cases:[]};
+          try{
+            for(const item of fixture.cases){
+              const page=await browser.newPage({viewport:{width:1280,height:900}});
+              const errors=[];
+              page.on('pageerror',error=>errors.push(String(error)));
+              page.on('console',message=>{if(message.type()==='error') errors.push(message.text())});
+              await page.goto(item.url,{waitUntil:'networkidle',timeout:75_000});
+              await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.trim()==='PASS',null,{timeout:75_000});
+              const observation=await page.evaluate(()=>{
+                const result=JSON.parse(document.querySelector('#result')?.textContent||'null');
+                const runtimeReceipt=JSON.parse(document.querySelector('#receipt')?.textContent||'null');
+                const svg=document.querySelector('#surface svg[data-atlas-stage="svg"]');
+                return {
+                  href:location.href,
+                  surfaceText:(document.querySelector('#surface')?.textContent||'').replace(/\s+/g,' ').trim(),
+                  status:document.querySelector('#status')?.textContent?.trim()||null,
+                  result,runtimeReceipt,
+                  canvas:svg?{
+                    nodeCount:Number(svg.getAttribute('data-atlas-node-count')),
+                    edgeCount:Number(svg.getAttribute('data-atlas-edge-count')),
+                    ariaLabel:svg.getAttribute('aria-label'),
+                    viewBox:svg.getAttribute('viewBox'),
+                  }:null,
+                };
+              });
+              assert.equal(observation.status,'PASS');
+              assert.equal(observation.result.status,'PASS');
+              assert.equal(observation.result.outputs?.[0]?.contract,'a2ui-render-receipt/1');
+              assert.equal(observation.runtimeReceipt.capability?.id,'render.a2ui');
+              assert.equal(observation.runtimeReceipt.capability?.version,'1');
+              for(const label of item.expectedLabels) assert.ok(observation.surfaceText.includes(label),`${item.id}: missing ${label}`);
+              if(item.canvas){
+                assert.ok(observation.canvas,`${item.id}: SVG canvas missing`);
+                assert.equal(observation.canvas.nodeCount,item.nodes);
+                assert.equal(observation.canvas.edgeCount,item.edges);
+                assert.ok(observation.canvas.viewBox);
+              }else{
+                assert.equal(observation.canvas,null);
+              }
+              assert.deepEqual(errors,[]);
+              const observed=new URL(observation.href);
+              const requested=new URL(item.url);
+              assert.equal(observed.origin,requested.origin);
+              assert.equal(observed.hash,requested.hash);
+              assert.ok(observed.pathname.startsWith(`/releases/${process.env.TREE_ID}/`));
+              await page.screenshot({path:path.join(process.env.RUNNER_TEMP,`${item.id}.png`),fullPage:true});
+              fs.writeFileSync(path.join(process.env.RUNNER_TEMP,`${item.id}.html`),await page.content());
+              receipt.cases.push({id:item.id,status:'PASS',url:item.url,observedUrl:observation.href,urlLength:item.urlLength,canvas:item.canvas,nodeCount:item.nodes,edgeCount:item.edges,capability:'render.a2ui@1',outputContract:'a2ui-render-receipt/1',browserErrors:0});
+              await page.close();
+            }
+          }finally{await browser.close()}
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'smoke-receipt.json'),JSON.stringify(receipt,null,2)+'\n');
+          console.log(JSON.stringify(receipt));
+          JS
+          cd "$RUNNER_TEMP/proof"
+          RUNNER_TEMP="$RUNNER_TEMP" TREE_ID="$TREE_ID" node smoke.mjs
+
+      - name: Upload non-authority four-URL evidence
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-stage-four-url-smoke-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/smoke-receipt.json
+            ${{ runner.temp }}/four-urls.json
+            ${{ runner.temp }}/four-cases.json
+            ${{ runner.temp }}/public-manifest.json
+            ${{ runner.temp }}/chrome-version
+            ${{ runner.temp }}/base.png
+            ${{ runner.temp }}/graph.png
+            ${{ runner.temp }}/map.png
+            ${{ runner.temp }}/seq.png
+            ${{ runner.temp }}/base.html
+            ${{ runner.temp }}/graph.html
+            ${{ runner.temp }}/map.html
+            ${{ runner.temp }}/seq.html
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record four stable URLs and close Ops issue 219
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/four-urls.json" "$RUNNER_TEMP/smoke-receipt.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          urls=json.load(open(sys.argv[1],encoding='utf-8'))['urls']
+          receipt=json.load(open(sys.argv[2],encoding='utf-8'))
+          print('## AtlasStage Base / Graph / Map / Seq Cloudflare URLs — PASS')
+          print()
+          print(f"- publication tree: `{receipt['publicationTree']}`")
+          print(f"- stable base: {receipt['stableBase']}")
+          print(f"- Base: {urls['base']}")
+          print(f"- Graph: {urls['graph']}")
+          print(f"- Map: {urls['map']}")
+          print(f"- Seq: {urls['seq']}")
+          print()
+          for case in receipt['cases']:
+            canvas='ordinary A2UI' if not case['canvas'] else f"SVG AtlasStage nodes={case['nodeCount']} edges={case['edgeCount']}"
+            print(f"- `{case['id']}`: **PASS**, {canvas}, URL `{case['urlLength']}` chars, browser errors `{case['browserErrors']}`")
+          print()
+          print(f"- proof run: {os.environ['RUN_URL']}")
+          print(f"- artifact ID / digest: `{os.environ['ARTIFACT_ID']}` / `{os.environ['ARTIFACT_DIGEST']}`")
+          print()
+          print('Boundary: Graph/Map/Seq use the trusted GitHub-owned SVG AtlasStage canvas. This is not a maxGraph claim; Map is semantic, not geographic Leaflet. Git remains source authority.')
+          PY
+          gh issue comment 219 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue close 219 --repo "$GITHUB_REPOSITORY" --reason completed
