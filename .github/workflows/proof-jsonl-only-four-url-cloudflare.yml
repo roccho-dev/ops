@@ -1,0 +1,252 @@
+name: Proof JSONL-only four Cloudflare URLs
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-jsonl-only-four-url-cloudflare.yml'
+      - 'verification/jsonl-only-four-url/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Resolve the accepted JSONL-only App closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          app=json.load(open('verification/artifact-runtime-app/manifest.json',encoding='utf-8'))
+          assert app['schema']=='ops.artifactRuntimeApp/1'
+          assert app['status']=='accepted-source' and app['authority'] is False
+          assert app['jsonlIssue']==223
+          assert app['publication']['treeDigest']=='sha256:b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52'
+          assert app['publication']['listedFiles']==63
+          assert app['contracts']['jsonl']['handwrittenSurfaceAllowed'] is False
+          assert app['boundaries']['handwrittenViewDataAllowedInUrlGenerator'] is False
+          assert [(x['id'],x['canvas'],x['nodeCount'],x['edgeCount']) for x in app['contracts']['jsonl']['fixtures']]==[
+            ('base',False,0,0),('graph',True,4,3),('map',True,5,4),('seq',True,6,5),
+          ]
+          values={
+            'TAG':app['publication']['tag'],
+            'TREE_DIGEST':app['publication']['treeDigest'],
+            'TREE_ID':app['publication']['treeDigest'].removeprefix('sha256:'),
+            'ARCHIVE_NAME':app['publication']['archive']['name'],
+            'ARCHIVE_BYTES':str(app['publication']['archive']['bytes']),
+            'ARCHIVE_SHA':app['publication']['archive']['sha256'].removeprefix('sha256:'),
+            'CARRIER_NAME':app['publication']['carrier']['name'],
+            'CARRIER_BYTES':str(app['publication']['carrier']['bytes']),
+            'CARRIER_SHA':app['publication']['carrier']['sha256'].removeprefix('sha256:'),
+            'EXPECTED_FILES':str(app['publication']['listedFiles']),
+            'STABLE_BASE':'https://stg-artifact-runtime.pages.dev/releases/'+app['publication']['treeDigest'].removeprefix('sha256:')+'/',
+          }
+          for key,value in values.items(): print(f'{key}={value}')
+          PY
+
+      - name: Wait for and download the immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/release"
+          mkdir -p "$release"
+          ready=false
+          for attempt in $(seq 1 60); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then ready=true; break; fi
+            sleep 10
+          done
+          test "$ready" = true
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | LC_ALL=C sort > "$RUNNER_TEMP/actual-assets"
+          printf '%s\n' \
+            "$ARCHIVE_NAME" \
+            "$CARRIER_NAME" \
+            artifact-runtime.app.carry.receipt.json \
+            artifact-runtime.app.manifest.json \
+            artifact-runtime.publication.manifest.json \
+            artifact-runtime.publication.receipt.json | LC_ALL=C sort > "$RUNNER_TEMP/expected-assets"
+          cmp "$RUNNER_TEMP/expected-assets" "$RUNNER_TEMP/actual-assets"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$release"
+
+      - name: Verify Release, Carrier and all 63 publication files
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/release"
+          archive="$release/$ARCHIVE_NAME"
+          carrier="$release/$CARRIER_NAME"
+          publication="$RUNNER_TEMP/publication"
+          replay="$RUNNER_TEMP/carry-replay.json"
+
+          cmp verification/artifact-runtime-app/manifest.json "$release/artifact-runtime.app.manifest.json"
+          test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
+          test "$(wc -c < "$carrier")" -eq "$CARRIER_BYTES"
+          test "$(sha256sum "$carrier" | cut -d' ' -f1)" = "$CARRIER_SHA"
+          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$carrier")"
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.tar.gz"
+
+          python3 - "$archive" "$publication" "$TREE_DIGEST" "$EXPECTED_FILES" <<'PY'
+          import hashlib,json,pathlib,sys,tarfile
+          archive,dest,expected_tree,expected_count=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]),sys.argv[3],int(sys.argv[4])
+          dest.mkdir()
+          with tarfile.open(archive,'r:gz') as tf:
+            members=tf.getmembers(); assert members and len(members)<=10000
+            for member in members:
+              parts=pathlib.PurePosixPath(member.name).parts
+              assert not pathlib.PurePosixPath(member.name).is_absolute()
+              assert '..' not in parts and (member.isdir() or member.isfile())
+            tf.extractall(dest)
+          manifest=json.loads((dest/'artifact-manifest.json').read_text(encoding='utf-8'))
+          assert manifest['schema']=='artifact-shell-publication-artifact/2'
+          assert manifest['treeDigest']==expected_tree
+          assert len(manifest['files'])==expected_count
+          for item in manifest['files']:
+            data=(dest/item['path']).read_bytes()
+            assert len(data)==item['bytes'],item['path']
+            assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256'],item['path']
+          actual=sorted(str(path.relative_to(dest)).replace('\\','/') for path in dest.rglob('*') if path.is_file())
+          expected=sorted([item['path'] for item in manifest['files']]+['artifact-manifest.json'])
+          assert actual==expected
+          canonical=json.dumps(manifest['files'],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+          assert 'sha256:'+hashlib.sha256(canonical).hexdigest()==expected_tree
+          PY
+
+          node verification/artifact-runtime-app/carry-smoke.mjs \
+            "$publication" "$release/artifact-runtime.app.manifest.json" "$replay"
+          cmp "$release/artifact-runtime.app.carry.receipt.json" "$replay"
+          python3 - "$replay" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['schema']=='ops.artifactRuntimeAppCarryReceipt/2' and x['status']=='PASS'
+          assert x['operations']['compileJsonl']=='PASS'
+          assert x['jsonl']['handwrittenSurfaceUsed'] is False
+          assert x['jsonl']['sourceCloneUsed'] is False and x['jsonl']['sourceBuildUsed'] is False
+          assert [(c['id'],c['canvas'],c['nodeCount'],c['edgeCount']) for c in x['jsonl']['cases']]==[
+            ('base',False,0,0),('graph',True,4,3),('map',True,5,4),('seq',True,6,5),
+          ]
+          PY
+
+      - name: Generate four URLs from carried JSONL only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node verification/jsonl-only-four-url/generate.mjs \
+            "$RUNNER_TEMP/publication" \
+            "$RUNNER_TEMP/release/artifact-runtime.app.manifest.json" \
+            "$STABLE_BASE" \
+            "$RUNNER_TEMP/four-cases.json"
+          python3 - "$RUNNER_TEMP/four-cases.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['status']=='PASS'
+          assert x['compiler']['handwrittenSurfaceUsed'] is False
+          assert [c['id'] for c in x['cases']]==['base','graph','map','seq']
+          assert all(c['source']['rowKinds']==['TreePatch','StatePatch'] for c in x['cases'])
+          PY
+
+      - name: Wait for the same publication on stable Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$RUNNER_TEMP/publication/artifact-manifest.json"
+          observed="$RUNNER_TEMP/cloudflare-artifact-manifest.json"
+          ready=false
+          for attempt in $(seq 1 80); do
+            if curl --fail --silent --show-error --location --max-time 20 \
+              "$STABLE_BASE/artifact-manifest.json" -o "$observed" && cmp "$expected" "$observed"; then
+              ready=true
+              break
+            fi
+            sleep 10
+          done
+          test "$ready" = true
+
+      - name: Install exact proof driver and select Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/browser-driver"
+          mkdir -p "$proof"
+          npm init --yes --prefix "$proof" >/dev/null
+          npm install --prefix "$proof" --ignore-scripts --no-audit --no-fund playwright-core@1.55.0
+          cp verification/jsonl-only-four-url/smoke.mjs "$proof/smoke.mjs"
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          printf '%s\n' "$chrome" > "$RUNNER_TEMP/chrome-bin"
+          "$chrome" --version > "$RUNNER_TEMP/chrome-version"
+
+      - name: Open Base, Graph, semantic Map and Seq in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/result"
+          node "$RUNNER_TEMP/browser-driver/smoke.mjs" \
+            "$RUNNER_TEMP/four-cases.json" \
+            "$(cat "$RUNNER_TEMP/chrome-bin")" \
+            "$RUNNER_TEMP/result"
+          cp "$RUNNER_TEMP/four-cases.json" "$RUNNER_TEMP/result/four-cases.json"
+          cp "$RUNNER_TEMP/carry-replay.json" "$RUNNER_TEMP/result/carry-replay.json"
+          cp "$RUNNER_TEMP/chrome-version" "$RUNNER_TEMP/result/chrome-version"
+          cp "$RUNNER_TEMP/release/artifact-runtime.app.manifest.json" "$RUNNER_TEMP/result/artifact-runtime.app.manifest.json"
+          cp "$RUNNER_TEMP/publication/artifact-manifest.json" "$RUNNER_TEMP/result/artifact-manifest.json"
+
+      - name: Upload non-authority JSONL-only proof
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jsonl-only-four-url-cloudflare-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record four URLs and exact proof on Ops issue 223
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/result/smoke-receipt.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          print('## JSONL-only Base / Graph / semantic Map / Seq URLs — PASS')
+          print()
+          print(f"- publication tree: `{x['publication']['treeDigest']}`")
+          print(f"- listed files: `{x['publication']['listedFiles']}`")
+          print(f"- compiler: `{x['compiler']['operation']['export']}`")
+          print(f"- handwritten surface / source clone / consumer build / repair: `{x['compiler']['handwrittenSurfaceUsed']} / {x['compiler']['sourceCloneUsed']} / {x['compiler']['consumerBuildUsed']} / {x['compiler']['repairUsed']}`")
+          print(f"- browser: `{x['browser']['version']}`")
+          print()
+          print('| View | JSONL SHA-256 | Canvas | Nodes / Edges | URL |')
+          print('|---|---|---:|---:|---|')
+          for case in x['cases']:
+            print(f"| {case['id']} | `{case['source']['sha256']}` | `{str(case['projection']['canvas']).lower()}` | `{case['projection']['nodeCount']} / {case['projection']['edgeCount']}` | {case['url']} |")
+          print()
+          print('- all inputs: exact carried `TreePatch + StatePatch` JSONL')
+          print('- exact URL decode to projected invocation: PASS')
+          print('- `render.a2ui@1` / `a2ui-render-receipt/1`: 4/4 PASS')
+          print('- browser errors / failed product responses: `0 / 0` for all views')
+          print(f"- proof run: {os.environ['RUN_URL']}")
+          print(f"- artifact ID / digest: `{os.environ['ARTIFACT_ID']}` / `{os.environ['ARTIFACT_DIGEST']}`")
+          print()
+          print('Git and the App manifest remain authority. Release, Cloudflare URLs, screenshots and this receipt are non-authority projections/evidence.')
+          PY
+          gh issue comment 223 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
