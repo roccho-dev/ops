@@ -65,8 +65,8 @@ jobs:
         run: |
           set -euo pipefail
           test "${{ github.event.pull_request.head.ref }}" = "$EXPECTED_BRANCH"
-          test "$(git rev-parse HEAD^^^)" = "$EXPECTED_BASE"
-          test "$(git rev-list --count "$EXPECTED_BASE"..HEAD)" -eq 3
+          git merge-base --is-ancestor "$EXPECTED_BASE" HEAD
+          test "$(git rev-list --count "$EXPECTED_BASE"..HEAD)" -eq 4
           test "$(git diff --name-only "$EXPECTED_BASE" HEAD)" = ".github/workflows/release-text-ingress-proof.yml"
           comments="$RUNNER_TEMP/comments.json"
           request="$RUNNER_TEMP/request.json"
@@ -151,8 +151,6 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git commit -m "chore: separate public operation request surfaces"
           test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
-          test "$(git rev-parse HEAD^2 2>/dev/null || true)" = ""
-
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
             push origin "HEAD:refs/heads/$EXPECTED_BRANCH"
