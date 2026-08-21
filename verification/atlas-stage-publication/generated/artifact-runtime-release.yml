@@ -1,0 +1,263 @@
+name: Artifact Runtime release projection
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/artifact-runtime-release.yml'
+      - 'verification/artifact-runtime-publication/**'
+      - 'verification/artifact-runtime-app/**'
+      - 'ci.intent.v1.jsonl'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/artifact-runtime-release.yml'
+      - 'verification/artifact-runtime-publication/**'
+      - 'verification/artifact-runtime-app/**'
+      - 'ci.intent.v1.jsonl'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Resolve immutable App publication contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          app=json.load(open('verification/artifact-runtime-app/manifest.json', encoding='utf-8'))
+          assert app['schema']=='ops.artifactRuntimeApp/1'
+          assert app['authority'] is False and app['status']=='accepted-source'
+          assert app['issue']==193 and app['id']=='artifact-runtime' and app['version']=='1'
+          authorities=app['sourceAuthorities']
+          assert len(authorities)==1
+          source=authorities[0]
+          assert source['repository']=='roccho-dev/ui'
+          assert source['commit']=='81f36ed47e61764495edcf5fb53a276a6722e06c'
+          assert source['tree']=='7836d64c2bb35bfe9d5ed176449cfefa78094eb1'
+          projected=app['publication']
+          assert projected['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
+          assert projected['kernelDigest']=='sha256:707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610'
+          assert projected['listedFiles']==54
+          assert projected['capabilities']==[
+              'inspect.json@1','render.a2ui@1','render.a2ui.app@1'
+          ]
+          assert app['contracts']['invocation']=='artifact-invocation/2'
+          assert app['contracts']['app']=='a2ui-app/1'
+          assert app['contracts']['url']=={
+              'fragment':'invoke','maximumCharacters':8192,'stateModes':['inline']
+          }
+          assert app['contracts']['action']['name']=='artifact.state.patch'
+          assert app['contracts']['action']['schema']=='artifact-state-action/1'
+          assert app['contracts']['action']['stateRoot']=='/state'
+          assert app['contracts']['action']['operations']==['replace','increment']
+          assert app['carry']['sourceCloneRequiredForUse'] is False
+          assert app['carry']['consumerBuildRequired'] is False
+          assert app['carry']['repairAllowed'] is False
+          values={
+            'UI_REPOSITORY':source['repository'],
+            'UI_COMMIT':source['commit'],
+            'UI_TREE':source['tree'],
+            'TREE_DIGEST':projected['treeDigest'],
+            'KERNEL_DIGEST':projected['kernelDigest'],
+            'EXPECTED_CAPABILITIES':str(len(projected['capabilities'])),
+            'EXPECTED_FILES':str(projected['listedFiles']),
+            'TAG':projected['tag'],
+            'ARCHIVE_NAME':projected['archive']['name'],
+            'ARCHIVE_BYTES':str(projected['archive']['bytes']),
+            'ARCHIVE_SHA':projected['archive']['sha256'].removeprefix('sha256:'),
+            'CARRIER_NAME':projected['carrier']['name'],
+            'CARRIER_BYTES':str(projected['carrier']['bytes']),
+            'CARRIER_SHA':projected['carrier']['sha256'].removeprefix('sha256:'),
+            'APP_MANIFEST_NAME':'artifact-runtime.app.manifest.json',
+            'PUBLICATION_MANIFEST_NAME':'artifact-runtime.publication.manifest.json',
+            'PUBLICATION_RECEIPT_NAME':'artifact-runtime.publication.receipt.json',
+            'CARRY_RECEIPT_NAME':'artifact-runtime.app.carry.receipt.json',
+          }
+          for key,value in values.items(): print(f'{key}={value}')
+          PY
+
+      - name: Materialize exact accepted UI source from GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none --no-checkout "https://github.com/$UI_REPOSITORY.git" "$RUNNER_TEMP/ui"
+          git -C "$RUNNER_TEMP/ui" fetch --depth=1 origin "$UI_COMMIT"
+          git -C "$RUNNER_TEMP/ui" checkout --detach "$UI_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/ui" rev-parse HEAD)" = "$UI_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/ui" rev-parse 'HEAD^{tree}')" = "$UI_TREE"
+          test -z "$(git -C "$RUNNER_TEMP/ui" status --porcelain)"
+          git -C "$RUNNER_TEMP/ui" fsck --no-dangling
+
+      - name: Build, carry and verify deterministic App publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          out="$RUNNER_TEMP/publication"
+          archive="$RUNNER_TEMP/$ARCHIVE_NAME"
+          carrier="$RUNNER_TEMP/$CARRIER_NAME"
+          app_manifest="$RUNNER_TEMP/$APP_MANIFEST_NAME"
+          publication_manifest="$RUNNER_TEMP/$PUBLICATION_MANIFEST_NAME"
+          publication_receipt="$RUNNER_TEMP/$PUBLICATION_RECEIPT_NAME"
+          carry_receipt="$RUNNER_TEMP/$CARRY_RECEIPT_NAME"
+          carried="$RUNNER_TEMP/carried-app"
+
+          (cd "$ui" && npm run check:artifact-runtime)
+          (cd "$ui" && node apps/artifact-shell/scripts/build-publication.mjs --out="$out")
+          python3 - "$out" "$TREE_DIGEST" "$KERNEL_DIGEST" "$EXPECTED_CAPABILITIES" "$EXPECTED_FILES" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          artifact=json.loads((root/'artifact-manifest.json').read_text(encoding='utf-8'))
+          catalog=json.loads((root/'catalog.json').read_text(encoding='utf-8'))
+          assert artifact['schema']=='artifact-shell-publication-artifact/2'
+          assert artifact['treeDigest']==sys.argv[2]
+          assert len(artifact['files'])==int(sys.argv[5])
+          assert catalog['schema']=='artifact-capability-catalog/2'
+          assert catalog['kernel']['digest']==sys.argv[3]
+          assert len(catalog['capabilities'])==int(sys.argv[4])
+          ids=[f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]
+          assert ids==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          atlas=[x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')]
+          assert len(atlas)==1
+          PY
+
+          (cd "$out" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
+          base64 -w0 "$archive" > "$carrier"
+          test "$(wc -c < "$carrier")" -eq "$CARRIER_BYTES"
+          test "$(sha256sum "$carrier" | cut -d' ' -f1)" = "$CARRIER_SHA"
+          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$carrier")"
+          base64 --decode "$carrier" | cmp - "$archive"
+
+          cp verification/artifact-runtime-app/manifest.json "$app_manifest"
+          python3 - "$app_manifest" "$publication_manifest" <<'PY'
+          import json,sys
+          app=json.load(open(sys.argv[1],encoding='utf-8'))
+          source=app['sourceAuthorities'][0]
+          projected=app['publication']
+          value={
+            'schema':'ops.artifactRuntimePublication/1',
+            'authority':False,
+            'status':'accepted-source',
+            'issue':app['issue'],
+            'source':{
+              'repository':source['repository'],'commit':source['commit'],'tree':source['tree']
+            },
+            'publication':{
+              'treeDigest':projected['treeDigest'],'kernelDigest':projected['kernelDigest'],
+              'capabilities':len(projected['capabilities']),'listedFiles':projected['listedFiles'],
+              'tag':projected['tag'],'archive':projected['archive'],'carrier':projected['carrier'],
+            },
+            'boundaries':{
+              'gitSourceAuthority':True,'releaseIsProjection':True,
+              'carrierIsTransportProjection':True,'receiptIsAuthority':False,
+              'consumerSourceCloneRequired':False,'consumerBuildRequired':False,
+              'mutableLatestAllowed':False,
+            },
+          }
+          open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(value,indent=2,sort_keys=True)+'\n')
+          PY
+
+          mkdir -p "$carried"
+          tar -xzf "$archive" -C "$carried"
+          node verification/artifact-runtime-app/carry-smoke.mjs "$carried" "$app_manifest" "$carry_receipt"
+
+          python3 - "$app_manifest" "$publication_manifest" ".github/workflows/artifact-runtime-release.yml" "$carry_receipt" "$publication_receipt" <<'PY'
+          import hashlib,json,subprocess,sys
+          def sha(path): return 'sha256:'+hashlib.sha256(open(path,'rb').read()).hexdigest()
+          app=json.load(open(sys.argv[1], encoding='utf-8'))
+          publication=json.load(open(sys.argv[2], encoding='utf-8'))
+          carry=json.load(open(sys.argv[4], encoding='utf-8'))
+          projected=publication['publication']; source=publication['source']
+          receipt={
+            'schema':'ops.artifactRuntimePublicationReceipt/2',
+            'status':'PASS',
+            'authority':False,
+            'opsCommit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+            'source':{'repository':source['repository'],'commit':source['commit'],'tree':source['tree']},
+            'app':{
+              'id':app['id'],'version':app['version'],'manifestSha256':sha(sys.argv[1]),
+              'carryReceiptSha256':sha(sys.argv[4]),'carryStatus':carry['status'],
+            },
+            'publication':{
+              'treeDigest':projected['treeDigest'],'kernelDigest':projected['kernelDigest'],
+              'capabilities':projected['capabilities'],'listedFiles':projected['listedFiles'],
+              'archive':projected['archive'],'carrier':projected['carrier'],
+            },
+            'publicationManifestSha256':sha(sys.argv[2]),
+            'workflowSha256':sha(sys.argv[3]),
+            'consumer':{'sourceCloneRequired':False,'sourceBuildRequired':False,'repairAllowed':False},
+          }
+          open(sys.argv[5],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+
+      - name: Publish immutable GitHub App projection
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/$ARCHIVE_NAME"
+          carrier="$RUNNER_TEMP/$CARRIER_NAME"
+          app_manifest="$RUNNER_TEMP/$APP_MANIFEST_NAME"
+          publication_manifest="$RUNNER_TEMP/$PUBLICATION_MANIFEST_NAME"
+          publication_receipt="$RUNNER_TEMP/$PUBLICATION_RECEIPT_NAME"
+          carry_receipt="$RUNNER_TEMP/$CARRY_RECEIPT_NAME"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Bidirectional Artifact App $TREE_DIGEST" \
+              --notes "Immutable non-authority App projection of $UI_REPOSITORY@$UI_COMMIT. Git remains source authority. No uploaded ZIP was used." \
+              "$archive" "$carrier" "$app_manifest" "$publication_manifest" "$publication_receipt" "$carry_receipt"
+          fi
+
+      - name: Authenticated Release readback and carry replay
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          readback="$RUNNER_TEMP/release-readback"
+          mkdir -p "$readback"
+          for name in "$ARCHIVE_NAME" "$CARRIER_NAME" "$APP_MANIFEST_NAME" "$PUBLICATION_MANIFEST_NAME" "$PUBLICATION_RECEIPT_NAME" "$CARRY_RECEIPT_NAME"; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$readback"
+            cmp "$RUNNER_TEMP/$name" "$readback/$name"
+          done
+          base64 --decode "$readback/$CARRIER_NAME" > "$RUNNER_TEMP/readback-archive.tar.gz"
+          cmp "$RUNNER_TEMP/readback-archive.tar.gz" "$readback/$ARCHIVE_NAME"
+          mkdir -p "$RUNNER_TEMP/readback-carried-app"
+          tar -xzf "$RUNNER_TEMP/readback-archive.tar.gz" -C "$RUNNER_TEMP/readback-carried-app"
+          node verification/artifact-runtime-app/carry-smoke.mjs \
+            "$RUNNER_TEMP/readback-carried-app" \
+            "$readback/$APP_MANIFEST_NAME" \
+            "$RUNNER_TEMP/readback-carry-replay.json"
+          cmp "$readback/$CARRY_RECEIPT_NAME" "$RUNNER_TEMP/readback-carry-replay.json"
+
+      - name: Upload non-authority App publication evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-runtime-app-publication-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/${{ env.APP_MANIFEST_NAME }}
+            ${{ runner.temp }}/${{ env.PUBLICATION_MANIFEST_NAME }}
+            ${{ runner.temp }}/${{ env.PUBLICATION_RECEIPT_NAME }}
+            ${{ runner.temp }}/${{ env.CARRY_RECEIPT_NAME }}
+            ${{ runner.temp }}/${{ env.ARCHIVE_NAME }}
+            ${{ runner.temp }}/${{ env.CARRIER_NAME }}
+          if-no-files-found: error
+          retention-days: 30

@@ -5,21 +5,21 @@
   "issue": 160,
   "appIssue": 193,
   "publication": {
-    "treeDigest": "sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
-    "tag": "artifact-runtime-b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b",
+    "treeDigest": "sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
+    "tag": "artifact-runtime-ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
     "archive": {
-      "name": "artifact-runtime.b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b.tar.gz",
-      "bytes": 37333,
-      "sha256": "sha256:571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b"
+      "name": "artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz",
+      "bytes": 39822,
+      "sha256": "sha256:06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9"
     },
-    "listedFiles": 53
+    "listedFiles": 54
   },
   "provider": {
     "kind": "cloudflare-pages",
     "environment": "cloudflare-production",
     "project": "stg-artifact-runtime",
     "productionBranch": "proposals",
-    "pathPrefix": "releases/b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b"
+    "pathPrefix": "releases/ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da"
   },
   "trigger": {
     "kind": "owner-issue-comment",
@@ -30,7 +30,7 @@
     "required": true,
     "verifyTreeDigest": true,
     "verifyAllFileHashes": true,
-    "expectedListedFiles": 53,
+    "expectedListedFiles": 54,
     "browserProof": {
       "capability": "render.a2ui.app@1",
       "initialState": 0,
