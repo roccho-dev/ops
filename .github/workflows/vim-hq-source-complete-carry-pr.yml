@@ -1,0 +1,79 @@
+name: materialize source-complete Vim HQ carry
+
+on:
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - "verification/vim-hq-complete-carry/request.json"
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      OUT: ${{ runner.temp }}/vim-hq-source-complete
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposals
+          persist-credentials: false
+
+      - name: Materialize exact source authorities
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUT"
+          mkdir -p "$OUT/source"
+          records="$OUT/source-records.tsv"
+          : > "$records"
+
+          snapshot() {
+            name=$1; remote=$2; ref=$3; expected=${4:-}
+            work="$RUNNER_TEMP/src-$name"
+            rm -rf "$work"
+            git init -q "$work"
+            git -C "$work" remote add origin "$remote"
+            git -C "$work" fetch -q --depth=1 origin "$ref"
+            commit=$(git -C "$work" rev-parse FETCH_HEAD^{commit})
+            test -z "$expected" || test "$commit" = "$expected"
+            git -C "$work" checkout -q --detach "$commit"
+            tree=$(git -C "$work" rev-parse HEAD^{tree})
+            test -z "$(git -C "$work" status --porcelain=v1)"
+            git -C "$work" archive --format=tar --prefix="$name-$commit/" HEAD | gzip -n > "$OUT/source/$name.source.tar.gz"
+            printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$remote" "$ref" "$commit" "$tree" >> "$records"
+          }
+
+          snapshot edits-current https://github.com/roccho-dev/edits.git d6d0f6d584883267b05559b0d058bce127f83d9c d6d0f6d584883267b05559b0d058bce127f83d9c
+          snapshot edits-proof https://github.com/roccho-dev/edits.git 58a1c3e2f329605c016a051c4254e3c04f5d0671 58a1c3e2f329605c016a051c4254e3c04f5d0671
+          test "$(awk -F '\t' '$1=="edits-proof"{print $5}' "$records")" = 133c9d136d718a64b953e3561447e704704c8284
+          snapshot edits-product-base https://github.com/roccho-dev/edits.git d83bf4c4860e02f37d6b41cc54fe8c881af4c779 d83bf4c4860e02f37d6b41cc54fe8c881af4c779
+          snapshot hq https://github.com/roccho-dev/hq.git 3118886f34ac5615e8a7732a6297bd41900e21e1 3118886f34ac5615e8a7732a6297bd41900e21e1
+          snapshot yegappan-lsp https://github.com/yegappan/lsp.git 989016ae2ae4cbf304a9ca29478f47fec794493f 989016ae2ae4cbf304a9ca29478f47fec794493f
+          snapshot vim https://github.com/vim/vim.git v9.2.0478 8aecd377f08e9fbdf0092478ab7ec3ce5e0f04ec
+          snapshot herdr https://github.com/herdrdev/herdr.git v0.8.0 ''
+          snapshot nixpkgs https://github.com/NixOS/nixpkgs.git 0ae2bc1419c3f345984c2629e72e7a631820fa4d 0ae2bc1419c3f345984c2629e72e7a631820fa4d
+          snapshot go-nixpkgs https://github.com/NixOS/nixpkgs.git cbb826608f7d081948eeb4ea0211b0cbd867b9d1 cbb826608f7d081948eeb4ea0211b0cbd867b9d1
+
+          python3 - "$OUT" <<'PY'
+          import json, pathlib, sys
+          root=pathlib.Path(sys.argv[1]); sources=[]
+          for line in (root/'source-records.tsv').read_text().splitlines():
+              name,remote,ref,commit,tree=line.split('\t')
+              sources.append({'name':name,'remote':remote,'ref':ref,'commit':commit,'tree':tree,'artifact':f'source/{name}.source.tar.gz'})
+          manifest={'schema':'ops.vimHqSourceCompleteCarry/1','status':'PASS','sources':sources,'runtime':'SEPARATE_PROJECTION','physicalWSLC':'NOT_ATTESTED'}
+          (root/'manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+          PY
+          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$OUT" && sha256sum --check SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vim-hq-source-complete
+          path: ${{ runner.temp }}/vim-hq-source-complete
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
