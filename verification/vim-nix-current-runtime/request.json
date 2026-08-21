@@ -1,0 +1,17 @@
+{
+  "schema": "ops.vimNixRuntimeMaterializationRequest/1",
+  "authority": false,
+  "issue": 238,
+  "requestId": "vim-nix-current-runtime-20260821-01",
+  "repository": "roccho-dev/edits",
+  "commit": "e4565840165d941fc4bd02489ee619905faa6fa7",
+  "tree": "590c79cd7b1358df88879d5e634e0d3e6970633b",
+  "ref": "refs/heads/proof/vim-nix-herdr-oci-current-20260821",
+  "handoffSha256": "sha256:6a88215c073a43b82f6e584466b07f6c8265e7d4b48ff5e92acbd14626248d38",
+  "effects": {
+    "networkDuringMaterialization": true,
+    "sourceMutation": false,
+    "modelRepair": false,
+    "publishRelease": false
+  }
+}
