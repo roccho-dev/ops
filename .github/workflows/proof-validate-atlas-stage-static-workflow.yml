@@ -1,4 +1,4 @@
-name: Export validated AtlasStage static workflow blob
+name: Persist validated AtlasStage static workflow blob
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
       - '.github/workflows/artifact-runtime-static-host.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -18,7 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
       - name: Repair and validate the one escaped newline
         shell: bash
@@ -56,14 +57,17 @@ jobs:
           print('static-contract-pass')
           PY
           git diff --check
-          mkdir -p "$RUNNER_TEMP/out"
-          cp .github/workflows/artifact-runtime-static-host.yml "$RUNNER_TEMP/out/artifact-runtime-static-host.yml"
-          sha256sum "$RUNNER_TEMP/out/artifact-runtime-static-host.yml" | tee "$RUNNER_TEMP/out/SHA256SUMS"
 
-      - name: Upload validated workflow blob
-        uses: actions/upload-artifact@v4
-        with:
-          name: atlas-stage-static-workflow-${{ github.run_id }}
-          path: ${{ runner.temp }}/out/
-          if-no-files-found: error
-          retention-days: 7
+      - name: Commit validated bytes only at a regular path
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=verification/atlas-stage-publication/validated-static-workflow.yml
+          test ! -e "$target"
+          cp .github/workflows/artifact-runtime-static-host.yml "$target"
+          sha256sum "$target"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$target"
+          git commit -m "proof: persist validated AtlasStage static workflow bytes"
+          git push origin HEAD:${GITHUB_HEAD_REF}
