@@ -1,0 +1,40 @@
+name: dispatch complete Vim HQ carry
+
+on:
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - "verification/vim-hq-complete-carry/request.json"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposals
+          persist-credentials: false
+
+      - name: Dispatch registered materializer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run vim-hq-complete-carry.yml --repo "$GITHUB_REPOSITORY" --ref proposals
+          sleep 3
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow vim-hq-complete-carry.yml --limit 1 \
+            --json databaseId,url,status,conclusion,headSha > "$RUNNER_TEMP/dispatched-run.json"
+          cat "$RUNNER_TEMP/dispatched-run.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vim-hq-complete-carry-dispatch-receipt
+          path: ${{ runner.temp }}/dispatched-run.json
+          retention-days: 7
