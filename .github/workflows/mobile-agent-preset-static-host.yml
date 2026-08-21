@@ -160,17 +160,25 @@ jobs:
             for asset in "${assets[@]}"; do name="$(basename "$asset")"; gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-check"; cmp "$asset" "$RUNNER_TEMP/release-check/$name"; done
           fi
 
+      - name: Stage one deterministic App artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/result"
+          rm -rf "$result"
+          mkdir -p "$result/dist"
+          cp -a "$RUNNER_TEMP/dist/." "$result/dist/"
+          cp verification/mobile-agent-preset-app/manifest.json "$result/manifest.json"
+          cp verification/mobile-agent-preset-app/expected.json "$result/expected.json"
+          for name in bootstrap-urls.json bootstrap-receipt.json bootstrap-browser-receipt.json; do
+            if [ -f "$RUNNER_TEMP/$name" ]; then cp "$RUNNER_TEMP/$name" "$result/$name"; fi
+          done
+
       - name: Upload staged App
         uses: actions/upload-artifact@v4
         with:
           name: mobile-agent-preset-site-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/dist/
-            ${{ runner.temp }}/bootstrap-urls.json
-            ${{ runner.temp }}/bootstrap-receipt.json
-            ${{ runner.temp }}/bootstrap-browser-receipt.json
-            verification/mobile-agent-preset-app/manifest.json
-            verification/mobile-agent-preset-app/expected.json
+          path: ${{ runner.temp }}/result/
           if-no-files-found: error
           retention-days: 14
 
@@ -245,7 +253,7 @@ jobs:
           CHROME_BIN="$chrome" python3 "$root/browser-smoke.py" "$RUNNER_TEMP/stable-urls.json" "$RUNNER_TEMP/browser-receipt.json" "$RUNNER_TEMP/screenshots"
           "$chrome" --version > "$RUNNER_TEMP/chrome-version.txt"
 
-      - name: Upload final proof
+      - name: Upload and record final proof
         id: evidence
         uses: actions/upload-artifact@v4
         with:
