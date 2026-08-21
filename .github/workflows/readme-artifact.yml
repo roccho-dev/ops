@@ -14,29 +14,50 @@ jobs:
     name: materialize official HQ and pinned Vim LSP
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      OUT: ${{ runner.temp }}/hq-vim-runtime-carry
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
       - name: Materialize exact runtime bytes
+        id: materialize
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          out="$RUNNER_TEMP/hq-vim-runtime-carry"
+          set -x
+          out="$OUT"
           hq_commit=3118886f34ac5615e8a7732a6297bd41900e21e1
           hq_tag=hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1
           lsp_commit=989016ae2ae4cbf304a9ca29478f47fec794493f
           lsp_tree=899cd0db6af40e3b1e0039b679541cd062cfa9e7
           mkdir -p "$out"/{release,bin,lsp,logs}
+          stage=init
+          trap 'rc=$?; printf "%s\n" "$stage" > "$out/logs/last-stage.txt"; printf "%s\n" "$rc" > "$out/logs/exit-code.txt"' EXIT
 
-          gh release download "$hq_tag" --repo roccho-dev/hq --dir "$out/release"
-          test "$(find "$out/release" -maxdepth 1 -type f | wc -l)" -eq 8
+          stage=release-download
+          base="https://github.com/roccho-dev/hq/releases/download/$hq_tag"
+          for name in \
+            SHA256SUMS \
+            hq-linux-amd64 \
+            hq-worker-linux-amd64 \
+            hq-windows-amd64.exe \
+            hq-worker-windows-amd64.exe \
+            manifest-linux-amd64.json \
+            manifest-windows-amd64.json \
+            hq-product-manifest.json; do
+            curl --fail --location --retry 3 --output "$out/release/$name" "$base/$name"
+          done
+
+          stage=release-verify
           (cd "$out/release" && sha256sum --check SHA256SUMS)
           test "$(jq -r .source_sha "$out/release/manifest-linux-amd64.json")" = "$hq_commit"
           test "$(jq -r .go_version "$out/release/manifest-linux-amd64.json")" = go1.23.12
+          test "$(jq -r .source_sha "$out/release/hq-product-manifest.json")" = "$hq_commit"
+          test "$(jq -r '.artifacts | length' "$out/release/hq-product-manifest.json")" = 4
+
+          stage=binary-verify
           cp "$out/release/hq-linux-amd64" "$out/bin/hq"
           cp "$out/release/hq-worker-linux-amd64" "$out/bin/hq-worker"
           chmod 0555 "$out/bin/hq" "$out/bin/hq-worker"
@@ -49,6 +70,7 @@ jobs:
           "$out/bin/hq" --help > "$out/logs/hq.help.txt"
           "$out/bin/hq-worker" --help > "$out/logs/hq-worker.help.txt"
 
+          stage=lsp-fetch
           git init --quiet "$RUNNER_TEMP/lsp"
           git -C "$RUNNER_TEMP/lsp" remote add origin https://github.com/yegappan/lsp.git
           git -C "$RUNNER_TEMP/lsp" fetch --quiet --depth=1 origin "$lsp_commit"
@@ -60,10 +82,13 @@ jobs:
           printf '%s\n' "$lsp_commit" > "$out/lsp/.pinned-commit"
           printf '%s\n' "$lsp_tree" > "$out/lsp/.pinned-tree"
 
+          stage=seal
           (cd "$out" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
           (cd "$out" && sha256sum --check SHA256SUMS)
+          stage=pass
 
-      - name: Upload runtime bytes
+      - name: Upload runtime bytes and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: hq-vim-runtime-carry-3118886f-989016ae
