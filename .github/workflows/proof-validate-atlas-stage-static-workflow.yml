@@ -64,6 +64,7 @@ jobs:
           set -euo pipefail
           target=verification/atlas-stage-publication/validated-static-workflow.yml
           test ! -e "$target"
+          mkdir -p "$(dirname "$target")"
           cp .github/workflows/artifact-runtime-static-host.yml "$target"
           sha256sum "$target"
           git config user.name github-actions[bot]
