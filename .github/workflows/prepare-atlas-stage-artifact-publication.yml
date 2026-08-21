@@ -1,0 +1,257 @@
+name: Prepare AtlasStage Artifact App publication candidate
+
+on:
+  push:
+    branches:
+      - proposal/atlas-stage-artifact-publication-260821
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      EXPECTED_OPS_BASE: ad03232103b5d22dc88f38be53390060ce1d02e4
+      UI_REPOSITORY: roccho-dev/ui
+      UI_COMMIT: 81f36ed47e61764495edcf5fb53a276a6722e06c
+      UI_TREE: 7836d64c2bb35bfe9d5ed176449cfefa78094eb1
+      TREE_DIGEST: sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      KERNEL_DIGEST: sha256:707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610
+      LISTED_FILES: "54"
+      ARCHIVE_BYTES: "39822"
+      ARCHIVE_SHA: sha256:06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9
+      CARRIER_BYTES: "53096"
+      CARRIER_SHA: sha256:a77ba5c6267bd89641daf119779b6be109b3486213a21a11d3734cc47e1cf02e
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposal/atlas-stage-artifact-publication-260821
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Refuse stale Ops or UI authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git merge-base HEAD "$EXPECTED_OPS_BASE")" = "$EXPECTED_OPS_BASE"
+          test "$(git ls-remote origin refs/heads/proposals | awk 'NR==1 {print $1}')" = "$EXPECTED_OPS_BASE"
+          test "$(git ls-remote https://github.com/$UI_REPOSITORY.git refs/heads/proposals | awk 'NR==1 {print $1}')" = "$UI_COMMIT"
+
+      - name: Update accepted manifests and generate workflow replacements
+        shell: bash
+        run: |
+          set -euo pipefail
+          generated=verification/atlas-stage-publication/generated
+          mkdir -p "$generated"
+          python3 - "$generated" <<'PY'
+          import json,os,pathlib,sys
+          root=pathlib.Path('.')
+          generated=pathlib.Path(sys.argv[1])
+          tree=os.environ['TREE_DIGEST']; tree_id=tree.removeprefix('sha256:')
+          kernel=os.environ['KERNEL_DIGEST']; kernel_id=kernel.removeprefix('sha256:')
+          archive={
+            'name':f'artifact-runtime.{tree_id}.tar.gz',
+            'bytes':int(os.environ['ARCHIVE_BYTES']),
+            'sha256':os.environ['ARCHIVE_SHA'],
+          }
+          carrier={
+            'name':f'artifact-runtime.{tree_id}.tar.gz.b64.txt',
+            'bytes':int(os.environ['CARRIER_BYTES']),
+            'sha256':os.environ['CARRIER_SHA'],
+            'codec':'standard-base64-no-whitespace',
+          }
+          capabilities=['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          source={
+            'repository':os.environ['UI_REPOSITORY'],
+            'commit':os.environ['UI_COMMIT'],
+            'tree':os.environ['UI_TREE'],
+          }
+
+          app_path=root/'verification/artifact-runtime-app/manifest.json'
+          app=json.loads(app_path.read_text(encoding='utf-8'))
+          assert app['schema']=='ops.artifactRuntimeApp/1' and app['issue']==193
+          app['sourceAuthorities'][0]['commit']=source['commit']
+          app['sourceAuthorities'][0]['tree']=source['tree']
+          roles=app['sourceAuthorities'][0]['roles']
+          if 'canvas-renderer' not in roles: roles.append('canvas-renderer')
+          app['publication']={
+            'treeDigest':tree,'kernelDigest':kernel,'listedFiles':int(os.environ['LISTED_FILES']),
+            'capabilities':capabilities,'tag':f'artifact-runtime-{tree_id}',
+            'archive':archive,'carrier':carrier,
+          }
+          entrypoints={
+            'browser':'index.html','catalog':'catalog.json','artifactManifest':'artifact-manifest.json',
+            'codec':f'kernel/{kernel_id}/packages/url-module/src/index.mjs',
+            'invocation':f'kernel/{kernel_id}/packages/artifact-invocation/src/index.mjs',
+            'actionCompiler':f'kernel/{kernel_id}/apps/artifact-shell/src/invocation-action.mjs',
+            'atlasStage':f'kernel/{kernel_id}/packages/a2ui-browser/src/catalog/atlas-stage.mjs',
+            'shell':f'kernel/{kernel_id}/apps/artifact-shell/src/shell-core.mjs',
+          }
+          app['entrypoints']=entrypoints
+          for name,relative,export in [
+            ('encode',entrypoints['codec'],'createUrlModuleUrl'),
+            ('decode',entrypoints['codec'],'readUrlModule'),
+            ('validateInvocation',entrypoints['invocation'],'validateArtifactInvocation'),
+            ('execute',entrypoints['invocation'],'createArtifactInvocationRuntime'),
+            ('applyAction',entrypoints['actionCompiler'],'applyArtifactStateAction'),
+          ]:
+            app['operations'][name]={'module':relative,'export':export}
+          ui_improvement=next(row for row in app['improvementSources'] if row['repository']=='roccho-dev/ui')
+          ui_improvement['commit']=source['commit']; ui_improvement['tree']=source['tree']
+          app_path.write_text(json.dumps(app,indent=2,sort_keys=False)+'\n',encoding='utf-8')
+
+          publication_path=root/'verification/artifact-runtime-publication/manifest.json'
+          publication=json.loads(publication_path.read_text(encoding='utf-8'))
+          assert publication['schema']=='ops.artifactRuntimePublication/1' and publication['issue']==193
+          publication['source']={**source,'acceptedPullRequest':162}
+          publication['publication']={
+            'treeDigest':tree,'kernelDigest':kernel,'capabilities':len(capabilities),
+            'listedFiles':int(os.environ['LISTED_FILES']),'tag':f'artifact-runtime-{tree_id}',
+            'archive':archive,'carrier':carrier,
+          }
+          publication_path.write_text(json.dumps(publication,indent=2,sort_keys=False)+'\n',encoding='utf-8')
+
+          static_path=root/'verification/artifact-runtime-static-host/manifest.json'
+          static=json.loads(static_path.read_text(encoding='utf-8'))
+          assert static['schema']=='ops.artifactRuntimeStaticHost/1' and static['issue']==160 and static['appIssue']==193
+          static['publication']={'treeDigest':tree,'tag':f'artifact-runtime-{tree_id}','archive':archive,'listedFiles':int(os.environ['LISTED_FILES'])}
+          static['provider']['pathPrefix']=f'releases/{tree_id}'
+          static['readback']['expectedListedFiles']=int(os.environ['LISTED_FILES'])
+          static_path.write_text(json.dumps(static,indent=2,sort_keys=False)+'\n',encoding='utf-8')
+
+          old={
+            '3a6eaeeb77aef568987add668f5c9b6aa426f74e':source['commit'],
+            'dfe8814083abc1faadfc67a6fdc93d180c723244':source['tree'],
+            'b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b':tree_id,
+            '50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320':kernel_id,
+            '571592795ca9e4405330c8dfdc11fbd5db6b27d7ef0d672587e58fdbf6cdca6b':archive['sha256'].removeprefix('sha256:'),
+            '7105c25d4e278d008c7abb2b2ac5530957b037c088868b2940f6fb65013d003f':carrier['sha256'].removeprefix('sha256:'),
+          }
+          for source_path,target_name in [
+            (root/'.github/workflows/artifact-runtime-release.yml','artifact-runtime-release.yml'),
+            (root/'.github/workflows/artifact-runtime-static-host.yml','artifact-runtime-static-host.yml'),
+            (root/'.github/workflows/artifact-runtime-source-carry.yml','artifact-runtime-source-carry.yml'),
+          ]:
+            text=source_path.read_text(encoding='utf-8')
+            for before,after in old.items():
+              text=text.replace(before,after)
+            text=text.replace("projected['listedFiles']==53", "projected['listedFiles']==54")
+            text=text.replace("p['publication']['listedFiles']==53", "p['publication']['listedFiles']==54")
+            text=text.replace("==p['publication']['listedFiles']==53", "==p['publication']['listedFiles']==54")
+            text=text.replace("'listedFiles':53", "'listedFiles':54")
+            text=text.replace("'bytes':37333", "'bytes':39822")
+            text=text.replace("'bytes':49780", "'bytes':53096")
+            text=text.replace('"bytes": 37333', '"bytes": 39822')
+            text=text.replace('"bytes": 49780', '"bytes": 53096')
+            if target_name=='artifact-runtime-release.yml':
+              marker="          assert ids==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']\n"
+              assert text.count(marker)==1
+              text=text.replace(marker,marker+"          atlas=[x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')]\n          assert len(atlas)==1\n")
+              old_step='''      - name: Public readback and carry replay
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          for name in "$ARCHIVE_NAME" "$CARRIER_NAME" "$APP_MANIFEST_NAME" "$PUBLICATION_MANIFEST_NAME" "$PUBLICATION_RECEIPT_NAME" "$CARRY_RECEIPT_NAME"; do
+            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$RUNNER_TEMP/readback-$name"
+            cmp "$RUNNER_TEMP/$name" "$RUNNER_TEMP/readback-$name"
+          done
+          base64 --decode "$RUNNER_TEMP/readback-$CARRIER_NAME" > "$RUNNER_TEMP/readback-archive.tar.gz"
+          cmp "$RUNNER_TEMP/readback-archive.tar.gz" "$RUNNER_TEMP/readback-$ARCHIVE_NAME"
+          mkdir -p "$RUNNER_TEMP/readback-carried-app"
+          tar -xzf "$RUNNER_TEMP/readback-archive.tar.gz" -C "$RUNNER_TEMP/readback-carried-app"
+          node verification/artifact-runtime-app/carry-smoke.mjs \\
+            "$RUNNER_TEMP/readback-carried-app" \\
+            "$RUNNER_TEMP/readback-$APP_MANIFEST_NAME" \\
+            "$RUNNER_TEMP/readback-carry-replay.json"
+          cmp "$RUNNER_TEMP/readback-$CARRY_RECEIPT_NAME" "$RUNNER_TEMP/readback-carry-replay.json"
+'''
+              new_step='''      - name: Authenticated Release readback and carry replay
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          readback="$RUNNER_TEMP/release-readback"
+          mkdir -p "$readback"
+          for name in "$ARCHIVE_NAME" "$CARRIER_NAME" "$APP_MANIFEST_NAME" "$PUBLICATION_MANIFEST_NAME" "$PUBLICATION_RECEIPT_NAME" "$CARRY_RECEIPT_NAME"; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$readback"
+            cmp "$RUNNER_TEMP/$name" "$readback/$name"
+          done
+          base64 --decode "$readback/$CARRIER_NAME" > "$RUNNER_TEMP/readback-archive.tar.gz"
+          cmp "$RUNNER_TEMP/readback-archive.tar.gz" "$readback/$ARCHIVE_NAME"
+          mkdir -p "$RUNNER_TEMP/readback-carried-app"
+          tar -xzf "$RUNNER_TEMP/readback-archive.tar.gz" -C "$RUNNER_TEMP/readback-carried-app"
+          node verification/artifact-runtime-app/carry-smoke.mjs \\
+            "$RUNNER_TEMP/readback-carried-app" \\
+            "$readback/$APP_MANIFEST_NAME" \\
+            "$RUNNER_TEMP/readback-carry-replay.json"
+          cmp "$readback/$CARRY_RECEIPT_NAME" "$RUNNER_TEMP/readback-carry-replay.json"
+'''
+              assert text.count(old_step)==1
+              text=text.replace(old_step,new_step)
+            (generated/target_name).write_text(text,encoding='utf-8')
+          PY
+
+      - name: Rebuild exact publication and prove carried operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          out="$RUNNER_TEMP/publication"
+          archive="$RUNNER_TEMP/artifact-runtime.${TREE_DIGEST#sha256:}.tar.gz"
+          carrier="$archive.b64.txt"
+          git clone --filter=blob:none --no-checkout "https://github.com/$UI_REPOSITORY.git" "$ui"
+          git -C "$ui" fetch --depth=1 origin "$UI_COMMIT"
+          git -C "$ui" checkout --detach "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse HEAD)" = "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse 'HEAD^{tree}')" = "$UI_TREE"
+          (cd "$ui" && npm run check:artifact-runtime)
+          (cd "$ui" && node apps/artifact-shell/scripts/build-publication.mjs --out="$out")
+          python3 - "$out" <<'PY'
+          import json,os,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); artifact=json.loads((root/'artifact-manifest.json').read_text()); catalog=json.loads((root/'catalog.json').read_text())
+          assert artifact['treeDigest']==os.environ['TREE_DIGEST']
+          assert len(artifact['files'])==int(os.environ['LISTED_FILES'])
+          assert catalog['kernel']['digest']==os.environ['KERNEL_DIGEST']
+          assert [f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          assert len([x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')])==1
+          PY
+          (cd "$out" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
+          test "sha256:$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
+          base64 -w0 "$archive" > "$carrier"
+          test "$(wc -c < "$carrier")" -eq "$CARRIER_BYTES"
+          test "sha256:$(sha256sum "$carrier" | cut -d' ' -f1)" = "$CARRIER_SHA"
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.tar.gz"
+          node verification/artifact-runtime-app/carry-smoke.mjs "$out" verification/artifact-runtime-app/manifest.json "$RUNNER_TEMP/carry-receipt.json"
+          python3 - "$RUNNER_TEMP/carry-receipt.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['status']=='PASS'
+          assert x['operations']=={'applyAction':'PASS','decode':'PASS','encode':'PASS','execute':'PASS'}
+          assert x['consumer']=={'repairUsed':False,'sourceBuildUsed':False,'sourceCloneUsed':False}
+          PY
+
+      - name: Commit manifests and generated workflow blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            verification/artifact-runtime-app/manifest.json \
+            verification/artifact-runtime-publication/manifest.json \
+            verification/artifact-runtime-static-host/manifest.json \
+            verification/atlas-stage-publication/generated
+          git diff --cached --check
+          git commit -m "feat: bind AtlasStage Artifact App publication identities"
+          git push origin HEAD:proposal/atlas-stage-artifact-publication-260821
