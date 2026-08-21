@@ -1,0 +1,73 @@
+name: Generate manifest-bound JSONL Source Carry workflow
+
+on:
+  pull_request:
+    branches:
+      - proposal/jsonl-artifact-app-260821
+    paths:
+      - '.github/workflows/proof-patch-jsonl-source-carry-binding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Remove duplicated publication identity from Source Carry adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=.github/workflows/artifact-runtime-source-carry.yml
+          python3 - "$target" <<'PY'
+          from pathlib import Path
+          import sys
+          path=Path(sys.argv[1]); source=path.read_text(encoding='utf-8')
+          old="          assert app['publication']['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'\n"
+          new="          assert re.fullmatch(r'sha256:[0-9a-f]{64}',app['publication']['treeDigest'])\n"
+          assert source.count(old)==1
+          source=source.replace(old,new)
+
+          old="          python3 - \"$receipt\" \"$role\" \"$repository\" \"$head\" \"$tree\" \"$archive\" \"$archive_bytes\" \"$archive_sha\" \"$carrier\" \"$carrier_bytes\" \"$carrier_sha\" \"$manifest_sha\" \"$release_tag\" <<'PY'\n"
+          new="          python3 - \"$receipt\" \"$role\" \"$repository\" \"$head\" \"$tree\" \"$archive\" \"$archive_bytes\" \"$archive_sha\" \"$carrier\" \"$carrier_bytes\" \"$carrier_sha\" \"$manifest_sha\" \"$release_tag\" \"$(python3 -c 'import json; print(json.load(open(\"verification/artifact-runtime-app/manifest.json\", encoding=\"utf-8\"))[\"publication\"][\"treeDigest\"])')\" <<'PY'\n"
+          assert source.count(old)==1
+          source=source.replace(old,new)
+
+          old="           carrier,carrier_bytes,carrier_sha,manifest_sha,release_tag)=sys.argv[1:]\n"
+          new="           carrier,carrier_bytes,carrier_sha,manifest_sha,release_tag,publication_tree)=sys.argv[1:]\n"
+          assert source.count(old)==1
+          source=source.replace(old,new)
+
+          old="                  'publicationTree':'sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da',\n"
+          new="                  'publicationTree':publication_tree,\n"
+          assert source.count(old)==1
+          source=source.replace(old,new)
+          path.write_text(source,encoding='utf-8')
+          PY
+
+          python3 - "$target" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_text(encoding='utf-8')
+          assert 'ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da' not in source
+          assert source.count("publication_tree)=sys.argv[1:]")==1
+          assert source.count("'publicationTree':publication_tree")==1
+          assert source.count("re.fullmatch(r'sha256:[0-9a-f]{64}',app['publication']['treeDigest'])")==1
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = "$target"
+          test "$(git diff --numstat | awk '{print $1, $2}')" = "4 4"
+          cp "$target" "$RUNNER_TEMP/artifact-runtime-source-carry.yml"
+
+      - name: Upload exact replacement file
+        uses: actions/upload-artifact@v4
+        with:
+          name: jsonl-source-carry-binding-${{ github.run_id }}
+          path: ${{ runner.temp }}/artifact-runtime-source-carry.yml
+          if-no-files-found: error
+          retention-days: 1
