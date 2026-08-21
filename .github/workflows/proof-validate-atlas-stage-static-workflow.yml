@@ -1,0 +1,45 @@
+name: Proof AtlasStage static workflow syntax
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-validate-atlas-stage-static-workflow.yml'
+      - '.github/workflows/artifact-runtime-static-host.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Parse and inspect static-host workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; YAML.parse_file(ARGV.fetch(0)); puts "yaml-parse-pass"' .github/workflows/artifact-runtime-static-host.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('.github/workflows/artifact-runtime-static-host.yml').read_text(encoding='utf-8')
+          required=[
+            "name: Artifact Runtime static host projection",
+            "pull_request:",
+            "issue_comment:",
+            "if [ \"$GITHUB_EVENT_NAME\" = pull_request ]; then",
+            "npm run check:artifact-runtime",
+            "atlas-stage.mjs",
+            "expectedListedFiles']==p['publication']['listedFiles']==54",
+          ]
+          for value in required:
+            assert value in text,value
+          assert text.count('jobs:')==1
+          assert text.count('  materialize:')==1
+          assert text.count('  deploy:')==1
+          print('static-contract-pass')
+          PY
