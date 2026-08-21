@@ -1,0 +1,137 @@
+name: Proof AtlasStage four URL public readback
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-atlas-stage-four-url-readback.yml'
+      - 'verification/atlas-stage-four-url-readback/**'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      TAG: artifact-runtime-ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      TREE_DIGEST: sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      TREE_ID: ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da
+      KERNEL_ID: 707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610
+      ARCHIVE_NAME: artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz
+      ARCHIVE_BYTES: "39822"
+      ARCHIVE_SHA: 06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9
+      STABLE_BASE: https://stg-artifact-runtime.pages.dev/releases/ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da/
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+
+      - name: Materialize and verify the immutable AtlasStage publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE_NAME" --dir "$RUNNER_TEMP"
+          archive="$RUNNER_TEMP/$ARCHIVE_NAME"
+          test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
+          mkdir -p "$RUNNER_TEMP/publication"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/publication"
+          python3 - "$RUNNER_TEMP/publication" <<'PY'
+          import hashlib,json,os,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); artifact=json.loads((root/'artifact-manifest.json').read_text()); catalog=json.loads((root/'catalog.json').read_text())
+          assert artifact['treeDigest']==os.environ['TREE_DIGEST'] and len(artifact['files'])==54
+          assert catalog['kernel']['digest']=='sha256:'+os.environ['KERNEL_ID']
+          assert [f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          assert len([x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')])==1
+          for item in artifact['files']:
+            data=(root/item['path']).read_bytes(); assert len(data)==item['bytes']; assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256']
+          PY
+
+      - name: Generate four canonical URLs with the exact carried codec
+        shell: bash
+        run: |
+          set -euo pipefail
+          node verification/atlas-stage-four-url-readback/generate.mjs \
+            "$RUNNER_TEMP/publication" "$STABLE_BASE" "$KERNEL_ID" "$TREE_DIGEST" "$RUNNER_TEMP/four-cases.json"
+
+      - name: Verify stable Cloudflare bytes equal the immutable publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --location --retry 8 --retry-all-errors --silent --show-error \
+            "${STABLE_BASE}artifact-manifest.json" -o "$RUNNER_TEMP/public-manifest.json"
+          cmp "$RUNNER_TEMP/publication/artifact-manifest.json" "$RUNNER_TEMP/public-manifest.json"
+
+      - name: Install exact proof-only browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/proof"; mkdir -p "$proof"; cd "$proof"
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          printf '%s\n' "$chrome" > "$RUNNER_TEMP/chrome-bin"
+          "$chrome" --version | tee "$RUNNER_TEMP/chrome-version"
+
+      - name: Open Base, Graph, Map and Seq in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence"
+          cd "$RUNNER_TEMP/proof"
+          TREE_ID="$TREE_ID" node "$GITHUB_WORKSPACE/verification/atlas-stage-four-url-readback/smoke.mjs" \
+            "$RUNNER_TEMP/four-cases.json" "$(cat "$RUNNER_TEMP/chrome-bin")" "$RUNNER_TEMP/evidence"
+
+      - name: Upload non-authority evidence
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-stage-four-url-readback-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/four-cases.json
+            ${{ runner.temp }}/public-manifest.json
+            ${{ runner.temp }}/chrome-version
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record four stable URLs and close Issue 219
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/evidence/four-urls.json" "$RUNNER_TEMP/evidence/smoke-receipt.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          urls=json.load(open(sys.argv[1]))['urls']; receipt=json.load(open(sys.argv[2]))
+          print('## AtlasStage Base / Graph / Map / Seq Cloudflare URLs — PASS')
+          print()
+          print(f"- publication tree: `{receipt['publicationTree']}`")
+          print(f"- stable base: {receipt['stableBase']}")
+          for name in ('base','graph','map','seq'): print(f"- {name.title()}: {urls[name]}")
+          print()
+          for case in receipt['cases']:
+            mode='ordinary A2UI' if not case['canvas'] else f"SVG AtlasStage nodes={case['nodeCount']} edges={case['edgeCount']}"
+            print(f"- `{case['id']}`: **PASS**, {mode}, URL `{case['urlLength']}` chars, browser errors `{case['browserErrors']}`")
+          print()
+          print(f"- proof run: {os.environ['RUN_URL']}")
+          print(f"- artifact ID / digest: `{os.environ['ARTIFACT_ID']}` / `{os.environ['ARTIFACT_DIGEST']}`")
+          print()
+          print('Boundary: Graph/Map/Seq use trusted SVG AtlasStage; Map is semantic, not geographic. This is not a maxGraph claim. Git remains source authority.')
+          PY
+          gh issue comment 219 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue close 219 --repo "$GITHUB_REPOSITORY" --reason completed
