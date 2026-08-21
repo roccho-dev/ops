@@ -1,0 +1,255 @@
+name: materialize exact Vim Nix runtime
+
+on:
+  push:
+    branches:
+      - proposals
+    paths:
+      - "verification/vim-nix-current-runtime/request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: materialize-exact-vim-nix-runtime
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      REQUEST_PATH: verification/vim-nix-current-runtime/request.json
+      ARTIFACT: ${{ runner.temp }}/vim-nix-current-runtime
+      EDIT_WORKSPACE: ${{ runner.temp }}/edits-exact
+      IMAGE_REF: roccho/vim-nix-herdr-hq-proof:d83bf4c
+      OCI_IMAGE_REF: roccho/vim-nix-herdr-hq-proof:oci-d83bf4c
+    steps:
+      - name: Checkout ops request authority
+        uses: actions/checkout@v4
+        with:
+          ref: proposals
+          fetch-depth: 1
+          persist-credentials: false
+
+      - id: request
+        name: Resolve bounded exact request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$REQUEST_PATH" "$GITHUB_OUTPUT" <<'PY'
+          import json, pathlib, re, sys
+          request = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+          assert request['schema'] == 'ops.vimNixRuntimeMaterializationRequest/1'
+          assert request['authority'] is False
+          assert request['issue'] == 238
+          assert request['repository'] == 'roccho-dev/edits'
+          assert request['ref'] == 'refs/heads/proof/vim-nix-herdr-oci-current-20260821'
+          assert request['handoffSha256'] == 'sha256:6a88215c073a43b82f6e584466b07f6c8265e7d4b48ff5e92acbd14626248d38'
+          for key in ('commit', 'tree'):
+              assert re.fullmatch(r'[0-9a-f]{40}', request[key]), key
+          assert request['effects'] == {
+              'networkDuringMaterialization': True,
+              'sourceMutation': False,
+              'modelRepair': False,
+              'publishRelease': False,
+          }
+          with open(sys.argv[2], 'a', encoding='utf-8') as output:
+              for key in ('repository', 'commit', 'tree', 'ref'):
+                  print(f'{key}={request[key]}', file=output)
+          PY
+
+      - name: Announce exact materialization
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 238,
+              body: [
+                '## Exact Vim/Nix runtime materialization started',
+                '',
+                `run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                `repository: \`${{ steps.request.outputs.repository }}\``,
+                `commit: \`${{ steps.request.outputs.commit }}\``,
+                `tree: \`${{ steps.request.outputs.tree }}\``
+              ].join('\n')
+            });
+
+      - name: Acquire and verify exact edits source
+        shell: bash
+        env:
+          SELECTED_REPOSITORY: ${{ steps.request.outputs.repository }}
+          SELECTED_COMMIT: ${{ steps.request.outputs.commit }}
+          SELECTED_TREE: ${{ steps.request.outputs.tree }}
+          SELECTED_REF: ${{ steps.request.outputs.ref }}
+        run: |
+          set -euo pipefail
+          rm -rf "$EDIT_WORKSPACE" "$ARTIFACT"
+          mkdir -p "$EDIT_WORKSPACE" "$ARTIFACT/source"
+          remote="https://github.com/$SELECTED_REPOSITORY.git"
+          ref_head="$(git ls-remote "$remote" "$SELECTED_REF" | awk 'NR == 1 { print $1 }')"
+          test "$ref_head" = "$SELECTED_COMMIT"
+
+          git -C "$EDIT_WORKSPACE" init --quiet
+          git -C "$EDIT_WORKSPACE" remote add origin "$remote"
+          git -C "$EDIT_WORKSPACE" fetch --quiet --depth=1 origin "$SELECTED_COMMIT"
+          test "$(git -C "$EDIT_WORKSPACE" rev-parse FETCH_HEAD^{commit})" = "$SELECTED_COMMIT"
+          git -C "$EDIT_WORKSPACE" checkout --quiet -b exact FETCH_HEAD
+          test "$(git -C "$EDIT_WORKSPACE" rev-parse HEAD^{tree})" = "$SELECTED_TREE"
+          test "$(git -C "$EDIT_WORKSPACE" rev-list --count HEAD)" = 1
+          test "$(git -C "$EDIT_WORKSPACE" rev-parse --is-shallow-repository)" = true
+          test -z "$(git -C "$EDIT_WORKSPACE" status --porcelain=v1)"
+          git -C "$EDIT_WORKSPACE" fsck --no-dangling
+
+          cp "$REQUEST_PATH" "$ARTIFACT/source/request.json"
+          printf '%s\n' "$SELECTED_COMMIT" > "$ARTIFACT/source/selected-commit.txt"
+          printf '%s\n' "$SELECTED_TREE" > "$ARTIFACT/source/selected-tree.txt"
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            always-allow-substitutes = true
+
+      - id: proof
+        name: Execute existing exact Nix Docker OCI proof
+        continue-on-error: true
+        shell: bash
+        env:
+          SELECTED_COMMIT: ${{ steps.request.outputs.commit }}
+        run: |
+          set -euo pipefail
+          export GITHUB_WORKSPACE="$EDIT_WORKSPACE"
+          export GITHUB_SHA="$SELECTED_COMMIT"
+          cat "$EDIT_WORKSPACE"/proofs/vim-nix/ci.parts/*.sh > "$RUNNER_TEMP/vim-nix-ci.sh"
+          chmod 0700 "$RUNNER_TEMP/vim-nix-ci.sh"
+          "$RUNNER_TEMP/vim-nix-ci.sh"
+
+      - name: Preserve exact source and every reached runtime object
+        if: always()
+        shell: bash
+        env:
+          SELECTED_REPOSITORY: ${{ steps.request.outputs.repository }}
+          SELECTED_COMMIT: ${{ steps.request.outputs.commit }}
+          SELECTED_TREE: ${{ steps.request.outputs.tree }}
+          SELECTED_REF: ${{ steps.request.outputs.ref }}
+          PROOF_OUTCOME: ${{ steps.proof.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$ARTIFACT/source"
+          git -C "$EDIT_WORKSPACE" bundle create \
+            "$ARTIFACT/source/edits-vim-nix-current.git.bundle" refs/heads/exact
+          git -C "$EDIT_WORKSPACE" bundle verify \
+            "$ARTIFACT/source/edits-vim-nix-current.git.bundle" \
+            > "$ARTIFACT/source/bundle-verify.txt"
+          git -C "$EDIT_WORKSPACE" archive --format=tar.gz \
+            --prefix="edits-$SELECTED_COMMIT/" HEAD \
+            > "$ARTIFACT/source/edits-vim-nix-current.source.tar.gz"
+          git -C "$EDIT_WORKSPACE" status --porcelain=v1 \
+            > "$ARTIFACT/source/git-status.txt"
+          test ! -s "$ARTIFACT/source/git-status.txt"
+
+          if test -s "$ARTIFACT/product/store-path.txt"; then
+            product="$(cat "$ARTIFACT/product/store-path.txt")"
+            test -e "$product"
+            printf '%s\n' "$product" > "$ARTIFACT/product/store-path.readback.txt"
+            nix-store -qR "$product" | sort > "$ARTIFACT/product/closure-paths.readback.txt"
+            sed 's#^/##' "$ARTIFACT/product/closure-paths.readback.txt" \
+              > "$ARTIFACT/product/closure-relative-paths.txt"
+            tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
+              --zstd -C / -cf "$ARTIFACT/product/product-store-closure.tar.zst" \
+              -T "$ARTIFACT/product/closure-relative-paths.txt"
+            rm -rf "$ARTIFACT/nix-cache"
+            nix copy --to "file://$ARTIFACT/nix-cache" "$product"
+            printf 'PASS\n' > "$ARTIFACT/nix-cache-export.txt"
+          fi
+
+          python3 - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ['ARTIFACT'])
+          value = {
+              'schema': 'ops.vimNixRuntimeMaterializationReceipt/1',
+              'status': 'PASS' if os.environ['PROOF_OUTCOME'] == 'success' else 'FAIL',
+              'authority': False,
+              'issue': 238,
+              'source': {
+                  'repository': os.environ['SELECTED_REPOSITORY'],
+                  'commit': os.environ['SELECTED_COMMIT'],
+                  'tree': os.environ['SELECTED_TREE'],
+                  'ref': os.environ['SELECTED_REF'],
+                  'acquisition': 'exact-git-depth-1',
+                  'clean': True,
+              },
+              'proofOutcome': os.environ['PROOF_OUTCOME'],
+              'objects': {
+                  'productStorePath': (root / 'product/store-path.txt').read_text().strip()
+                      if (root / 'product/store-path.txt').is_file() else None,
+                  'dockerArchive': (root / 'vim-nix-herdr-hq.docker.tar').is_file(),
+                  'ociArchive': (root / 'vim-nix-herdr-hq.oci.tar').is_file(),
+                  'runtimeReceipt': (root / 'evidence-docker/receipt.json').is_file(),
+                  'nixCache': (root / 'nix-cache').is_dir(),
+                  'portableStoreClosure': (root / 'product/product-store-closure.tar.zst').is_file(),
+              },
+              'claimBoundary': {
+                  'productComplete': os.environ['PROOF_OUTCOME'] == 'success',
+                  'physicalWslcReadback': False,
+                  'modelRepairAllowed': False,
+              },
+          }
+          (root / 'materialization-receipt.json').write_text(
+              json.dumps(value, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+          PY
+
+          (cd "$ARTIFACT" && \
+            find . -type f ! -name SHA256SUMS -print0 | sort -z | \
+            xargs -0 sha256sum > SHA256SUMS)
+          (cd "$ARTIFACT" && sha256sum --check SHA256SUMS)
+          du -sh "$ARTIFACT"
+
+      - id: upload
+        name: Upload exact runtime OCI closure and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vim-nix-current-runtime-${{ steps.request.outputs.commit }}
+          path: ${{ runner.temp }}/vim-nix-current-runtime
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Report exact materialization result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const success = '${{ steps.proof.outcome }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 238,
+              body: [
+                '## Exact Vim/Nix runtime materialization result',
+                '',
+                `status: \`${success ? 'success' : 'failure'}\``,
+                `run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                `commit: \`${{ steps.request.outputs.commit }}\``,
+                `tree: \`${{ steps.request.outputs.tree }}\``,
+                `artifact ID: \`${{ steps.upload.outputs.artifact-id }}\``,
+                `artifact URL: ${{ steps.upload.outputs.artifact-url }}`,
+                '',
+                success
+                  ? 'Exact Nix/offline, native popup, two-pane, managed worker, Docker, OCI, mutation rejection, and semantic parity gates passed. Physical WSLC readback remains external.'
+                  : 'The proof failed closed. Exact source and every runtime object reached before failure were still uploaded; no completion claim is made.'
+              ].join('\n')
+            });
+
+      - name: Enforce proof verdict
+        if: always()
+        shell: bash
+        run: |
+          test '${{ steps.proof.outcome }}' = success
