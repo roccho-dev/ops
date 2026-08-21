@@ -1,0 +1,62 @@
+name: Dispatch exact Vim Nix runtime materializer
+
+on:
+  push:
+    branches:
+      - proposals
+    paths:
+      - .github/workflows/dispatch-vim-nix-exact-runtime.yml
+      - proofs/vim-nix-current-sandbox/request.json
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  statuses: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact request
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate immutable request
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .schema == "ops.vimNixExactRuntimeRequest/1" and
+            .commit == "b6f84f74bb2a1cf9e94b6d77d1d0381679385636" and
+            .tree == "7f9da1fad43838e7198cbbf87ee904484d29bc39" and
+            .ref == "refs/heads/proof/vim-nix-herdr-oci-current-20260821" and
+            .handoffSha256 == "6a88215c073a43b82f6e584466b07f6c8265e7d4b48ff5e92acbd14626248d38" and
+            .flakeLockSha256 == "35cdda5fa9645ab469924c69f36992db2f8637360fce128e7c7fd372c3a4ce0f"
+          ' proofs/vim-nix-current-sandbox/request.json >/dev/null
+
+      - name: Dispatch bounded proof workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run proof-vim-nix-exact-runtime-current-sandbox.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref proof/vim-nix-exact-runtime-current-sandbox-20260821
+
+      - name: Publish dispatch receipt
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'success',
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: 'Exact Vim/Nix runtime workflow dispatched',
+              context: 'dispatch/vim-nix-exact-runtime'
+            });
