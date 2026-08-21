@@ -1,4 +1,4 @@
-name: Proof AtlasStage static workflow syntax
+name: Repair and validate AtlasStage static workflow syntax
 
 on:
   pull_request:
@@ -8,21 +8,37 @@ on:
       - '.github/workflows/artifact-runtime-static-host.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
+    if: github.head_ref == 'proposal/atlas-stage-artifact-publication-260821'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
-      - name: Parse and inspect static-host workflow
+      - name: Repair the one escaped newline and validate the complete workflow
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/artifact-runtime-static-host.yml')
+          lines=path.read_text(encoding='utf-8').splitlines()
+          matches=[]
+          for index,line in enumerate(lines[:-1]):
+              if "open(sys.argv[3],'w',encoding='utf-8').write(json.dumps(out,sort_keys=True,separators=(',',':'))+'" in line and lines[index+1].strip()=="')":
+                  matches.append(index)
+          assert len(matches)==1,matches
+          index=matches[0]
+          lines[index]=lines[index][:-2] + "+'" + chr(92) + "n')"
+          del lines[index+1]
+          path.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
           ruby -e 'require "yaml"; YAML.parse_file(ARGV.fetch(0)); puts "yaml-parse-pass"' .github/workflows/artifact-runtime-static-host.yml
           python3 - <<'PY'
           from pathlib import Path
@@ -35,6 +51,7 @@ jobs:
             "npm run check:artifact-runtime",
             "atlas-stage.mjs",
             "expectedListedFiles']==p['publication']['listedFiles']==54",
+            "write(json.dumps(out,sort_keys=True,separators=(',',':'))+'\\n')",
           ]
           for value in required:
             assert value in text,value
@@ -43,3 +60,16 @@ jobs:
           assert text.count('  deploy:')==1
           print('static-contract-pass')
           PY
+          git diff --check
+
+      - name: Commit the product fix and retire this proof workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/artifact-runtime-static-host.yml
+          git commit -m "fix: preserve receipt newline in AtlasStage static workflow"
+          git rm .github/workflows/proof-validate-atlas-stage-static-workflow.yml
+          git commit -m "chore: retire AtlasStage static workflow syntax proof"
+          git push origin HEAD:${GITHUB_HEAD_REF}
