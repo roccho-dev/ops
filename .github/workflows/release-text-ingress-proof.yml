@@ -6,6 +6,9 @@ on:
       - "packages/chatgpt-capability/ingress/**"
       - ".github/workflows/release-text-ingress-proof.yml"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release-text-ingress-proof.yml"
 
 permissions:
   contents: read
@@ -35,8 +38,10 @@ jobs:
 
   apply-private-migration-patch:
     if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/chore/public-ops-control-surfaces-20260821' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'chore/public-ops-control-surfaces-20260821' &&
+      github.event.pull_request.base.ref == 'proposals' &&
       github.actor == github.repository_owner
     permissions:
       contents: write
@@ -46,6 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -58,9 +64,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_REF#refs/heads/}" = "$EXPECTED_BRANCH"
-          test "$(git rev-parse HEAD^^)" = "$EXPECTED_BASE"
-          test "$(git rev-list --count "$EXPECTED_BASE"..HEAD)" -eq 2
+          test "${{ github.event.pull_request.head.ref }}" = "$EXPECTED_BRANCH"
+          test "$(git rev-parse HEAD^^^)" = "$EXPECTED_BASE"
+          test "$(git rev-list --count "$EXPECTED_BASE"..HEAD)" -eq 3
           test "$(git diff --name-only "$EXPECTED_BASE" HEAD)" = ".github/workflows/release-text-ingress-proof.yml"
           comments="$RUNNER_TEMP/comments.json"
           request="$RUNNER_TEMP/request.json"
