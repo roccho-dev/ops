@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: '22.16.0'
 
-      - name: Validate fixed existing-App contract
+      - name: Validate exact existing-App projection contract
         id: contract
         shell: bash
         run: |
@@ -55,18 +55,25 @@ jobs:
           value=json.load(open('verification/mobile-agent-preset-url-dod/cases.json',encoding='utf-8'))
           assert value['schema']=='ops.mobileAgentPresetUrlDodCases/1' and value['authority'] is False
           assert value['sourceApp']=={
-            'url':'https://mobile-agent.roccho.workers.dev/app/',
-            'bytes':2026821,
-            'sha256':'sha256:c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4',
+            'projectionRef':'projection/mobile-agent-preset-dist-b0af2ab9',
+            'parts':[
+              'projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00',
+              'projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01',
+            ],
+            'bytes':2412388,
+            'sha256':'sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6',
+            'implementationRewritten':False,
           }
           assert [row['preset'] for row in value['cases']]==['graph/1','map/1','seq/1']
           assert all(row['fragment'].startswith('smap=') for row in value['cases'])
           assert all(row['sourceJsonlSha256'].startswith('sha256:') for row in value['cases'])
+          digest=value['sourceApp']['sha256'].removeprefix('sha256:')
           print('project=stg-mobile-agent')
-          print('tag=mobile-agent-preset-app-c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4')
-          print('app_name=mobile-agent-preset-app.c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4.html')
-          print('app_sha=c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4')
-          print('app_bytes=2026821')
+          print(f'tag=mobile-agent-preset-app-{digest}')
+          print(f'app_name=mobile-agent-preset-app.{digest}.html')
+          print(f'app_sha={digest}')
+          print(f"app_bytes={value['sourceApp']['bytes']}")
+          print(f"projection_ref={value['sourceApp']['projectionRef']}")
           PY
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -77,27 +84,42 @@ jobs:
           APP_NAME: ${{ steps.contract.outputs.app_name }}
           APP_SHA: ${{ steps.contract.outputs.app_sha }}
           APP_BYTES: ${{ steps.contract.outputs.app_bytes }}
+          PROJECTION_REF: ${{ steps.contract.outputs.projection_ref }}
         shell: bash
         run: |
           set -euo pipefail
           result="$RUNNER_TEMP/result"
-          mkdir -p "$result/dist/app"
+          mkdir -p "$result/dist/app" "$RUNNER_TEMP/parts"
           if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
             gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APP_NAME" --dir "$RUNNER_TEMP"
             mv "$RUNNER_TEMP/$APP_NAME" "$result/dist/app/index.html"
           else
-            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error \
-              -H 'Cache-Control: no-cache' \
-              'https://mobile-agent.roccho.workers.dev/app/' \
-              -o "$result/dist/app/index.html"
+            fetch_content() {
+              local path="$1" out="$2"
+              gh api -X GET "repos/$GITHUB_REPOSITORY/contents/$path" -f ref="$PROJECTION_REF" --jq .content \
+                | tr -d '\n' | base64 --decode > "$out"
+            }
+            fetch_content projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00 "$RUNNER_TEMP/parts/part00"
+            fetch_content projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01 "$RUNNER_TEMP/parts/part01"
+            cat "$RUNNER_TEMP/parts/part00" "$RUNNER_TEMP/parts/part01" > "$RUNNER_TEMP/app-index.br.b64"
+            test "$(wc -c < "$RUNNER_TEMP/app-index.br.b64")" -eq 30024
+            base64 --decode "$RUNNER_TEMP/app-index.br.b64" > "$RUNNER_TEMP/app-index.br"
+            node - "$RUNNER_TEMP/app-index.br" "$result/dist/app/index.html" <<'JS'
+            const fs=require('node:fs'); const zlib=require('node:zlib');
+            fs.writeFileSync(process.argv[3],zlib.brotliDecompressSync(fs.readFileSync(process.argv[2])));
+            JS
           fi
           test "$(wc -c < "$result/dist/app/index.html")" -eq "$APP_BYTES"
           test "$(sha256sum "$result/dist/app/index.html" | cut -d' ' -f1)" = "$APP_SHA"
+          grep -F 'graph/1' "$result/dist/app/index.html" >/dev/null
+          grep -F 'map/1' "$result/dist/app/index.html" >/dev/null
+          grep -F 'seq/1' "$result/dist/app/index.html" >/dev/null
+          grep -F 'maxgraph' "$result/dist/app/index.html" >/dev/null
           cp verification/mobile-agent-preset-url-dod/cases.json "$result/cases.json"
-          python3 - "$result/dist/app/index.html" "$result/materialization.json" <<'PY'
+          python3 - "$result/dist/app/index.html" "$result/materialization.json" "$PROJECTION_REF" <<'PY'
           import hashlib,json,pathlib,sys
-          target=pathlib.Path(sys.argv[1]); data=target.read_bytes()
-          value={'schema':'ops.mobileAgentPresetAppMaterialization/1','status':'PASS','authority':False,'path':'app/index.html','bytes':len(data),'sha256':'sha256:'+hashlib.sha256(data).hexdigest(),'sourceCloneUsed':False,'consumerBuildUsed':False,'implementationRewritten':False}
+          data=pathlib.Path(sys.argv[1]).read_bytes()
+          value={'schema':'ops.mobileAgentPresetAppMaterialization/2','status':'PASS','authority':False,'path':'app/index.html','bytes':len(data),'sha256':'sha256:'+hashlib.sha256(data).hexdigest(),'projectionRef':sys.argv[3],'sourceCloneUsed':False,'consumerBuildUsed':False,'implementationRewritten':False}
           pathlib.Path(sys.argv[2]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n')
           PY
 
@@ -112,9 +134,11 @@ jobs:
           python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/result/dist" > "$RUNNER_TEMP/http.log" 2>&1 &
           server=$!
           trap 'kill $server 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 50); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          for attempt in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          curl -fsS http://127.0.0.1:4173/app/ >/dev/null
           node verification/mobile-agent-preset-url-dod/smoke.mjs \
             "$RUNNER_TEMP/result/cases.json" http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/result/local-proof"
+          "$chrome" --version > "$RUNNER_TEMP/result/chrome-version.txt"
 
       - name: Publish immutable exact-App Release
         if: github.event_name == 'push'
@@ -132,7 +156,7 @@ jobs:
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
               --title 'Mobile Agent existing preset App URL DoD' \
-              --notes 'Immutable non-authority projection of the existing preset maxGraph App. Source promotion remains tracked by #233.' \
+              --notes 'Immutable non-authority projection of the exact existing graph/1, map/1 and seq/1 maxGraph App.' \
               "${assets[@]}"
           else
             mkdir "$RUNNER_TEMP/release-readback"
