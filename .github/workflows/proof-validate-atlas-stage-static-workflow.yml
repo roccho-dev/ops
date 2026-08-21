@@ -51,7 +51,7 @@ jobs:
             "npm run check:artifact-runtime",
             "atlas-stage.mjs",
             "expectedListedFiles']==p['publication']['listedFiles']==54",
-            "write(json.dumps(out,sort_keys=True,separators=(',',':'))+'\\n')",
+            "write(json.dumps(out,sort_keys=True,separators=(',',':'))+",
           ]
           for value in required:
             assert value in text,value
