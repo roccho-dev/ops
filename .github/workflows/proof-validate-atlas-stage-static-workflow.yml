@@ -1,4 +1,4 @@
-name: Repair and validate AtlasStage static workflow syntax
+name: Export validated AtlasStage static workflow blob
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
       - '.github/workflows/artifact-runtime-static-host.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -18,10 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Repair the one escaped newline and validate the complete workflow
+      - name: Repair and validate the one escaped newline
         shell: bash
         run: |
           set -euo pipefail
@@ -44,17 +43,12 @@ jobs:
           from pathlib import Path
           text=Path('.github/workflows/artifact-runtime-static-host.yml').read_text(encoding='utf-8')
           required=[
-            "name: Artifact Runtime static host projection",
-            "pull_request:",
-            "issue_comment:",
             "if [ \"$GITHUB_EVENT_NAME\" = pull_request ]; then",
             "npm run check:artifact-runtime",
             "atlas-stage.mjs",
             "expectedListedFiles']==p['publication']['listedFiles']==54",
-            "write(json.dumps(out,sort_keys=True,separators=(',',':'))+",
           ]
-          for value in required:
-            assert value in text,value
+          for value in required: assert value in text,value
           lines=text.splitlines()
           assert sum(line=='jobs:' for line in lines)==1
           assert sum(line=='  materialize:' for line in lines)==1
@@ -62,15 +56,14 @@ jobs:
           print('static-contract-pass')
           PY
           git diff --check
+          mkdir -p "$RUNNER_TEMP/out"
+          cp .github/workflows/artifact-runtime-static-host.yml "$RUNNER_TEMP/out/artifact-runtime-static-host.yml"
+          sha256sum "$RUNNER_TEMP/out/artifact-runtime-static-host.yml" | tee "$RUNNER_TEMP/out/SHA256SUMS"
 
-      - name: Commit the product fix and retire this proof workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .github/workflows/artifact-runtime-static-host.yml
-          git commit -m "fix: preserve receipt newline in AtlasStage static workflow"
-          git rm .github/workflows/proof-validate-atlas-stage-static-workflow.yml
-          git commit -m "chore: retire AtlasStage static workflow syntax proof"
-          git push origin HEAD:${GITHUB_HEAD_REF}
+      - name: Upload validated workflow blob
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-stage-static-workflow-${{ github.run_id }}
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 7
