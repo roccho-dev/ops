@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   source:
@@ -21,6 +22,17 @@ jobs:
         with:
           ref: proposals
           persist-credentials: false
+
+      - name: Announce source materialization
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 238,
+              body: `## Source-complete Carry run started\n\nrun: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            });
 
       - name: Materialize exact source authorities
         shell: bash
@@ -70,10 +82,30 @@ jobs:
           (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
           (cd "$OUT" && sha256sum --check SHA256SUMS)
 
-      - uses: actions/upload-artifact@v4
+      - id: upload
+        uses: actions/upload-artifact@v4
         with:
           name: vim-hq-source-complete
           path: ${{ runner.temp }}/vim-hq-source-complete
           compression-level: 0
           retention-days: 90
           if-no-files-found: error
+
+      - name: Report source artifact
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 238,
+              body: [
+                '## Source-complete Carry run result',
+                '',
+                `status: \`${{ job.status }}\``,
+                `run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                `artifact ID: \`${{ steps.upload.outputs.artifact-id }}\``,
+                `artifact digest: \`${{ steps.upload.outputs.artifact-digest }}\``
+              ].join('\n')
+            });
