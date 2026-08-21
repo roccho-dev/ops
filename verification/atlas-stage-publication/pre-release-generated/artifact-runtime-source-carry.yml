@@ -1,0 +1,365 @@
+name: Artifact Runtime improvement source carry
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/artifact-runtime-source-carry.yml'
+      - 'verification/artifact-runtime-app/manifest.json'
+      - 'ci.intent.v1.jsonl'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  carry:
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 216 &&
+       github.event.comment.user.login == github.repository_owner &&
+       (github.event.comment.body == '/artifact-runtime-source-carry ui' ||
+        github.event.comment.body == '/artifact-runtime-source-carry ops'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || 'proposals' }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure bounded GitHub read authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+
+      - name: Resolve exact sources from the accepted App manifest
+        id: resolve
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          app='verification/artifact-runtime-app/manifest.json'
+          test -f "$app"
+
+          if [ "$EVENT_NAME" = pull_request ]; then
+            roles='ui ops'
+            suffix='both'
+          else
+            case "$COMMENT_BODY" in
+              '/artifact-runtime-source-carry ui') roles='ui'; suffix='ui' ;;
+              '/artifact-runtime-source-carry ops') roles='ops'; suffix='ops' ;;
+              *) echo 'unsupported source-carry command' >&2; exit 2 ;;
+            esac
+          fi
+
+          tag="$(python3 -c 'import json; print(json.load(open("verification/artifact-runtime-app/manifest.json", encoding="utf-8"))["publication"]["tag"])')"
+          test -n "$tag"
+          if [ "$EVENT_NAME" = pull_request ]; then
+            ops_target="$(git rev-parse HEAD)"
+            release_bound=false
+          else
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+            object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.type)"
+            ops_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
+            while [ "$object_type" = tag ]; do
+              object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ops_target" --jq .object.type)"
+              ops_target="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ops_target" --jq .object.sha)"
+            done
+            test "$object_type" = commit
+            release_bound=true
+          fi
+          [[ "$ops_target" =~ ^[0-9a-f]{40}$ ]]
+
+          python3 - "$app" "$roles" "$ops_target" "$tag" "$release_bound" "$RUNNER_TEMP/app-sources.json" <<'PY'
+          import hashlib,json,pathlib,re,sys
+          manifest_path,roles_raw,ops_target,tag,release_bound_raw,out=sys.argv[1:]
+          release_bound=release_bound_raw=='true'
+          raw=pathlib.Path(manifest_path).read_bytes()
+          app=json.loads(raw)
+          assert app['schema']=='ops.artifactRuntimeApp/1'
+          assert app['authority'] is False and app['status']=='accepted-source'
+          assert app['id']=='artifact-runtime' and app['version']=='1'
+          assert app['issue']==193
+          assert app['publication']['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
+          assert app['publication']['tag']==tag
+          assert app['boundaries']['gitIsSourceAuthority'] is True
+          assert app['boundaries']['mutableLatestAllowed'] is False
+          assert app['boundaries']['uploadedZipAllowedAsSource'] is False
+          assert app['assemblyAuthority']=={
+              'repository':'roccho-dev/ops',
+              'path':'verification/artifact-runtime-app/manifest.json',
+              'revision':'self',
+          }
+          authorities={row['repository']:row for row in app['sourceAuthorities']}
+          improvements={row['repository']:row for row in app['improvementSources']}
+          assert set(improvements)=={'roccho-dev/ui','roccho-dev/ops'}
+          ui=improvements['roccho-dev/ui']
+          ui_authority=authorities['roccho-dev/ui']
+          assert ui['acquire']=='exact-git-or-repo-head-carrier'
+          assert ui['commit']==ui_authority['commit']
+          assert ui['tree']==ui_authority['tree']
+          assert re.fullmatch(r'[0-9a-f]{40}',ui['commit'])
+          assert re.fullmatch(r'[0-9a-f]{40}',ui['tree'])
+          ops=improvements['roccho-dev/ops']
+          assert ops=={
+              'repository':'roccho-dev/ops',
+              'revision':'release-target',
+              'acquire':'exact-git-or-repo-head-carrier',
+          }
+          assert re.fullmatch(r'[0-9a-f]{40}',ops_target)
+          requested=roles_raw.split()
+          assert requested and len(requested)==len(set(requested))
+          assert set(requested)<= {'ui','ops'}
+          sources=[]
+          for role in requested:
+              if role=='ui':
+                  sources.append({
+                      'role':'ui','repository':'roccho-dev/ui',
+                      'commit':ui['commit'],'expectedTree':ui['tree'],
+                      'assemblyPath':None,'releaseTag':None,
+                  })
+              else:
+                  sources.append({
+                      'role':'ops','repository':'roccho-dev/ops',
+                      'commit':ops_target,'expectedTree':None,
+                      'assemblyPath':app['assemblyAuthority']['path'],
+                      'releaseTag':tag if release_bound else None,
+                  })
+          value={
+              'schema':'ops.artifactAppSourceCarryRequest/1',
+              'authority':False,
+              'issue':216,
+              'app':{
+                  'id':app['id'],'version':app['version'],
+                  'manifestSha256':'sha256:'+hashlib.sha256(raw).hexdigest(),
+                  'publicationTree':app['publication']['treeDigest'],
+              },
+              'sources':sources,
+          }
+          pathlib.Path(out).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+
+          echo "roles=$roles" >> "$GITHUB_OUTPUT"
+          echo "suffix=$suffix" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ops_target=$ops_target" >> "$GITHUB_OUTPUT"
+
+      - name: Build and independently restore exact shallow Git Carriers
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.resolve.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/app-sources.json"
+          app='verification/artifact-runtime-app/manifest.json'
+          out="$RUNNER_TEMP/source-carry-out"
+          mkdir -p "$out"
+          cp "$app" "$out/artifact-runtime.app.manifest.json"
+          cp "$request" "$out/source-carry.request.json"
+
+          python3 - "$request" <<'PY' > "$RUNNER_TEMP/source-rows.tsv"
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['schema']=='ops.artifactAppSourceCarryRequest/1'
+          for row in x['sources']:
+              print('\t'.join([
+                  row['role'],row['repository'],row['commit'],
+                  row['expectedTree'] or '-',row['assemblyPath'] or '-',
+                  row['releaseTag'] or '-',
+              ]))
+          PY
+
+          while IFS=$'\t' read -r role repository head expected_tree assembly_path release_tag; do
+            [[ "$role" =~ ^(ui|ops)$ ]]
+            [[ "$repository" =~ ^roccho-dev/(ui|ops)$ ]]
+            [[ "$head" =~ ^[0-9a-f]{40}$ ]]
+            work="$RUNNER_TEMP/source-$role"
+            restore="$RUNNER_TEMP/restore-$role"
+            mkdir -p "$restore"
+            git init --quiet "$work"
+            git -C "$work" remote add origin "https://github.com/$repository.git"
+            git -C "$work" fetch --quiet --depth=1 origin "$head"
+            test "$(git -C "$work" rev-parse FETCH_HEAD)" = "$head"
+            git -C "$work" checkout --quiet -b app-source FETCH_HEAD
+            tree="$(git -C "$work" rev-parse 'HEAD^{tree}')"
+            if [ "$expected_tree" != '-' ]; then test "$tree" = "$expected_tree"; fi
+            test "$(git -C "$work" rev-parse --is-shallow-repository)" = true
+            test "$(git -C "$work" rev-list --count HEAD)" = 1
+            test "$(git -C "$work" branch --show-current)" = app-source
+            test "$(git -C "$work" remote get-url origin)" = "https://github.com/$repository.git"
+            test -z "$(git -C "$work" status --porcelain)"
+            git -C "$work" fsck --no-dangling
+
+            if [ "$role" = ops ]; then
+              test "$assembly_path" = 'verification/artifact-runtime-app/manifest.json'
+              git -C "$work" show "$head:$assembly_path" > "$RUNNER_TEMP/ops-app-manifest.json"
+              cmp "$app" "$RUNNER_TEMP/ops-app-manifest.json"
+              if [ "$release_tag" != '-' ]; then
+                test "$release_tag" = "$RELEASE_TAG"
+              fi
+            else
+              test "$assembly_path" = '-'
+              test "$release_tag" = '-'
+            fi
+
+            base="artifact-runtime.$role.$head.git"
+            archive="$out/$base.tar.gz"
+            carrier="$archive.b64.txt"
+            receipt="$out/artifact-runtime.$role.$head.source-carry.receipt.json"
+            tar -C "$work" -czf "$archive" .git
+            base64 -w0 "$archive" > "$carrier"
+            base64 --decode "$carrier" > "$RUNNER_TEMP/$role.decoded.git.tar.gz"
+            cmp "$archive" "$RUNNER_TEMP/$role.decoded.git.tar.gz"
+            base64 -w0 "$RUNNER_TEMP/$role.decoded.git.tar.gz" | cmp - "$carrier"
+
+            tar -C "$restore" -xzf "$archive"
+            git -C "$restore" reset --hard HEAD
+            test "$(git -C "$restore" rev-parse HEAD)" = "$head"
+            test "$(git -C "$restore" rev-parse 'HEAD^{tree}')" = "$tree"
+            test "$(git -C "$restore" rev-parse --is-shallow-repository)" = true
+            test "$(git -C "$restore" rev-list --count HEAD)" = 1
+            test "$(git -C "$restore" branch --show-current)" = app-source
+            test "$(git -C "$restore" remote get-url origin)" = "https://github.com/$repository.git"
+            test -z "$(git -C "$restore" status --porcelain)"
+            git -C "$restore" fsck --no-dangling
+
+            archive_bytes="$(stat -c %s "$archive")"
+            archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+            carrier_bytes="$(stat -c %s "$carrier")"
+            carrier_sha="$(sha256sum "$carrier" | cut -d' ' -f1)"
+            manifest_sha="$(sha256sum "$app" | cut -d' ' -f1)"
+            python3 - "$receipt" "$role" "$repository" "$head" "$tree" "$archive" "$archive_bytes" "$archive_sha" "$carrier" "$carrier_bytes" "$carrier_sha" "$manifest_sha" "$release_tag" <<'PY'
+          import json,pathlib,sys
+          (out,role,repository,head,tree,archive,archive_bytes,archive_sha,
+           carrier,carrier_bytes,carrier_sha,manifest_sha,release_tag)=sys.argv[1:]
+          value={
+              'schema':'ops.artifactAppSourceCarryReceipt/1',
+              'status':'PASS','authority':False,'issue':216,
+              'app':{
+                  'id':'artifact-runtime','version':'1',
+                  'manifestSha256':'sha256:'+manifest_sha,
+                  'publicationTree':'sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da',
+              },
+              'source':{
+                  'role':role,'repository':repository,'commit':head,'tree':tree,
+                  'localBranch':'app-source','acquisition':'exact-git-depth-1',
+                  'declaredByApp':True,
+                  'releaseTargetVerified':role=='ops' and release_tag!='-',
+                  'releaseTag':None if release_tag=='-' else release_tag,
+              },
+              'git':{
+                  'shallow':True,'commitCount':1,'clean':True,'fsck':'PASS',
+                  'origin':'https://github.com/'+repository+'.git',
+              },
+              'archive':{
+                  'name':pathlib.Path(archive).name,'bytes':int(archive_bytes),
+                  'sha256':'sha256:'+archive_sha,
+              },
+              'carrier':{
+                  'name':pathlib.Path(carrier).name,'bytes':int(carrier_bytes),
+                  'sha256':'sha256:'+carrier_sha,'codec':'standard-base64',
+                  'decodedSha256':'sha256:'+archive_sha,
+              },
+              'transport':'github-actions-artifact',
+              'consumer':{'sourceBuildRequired':False,'repairAllowed':False},
+          }
+          pathlib.Path(out).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+          done < "$RUNNER_TEMP/source-rows.tsv"
+
+          python3 - "$out" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          receipts=[]
+          for path in sorted(root.glob('*.source-carry.receipt.json')):
+              value=json.loads(path.read_text(encoding='utf-8'))
+              assert value['schema']=='ops.artifactAppSourceCarryReceipt/1'
+              assert value['status']=='PASS'
+              receipts.append({
+                  'role':value['source']['role'],
+                  'repository':value['source']['repository'],
+                  'commit':value['source']['commit'],
+                  'tree':value['source']['tree'],
+                  'receipt':path.name,
+                  'receiptSha256':'sha256:'+hashlib.sha256(path.read_bytes()).hexdigest(),
+              })
+          assert receipts
+          index={
+              'schema':'ops.artifactAppSourceCarryIndex/1','status':'PASS',
+              'authority':False,'issue':216,'sources':receipts,
+          }
+          (root/'source-carry.index.json').write_text(json.dumps(index,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+
+          if [ "${{ github.event_name }}" = issue_comment ]; then
+            receipt="$(find "$out" -maxdepth 1 -name '*.source-carry.receipt.json' -print -quit)"
+            test -n "$receipt"
+            python3 - "$receipt" <<'PY' >> "$GITHUB_OUTPUT"
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          for key,value in {
+              'role':x['source']['role'],'repository':x['source']['repository'],
+              'head':x['source']['commit'],'tree':x['source']['tree'],
+              'archive_sha':x['archive']['sha256'],'carrier_sha':x['carrier']['sha256'],
+          }.items(): print(f'{key}={value}')
+          PY
+          fi
+
+      - name: Upload exact source Carrier result
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-runtime-source-${{ steps.resolve.outputs.suffix }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/source-carry-out/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Return source and artifact identity to the Issue
+        if: ${{ always() && github.event_name == 'issue_comment' }}
+        env:
+          ARTIFACT_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact-id }}
+          ARTIFACT_URL: ${{ steps.artifact.outputs.artifact-url }}
+          CARRIER_SHA: ${{ steps.build.outputs.carrier_sha }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.build.outputs.head }}
+          JOB_STATUS: ${{ job.status }}
+          REPOSITORY: ${{ steps.build.outputs.repository }}
+          ROLE: ${{ steps.build.outputs.role }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TREE_SHA: ${{ steps.build.outputs.tree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Artifact App Source Carry result
+
+          - status: \`$JOB_STATUS\`
+          - App: \`artifact-runtime@1\`
+          - source role: \`${ROLE:-unknown}\`
+          - repository: \`${REPOSITORY:-unknown}\`
+          - exact commit: \`${HEAD_SHA:-unknown}\`
+          - exact tree: \`${TREE_SHA:-unknown}\`
+          - Carrier SHA-256: \`${CARRIER_SHA:-unknown}\`
+          - workflow run: $RUN_URL
+          - Actions artifact: ${ARTIFACT_URL:-not-created}
+          - artifact ID: \`${ARTIFACT_ID:-not-created}\`
+          - artifact digest: \`${ARTIFACT_DIGEST:-not-created}\`
+          - authority: \`false\`; Git commit/tree remain source authority
+
+          No source build, product write, PR, merge, Release, static-host or provider effect was performed.
+          EOF
+          gh issue comment 216 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
