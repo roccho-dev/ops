@@ -19,17 +19,32 @@ try {
   for (const item of source.cases) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     const errors = [];
-    const failed = [];
+    const responses = [];
+    const requests = [];
     await page.route("**/favicon.ico", route => route.fulfill({ status: 204, contentType: "image/x-icon", body: "" }));
     page.on("pageerror", error => errors.push(String(error)));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
-    page.on("response", response => { if (response.status() >= 400 && !response.url().endsWith("/favicon.ico")) failed.push({ status: response.status(), url: response.url() }); });
+    page.on("request", request => requests.push({ method: request.method(), resourceType: request.resourceType(), url: request.url() }));
+    page.on("response", response => responses.push({ status: response.status(), url: response.url() }));
     const url = new URL("app/", base);
     url.hash = item.fragment;
     await page.goto(url.href, { waitUntil: "networkidle", timeout: 75_000 });
-    await page.waitForFunction(() => globalThis.semanticMapSite?.ready === true, null, { timeout: 75_000 });
-    await page.waitForFunction(() => globalThis.semanticMapApp?.ready === true, null, { timeout: 75_000 });
-    await page.waitForFunction(() => Boolean(globalThis.semanticMapRuntime?.view?.pattern), null, { timeout: 75_000 });
+    await page.waitForTimeout(5_000);
+    const bootstrap = await page.evaluate(() => ({
+      href: location.href,
+      title: document.title,
+      readyState: document.readyState,
+      bodyText: (document.body?.innerText || "").slice(0, 2_000),
+      siteReady: globalThis.semanticMapSite?.ready ?? null,
+      appReady: globalThis.semanticMapApp?.ready ?? null,
+      runtimePattern: globalThis.semanticMapRuntime?.view?.pattern ?? null,
+      semanticGlobals: Object.keys(globalThis).filter(key => key.startsWith("semanticMap")).sort(),
+    }));
+    fs.writeFileSync(path.join(out, `${item.id}-bootstrap.json`), `${JSON.stringify({ item: item.id, bootstrap, errors, requests, responses }, null, 2)}\n`);
+    await page.screenshot({ path: path.join(out, `${item.id}-bootstrap.png`), fullPage: true });
+    assert.equal(bootstrap.siteReady, true, `${item.id}: semanticMapSite.ready; diagnostic written`);
+    assert.equal(bootstrap.appReady, true, `${item.id}: semanticMapApp.ready; diagnostic written`);
+    assert.equal(bootstrap.runtimePattern, item.preset, `${item.id}: runtime preset; diagnostic written`);
     const state = await page.evaluate(() => ({
       pattern: semanticMapRuntime.view.pattern,
       scenePattern: semanticMapApp.snapshot().scene.pattern,
@@ -98,6 +113,7 @@ try {
       return { schema: state.schema, bytes: state.bytes, text: state.text };
     });
     assert.ok(exported.bytes > 0 && exported.text.trim(), `${item.id}: Source export`);
+    const failed = responses.filter(response => response.status >= 400 && !response.url.endsWith("/favicon.ico"));
     assert.deepEqual(errors, [], `${item.id}: browser errors`);
     assert.deepEqual(failed, [], `${item.id}: failed product responses`);
     await page.screenshot({ path: path.join(out, `${item.id}.png`), fullPage: true });
