@@ -1,0 +1,139 @@
+name: Proof AtlasStage Artifact App publication identities
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-atlas-stage-publication-identities.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      UI_REPOSITORY: roccho-dev/ui
+      UI_COMMIT: 81f36ed47e61764495edcf5fb53a276a6722e06c
+      UI_TREE: 7836d64c2bb35bfe9d5ed176449cfefa78094eb1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Materialize exact accepted UI source from GitHub
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          git clone --filter=blob:none --no-checkout "https://github.com/$UI_REPOSITORY.git" "$ui"
+          git -C "$ui" fetch --depth=1 origin "$UI_COMMIT"
+          git -C "$ui" checkout --detach "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse HEAD)" = "$UI_COMMIT"
+          test "$(git -C "$ui" rev-parse 'HEAD^{tree}')" = "$UI_TREE"
+          test "$(git -C "$ui" rev-parse --is-shallow-repository)" = true
+          test "$(git -C "$ui" rev-list --count HEAD)" = 1
+          test -z "$(git -C "$ui" status --porcelain)"
+          git -C "$ui" fsck --no-dangling
+
+      - name: Rebuild, archive and verify deterministic publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          out="$RUNNER_TEMP/publication"
+          first="$RUNNER_TEMP/build-a.json"
+          second="$RUNNER_TEMP/build-b.json"
+          out_b="$RUNNER_TEMP/publication-b"
+          (
+            cd "$ui"
+            npm run check:artifact-runtime
+            node apps/artifact-shell/scripts/build-publication.mjs --out="$out" | tee "$first"
+            node apps/artifact-shell/scripts/build-publication.mjs --out="$out_b" | tee "$second"
+          )
+          diff -qr "$out" "$out_b"
+          cmp "$first" "$second"
+
+          tree_id="$(python3 -c 'import json;print(json.load(open("'"$first"'"))["treeDigest"].removeprefix("sha256:"))')"
+          archive="$RUNNER_TEMP/artifact-runtime.$tree_id.tar.gz"
+          carrier="$archive.b64.txt"
+          (cd "$out" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          base64 -w0 "$archive" > "$carrier"
+          base64 --decode "$carrier" > "$RUNNER_TEMP/decoded.tar.gz"
+          cmp "$archive" "$RUNNER_TEMP/decoded.tar.gz"
+
+          python3 - "$out" "$archive" "$carrier" "$RUNNER_TEMP/identity.json" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); archive=pathlib.Path(sys.argv[2]); carrier=pathlib.Path(sys.argv[3]); output=pathlib.Path(sys.argv[4])
+          artifact=json.loads((root/'artifact-manifest.json').read_text(encoding='utf-8'))
+          catalog=json.loads((root/'catalog.json').read_text(encoding='utf-8'))
+          assert artifact['schema']=='artifact-shell-publication-artifact/2'
+          assert catalog['schema']=='artifact-capability-catalog/2'
+          capabilities=[f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]
+          assert capabilities==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          atlas=[x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')]
+          assert len(atlas)==1
+          services=[x for x in artifact['files'] if x['path'].endswith('/apps/artifact-shell/src/services.mjs')]
+          assert len(services)==1
+          kernel=catalog['kernel']; kernel_id=kernel['digest'].removeprefix('sha256:')
+          value={
+            'schema':'ops.atlasStageArtifactPublicationIdentity/1','status':'PASS','authority':False,
+            'source':{'repository':'roccho-dev/ui','commit':'81f36ed47e61764495edcf5fb53a276a6722e06c','tree':'7836d64c2bb35bfe9d5ed176449cfefa78094eb1','transport':'exact-github-git-depth-1'},
+            'publication':{
+              'treeDigest':artifact['treeDigest'],'kernelDigest':kernel['digest'],'listedFiles':len(artifact['files']),
+              'capabilities':capabilities,
+              'archive':{'name':archive.name,'bytes':archive.stat().st_size,'sha256':'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()},
+              'carrier':{'name':carrier.name,'bytes':carrier.stat().st_size,'sha256':'sha256:'+hashlib.sha256(carrier.read_bytes()).hexdigest(),'codec':'standard-base64-no-whitespace'},
+            },
+            'atlasStage':atlas[0],
+            'services':services[0],
+            'entrypoints':{
+              'browser':'index.html','catalog':'catalog.json','artifactManifest':'artifact-manifest.json',
+              'codec':f'kernel/{kernel_id}/packages/url-module/src/index.mjs',
+              'atlasStage':f'kernel/{kernel_id}/packages/a2ui-browser/src/catalog/atlas-stage.mjs',
+              'services':f'kernel/{kernel_id}/apps/artifact-shell/src/services.mjs',
+              'shell':f'kernel/{kernel_id}/apps/artifact-shell/src/shell-core.mjs',
+            },
+            'boundaries':{'uploadedZipInputUsed':False,'consumerCloneRequired':False,'consumerBuildRequired':False,'capabilityCountChanged':False},
+          }
+          output.write_text(json.dumps(value,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps(value))
+          PY
+
+      - name: Record exact identities on Ops issue 219
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/identity.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8')); p=x['publication']; s=x['source']
+          print('## Exact AtlasStage Artifact App publication identities — PASS')
+          print()
+          print(f"- UI source: `{s['commit']}` / tree `{s['tree']}`")
+          print(f"- publication tree: `{p['treeDigest']}`")
+          print(f"- kernel: `{p['kernelDigest']}`")
+          print(f"- capabilities: `{', '.join(p['capabilities'])}`")
+          print(f"- listed files: `{p['listedFiles']}`")
+          print(f"- AtlasStage module: `{x['atlasStage']['path']}` / `{x['atlasStage']['sha256']}`")
+          print(f"- archive: `{p['archive']['bytes']}` bytes / `{p['archive']['sha256']}`")
+          print(f"- Carrier: `{p['carrier']['bytes']}` bytes / `{p['carrier']['sha256']}`")
+          print(f"- run: {os.environ['RUN_URL']}")
+          print()
+          print('Exact GitHub Git only; no uploaded ZIP input, no additional capability, and no consumer clone/build after Carry.')
+          PY
+          gh issue comment 219 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+
+      - name: Upload non-authority identity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-stage-publication-identity-${{ github.run_id }}
+          path: ${{ runner.temp }}/identity.json
+          if-no-files-found: error
+          retention-days: 7
