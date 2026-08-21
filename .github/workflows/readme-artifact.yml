@@ -13,12 +13,6 @@ jobs:
   export:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      OUT: ${{ runner.temp }}/hq-vim-runtime-carry
-      HQ_TAG: hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1
-      HQ_COMMIT: 3118886f34ac5615e8a7732a6297bd41900e21e1
-      LSP_COMMIT: 989016ae2ae4cbf304a9ca29478f47fec794493f
-      LSP_TREE: 899cd0db6af40e3b1e0039b679541cd062cfa9e7
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,8 +22,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$OUT"/{bin,lsp,logs}
-          printf 'prepared\n' > "$OUT/logs/00-prepare.txt"
+          out="$RUNNER_TEMP/hq-vim-runtime-carry"
+          mkdir -p "$out"/{bin,lsp,logs}
+          {
+            echo "OUT=$out"
+            echo "HQ_TAG=hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1"
+            echo "HQ_COMMIT=3118886f34ac5615e8a7732a6297bd41900e21e1"
+            echo "LSP_COMMIT=989016ae2ae4cbf304a9ca29478f47fec794493f"
+            echo "LSP_TREE=899cd0db6af40e3b1e0039b679541cd062cfa9e7"
+          } >> "$GITHUB_ENV"
+          printf 'prepared\n' > "$out/logs/00-prepare.txt"
 
       - name: Download exact official Linux assets
         shell: bash
