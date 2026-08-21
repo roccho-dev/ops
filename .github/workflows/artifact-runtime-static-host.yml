@@ -231,8 +231,7 @@ jobs:
           python3 - "$TREE_DIGEST" "${{ steps.contract.outputs.source_sha }}" "$RUNNER_TEMP/static-host-proof.json" <<'PY'
           import json,sys
           out={'schema':'ops.artifactRuntimeStaticHostProof/1','status':'PASS','authority':False,'opsCommit':sys.argv[2],'treeDigest':sys.argv[1],'providerEffect':False}
-          open(sys.argv[3],'w',encoding='utf-8').write(json.dumps(out,sort_keys=True,separators=(',',':'))+'
-')
+          open(sys.argv[3],'w',encoding='utf-8').write(json.dumps(out,sort_keys=True,separators=(',',':'))+'\n')
           PY
 
       - name: Upload non-authority static-site proof
