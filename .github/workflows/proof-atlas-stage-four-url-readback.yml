@@ -72,11 +72,14 @@ jobs:
             "${STABLE_BASE}artifact-manifest.json" -o "$RUNNER_TEMP/public-manifest.json"
           cmp "$RUNNER_TEMP/publication/artifact-manifest.json" "$RUNNER_TEMP/public-manifest.json"
 
-      - name: Install exact proof-only browser driver
+      - name: Install exact proof-only browser driver beside the proof script
         shell: bash
         run: |
           set -euo pipefail
-          proof="$RUNNER_TEMP/proof"; mkdir -p "$proof"; cd "$proof"
+          proof="$RUNNER_TEMP/proof"
+          mkdir -p "$proof"
+          cp verification/atlas-stage-four-url-readback/smoke.mjs "$proof/smoke.mjs"
+          cd "$proof"
           npm init -y >/dev/null
           npm install --ignore-scripts --no-audit --no-fund playwright-core@1.55.0
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
@@ -90,7 +93,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/evidence"
           cd "$RUNNER_TEMP/proof"
-          TREE_ID="$TREE_ID" node "$GITHUB_WORKSPACE/verification/atlas-stage-four-url-readback/smoke.mjs" \
+          TREE_ID="$TREE_ID" node ./smoke.mjs \
             "$RUNNER_TEMP/four-cases.json" "$(cat "$RUNNER_TEMP/chrome-bin")" "$RUNNER_TEMP/evidence"
 
       - name: Upload non-authority evidence
