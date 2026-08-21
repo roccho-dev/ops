@@ -20,6 +20,7 @@ def main(argv):
         try:
             for item in values['cases']:
                 page=browser.new_page(viewport={'width':1280,'height':900})
+                page.route('**/favicon.ico', lambda route: route.fulfill(status=204, content_type='image/x-icon', body=''))
                 errors=[]; failed=[]
                 page.on('pageerror',lambda error: errors.append(str(error)))
                 page.on('console',lambda msg: errors.append(msg.text) if msg.type=='error' else None)
