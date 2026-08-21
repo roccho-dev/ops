@@ -1,0 +1,10 @@
+{
+  "schema": "ops.vimNixExactRuntimeRequest/1",
+  "requestId": "vim-nix-exact-runtime-current-sandbox-20260821-001",
+  "editsRepository": "roccho-dev/edits",
+  "commit": "b6f84f74bb2a1cf9e94b6d77d1d0381679385636",
+  "tree": "7f9da1fad43838e7198cbbf87ee904484d29bc39",
+  "ref": "refs/heads/proof/vim-nix-herdr-oci-current-20260821",
+  "handoffSha256": "6a88215c073a43b82f6e584466b07f6c8265e7d4b48ff5e92acbd14626248d38",
+  "flakeLockSha256": "35cdda5fa9645ab469924c69f36992db2f8637360fce128e7c7fd372c3a4ce0f"
+}
