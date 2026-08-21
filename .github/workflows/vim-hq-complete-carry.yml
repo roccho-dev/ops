@@ -1,0 +1,304 @@
+name: materialize complete Vim HQ carry
+
+on:
+  push:
+    branches:
+      - proposals
+    paths:
+      - "verification/vim-hq-complete-carry/request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: materialize-complete-vim-hq-carry
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      REQUEST: verification/vim-hq-complete-carry/request.json
+      OUT: ${{ runner.temp }}/vim-hq-complete-carry
+      EDITS_CURRENT: d6d0f6d584883267b05559b0d058bce127f83d9c
+      EDITS_PROOF: 58a1c3e2f329605c016a051c4254e3c04f5d0671
+      EDITS_PROOF_TREE: 133c9d136d718a64b953e3561447e704704c8284
+      EDITS_PRODUCT_BASE: d83bf4c4860e02f37d6b41cc54fe8c881af4c779
+      HQ_COMMIT: 3118886f34ac5615e8a7732a6297bd41900e21e1
+      LSP_COMMIT: 989016ae2ae4cbf304a9ca29478f47fec794493f
+      VIM_COMMIT: 8aecd377f08e9fbdf0092478ab7ec3ce5e0f04ec
+      VIM_TAG: v9.2.0478
+      HERDR_TAG: v0.8.0
+      FLAKE_LOCK_SHA256: 35cdda5fa9645ab469924c69f36992db2f8637360fce128e7c7fd372c3a4ce0f
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposals
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate immutable request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$REQUEST" <<'PY'
+          import json, pathlib, sys
+          r=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert r == {
+            "schema":"ops.vimHqCompleteCarryRequest/1",
+            "editsCurrent":"d6d0f6d584883267b05559b0d058bce127f83d9c",
+            "editsProof":"58a1c3e2f329605c016a051c4254e3c04f5d0671",
+            "editsProofTree":"133c9d136d718a64b953e3561447e704704c8284",
+            "hq":"3118886f34ac5615e8a7732a6297bd41900e21e1",
+            "yegappanLsp":"989016ae2ae4cbf304a9ca29478f47fec794493f",
+            "vim":"8aecd377f08e9fbdf0092478ab7ec3ce5e0f04ec",
+            "herdrTag":"v0.8.0",
+            "purpose":"source-complete-runtime-carry"
+          }
+          PY
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            always-allow-substitutes = true
+
+      - name: Acquire exact repo source snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$OUT"
+          mkdir -p "$OUT"/{source/repo,source/flake-input,runtime/native,runtime/share,runtime/nix/cache,runtime/docker,runtime/oci,evidence}
+          records="$OUT/evidence/source-records.tsv"
+          : > "$records"
+
+          snapshot() {
+            name=$1; remote=$2; ref=$3; expected=${4:-}
+            work="$RUNNER_TEMP/source-$name"
+            rm -rf "$work"
+            git init -q "$work"
+            git -C "$work" remote add origin "$remote"
+            git -C "$work" fetch -q --depth=1 origin "$ref"
+            commit=$(git -C "$work" rev-parse FETCH_HEAD^{commit})
+            test -z "$expected" || test "$commit" = "$expected"
+            git -C "$work" checkout -q --detach "$commit"
+            tree=$(git -C "$work" rev-parse HEAD^{tree})
+            test -z "$(git -C "$work" status --porcelain=v1)"
+            git -C "$work" archive --format=tar --prefix="$name-$commit/" HEAD | gzip -n > "$OUT/source/repo/$name.source.tar.gz"
+            printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$remote" "$ref" "$commit" "$tree" >> "$records"
+          }
+
+          snapshot edits-current https://github.com/roccho-dev/edits.git "$EDITS_CURRENT" "$EDITS_CURRENT"
+          snapshot edits-proof https://github.com/roccho-dev/edits.git "$EDITS_PROOF" "$EDITS_PROOF"
+          test "$(awk -F '\t' '$1=="edits-proof"{print $5}' "$records")" = "$EDITS_PROOF_TREE"
+          snapshot edits-product-base https://github.com/roccho-dev/edits.git "$EDITS_PRODUCT_BASE" "$EDITS_PRODUCT_BASE"
+          snapshot hq https://github.com/roccho-dev/hq.git "$HQ_COMMIT" "$HQ_COMMIT"
+          snapshot yegappan-lsp https://github.com/yegappan/lsp.git "$LSP_COMMIT" "$LSP_COMMIT"
+          snapshot vim https://github.com/vim/vim.git "$VIM_TAG" "$VIM_COMMIT"
+          snapshot herdr https://github.com/herdrdev/herdr.git "$HERDR_TAG" ''
+
+      - name: Archive exact flake inputs and build runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/source-edits-proof/proofs/vim-nix"
+          test "$(sha256sum "$proof/flake.lock" | cut -d' ' -f1)" = "$FLAKE_LOCK_SHA256"
+
+          pushd "$proof" >/dev/null
+          nix flake archive --json > "$OUT/evidence/flake-archive.json"
+          product=$(nix build --no-link --print-out-paths .#default)
+          image=$(nix build --no-link --print-out-paths .#image)
+          skopeo=$(nix build --no-link --print-out-paths .#skopeo)
+          popd >/dev/null
+
+          printf '%s\n' "$product" > "$OUT/runtime/nix/product-store-path.txt"
+          printf '%s\n' "$image" > "$OUT/runtime/nix/docker-image-store-path.txt"
+          nix-store -qR "$product" | sort > "$OUT/runtime/nix/runtime-closure-paths.txt"
+          nix path-info -rS "$product" > "$OUT/runtime/nix/runtime-closure-size.txt"
+          nix copy --to "file://$OUT/runtime/nix/cache" "$product"
+
+          cp -L "$product/bin/herdr" "$OUT/runtime/native/herdr"
+          cp -L "$product/bin/hq" "$OUT/runtime/native/hq"
+          cp -L "$product/bin/hq-worker" "$OUT/runtime/native/hq-worker"
+          cp -L "$product/bin/hq-worker-proof-provider" "$OUT/runtime/native/hq-worker-proof-provider"
+          cp -L "$product/bin/proof-sh" "$OUT/runtime/native/proof-sh"
+          cp -L "$product/bin/vim" "$OUT/runtime/native/vim"
+          chmod 0755 "$OUT/runtime/native"/*
+          cp -aL "$product/share/hq-vim" "$OUT/runtime/share/hq-vim"
+          cp -aL "$product/share/yegappan-lsp" "$OUT/runtime/share/yegappan-lsp"
+          cp -aL "$product/share/proof" "$OUT/runtime/share/proof"
+
+          cp -L "$image" "$OUT/runtime/docker/vim-nix-herdr-hq.docker.tar"
+          "$skopeo/bin/skopeo" copy \
+            "docker-archive:$OUT/runtime/docker/vim-nix-herdr-hq.docker.tar" \
+            "oci-archive:$OUT/runtime/oci/vim-nix-herdr-hq.oci.tar"
+
+          python3 - "$OUT/evidence/flake-archive.json" "$OUT/source/flake-input" <<'PY'
+          import json, pathlib, subprocess, sys
+          data=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          out=pathlib.Path(sys.argv[2])
+          wanted=['nixpkgs','go-nixpkgs','vim-src','hq','yegappan-lsp','edits-src']
+          inputs=data.get('inputs',{})
+          for name in wanted:
+              node=inputs[name]
+              path=node['path'] if isinstance(node,dict) else node
+              dest=out/f'{name}.source.tar.zst'
+              subprocess.run(['tar','--sort=name','--mtime=@0','--owner=0','--group=0','--numeric-owner','--zstd','-C',path,'-cf',str(dest),'.'],check=True)
+          PY
+
+      - name: Build self-describing complete carry
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$OUT/run" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+          command=${1:-help}
+          case "$command" in
+            verify)
+              (cd "$root" && sha256sum --check SHA256SUMS)
+              ;;
+            sources)
+              python3 - "$root/manifest.json" <<'PY'
+          import json,sys
+          m=json.load(open(sys.argv[1]))
+          for s in m['sources']:
+              print(f"{s['name']}\t{s['commit']}\t{s['artifact']}")
+          PY
+              ;;
+            nix-import)
+              command -v nix >/dev/null
+              product=$(cat "$root/runtime/nix/product-store-path.txt")
+              nix copy --from "file://$root/runtime/nix/cache" "$product"
+              printf '%s\n' "$product"
+              ;;
+            docker-shell)
+              command -v docker >/dev/null
+              docker load -i "$root/runtime/docker/vim-nix-herdr-hq.docker.tar" >/dev/null
+              exec docker run --rm -it --entrypoint /bin/bash roccho/vim-nix-herdr-hq-proof:d83bf4c
+              ;;
+            docker-proof)
+              command -v docker >/dev/null
+              docker load -i "$root/runtime/docker/vim-nix-herdr-hq.docker.tar" >/dev/null
+              exec docker run --rm roccho/vim-nix-herdr-hq-proof:d83bf4c
+              ;;
+            help|-h|--help)
+              cat <<'EOF'
+          ./run verify       Verify every byte in this carry.
+          ./run sources      List exact source authorities/artifacts.
+          ./run nix-import   Import the exact runtime into an existing Nix installation.
+          ./run docker-shell Load the exact Docker archive and open an interactive shell.
+          ./run docker-proof Load the archive and execute the bundled full proof.
+          EOF
+              ;;
+            *) echo "unknown command: $command" >&2; exit 2 ;;
+          esac
+          SH
+          chmod 0755 "$OUT/run"
+
+          python3 - "$OUT" <<'PY'
+          import json, pathlib, sys
+          root=pathlib.Path(sys.argv[1])
+          records=[]
+          for line in (root/'evidence/source-records.tsv').read_text().splitlines():
+              name,remote,ref,commit,tree=line.split('\t')
+              artifact=f'source/repo/{name}.source.tar.gz'
+              records.append({'name':name,'remote':remote,'ref':ref,'commit':commit,'tree':tree,'artifact':artifact})
+          manifest={
+            'schema':'ops.vimHqCompleteCarry/1',
+            'target':'linux-x86_64',
+            'entrypoint':'run',
+            'sources':records,
+            'flakeInputs':{
+              name:f'source/flake-input/{name}.source.tar.zst'
+              for name in ['nixpkgs','go-nixpkgs','vim-src','hq','yegappan-lsp','edits-src']
+            },
+            'runtime':{
+              'native':['herdr','hq','hq-worker','hq-worker-proof-provider','proof-sh','vim'],
+              'share':['hq-vim','yegappan-lsp','proof'],
+              'nixCache':'runtime/nix/cache',
+              'docker':'runtime/docker/vim-nix-herdr-hq.docker.tar',
+              'oci':'runtime/oci/vim-nix-herdr-hq.oci.tar'
+            },
+            'claimBoundary':{
+              'sourceCompleteForPinnedRepos':True,
+              'runtimeProjectionMaterialized':True,
+              'fullHighCostE2E':'NOT_CLAIMED_BY_THIS_MATERIALIZER',
+              'physicalWSLC':'NOT_ATTESTED'
+            }
+          }
+          (root/'manifest.json').write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+          PY
+
+          cat > "$OUT/README.md" <<'EOF'
+          # Vim/HQ complete Carry
+
+          This ZIP keeps repository sources separate. It does not merge repositories into one source tree.
+
+          - `source/repo/`: exact source snapshots for current edits, proof edits, product-base edits, HQ, yegappan/lsp, Vim, and Herdr.
+          - `source/flake-input/`: exact Nix flake input snapshots including both pinned nixpkgs revisions.
+          - `runtime/native/`: materialized binaries; `hq`, workers, and Herdr are directly inspectable; Vim's full dependency closure is carried by Nix/OCI.
+          - `runtime/share/`: hq-vim and pinned yegappan/lsp runtime files.
+          - `runtime/nix/`: exact runtime Nix cache.
+          - `runtime/docker/` and `runtime/oci/`: runnable distribution projections.
+
+          Start with `./run verify`, then `./run docker-shell` on a Docker-capable WSLC host, or `./run nix-import` where Nix is installed.
+          EOF
+
+          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$OUT" && sha256sum --check SHA256SUMS)
+
+          python3 - "$OUT" "$RUNNER_TEMP/vim-hq-complete-carry.zip" <<'PY'
+          import pathlib, stat, sys, zipfile
+          root=pathlib.Path(sys.argv[1]); dest=pathlib.Path(sys.argv[2]); prefix='vim-hq-complete-carry'
+          fixed=(2026,8,21,0,0,0)
+          with zipfile.ZipFile(dest,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+              for p in sorted(root.rglob('*')):
+                  if p.is_dir(): continue
+                  rel=pathlib.PurePosixPath(prefix)/p.relative_to(root).as_posix()
+                  info=zipfile.ZipInfo(str(rel),fixed); info.create_system=3
+                  mode=stat.S_IMODE(p.stat().st_mode)
+                  info.external_attr=(stat.S_IFREG|mode)<<16
+                  info.compress_type=zipfile.ZIP_DEFLATED
+                  z.writestr(info,p.read_bytes(),compress_type=zipfile.ZIP_DEFLATED,compresslevel=9)
+              bad=z.testzip()
+              if bad: raise SystemExit(bad)
+          PY
+          sha256sum "$RUNNER_TEMP/vim-hq-complete-carry.zip" > "$RUNNER_TEMP/vim-hq-complete-carry.zip.sha256"
+          du -sh "$OUT" "$RUNNER_TEMP/vim-hq-complete-carry.zip"
+
+      - id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: vim-hq-complete-carry
+          path: |
+            ${{ runner.temp }}/vim-hq-complete-carry.zip
+            ${{ runner.temp }}/vim-hq-complete-carry.zip.sha256
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Report result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 238,
+              body: [
+                '## Source-complete Vim/HQ Carry materialization',
+                '',
+                `status: \`${{ job.status }}\``,
+                `run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                `artifact ID: \`${{ steps.upload.outputs.artifact-id }}\``,
+                `artifact digest: \`${{ steps.upload.outputs.artifact-digest }}\``
+              ].join('\n')
+            });
