@@ -59,7 +59,9 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REF#refs/heads/}" = "$EXPECTED_BRANCH"
-          test "$(git rev-parse HEAD^)" = "$EXPECTED_BASE"
+          test "$(git rev-parse HEAD^^)" = "$EXPECTED_BASE"
+          test "$(git rev-list --count "$EXPECTED_BASE"..HEAD)" -eq 2
+          test "$(git diff --name-only "$EXPECTED_BASE" HEAD)" = ".github/workflows/release-text-ingress-proof.yml"
           comments="$RUNNER_TEMP/comments.json"
           request="$RUNNER_TEMP/request.json"
           patch_gz="$RUNNER_TEMP/change.patch.gz"
