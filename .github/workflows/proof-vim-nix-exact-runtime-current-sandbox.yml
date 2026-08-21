@@ -11,7 +11,7 @@ on:
 
 permissions:
   contents: read
-  issues: write
+  statuses: write
 
 concurrency:
   group: proof-vim-nix-exact-runtime-current-sandbox
@@ -29,30 +29,28 @@ jobs:
       HANDOFF_SHA256: 6a88215c073a43b82f6e584466b07f6c8265e7d4b48ff5e92acbd14626248d38
       FLAKE_LOCK_SHA256: 35cdda5fa9645ab469924c69f36992db2f8637360fce128e7c7fd372c3a4ce0f
       ARTIFACT: ${{ runner.temp }}/vim-nix-exact-runtime-current-sandbox
+      STATUS_CONTEXT: proof/vim-nix-exact-runtime-current-sandbox
 
     steps:
+      - name: Publish observable run identity
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: 'Exact Vim/Nix runtime materialization is running',
+              context: process.env.STATUS_CONTEXT
+            });
+
       - name: Checkout ops proof branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Announce exact materialization to ops Issue 188
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: 188,
-              body: [
-                '## Vim/Nix exact-runtime materialization started',
-                '',
-                `run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-                `edits commit: \`${process.env.EDITS_COMMIT}\``,
-                `edits tree: \`${process.env.EDITS_TREE}\``
-              ].join('\n')
-            });
 
       - name: Checkout exact edits candidate and verify identity
         shell: bash
@@ -60,12 +58,13 @@ jobs:
           set -euo pipefail
           work="$RUNNER_TEMP/edits"
           git clone --no-checkout "$EDITS_REPOSITORY" "$work"
+          git -C "$work" fetch --no-tags origin "$EDITS_REF"
+          test "$(git -C "$work" rev-parse FETCH_HEAD^{commit})" = "$EDITS_COMMIT"
           git -C "$work" checkout --detach "$EDITS_COMMIT"
           test "$(git -C "$work" rev-parse HEAD^{commit})" = "$EDITS_COMMIT"
           test "$(git -C "$work" rev-parse HEAD^{tree})" = "$EDITS_TREE"
           test -z "$(git -C "$work" status --porcelain=v1)"
           test "$(sha256sum "$work/proofs/vim-nix/flake.lock" | cut -d' ' -f1)" = "$FLAKE_LOCK_SHA256"
-          test "$(git -C "$work" rev-parse "$EDITS_REF^{commit}")" = "$EDITS_COMMIT"
 
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3
@@ -84,15 +83,19 @@ jobs:
           rm -rf "$ARTIFACT"
           mkdir -p "$ARTIFACT"/{source,product,logs,nix-cache}
 
-          lock_before="$(sha256sum "$proof/flake.lock" | cut -d' ' -f1)"
-          product="$(nix build --no-link --print-out-paths "$proof#default" 2> >(tee "$ARTIFACT/logs/nix-build.stderr.txt" >&2))"
-          lock_mid="$(sha256sum "$proof/flake.lock" | cut -d' ' -f1)"
+          pushd "$proof" >/dev/null
+          lock_before="$(sha256sum flake.lock | cut -d' ' -f1)"
+          product="$(nix build --no-link --print-out-paths .#default \
+            2> >(tee "$ARTIFACT/logs/nix-build.stderr.txt" >&2))"
+          lock_mid="$(sha256sum flake.lock | cut -d' ' -f1)"
           test "$lock_before" = "$lock_mid"
 
-          product_offline="$(nix build --offline --no-write-lock-file --no-link --print-out-paths "$proof#default" \
+          product_offline="$(nix build --offline --no-write-lock-file --no-link --print-out-paths .#default \
             --option substituters '' \
             2> >(tee "$ARTIFACT/logs/nix-build-offline.stderr.txt" >&2))"
-          lock_after="$(sha256sum "$proof/flake.lock" | cut -d' ' -f1)"
+          lock_after="$(sha256sum flake.lock | cut -d' ' -f1)"
+          popd >/dev/null
+
           test "$lock_before" = "$lock_after"
           test "$product" = "$product_offline"
           test -d "$product"
@@ -107,15 +110,17 @@ jobs:
           nix path-info -rS "$product" > "$ARTIFACT/product/runtime-closure-size.txt"
           nix path-info -r --json-format 2 "$product" > "$ARTIFACT/product/runtime-closure.json"
 
-          find "$product/bin" -maxdepth 1 -type f -o -type l | sort > "$ARTIFACT/product/bin-list.txt"
+          find "$product/bin" -maxdepth 1 \( -type f -o -type l \) -print | sort \
+            > "$ARTIFACT/product/bin-list.txt"
           "$product/bin/herdr" --version > "$ARTIFACT/product/herdr.version.txt"
           "$product/bin/vim" --version > "$ARTIFACT/product/vim.version.txt"
           "$product/bin/hq" --help > "$ARTIFACT/product/hq.help.txt"
-          test "$(sed -n '1p' "$ARTIFACT/product/herdr.version.txt")" = "herdr 0.8.0"
+          test "$(sed -n '1p' "$ARTIFACT/product/herdr.version.txt")" = 'herdr 0.8.0'
           grep -q '^VIM - Vi IMproved 9.2' "$ARTIFACT/product/vim.version.txt"
           grep -q 'Included patches: 1-478' "$ARTIFACT/product/vim.version.txt"
 
-          if grep -Ei '/(gtk|x11|python|ruby|lua)([-/]|$)' "$ARTIFACT/product/runtime-closure-paths.txt" \
+          if grep -Ei '/(gtk|x11|python|ruby|lua)([-/]|$)' \
+              "$ARTIFACT/product/runtime-closure-paths.txt" \
               > "$ARTIFACT/product/forbidden-runtime-dependencies.txt"; then
             echo 'forbidden runtime dependency found' >&2
             cat "$ARTIFACT/product/forbidden-runtime-dependencies.txt" >&2
@@ -180,7 +185,8 @@ jobs:
           pathlib.Path(output).write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
           PY
 
-          (cd "$ARTIFACT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$ARTIFACT" && find . -type f ! -name SHA256SUMS -print0 | sort -z \
+            | xargs -0 sha256sum > SHA256SUMS)
           (cd "$ARTIFACT" && sha256sum --check SHA256SUMS)
           du -sh "$ARTIFACT" "$ARTIFACT/nix-cache"
 
@@ -200,37 +206,25 @@ jobs:
           retention-days: 90
           compression-level: 0
 
-      - name: Return materialization identity to ops Issue 188
+      - name: Publish terminal commit status
         if: always()
-        shell: bash
+        uses: actions/github-script@v7
         env:
-          GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
-          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          WORKFLOW_COMMIT: ${{ github.sha }}
-          PRODUCT: ${{ steps.build.outputs.product }}
-          DERIVATION: ${{ steps.build.outputs.drv }}
-          OFFLINE_PATH_COUNT: ${{ steps.build.outputs.offline_path_count }}
           ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
-          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
           ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
-        run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/comment.md" <<EOF
-          ## Vim/Nix exact-runtime materialization result
-
-          status: \`$JOB_STATUS\`
-          edits-commit: \`$EDITS_COMMIT\`
-          edits-tree: \`$EDITS_TREE\`
-          product-store-path: \`${PRODUCT:-not-produced}\`
-          derivation-path: \`${DERIVATION:-not-produced}\`
-          offline-build-path-count: \`${OFFLINE_PATH_COUNT:-not-produced}\`
-          artifact-id: \`${ARTIFACT_ID:-not-produced}\`
-          artifact-digest: \`${ARTIFACT_DIGEST:-not-produced}\`
-          artifact-url: ${ARTIFACT_URL:-not-produced}
-          run: $RUN_URL
-          workflow-commit: \`$WORKFLOW_COMMIT\`
-
-          The artifact contains the exact source, runtime closure, and all source/build paths required for an offline same-path replay. Current-sandbox import and fresh PTY screenshots are intentionally separate readback steps.
-          EOF
-          gh issue comment 188 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+        with:
+          script: |
+            const ok = process.env.JOB_STATUS === 'success';
+            const suffix = process.env.ARTIFACT_ID
+              ? `; artifact ${process.env.ARTIFACT_ID}`
+              : '; no artifact';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: ok ? 'success' : 'failure',
+              target_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: `${ok ? 'Exact runtime materialized' : 'Materialization failed'}${suffix}`.slice(0, 140),
+              context: process.env.STATUS_CONTEXT
+            });
