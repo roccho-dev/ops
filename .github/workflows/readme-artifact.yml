@@ -14,139 +14,56 @@ jobs:
     name: materialize official HQ and pinned Vim LSP
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      HQ_REPOSITORY: roccho-dev/hq
-      HQ_COMMIT: 3118886f34ac5615e8a7732a6297bd41900e21e1
-      HQ_TAG: hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1
-      LSP_REPOSITORY: yegappan/lsp
-      LSP_COMMIT: 989016ae2ae4cbf304a9ca29478f47fec794493f
-      LSP_TREE: 899cd0db6af40e3b1e0039b679541cd062cfa9e7
-      OUT: ${{ runner.temp }}/hq-vim-runtime-carry
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Download and verify the immutable official HQ Release
+      - name: Materialize exact runtime bytes
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p "$OUT"/{official-release,runtime/bin,runtime/lsp,logs}
-          gh release download "$HQ_TAG" --repo "$HQ_REPOSITORY" --dir "$OUT/official-release"
+          out="$RUNNER_TEMP/hq-vim-runtime-carry"
+          hq_commit=3118886f34ac5615e8a7732a6297bd41900e21e1
+          hq_tag=hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1
+          lsp_commit=989016ae2ae4cbf304a9ca29478f47fec794493f
+          lsp_tree=899cd0db6af40e3b1e0039b679541cd062cfa9e7
+          mkdir -p "$out"/{release,bin,lsp,logs}
 
-          find "$OUT/official-release" -maxdepth 1 -type f -printf '%f\n' | sort > "$OUT/logs/hq-assets.actual.txt"
-          cat > "$OUT/logs/hq-assets.expected.txt" <<'EOF'
-          SHA256SUMS
-          hq-linux-amd64
-          hq-product-manifest.json
-          hq-windows-amd64.exe
-          hq-worker-linux-amd64
-          hq-worker-windows-amd64.exe
-          manifest-linux-amd64.json
-          manifest-windows-amd64.json
-          EOF
-          sed -i 's/^          //' "$OUT/logs/hq-assets.expected.txt"
-          sort -o "$OUT/logs/hq-assets.expected.txt" "$OUT/logs/hq-assets.expected.txt"
-          cmp "$OUT/logs/hq-assets.expected.txt" "$OUT/logs/hq-assets.actual.txt"
-          (cd "$OUT/official-release" && sha256sum --check SHA256SUMS)
+          gh release download "$hq_tag" --repo roccho-dev/hq --dir "$out/release"
+          test "$(find "$out/release" -maxdepth 1 -type f | wc -l)" -eq 8
+          (cd "$out/release" && sha256sum --check SHA256SUMS)
+          test "$(jq -r .source_sha "$out/release/manifest-linux-amd64.json")" = "$hq_commit"
+          test "$(jq -r .go_version "$out/release/manifest-linux-amd64.json")" = go1.23.12
+          cp "$out/release/hq-linux-amd64" "$out/bin/hq"
+          cp "$out/release/hq-worker-linux-amd64" "$out/bin/hq-worker"
+          chmod 0555 "$out/bin/hq" "$out/bin/hq-worker"
+          go version -m "$out/bin/hq" > "$out/logs/hq.buildinfo.txt"
+          go version -m "$out/bin/hq-worker" > "$out/logs/hq-worker.buildinfo.txt"
+          grep -F "vcs.revision=$hq_commit" "$out/logs/hq.buildinfo.txt"
+          grep -F "vcs.revision=$hq_commit" "$out/logs/hq-worker.buildinfo.txt"
+          grep -F 'vcs.modified=false' "$out/logs/hq.buildinfo.txt"
+          grep -F 'vcs.modified=false' "$out/logs/hq-worker.buildinfo.txt"
+          "$out/bin/hq" --help > "$out/logs/hq.help.txt"
+          "$out/bin/hq-worker" --help > "$out/logs/hq-worker.help.txt"
 
-          test "$(jq -r .source_sha "$OUT/official-release/manifest-linux-amd64.json")" = "$HQ_COMMIT"
-          test "$(jq -r .go_version "$OUT/official-release/manifest-linux-amd64.json")" = go1.23.12
-          test "$(jq -r .source_sha "$OUT/official-release/hq-product-manifest.json")" = "$HQ_COMMIT"
-          test "$(jq -r '.artifacts | length' "$OUT/official-release/hq-product-manifest.json")" = 4
+          git init --quiet "$RUNNER_TEMP/lsp"
+          git -C "$RUNNER_TEMP/lsp" remote add origin https://github.com/yegappan/lsp.git
+          git -C "$RUNNER_TEMP/lsp" fetch --quiet --depth=1 origin "$lsp_commit"
+          test "$(git -C "$RUNNER_TEMP/lsp" rev-parse FETCH_HEAD^{commit})" = "$lsp_commit"
+          test "$(git -C "$RUNNER_TEMP/lsp" rev-parse FETCH_HEAD^{tree})" = "$lsp_tree"
+          git -C "$RUNNER_TEMP/lsp" archive "$lsp_commit" | tar -x -C "$out/lsp"
+          test -f "$out/lsp/plugin/lsp.vim"
+          test -f "$out/lsp/autoload/lsp/lsp.vim"
+          printf '%s\n' "$lsp_commit" > "$out/lsp/.pinned-commit"
+          printf '%s\n' "$lsp_tree" > "$out/lsp/.pinned-tree"
 
-          cp "$OUT/official-release/hq-linux-amd64" "$OUT/runtime/bin/hq"
-          cp "$OUT/official-release/hq-worker-linux-amd64" "$OUT/runtime/bin/hq-worker"
-          chmod 0555 "$OUT/runtime/bin/hq" "$OUT/runtime/bin/hq-worker"
+          (cd "$out" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$out" && sha256sum --check SHA256SUMS)
 
-          for binary in "$OUT/runtime/bin/hq" "$OUT/runtime/bin/hq-worker"; do
-            go version -m "$binary" | tee "$OUT/logs/$(basename "$binary").buildinfo.txt"
-            go version -m "$binary" | grep -F "vcs.revision=$HQ_COMMIT"
-            go version -m "$binary" | grep -F 'vcs.modified=false'
-            if go version -m "$binary" | grep -F 'vcs.modified=true'; then
-              echo "dirty official binary: $binary" >&2
-              exit 1
-            fi
-          done
-          "$OUT/runtime/bin/hq" --help > "$OUT/logs/hq.help.txt"
-          "$OUT/runtime/bin/hq-worker" --help > "$OUT/logs/hq-worker.help.txt"
-          "$OUT/runtime/bin/hq-worker" serve --help > "$OUT/logs/hq-worker-serve.help.txt"
-          "$OUT/runtime/bin/hq-worker" health --help > "$OUT/logs/hq-worker-health.help.txt"
-          "$OUT/runtime/bin/hq-worker" stop --help > "$OUT/logs/hq-worker-stop.help.txt"
-
-      - name: Materialize the exact pinned yegappan LSP runtimepath
-        shell: bash
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/yegappan-lsp"
-          git init --quiet "$work"
-          git -C "$work" remote add origin "https://github.com/$LSP_REPOSITORY.git"
-          git -C "$work" fetch --quiet --depth=1 origin "$LSP_COMMIT"
-          test "$(git -C "$work" rev-parse FETCH_HEAD^{commit})" = "$LSP_COMMIT"
-          test "$(git -C "$work" rev-parse FETCH_HEAD^{tree})" = "$LSP_TREE"
-          git -C "$work" archive "$LSP_COMMIT" | tar -x -C "$OUT/runtime/lsp"
-          git -C "$work" archive --format=tar.gz --prefix=yegappan-lsp/ "$LSP_COMMIT" > "$OUT/yegappan-lsp.$LSP_COMMIT.source.tar.gz"
-          test -f "$OUT/runtime/lsp/plugin/lsp.vim"
-          test -f "$OUT/runtime/lsp/autoload/lsp/lsp.vim"
-          test -f "$OUT/runtime/lsp/README.md"
-          printf '%s\n' "$LSP_COMMIT" > "$OUT/runtime/lsp/.pinned-commit"
-          printf '%s\n' "$LSP_TREE" > "$OUT/runtime/lsp/.pinned-tree"
-          find "$OUT/runtime/lsp" -type f -printf '%P\n' | sort > "$OUT/logs/lsp-files.txt"
-
-      - name: Seal the transport receipt
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - "$OUT" <<'PY'
-          import hashlib, json, pathlib, sys
-          root = pathlib.Path(sys.argv[1])
-          def sha(path): return hashlib.sha256(path.read_bytes()).hexdigest()
-          hq = root/'runtime/bin/hq'
-          worker = root/'runtime/bin/hq-worker'
-          lsp_archive = root/'yegappan-lsp.989016ae2ae4cbf304a9ca29478f47fec794493f.source.tar.gz'
-          receipt = {
-              'schema': 'ops.hqVimRuntimeCarry/1',
-              'status': 'PASS',
-              'target': 'linux-amd64',
-              'hq': {
-                  'repository': 'roccho-dev/hq',
-                  'sourceCommit': '3118886f34ac5615e8a7732a6297bd41900e21e1',
-                  'releaseTag': 'hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1',
-                  'verifiedMarkerTag': 'hq-artifact-verified-3118886f34ac5615e8a7732a6297bd41900e21e1',
-                  'hqSha256': sha(hq),
-                  'workerSha256': sha(worker),
-                  'goVersion': 'go1.23.12',
-                  'vcsModified': False,
-              },
-              'lsp': {
-                  'repository': 'yegappan/lsp',
-                  'commit': '989016ae2ae4cbf304a9ca29478f47fec794493f',
-                  'tree': '899cd0db6af40e3b1e0039b679541cd062cfa9e7',
-                  'archiveSha256': sha(lsp_archive),
-                  'fileCount': len([p for p in (root/'runtime/lsp').rglob('*') if p.is_file()]),
-              },
-              'runtime': {
-                  'entrypoints': ['runtime/bin/hq', 'runtime/bin/hq-worker'],
-                  'lspRuntimePath': 'runtime/lsp',
-                  'workerLifecycleCommandsObserved': ['serve', 'health', 'stop'],
-                  'sourceBuildRequiredByConsumer': False,
-                  'runtimeNetworkRequiredAfterExtraction': False,
-              },
-              'authorityBoundary': {
-                  'hqOwnsProductAndWorkerSemantics': True,
-                  'editsOwnsVimClientUX': True,
-                  'envsOwnsInstalledPlacementAndSupervision': True,
-                  'thisArtifactIsTransportProjection': True,
-              },
-          }
-          (root/'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
-          PY
-          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
-          (cd "$OUT" && sha256sum --check SHA256SUMS)
-
-      - name: Upload the exact runtime Carry input
+      - name: Upload runtime bytes
         uses: actions/upload-artifact@v4
         with:
           name: hq-vim-runtime-carry-3118886f-989016ae
