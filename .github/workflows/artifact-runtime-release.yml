@@ -44,12 +44,12 @@ jobs:
           assert len(authorities)==1
           source=authorities[0]
           assert source['repository']=='roccho-dev/ui'
-          assert source['commit']=='3a6eaeeb77aef568987add668f5c9b6aa426f74e'
-          assert source['tree']=='dfe8814083abc1faadfc67a6fdc93d180c723244'
+          assert source['commit']=='81f36ed47e61764495edcf5fb53a276a6722e06c'
+          assert source['tree']=='7836d64c2bb35bfe9d5ed176449cfefa78094eb1'
           projected=app['publication']
-          assert projected['treeDigest']=='sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b'
-          assert projected['kernelDigest']=='sha256:50f7417e5e96881e810c5691081820bd0ee9e9743784dc1b7f197554b49ce320'
-          assert projected['listedFiles']==53
+          assert projected['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
+          assert projected['kernelDigest']=='sha256:707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610'
+          assert projected['listedFiles']==54
           assert projected['capabilities']==[
               'inspect.json@1','render.a2ui@1','render.a2ui.app@1'
           ]
@@ -129,6 +129,8 @@ jobs:
           assert len(catalog['capabilities'])==int(sys.argv[4])
           ids=[f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]
           assert ids==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
+          atlas=[x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')]
+          assert len(atlas)==1
           PY
 
           (cd "$out" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
@@ -222,25 +224,28 @@ jobs:
               "$archive" "$carrier" "$app_manifest" "$publication_manifest" "$publication_receipt" "$carry_receipt"
           fi
 
-      - name: Public readback and carry replay
+      - name: Authenticated Release readback and carry replay
         if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          readback="$RUNNER_TEMP/release-readback"
+          mkdir -p "$readback"
           for name in "$ARCHIVE_NAME" "$CARRIER_NAME" "$APP_MANIFEST_NAME" "$PUBLICATION_MANIFEST_NAME" "$PUBLICATION_RECEIPT_NAME" "$CARRY_RECEIPT_NAME"; do
-            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error "$base/$name" -o "$RUNNER_TEMP/readback-$name"
-            cmp "$RUNNER_TEMP/$name" "$RUNNER_TEMP/readback-$name"
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$readback"
+            cmp "$RUNNER_TEMP/$name" "$readback/$name"
           done
-          base64 --decode "$RUNNER_TEMP/readback-$CARRIER_NAME" > "$RUNNER_TEMP/readback-archive.tar.gz"
-          cmp "$RUNNER_TEMP/readback-archive.tar.gz" "$RUNNER_TEMP/readback-$ARCHIVE_NAME"
+          base64 --decode "$readback/$CARRIER_NAME" > "$RUNNER_TEMP/readback-archive.tar.gz"
+          cmp "$RUNNER_TEMP/readback-archive.tar.gz" "$readback/$ARCHIVE_NAME"
           mkdir -p "$RUNNER_TEMP/readback-carried-app"
           tar -xzf "$RUNNER_TEMP/readback-archive.tar.gz" -C "$RUNNER_TEMP/readback-carried-app"
           node verification/artifact-runtime-app/carry-smoke.mjs \
             "$RUNNER_TEMP/readback-carried-app" \
-            "$RUNNER_TEMP/readback-$APP_MANIFEST_NAME" \
+            "$readback/$APP_MANIFEST_NAME" \
             "$RUNNER_TEMP/readback-carry-replay.json"
-          cmp "$RUNNER_TEMP/readback-$CARRY_RECEIPT_NAME" "$RUNNER_TEMP/readback-carry-replay.json"
+          cmp "$readback/$CARRY_RECEIPT_NAME" "$RUNNER_TEMP/readback-carry-replay.json"
 
       - name: Upload non-authority App publication evidence
         if: always()

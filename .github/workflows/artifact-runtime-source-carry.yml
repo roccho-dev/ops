@@ -65,26 +65,33 @@ jobs:
 
           tag="$(python3 -c 'import json; print(json.load(open("verification/artifact-runtime-app/manifest.json", encoding="utf-8"))["publication"]["tag"])')"
           test -n "$tag"
-          gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
-          object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.type)"
-          ops_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
-          while [ "$object_type" = tag ]; do
-            object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ops_target" --jq .object.type)"
-            ops_target="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ops_target" --jq .object.sha)"
-          done
-          test "$object_type" = commit
+          if [ "$EVENT_NAME" = pull_request ]; then
+            ops_target="$(git rev-parse HEAD)"
+            release_bound=false
+          else
+            gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null
+            object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.type)"
+            ops_target="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
+            while [ "$object_type" = tag ]; do
+              object_type="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ops_target" --jq .object.type)"
+              ops_target="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$ops_target" --jq .object.sha)"
+            done
+            test "$object_type" = commit
+            release_bound=true
+          fi
           [[ "$ops_target" =~ ^[0-9a-f]{40}$ ]]
 
-          python3 - "$app" "$roles" "$ops_target" "$tag" "$RUNNER_TEMP/app-sources.json" <<'PY'
+          python3 - "$app" "$roles" "$ops_target" "$tag" "$release_bound" "$RUNNER_TEMP/app-sources.json" <<'PY'
           import hashlib,json,pathlib,re,sys
-          manifest_path,roles_raw,ops_target,tag,out=sys.argv[1:]
+          manifest_path,roles_raw,ops_target,tag,release_bound_raw,out=sys.argv[1:]
+          release_bound=release_bound_raw=='true'
           raw=pathlib.Path(manifest_path).read_bytes()
           app=json.loads(raw)
           assert app['schema']=='ops.artifactRuntimeApp/1'
           assert app['authority'] is False and app['status']=='accepted-source'
           assert app['id']=='artifact-runtime' and app['version']=='1'
           assert app['issue']==193
-          assert app['publication']['treeDigest']=='sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b'
+          assert app['publication']['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
           assert app['publication']['tag']==tag
           assert app['boundaries']['gitIsSourceAuthority'] is True
           assert app['boundaries']['mutableLatestAllowed'] is False
@@ -127,7 +134,7 @@ jobs:
                       'role':'ops','repository':'roccho-dev/ops',
                       'commit':ops_target,'expectedTree':None,
                       'assemblyPath':app['assemblyAuthority']['path'],
-                      'releaseTag':tag,
+                      'releaseTag':tag if release_bound else None,
                   })
           value={
               'schema':'ops.artifactAppSourceCarryRequest/1',
@@ -197,10 +204,12 @@ jobs:
             git -C "$work" fsck --no-dangling
 
             if [ "$role" = ops ]; then
-              test "$release_tag" = "$RELEASE_TAG"
               test "$assembly_path" = 'verification/artifact-runtime-app/manifest.json'
               git -C "$work" show "$head:$assembly_path" > "$RUNNER_TEMP/ops-app-manifest.json"
               cmp "$app" "$RUNNER_TEMP/ops-app-manifest.json"
+              if [ "$release_tag" != '-' ]; then
+                test "$release_tag" = "$RELEASE_TAG"
+              fi
             else
               test "$assembly_path" = '-'
               test "$release_tag" = '-'
@@ -242,13 +251,13 @@ jobs:
               'app':{
                   'id':'artifact-runtime','version':'1',
                   'manifestSha256':'sha256:'+manifest_sha,
-                  'publicationTree':'sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b',
+                  'publicationTree':'sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da',
               },
               'source':{
                   'role':role,'repository':repository,'commit':head,'tree':tree,
                   'localBranch':'app-source','acquisition':'exact-git-depth-1',
                   'declaredByApp':True,
-                  'releaseTargetVerified':role=='ops',
+                  'releaseTargetVerified':role=='ops' and release_tag!='-',
                   'releaseTag':None if release_tag=='-' else release_tag,
               },
               'git':{
