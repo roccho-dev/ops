@@ -1,0 +1,11 @@
+{
+  "schema": "ops.vimHqCompleteCarryRequest/1",
+  "editsCurrent": "d6d0f6d584883267b05559b0d058bce127f83d9c",
+  "editsProof": "58a1c3e2f329605c016a051c4254e3c04f5d0671",
+  "editsProofTree": "133c9d136d718a64b953e3561447e704704c8284",
+  "hq": "3118886f34ac5615e8a7732a6297bd41900e21e1",
+  "yegappanLsp": "989016ae2ae4cbf304a9ca29478f47fec794493f",
+  "vim": "8aecd377f08e9fbdf0092478ab7ec3ce5e0f04ec",
+  "herdrTag": "v0.8.0",
+  "purpose": "source-complete-runtime-carry"
+}
