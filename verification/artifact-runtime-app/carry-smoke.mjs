@@ -39,6 +39,9 @@ invariant(app.id === "artifact-runtime" && app.version === "1", "app identity is
 invariant(app.carry.sourceCloneRequiredForUse === false, "source clone must not be required");
 invariant(app.carry.consumerBuildRequired === false, "consumer build must not be required");
 invariant(app.carry.repairAllowed === false, "repair must be forbidden");
+invariant(app.contracts.jsonl?.inputSchema === "artifact-runtime-jsonl-surface/1", "JSONL input contract is invalid");
+invariant(app.contracts.jsonl?.receiptSchema === "artifact-runtime-jsonl-surface-receipt/1", "JSONL receipt contract is invalid");
+invariant(Array.isArray(app.contracts.jsonl.fixtures) && app.contracts.jsonl.fixtures.length === 4, "JSONL fixtures are incomplete");
 
 const artifactManifestPath = inside(app.entrypoints.artifactManifest);
 const catalogPath = inside(app.entrypoints.catalog);
@@ -57,6 +60,8 @@ const readUrlModule = await importFromApp(app.operations.decode);
 const validateArtifactInvocation = await importFromApp(app.operations.validateInvocation);
 const createArtifactInvocationRuntime = await importFromApp(app.operations.execute);
 const applyArtifactStateAction = await importFromApp(app.operations.applyAction);
+const compileArtifactRuntimeJsonlSurface = await importFromApp(app.operations.compileJsonl);
+const canonicalJson = await importFromApp({ module: app.entrypoints.codec, export: "canonicalJson" });
 const actionModule = await import(pathToFileURL(inside(app.entrypoints.actionCompiler)).href);
 invariant(typeof actionModule.createArtifactInvocationUrl === "function", "createArtifactInvocationUrl is missing");
 invariant(actionModule.ARTIFACT_STATE_ACTION === app.contracts.action.name, "action name differs from app manifest");
@@ -139,18 +144,62 @@ const initialUrl = await actionModule.createArtifactInvocationUrl({ base, reques
 const nextUrl = await actionModule.createArtifactInvocationUrl({ base: initialUrl, request: compiled.request });
 invariant(initialUrl !== nextUrl, "state change did not change the URL");
 invariant(nextUrl.length <= app.contracts.url.maximumCharacters, "compiled URL exceeds the app contract");
-const decodedInitial = await readUrlModule({ fragment: app.contracts.url.fragment, input: initialUrl });
-const decodedNext = await readUrlModule({ fragment: app.contracts.url.fragment, input: nextUrl });
-assert.deepEqual(decodedInitial, initialRequest);
-assert.deepEqual(decodedNext, compiled.request);
+assert.deepEqual(await readUrlModule({ fragment: app.contracts.url.fragment, input: initialUrl }), initialRequest);
+assert.deepEqual(await readUrlModule({ fragment: app.contracts.url.fragment, input: nextUrl }), compiled.request);
 assert.equal(await createUrlModuleUrl({ base, fragment: app.contracts.url.fragment, value: compiled.request }), nextUrl);
-
-const nextOutcome = await runtime.execute({ request: decodedNext });
+const nextOutcome = await runtime.execute({ request: compiled.request });
 invariant(nextOutcome.result.status === "PASS", `next carried execution did not pass: ${JSON.stringify(nextOutcome.result)}`);
 invariant(nextOutcome.result.outputs.some(output => output.contract === "a2ui-app-render-receipt/1"), "next app output is missing");
 
+const jsonlCases = [];
+for (const fixture of app.contracts.jsonl.fixtures) {
+  const fixturePath = inside(fixture.path);
+  const jsonl = fs.readFileSync(fixturePath, "utf8");
+  invariant(sha(Buffer.from(jsonl)) === fixture.sha256, `${fixture.id}: JSONL fixture digest mismatch`);
+  const projected = compileArtifactRuntimeJsonlSurface({ jsonl });
+  invariant(projected.receipt.schema === app.contracts.jsonl.receiptSchema, `${fixture.id}: JSONL receipt schema mismatch`);
+  invariant(projected.receipt.status === "PASS" && projected.receipt.rowCount === 2, `${fixture.id}: JSONL projection failed`);
+  const canvas = projected.surface.components.find(component => component.component === "AtlasStage") ?? null;
+  invariant(Boolean(canvas) === fixture.canvas, `${fixture.id}: Canvas expectation mismatch`);
+  invariant((canvas?.nodes.length ?? 0) === fixture.nodeCount, `${fixture.id}: node count mismatch`);
+  invariant((canvas?.edges.length ?? 0) === fixture.edgeCount, `${fixture.id}: edge count mismatch`);
+
+  const request = validateArtifactInvocation({
+    schema: app.contracts.invocation,
+    id: `request.jsonl.${fixture.id}`,
+    intent: "render",
+    inputs: [{
+      id: "surface",
+      mediaType: "application/vnd.roccho.a2ui-surface+json",
+      schema: "a2ui-surface/1",
+      source: { kind: "inline", value: projected.surface },
+    }],
+    constraints: { allowedRuntimes: ["browser"], noUpload: true },
+    expects: ["a2ui-render-receipt/1"],
+  });
+  const url = await createUrlModuleUrl({ base, fragment: app.contracts.url.fragment, value: request });
+  invariant(url.length <= app.contracts.url.maximumCharacters, `${fixture.id}: URL exceeds contract`);
+  assert.deepEqual(await readUrlModule({ fragment: app.contracts.url.fragment, input: url }), request);
+  const outcome = await runtime.execute({ request });
+  invariant(outcome.result.status === "PASS", `${fixture.id}: carried runtime execution failed`);
+  invariant(outcome.result.outputs.some(output => output.contract === "a2ui-render-receipt/1"), `${fixture.id}: render output is missing`);
+  jsonlCases.push(Object.freeze({
+    id: fixture.id,
+    status: "PASS",
+    jsonlSha256: fixture.sha256,
+    surfaceSha256: sha(Buffer.from(canonicalJson(projected.surface))),
+    requestSha256: sha(Buffer.from(canonicalJson(request))),
+    urlSha256: sha(Buffer.from(url)),
+    urlCharacters: url.length,
+    canvas: fixture.canvas,
+    nodeCount: fixture.nodeCount,
+    edgeCount: fixture.edgeCount,
+    capability: "render.a2ui@1",
+  }));
+}
+
 const receipt = Object.freeze({
-  schema: "ops.artifactRuntimeAppCarryReceipt/1",
+  schema: "ops.artifactRuntimeAppCarryReceipt/2",
   status: "PASS",
   authority: false,
   app: Object.freeze({ id: app.id, version: app.version, manifestSha256: sha(fs.readFileSync(appManifestPath)) }),
@@ -161,7 +210,7 @@ const receipt = Object.freeze({
     kernelDigest: catalog.kernel.digest,
     capabilities: Object.freeze(capabilityIds),
   }),
-  operations: Object.freeze({ encode: "PASS", decode: "PASS", execute: "PASS", applyAction: "PASS" }),
+  operations: Object.freeze({ encode: "PASS", decode: "PASS", execute: "PASS", applyAction: "PASS", compileJsonl: "PASS" }),
   roundTrip: Object.freeze({
     action: detail.action,
     history: compiled.history,
@@ -171,8 +220,15 @@ const receipt = Object.freeze({
     nextUrlSha256: sha(Buffer.from(nextUrl)),
     nextUrlCharacters: nextUrl.length,
   }),
+  jsonl: Object.freeze({
+    inputSchema: app.contracts.jsonl.inputSchema,
+    receiptSchema: app.contracts.jsonl.receiptSchema,
+    sourceCloneUsed: false,
+    sourceBuildUsed: false,
+    handwrittenSurfaceUsed: false,
+    cases: Object.freeze(jsonlCases),
+  }),
   consumer: Object.freeze({ sourceCloneUsed: false, sourceBuildUsed: false, repairUsed: false }),
 });
-const canonicalJson = await importFromApp({ module: app.entrypoints.codec, export: "canonicalJson" });
 fs.writeFileSync(receiptPath, `${canonicalJson(receipt)}\n`, "utf8");
 console.log(JSON.stringify(receipt));
