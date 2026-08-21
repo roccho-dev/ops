@@ -1,0 +1,281 @@
+name: Mobile Agent preset URL DoD
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-preset-url-dod.yml'
+      - 'verification/mobile-agent-preset-url-dod/**'
+      - 'ci.intent.v1.jsonl'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-preset-url-dod.yml'
+      - 'verification/mobile-agent-preset-url-dod/**'
+      - 'ci.intent.v1.jsonl'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  materialize:
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'push' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 242 &&
+       github.event.comment.user.login == github.repository_owner &&
+       github.event.comment.body == '/mobile-agent-preset-deploy')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      source_sha: ${{ steps.contract.outputs.source_sha }}
+      project: ${{ steps.contract.outputs.project }}
+      tag: ${{ steps.contract.outputs.tag }}
+      app_name: ${{ steps.contract.outputs.app_name }}
+      app_sha: ${{ steps.contract.outputs.app_sha }}
+      app_bytes: ${{ steps.contract.outputs.app_bytes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || 'proposals' }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Validate fixed existing-App contract
+        id: contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          value=json.load(open('verification/mobile-agent-preset-url-dod/cases.json',encoding='utf-8'))
+          assert value['schema']=='ops.mobileAgentPresetUrlDodCases/1' and value['authority'] is False
+          assert value['sourceApp']=={
+            'url':'https://mobile-agent.roccho.workers.dev/app/',
+            'bytes':2026821,
+            'sha256':'sha256:c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4',
+          }
+          assert [row['preset'] for row in value['cases']]==['graph/1','map/1','seq/1']
+          assert all(row['fragment'].startswith('smap=') for row in value['cases'])
+          assert all(row['sourceJsonlSha256'].startswith('sha256:') for row in value['cases'])
+          print('project=stg-mobile-agent')
+          print('tag=mobile-agent-preset-app-c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4')
+          print('app_name=mobile-agent-preset-app.c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4.html')
+          print('app_sha=c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4')
+          print('app_bytes=2026821')
+          PY
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize exact existing preset App
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.contract.outputs.tag }}
+          APP_NAME: ${{ steps.contract.outputs.app_name }}
+          APP_SHA: ${{ steps.contract.outputs.app_sha }}
+          APP_BYTES: ${{ steps.contract.outputs.app_bytes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/result"
+          mkdir -p "$result/dist/app"
+          if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$APP_NAME" --dir "$RUNNER_TEMP"
+            mv "$RUNNER_TEMP/$APP_NAME" "$result/dist/app/index.html"
+          else
+            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error \
+              -H 'Cache-Control: no-cache' \
+              'https://mobile-agent.roccho.workers.dev/app/' \
+              -o "$result/dist/app/index.html"
+          fi
+          test "$(wc -c < "$result/dist/app/index.html")" -eq "$APP_BYTES"
+          test "$(sha256sum "$result/dist/app/index.html" | cut -d' ' -f1)" = "$APP_SHA"
+          cp verification/mobile-agent-preset-url-dod/cases.json "$result/cases.json"
+          python3 - "$result/dist/app/index.html" "$result/materialization.json" <<'PY'
+          import hashlib,json,pathlib,sys
+          target=pathlib.Path(sys.argv[1]); data=target.read_bytes()
+          value={'schema':'ops.mobileAgentPresetAppMaterialization/1','status':'PASS','authority':False,'path':'app/index.html','bytes':len(data),'sha256':'sha256:'+hashlib.sha256(data).hexdigest(),'sourceCloneUsed':False,'consumerBuildUsed':False,'implementationRewritten':False}
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n')
+          PY
+
+      - name: Prove existing maxGraph presets locally
+        if: github.event_name != 'issue_comment'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/result/dist" > "$RUNNER_TEMP/http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 50); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          node verification/mobile-agent-preset-url-dod/smoke.mjs \
+            "$RUNNER_TEMP/result/cases.json" http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/result/local-proof"
+
+      - name: Publish immutable exact-App Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.contract.outputs.tag }}
+          APP_NAME: ${{ steps.contract.outputs.app_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/result/dist/app/index.html" "$RUNNER_TEMP/$APP_NAME"
+          cp "$RUNNER_TEMP/result/cases.json" "$RUNNER_TEMP/mobile-agent-preset-url-cases.json"
+          cp "$RUNNER_TEMP/result/materialization.json" "$RUNNER_TEMP/mobile-agent-preset-materialization.json"
+          assets=("$RUNNER_TEMP/$APP_NAME" "$RUNNER_TEMP/mobile-agent-preset-url-cases.json" "$RUNNER_TEMP/mobile-agent-preset-materialization.json")
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title 'Mobile Agent existing preset App URL DoD' \
+              --notes 'Immutable non-authority projection of the existing preset maxGraph App. Source promotion remains tracked by #233.' \
+              "${assets[@]}"
+          else
+            mkdir "$RUNNER_TEMP/release-readback"
+            for asset in "${assets[@]}"; do
+              name="$(basename "$asset")"
+              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-readback"
+              cmp "$asset" "$RUNNER_TEMP/release-readback/$name"
+            done
+          fi
+
+      - name: Upload exact staged App
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-preset-url-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    needs: materialize
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.number == 242 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == '/mobile-agent-preset-deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.materialize.outputs.source_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-agent-preset-url-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/staged
+
+      - name: Create or verify dedicated Pages project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PROJECT: ${{ needs.materialize.outputs.project }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$PROJECT" = stg-mobile-agent
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT"
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create "$PROJECT" --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1])); assert x['success'] is True; assert x['result']['name']=='stg-mobile-agent'; assert x['result']['production_branch']=='proposals'
+          PY
+          else
+            cat "$RUNNER_TEMP/project.json" >&2
+            exit 1
+          fi
+
+      - name: Deploy exact existing App bytes
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PROJECT: ${{ needs.materialize.outputs.project }}
+          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          site="$RUNNER_TEMP/staged/dist"
+          test -f "$site/app/index.html"
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$site" --project-name "$PROJECT" --branch proposals --commit-hash "$SOURCE_SHA" --commit-message 'Existing preset maxGraph URL DoD' 2>&1)"
+          printf '%s\n' "$output"
+          urls="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | awk '!seen[$0]++')"
+          deployment="$(printf '%s\n' "$urls" | grep -v -F "https://$PROJECT.pages.dev" | head -n1 || true)"
+          test -n "$deployment"
+          echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
+          echo "stable_base=https://$PROJECT.pages.dev/" >> "$GITHUB_OUTPUT"
+
+      - name: Read back bytes and prove three public URLs
+        env:
+          APP_SHA: ${{ needs.materialize.outputs.app_sha }}
+          APP_BYTES: ${{ needs.materialize.outputs.app_bytes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for entry in stable=${{ steps.deploy.outputs.stable_base }} immutable=${{ steps.deploy.outputs.deployment_base }}; do
+            name="${entry%%=*}"; base="${entry#*=}"
+            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error -H 'Cache-Control: no-cache' "${base}app/" -o "$RUNNER_TEMP/${name}-app.html"
+            test "$(wc -c < "$RUNNER_TEMP/${name}-app.html")" -eq "$APP_BYTES"
+            test "$(sha256sum "$RUNNER_TEMP/${name}-app.html" | cut -d' ' -f1)" = "$APP_SHA"
+          done
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          node verification/mobile-agent-preset-url-dod/smoke.mjs "$RUNNER_TEMP/staged/cases.json" "${{ steps.deploy.outputs.stable_base }}" "$chrome" "$RUNNER_TEMP/stable-proof"
+          node verification/mobile-agent-preset-url-dod/smoke.mjs "$RUNNER_TEMP/staged/cases.json" "${{ steps.deploy.outputs.deployment_base }}" "$chrome" "$RUNNER_TEMP/immutable-proof"
+          "$chrome" --version > "$RUNNER_TEMP/chrome-version.txt"
+
+      - name: Upload final URL evidence
+        id: evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-preset-public-urls-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/stable-proof/
+            ${{ runner.temp }}/immutable-proof/
+            ${{ runner.temp }}/stable-app.html
+            ${{ runner.temp }}/immutable-app.html
+            ${{ runner.temp }}/chrome-version.txt
+            ${{ runner.temp }}/staged/materialization.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record exact public URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/stable-proof/urls.json" "$RUNNER_TEMP/immutable-proof/urls.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          stable=json.load(open(sys.argv[1],encoding='utf-8'))['urls']; immutable=json.load(open(sys.argv[2],encoding='utf-8'))['urls']
+          print('## Existing preset maxGraph public URLs — PASS\n')
+          print('- Graph / Map / Seq public URL ready: **3/3 PASS**')
+          print('- stable and deployment-specific browser readback: **6/6 PASS**')
+          print('- presets: `graph/1`, `map/1`, `seq/1`; existing maxGraph and existing interaction shell only')
+          print('- Graph drag/undo/redo, Map zoom, Seq edit/undo, Source, handoff and review: **PASS**')
+          for key in ('graph','map','seq'): print(f'- {key.title()}: {stable[key]}')
+          print('- deployment-specific URLs:')
+          for key in ('graph','map','seq'): print(f'  - `{key}`: {immutable[key]}')
+          print(f"- run: {os.environ['RUN_URL']}")
+          print(f"- evidence: `{os.environ['ARTIFACT_ID']}` / `{os.environ['ARTIFACT_DIGEST']}`")
+          print('\nThis closes the URL DoD. Exact historical source authority promotion remains tracked independently by #233; Pages, URLs and receipts are non-authority projections.')
+          PY
+          gh issue comment 242 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue comment 233 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
