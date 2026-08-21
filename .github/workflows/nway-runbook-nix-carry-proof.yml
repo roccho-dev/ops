@@ -1,0 +1,110 @@
+name: nway-runbook-nix-carry-proof
+
+on:
+  push:
+    branches:
+      - proof/nway-runbook-nix-carry-6a85fd4d
+
+permissions:
+  contents: read
+
+jobs:
+  prove-package-runbook:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Build package and prove every Runbook route
+        run: |
+          set -euo pipefail
+          rm -rf nway-runbook-nix-proof
+          mkdir -p nway-runbook-nix-proof
+
+          out="$(nix build --no-link --print-out-paths .#shiftleft-admission | tail -n 1)"
+          test -n "$out"
+          test -x "$out/bin/policyctl"
+          test -f "$out/share/doc/shiftleft-admission/nway-runbook.md"
+
+          "$out/bin/policyctl" --help > nway-runbook-nix-proof/help.txt
+          grep -F 'policyctl runbook nway' nway-runbook-nix-proof/help.txt
+
+          "$out/bin/policyctl" runbook nway > nway-runbook-nix-proof/cli-runbook.md
+          "$out/bin/policyctl" help nway > nway-runbook-nix-proof/help-runbook.md
+          cp "$out/share/doc/shiftleft-admission/nway-runbook.md" \
+            nway-runbook-nix-proof/nix-output-runbook.md
+
+          cmp packages/shiftleft-admission/docs/nway-runbook.md \
+            nway-runbook-nix-proof/nix-output-runbook.md
+          cmp nway-runbook-nix-proof/cli-runbook.md \
+            nway-runbook-nix-proof/nix-output-runbook.md
+          cmp nway-runbook-nix-proof/help-runbook.md \
+            nway-runbook-nix-proof/nix-output-runbook.md
+          grep -F '| Owner package | `shiftleft-admission` |' \
+            nway-runbook-nix-proof/nix-output-runbook.md
+          grep -F '| Document ID | `shiftleft-admission/nway` |' \
+            nway-runbook-nix-proof/nix-output-runbook.md
+
+          printf '%s\n' "$out" > nway-runbook-nix-proof/nix-output-path.txt
+          python3 - "$GITHUB_SHA" "$out" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          commit, output_path = sys.argv[1:]
+          root = pathlib.Path('nway-runbook-nix-proof')
+          def digest(name):
+              return 'sha256:' + hashlib.sha256((root / name).read_bytes()).hexdigest()
+
+          hashes = {
+              'source': 'sha256:' + hashlib.sha256(
+                  pathlib.Path('packages/shiftleft-admission/docs/nway-runbook.md').read_bytes()
+              ).hexdigest(),
+              'nixOutput': digest('nix-output-runbook.md'),
+              'cliRunbook': digest('cli-runbook.md'),
+              'helpRunbook': digest('help-runbook.md'),
+          }
+          if len(set(hashes.values())) != 1:
+              raise SystemExit('RUNBOOK_PROJECTION_MISMATCH')
+
+          receipt = {
+              'schema': 'shiftleft-admission.nway-runbook-nix-proof/1',
+              'status': 'PASS',
+              'repository': 'roccho-dev/ops',
+              'commit': commit,
+              'ownerPackage': 'shiftleft-admission',
+              'documentId': 'shiftleft-admission/nway',
+              'sourcePath': 'packages/shiftleft-admission/docs/nway-runbook.md',
+              'nixOutputPath': output_path,
+              'nixDocumentPath': 'share/doc/shiftleft-admission/nway-runbook.md',
+              'cliRoutes': ['policyctl --help', 'policyctl runbook nway', 'policyctl help nway'],
+              'hashes': hashes,
+              'sourceBuildRequiredAfterCarry': False,
+              'runbookReachableFromStandaloneBinary': True,
+              'runbookReachableFromNixOutput': True,
+          }
+          (root / 'receipt.json').write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+
+          (
+            cd nway-runbook-nix-proof
+            find . -type f ! -name SHA256SUMS -printf '%P\0' \
+              | LC_ALL=C sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nway-runbook-nix-carry-proof-${{ github.run_id }}
+          path: nway-runbook-nix-proof/
+          if-no-files-found: error
+          retention-days: 30
