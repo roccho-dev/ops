@@ -3,27 +3,28 @@
   "authority": false,
   "status": "accepted-source",
   "issue": 193,
+  "jsonlIssue": 223,
   "source": {
     "repository": "roccho-dev/ui",
-    "commit": "81f36ed47e61764495edcf5fb53a276a6722e06c",
-    "tree": "7836d64c2bb35bfe9d5ed176449cfefa78094eb1",
-    "acceptedPullRequest": 162
+    "commit": "1a7be63b9ddea94eece0b693d90df48f34c1575d",
+    "tree": "1cff1b75ddcbae6faf518d2ae1ac177757f9e95a",
+    "acceptedPullRequest": 164
   },
   "publication": {
-    "treeDigest": "sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
-    "kernelDigest": "sha256:707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610",
+    "treeDigest": "sha256:b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52",
+    "kernelDigest": "sha256:b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b",
     "capabilities": 3,
-    "listedFiles": 54,
-    "tag": "artifact-runtime-ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
+    "listedFiles": 63,
+    "tag": "artifact-runtime-b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52",
     "archive": {
-      "name": "artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz",
-      "bytes": 39822,
-      "sha256": "sha256:06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9"
+      "name": "artifact-runtime.b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52.tar.gz",
+      "bytes": 50404,
+      "sha256": "sha256:8d747382ef93ff1fb0abae20a47f9df8514c475b72ccd3237811e8062fc104f5"
     },
     "carrier": {
-      "name": "artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz.b64.txt",
-      "bytes": 53096,
-      "sha256": "sha256:a77ba5c6267bd89641daf119779b6be109b3486213a21a11d3734cc47e1cf02e",
+      "name": "artifact-runtime.b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52.tar.gz.b64.txt",
+      "bytes": 67208,
+      "sha256": "sha256:a5edea2e3c42ee6149ebb2b3b64e3e0cd8f40cfe4acbd04e5ddd73aeb2a61ad5",
       "codec": "standard-base64-no-whitespace"
     }
   },
@@ -34,6 +35,7 @@
     "receiptIsAuthority": false,
     "consumerSourceCloneRequired": false,
     "consumerBuildRequired": false,
-    "mutableLatestAllowed": false
+    "mutableLatestAllowed": false,
+    "handwrittenViewDataAllowedInUrlGenerator": false
   }
 }

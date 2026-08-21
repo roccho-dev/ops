@@ -4,22 +4,23 @@
   "status": "planned-provider-effect",
   "issue": 160,
   "appIssue": 193,
+  "jsonlIssue": 223,
   "publication": {
-    "treeDigest": "sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
-    "tag": "artifact-runtime-ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
+    "treeDigest": "sha256:b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52",
+    "tag": "artifact-runtime-b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52",
     "archive": {
-      "name": "artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz",
-      "bytes": 39822,
-      "sha256": "sha256:06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9"
+      "name": "artifact-runtime.b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52.tar.gz",
+      "bytes": 50404,
+      "sha256": "sha256:8d747382ef93ff1fb0abae20a47f9df8514c475b72ccd3237811e8062fc104f5"
     },
-    "listedFiles": 54
+    "listedFiles": 63
   },
   "provider": {
     "kind": "cloudflare-pages",
     "environment": "cloudflare-production",
     "project": "stg-artifact-runtime",
     "productionBranch": "proposals",
-    "pathPrefix": "releases/ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da"
+    "pathPrefix": "releases/b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52"
   },
   "trigger": {
     "kind": "owner-issue-comment",
@@ -30,7 +31,7 @@
     "required": true,
     "verifyTreeDigest": true,
     "verifyAllFileHashes": true,
-    "expectedListedFiles": 54,
+    "expectedListedFiles": 63,
     "browserProof": {
       "capability": "render.a2ui.app@1",
       "initialState": 0,
@@ -41,6 +42,21 @@
         "fresh-open-restores-next-state",
         "reload-preserves-next-state"
       ]
+    },
+    "jsonlProof": {
+      "inputSchema": "artifact-runtime-jsonl-surface/1",
+      "views": [
+        "base",
+        "graph",
+        "map",
+        "seq"
+      ],
+      "requirements": [
+        "jsonl-only-generation",
+        "url-decodes-exact-projected-invocation",
+        "real-browser-render",
+        "zero-product-http-failures"
+      ]
     }
   },
   "boundaries": {
@@ -50,6 +66,7 @@
     "deploymentReceiptIsAuthority": false,
     "mutableLatestAllowed": false,
     "existingCloudflareProjectOverwriteAllowed": false,
-    "staticHostServesSamePublicationBytes": true
+    "staticHostServesSamePublicationBytes": true,
+    "handwrittenViewDataAllowedInUrlGenerator": false
   }
 }

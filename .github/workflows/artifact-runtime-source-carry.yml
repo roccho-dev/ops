@@ -91,7 +91,7 @@ jobs:
           assert app['authority'] is False and app['status']=='accepted-source'
           assert app['id']=='artifact-runtime' and app['version']=='1'
           assert app['issue']==193
-          assert app['publication']['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
+          assert re.fullmatch(r'sha256:[0-9a-f]{64}',app['publication']['treeDigest'])
           assert app['publication']['tag']==tag
           assert app['boundaries']['gitIsSourceAuthority'] is True
           assert app['boundaries']['mutableLatestAllowed'] is False
@@ -241,17 +241,17 @@ jobs:
             carrier_bytes="$(stat -c %s "$carrier")"
             carrier_sha="$(sha256sum "$carrier" | cut -d' ' -f1)"
             manifest_sha="$(sha256sum "$app" | cut -d' ' -f1)"
-            python3 - "$receipt" "$role" "$repository" "$head" "$tree" "$archive" "$archive_bytes" "$archive_sha" "$carrier" "$carrier_bytes" "$carrier_sha" "$manifest_sha" "$release_tag" <<'PY'
+            python3 - "$receipt" "$role" "$repository" "$head" "$tree" "$archive" "$archive_bytes" "$archive_sha" "$carrier" "$carrier_bytes" "$carrier_sha" "$manifest_sha" "$release_tag" "$(python3 -c 'import json; print(json.load(open("verification/artifact-runtime-app/manifest.json", encoding="utf-8"))["publication"]["treeDigest"])')" <<'PY'
           import json,pathlib,sys
           (out,role,repository,head,tree,archive,archive_bytes,archive_sha,
-           carrier,carrier_bytes,carrier_sha,manifest_sha,release_tag)=sys.argv[1:]
+           carrier,carrier_bytes,carrier_sha,manifest_sha,release_tag,publication_tree)=sys.argv[1:]
           value={
               'schema':'ops.artifactAppSourceCarryReceipt/1',
               'status':'PASS','authority':False,'issue':216,
               'app':{
                   'id':'artifact-runtime','version':'1',
                   'manifestSha256':'sha256:'+manifest_sha,
-                  'publicationTree':'sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da',
+                  'publicationTree':publication_tree,
               },
               'source':{
                   'role':role,'repository':repository,'commit':head,'tree':tree,

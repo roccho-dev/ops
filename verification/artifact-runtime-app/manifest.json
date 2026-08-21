@@ -3,6 +3,7 @@
   "authority": false,
   "status": "accepted-source",
   "issue": 193,
+  "jsonlIssue": 223,
   "id": "artifact-runtime",
   "version": "1",
   "assemblyAuthority": {
@@ -13,8 +14,8 @@
   "sourceAuthorities": [
     {
       "repository": "roccho-dev/ui",
-      "commit": "81f36ed47e61764495edcf5fb53a276a6722e06c",
-      "tree": "7836d64c2bb35bfe9d5ed176449cfefa78094eb1",
+      "commit": "1a7be63b9ddea94eece0b693d90df48f34c1575d",
+      "tree": "1cff1b75ddcbae6faf518d2ae1ac177757f9e95a",
       "roles": [
         "browser-runtime",
         "url-codec",
@@ -22,29 +23,33 @@
         "trusted-renderer",
         "action-compiler",
         "capabilities",
-        "canvas-renderer"
+        "canvas-renderer",
+        "jsonl-parser",
+        "jsonl-reducer",
+        "jsonl-projector",
+        "jsonl-fixtures"
       ]
     }
   ],
   "publication": {
-    "treeDigest": "sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
-    "kernelDigest": "sha256:707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610",
-    "listedFiles": 54,
+    "treeDigest": "sha256:b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52",
+    "kernelDigest": "sha256:b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b",
+    "listedFiles": 63,
     "capabilities": [
       "inspect.json@1",
       "render.a2ui@1",
       "render.a2ui.app@1"
     ],
-    "tag": "artifact-runtime-ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da",
+    "tag": "artifact-runtime-b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52",
     "archive": {
-      "name": "artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz",
-      "bytes": 39822,
-      "sha256": "sha256:06adda6814115fbda8f67585232cc416911f44539a57e102c84b4e36154456e9"
+      "name": "artifact-runtime.b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52.tar.gz",
+      "bytes": 50404,
+      "sha256": "sha256:8d747382ef93ff1fb0abae20a47f9df8514c475b72ccd3237811e8062fc104f5"
     },
     "carrier": {
-      "name": "artifact-runtime.ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da.tar.gz.b64.txt",
-      "bytes": 53096,
-      "sha256": "sha256:a77ba5c6267bd89641daf119779b6be109b3486213a21a11d3734cc47e1cf02e",
+      "name": "artifact-runtime.b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52.tar.gz.b64.txt",
+      "bytes": 67208,
+      "sha256": "sha256:a5edea2e3c42ee6149ebb2b3b64e3e0cd8f40cfe4acbd04e5ddd73aeb2a61ad5",
       "codec": "standard-base64-no-whitespace"
     }
   },
@@ -52,11 +57,12 @@
     "browser": "index.html",
     "catalog": "catalog.json",
     "artifactManifest": "artifact-manifest.json",
-    "codec": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/url-module/src/index.mjs",
-    "invocation": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/artifact-invocation/src/index.mjs",
-    "actionCompiler": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/apps/artifact-shell/src/invocation-action.mjs",
-    "atlasStage": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/a2ui-browser/src/catalog/atlas-stage.mjs",
-    "shell": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/apps/artifact-shell/src/shell-core.mjs"
+    "codec": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/url-module/src/index.mjs",
+    "invocation": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/artifact-invocation/src/index.mjs",
+    "actionCompiler": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/src/invocation-action.mjs",
+    "atlasStage": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/a2ui-browser/src/catalog/atlas-stage.mjs",
+    "jsonlSurface": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/a2ui-browser/src/jsonl-surface.mjs",
+    "shell": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/src/shell-core.mjs"
   },
   "contracts": {
     "invocation": "artifact-invocation/2",
@@ -81,28 +87,75 @@
         "push"
       ],
       "maximumOperations": 16
+    },
+    "jsonl": {
+      "inputSchema": "artifact-runtime-jsonl-surface/1",
+      "receiptSchema": "artifact-runtime-jsonl-surface-receipt/1",
+      "rowKinds": [
+        "TreePatch",
+        "StatePatch"
+      ],
+      "handwrittenSurfaceAllowed": false,
+      "fixtures": [
+        {
+          "id": "base",
+          "path": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/fixtures/jsonl/base.jsonl",
+          "sha256": "sha256:385d6cc1161264bb133dccb438a2452fee275cb566ae3d0e42da974ab527f009",
+          "canvas": false,
+          "nodeCount": 0,
+          "edgeCount": 0
+        },
+        {
+          "id": "graph",
+          "path": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/fixtures/jsonl/graph.jsonl",
+          "sha256": "sha256:bf67c2b356402355fd343b831e4a2acf7c2fcc6b01eed346f1fff1a1f541efd7",
+          "canvas": true,
+          "nodeCount": 4,
+          "edgeCount": 3
+        },
+        {
+          "id": "map",
+          "path": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/fixtures/jsonl/map.jsonl",
+          "sha256": "sha256:1218c7b655b1cc4ff8809a7c7d47cd1413b67382dca006d5180e26e93c7a3fa8",
+          "canvas": true,
+          "nodeCount": 5,
+          "edgeCount": 4
+        },
+        {
+          "id": "seq",
+          "path": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/fixtures/jsonl/seq.jsonl",
+          "sha256": "sha256:5c069f3a056d2e7be8203bf6044c008bf24b6bec14fce8a9c00693b7ba491daf",
+          "canvas": true,
+          "nodeCount": 6,
+          "edgeCount": 5
+        }
+      ]
     }
   },
   "operations": {
     "encode": {
-      "module": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/url-module/src/index.mjs",
+      "module": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/url-module/src/index.mjs",
       "export": "createUrlModuleUrl"
     },
     "decode": {
-      "module": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/url-module/src/index.mjs",
+      "module": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/url-module/src/index.mjs",
       "export": "readUrlModule"
     },
     "validateInvocation": {
-      "module": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/artifact-invocation/src/index.mjs",
+      "module": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/artifact-invocation/src/index.mjs",
       "export": "validateArtifactInvocation"
     },
     "execute": {
-      "module": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/packages/artifact-invocation/src/index.mjs",
+      "module": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/artifact-invocation/src/index.mjs",
       "export": "createArtifactInvocationRuntime"
     },
     "applyAction": {
-      "module": "kernel/707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610/apps/artifact-shell/src/invocation-action.mjs",
+      "module": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/apps/artifact-shell/src/invocation-action.mjs",
       "export": "applyArtifactStateAction"
+    },
+    "compileJsonl": {
+      "module": "kernel/b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b/packages/a2ui-browser/src/jsonl-surface.mjs",
+      "export": "compileArtifactRuntimeJsonlSurface"
     }
   },
   "carry": {
@@ -122,8 +175,8 @@
   "improvementSources": [
     {
       "repository": "roccho-dev/ui",
-      "commit": "81f36ed47e61764495edcf5fb53a276a6722e06c",
-      "tree": "7836d64c2bb35bfe9d5ed176449cfefa78094eb1",
+      "commit": "1a7be63b9ddea94eece0b693d90df48f34c1575d",
+      "tree": "1cff1b75ddcbae6faf518d2ae1ac177757f9e95a",
       "acquire": "exact-git-or-repo-head-carrier"
     },
     {
@@ -142,6 +195,7 @@
     "mutableLatestAllowed": false,
     "uploadedZipAllowedAsSource": false,
     "arbitraryJavaScriptAllowed": false,
-    "referenceStateMutationAllowed": false
+    "referenceStateMutationAllowed": false,
+    "handwrittenViewDataAllowedInUrlGenerator": false
   }
 }

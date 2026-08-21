@@ -39,17 +39,23 @@ jobs:
           app=json.load(open('verification/artifact-runtime-app/manifest.json', encoding='utf-8'))
           assert app['schema']=='ops.artifactRuntimeApp/1'
           assert app['authority'] is False and app['status']=='accepted-source'
-          assert app['issue']==193 and app['id']=='artifact-runtime' and app['version']=='1'
+          assert app['issue']==193 and app['jsonlIssue']==223
+          assert app['id']=='artifact-runtime' and app['version']=='1'
           authorities=app['sourceAuthorities']
           assert len(authorities)==1
           source=authorities[0]
           assert source['repository']=='roccho-dev/ui'
-          assert source['commit']=='81f36ed47e61764495edcf5fb53a276a6722e06c'
-          assert source['tree']=='7836d64c2bb35bfe9d5ed176449cfefa78094eb1'
+          assert source['commit']=='1a7be63b9ddea94eece0b693d90df48f34c1575d'
+          assert source['tree']=='1cff1b75ddcbae6faf518d2ae1ac177757f9e95a'
+          required_roles={
+            'browser-runtime','url-codec','invocation-runtime','trusted-renderer','action-compiler',
+            'capabilities','canvas-renderer','jsonl-parser','jsonl-reducer','jsonl-projector','jsonl-fixtures',
+          }
+          assert set(source['roles'])==required_roles
           projected=app['publication']
-          assert projected['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
-          assert projected['kernelDigest']=='sha256:707a24aeb77bbc283ead837c0123bf628a16e10132cffdb40b56c0bc55a2a610'
-          assert projected['listedFiles']==54
+          assert projected['treeDigest']=='sha256:b5c164f7b8a9dd8c612cfdb6747d649f4ae2a809a5ddaa02d744a509a4d40c52'
+          assert projected['kernelDigest']=='sha256:b2251729cd9ec1b4232b2ca13acb8c993278e78b92cbd8f226302b241ef7d08b'
+          assert projected['listedFiles']==63
           assert projected['capabilities']==[
               'inspect.json@1','render.a2ui@1','render.a2ui.app@1'
           ]
@@ -62,9 +68,19 @@ jobs:
           assert app['contracts']['action']['schema']=='artifact-state-action/1'
           assert app['contracts']['action']['stateRoot']=='/state'
           assert app['contracts']['action']['operations']==['replace','increment']
+          jsonl=app['contracts']['jsonl']
+          assert jsonl['inputSchema']=='artifact-runtime-jsonl-surface/1'
+          assert jsonl['receiptSchema']=='artifact-runtime-jsonl-surface-receipt/1'
+          assert jsonl['rowKinds']==['TreePatch','StatePatch']
+          assert jsonl['handwrittenSurfaceAllowed'] is False
+          assert [(x['id'],x['canvas'],x['nodeCount'],x['edgeCount']) for x in jsonl['fixtures']]==[
+            ('base',False,0,0),('graph',True,4,3),('map',True,5,4),('seq',True,6,5),
+          ]
+          assert app['operations']['compileJsonl']['export']=='compileArtifactRuntimeJsonlSurface'
           assert app['carry']['sourceCloneRequiredForUse'] is False
           assert app['carry']['consumerBuildRequired'] is False
           assert app['carry']['repairAllowed'] is False
+          assert app['boundaries']['handwrittenViewDataAllowedInUrlGenerator'] is False
           values={
             'UI_REPOSITORY':source['repository'],
             'UI_COMMIT':source['commit'],
@@ -129,8 +145,19 @@ jobs:
           assert len(catalog['capabilities'])==int(sys.argv[4])
           ids=[f"{x['capability']['id']}@{x['capability']['version']}" for x in catalog['capabilities']]
           assert ids==['inspect.json@1','render.a2ui@1','render.a2ui.app@1']
-          atlas=[x for x in artifact['files'] if x['path'].endswith('/packages/a2ui-browser/src/catalog/atlas-stage.mjs')]
-          assert len(atlas)==1
+          required=[
+            'packages/a2ui-browser/src/catalog/atlas-stage.mjs',
+            'packages/a2ui-browser/src/jsonl-surface.mjs',
+            'packages/core-port/src/jsonl.mjs',
+            'packages/core-port/src/project.mjs',
+            'packages/core-port/src/catalog.mjs',
+            'packages/core-port/src/registry.mjs',
+          ]
+          for suffix in required:
+            assert sum(x['path'].endswith(suffix) for x in artifact['files'])==1,suffix
+          for name in ('base','graph','map','seq'):
+            suffix=f'apps/artifact-shell/fixtures/jsonl/{name}.jsonl'
+            assert sum(x['path'].endswith(suffix) for x in artifact['files'])==1,suffix
           PY
 
           (cd "$out" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
@@ -153,6 +180,7 @@ jobs:
             'authority':False,
             'status':'accepted-source',
             'issue':app['issue'],
+            'jsonlIssue':app['jsonlIssue'],
             'source':{
               'repository':source['repository'],'commit':source['commit'],'tree':source['tree']
             },
@@ -165,7 +193,7 @@ jobs:
               'gitSourceAuthority':True,'releaseIsProjection':True,
               'carrierIsTransportProjection':True,'receiptIsAuthority':False,
               'consumerSourceCloneRequired':False,'consumerBuildRequired':False,
-              'mutableLatestAllowed':False,
+              'mutableLatestAllowed':False,'handwrittenViewDataAllowedInUrlGenerator':False,
             },
           }
           open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(value,indent=2,sort_keys=True)+'\n')
@@ -181,9 +209,14 @@ jobs:
           app=json.load(open(sys.argv[1], encoding='utf-8'))
           publication=json.load(open(sys.argv[2], encoding='utf-8'))
           carry=json.load(open(sys.argv[4], encoding='utf-8'))
+          assert carry['schema']=='ops.artifactRuntimeAppCarryReceipt/2'
+          assert carry['status']=='PASS'
+          assert carry['operations']['compileJsonl']=='PASS'
+          assert carry['jsonl']['handwrittenSurfaceUsed'] is False
+          assert [x['id'] for x in carry['jsonl']['cases']]==['base','graph','map','seq']
           projected=publication['publication']; source=publication['source']
           receipt={
-            'schema':'ops.artifactRuntimePublicationReceipt/2',
+            'schema':'ops.artifactRuntimePublicationReceipt/3',
             'status':'PASS',
             'authority':False,
             'opsCommit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
@@ -196,6 +229,11 @@ jobs:
               'treeDigest':projected['treeDigest'],'kernelDigest':projected['kernelDigest'],
               'capabilities':projected['capabilities'],'listedFiles':projected['listedFiles'],
               'archive':projected['archive'],'carrier':projected['carrier'],
+            },
+            'jsonl':{
+              'inputSchema':app['contracts']['jsonl']['inputSchema'],
+              'fixtures':[{'id':x['id'],'jsonlSha256':x['jsonlSha256'],'surfaceSha256':x['surfaceSha256'],'requestSha256':x['requestSha256']} for x in carry['jsonl']['cases']],
+              'handwrittenSurfaceUsed':False,
             },
             'publicationManifestSha256':sha(sys.argv[2]),
             'workflowSha256':sha(sys.argv[3]),
@@ -219,8 +257,8 @@ jobs:
           carry_receipt="$RUNNER_TEMP/$CARRY_RECEIPT_NAME"
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Bidirectional Artifact App $TREE_DIGEST" \
-              --notes "Immutable non-authority App projection of $UI_REPOSITORY@$UI_COMMIT. Git remains source authority. No uploaded ZIP was used." \
+              --title "JSONL-only Artifact App $TREE_DIGEST" \
+              --notes "Immutable non-authority projection of $UI_REPOSITORY@$UI_COMMIT. Base, Graph, semantic Map and Seq are compiled from carried JSONL only. Git remains source authority; no uploaded ZIP or hand-built surface was used." \
               "$archive" "$carrier" "$app_manifest" "$publication_manifest" "$publication_receipt" "$carry_receipt"
           fi
 
