@@ -1,0 +1,15 @@
+{
+  "schema": "ops.hqVimRuntimeCarryRequest/1",
+  "requestId": "hq-vim-runtime-carry-20260821-001",
+  "hq": {
+    "repository": "roccho-dev/hq",
+    "commit": "3118886f34ac5615e8a7732a6297bd41900e21e1",
+    "releaseTag": "hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1"
+  },
+  "lsp": {
+    "repository": "yegappan/lsp",
+    "commit": "989016ae2ae4cbf304a9ca29478f47fec794493f",
+    "tree": "899cd0db6af40e3b1e0039b679541cd062cfa9e7"
+  },
+  "target": "linux-amd64"
+}
