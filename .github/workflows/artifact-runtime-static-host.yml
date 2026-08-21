@@ -144,7 +144,7 @@ jobs:
           tree=s['publication']['treeDigest']; tree_id=tree.removeprefix('sha256:')
           assert s['provider']['pathPrefix']==f'releases/{tree_id}'
           assert s['readback']['required'] is True and s['readback']['verifyAllFileHashes'] is True
-          assert s['readback']['expectedListedFiles']==p['publication']['listedFiles']==53
+          assert s['readback']['expectedListedFiles']==p['publication']['listedFiles']==54
           assert s['readback']['browserProof']=={
             'capability':'render.a2ui.app@1','initialState':0,'nextState':1,
             'requirements':['click-updates-url','back-restores-state','fresh-open-restores-next-state','reload-preserves-next-state'],

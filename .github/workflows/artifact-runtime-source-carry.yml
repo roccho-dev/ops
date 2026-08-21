@@ -84,7 +84,7 @@ jobs:
           assert app['authority'] is False and app['status']=='accepted-source'
           assert app['id']=='artifact-runtime' and app['version']=='1'
           assert app['issue']==193
-          assert app['publication']['treeDigest']=='sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b'
+          assert app['publication']['treeDigest']=='sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da'
           assert app['publication']['tag']==tag
           assert app['boundaries']['gitIsSourceAuthority'] is True
           assert app['boundaries']['mutableLatestAllowed'] is False
@@ -242,7 +242,7 @@ jobs:
               'app':{
                   'id':'artifact-runtime','version':'1',
                   'manifestSha256':'sha256:'+manifest_sha,
-                  'publicationTree':'sha256:b1f12244cc627fc27a97fc22f3da9e813dab10954c972c7033f99ab8d909184b',
+                  'publicationTree':'sha256:ce21da7009b4a440fef0b7857456fd0bd58efec83d71f23197565ac92cca96da',
               },
               'source':{
                   'role':role,'repository':repository,'commit':head,'tree':tree,
