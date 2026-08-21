@@ -1,0 +1,11 @@
+{"type":"meta","schema":"semantic-map-state/1","root":"sequence","title":"Decision review sequence"}
+{"type":"region","id":"sequence","parent":null,"label":"Decision review sequence","kind":"root","bounds":[0,0,1000,560],"summary":"actor laneとordinal順序を明示したseq/1 fixture"}
+{"type":"region","id":"human","parent":"sequence","label":"Human","kind":"actor","bounds":[20,30,140,72],"summary":"提案を依頼し承認する主体"}
+{"type":"region","id":"agent","parent":"sequence","label":"Agent","kind":"actor","bounds":[20,300,140,72],"summary":"Proposalを生成し検査する主体"}
+{"type":"region","id":"request","parent":"sequence","label":"Request","kind":"task","bounds":[200,90,180,80],"summary":"変更依頼","temporal":{"actor":"human","ordinal":{"start":0,"end":0},"calendar":{"start":"2026-08-10","end":"2026-08-10"}}}
+{"type":"region","id":"proposal","parent":"sequence","label":"Proposal","kind":"task","bounds":[400,360,180,80],"summary":"未appendのDecision","temporal":{"actor":"agent","ordinal":{"start":1,"end":1},"calendar":{"start":"2026-08-11","end":"2026-08-12"}}}
+{"type":"region","id":"accept","parent":"sequence","label":"Accept","kind":"task","bounds":[600,90,180,80],"summary":"Proposalを承認","temporal":{"actor":"human","ordinal":{"start":2,"end":2},"calendar":{"start":"2026-08-13","end":"2026-08-13"}}}
+{"type":"region","id":"append","parent":"sequence","label":"Append","kind":"task","bounds":[800,360,180,80],"summary":"DecisionLogへappend","temporal":{"actor":"agent","ordinal":{"start":3,"end":3},"calendar":{"start":"2026-08-14","end":"2026-08-14"}}}
+{"type":"relation","id":"seq-r1","from":"request","to":"proposal","kind":"message","label":"依頼"}
+{"type":"relation","id":"seq-r2","from":"proposal","to":"accept","kind":"message","label":"確認"}
+{"type":"relation","id":"seq-r3","from":"accept","to":"append","kind":"message","label":"承認"}
