@@ -91,6 +91,12 @@
               nativeBuildInputs = [ pkgs.makeWrapper ];
               postInstall = ''
                 test -x "$out/bin/policyctl"
+                install -Dm0444 docs/nway-runbook.md \
+                  "$out/share/doc/shiftleft-admission/nway-runbook.md"
+                "$out/bin/policyctl" --help | grep -F 'policyctl runbook nway'
+                "$out/bin/policyctl" runbook nway > "$TMPDIR/nway-runbook.md"
+                cmp "$TMPDIR/nway-runbook.md" \
+                  "$out/share/doc/shiftleft-admission/nway-runbook.md"
               '';
               postFixup = ''
                 wrapProgram "$out/bin/policyctl" \
