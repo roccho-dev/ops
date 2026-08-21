@@ -55,9 +55,10 @@ jobs:
           ]
           for value in required:
             assert value in text,value
-          assert text.count('jobs:')==1
-          assert text.count('  materialize:')==1
-          assert text.count('  deploy:')==1
+          lines=text.splitlines()
+          assert sum(line=='jobs:' for line in lines)==1
+          assert sum(line=='  materialize:' for line in lines)==1
+          assert sum(line=='  deploy:' for line in lines)==1
           print('static-contract-pass')
           PY
           git diff --check
