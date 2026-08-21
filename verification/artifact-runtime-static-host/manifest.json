@@ -2,7 +2,7 @@
   "schema": "ops.artifactRuntimeStaticHost/1",
   "authority": false,
   "status": "planned-provider-effect",
-  "issue": 230,
+  "issue": 160,
   "appIssue": 193,
   "jsonlIssue": 223,
   "publication": {
