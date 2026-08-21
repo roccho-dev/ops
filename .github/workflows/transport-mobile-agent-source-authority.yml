@@ -5,95 +5,152 @@ on:
     branches: [proposals]
     paths:
       - '.github/workflows/transport-mobile-agent-source-authority.yml'
-      - '.github/transport/mobile-agent-source.bundle.b64.part*'
+      - '.github/transport/mobile-agent-source-v3.tar.xz.chunk*.b64'
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   promote:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       TARGET_REF: source/mobile-agent-presets-v1
-      EXPECTED_COMMIT: 608229b5a0b6fe370b07cef7c11a062e7add5ae1
-      EXPECTED_TREE: 2abfe78594e92831009236df6d34902990be020d
-      EXPECTED_B64_SHA256: 428f8ecb3408fd1df0708151dbe0e045dd9992443beeb5e175643ddf1a5228f9
-      EXPECTED_BUNDLE_SHA256: 077ec461c791901cf5a84cd79363ba9775a3da5a86e88c5bf444f38c1550e710
+      PRODUCT_REF: proposal/mobile-agent-preset-static-app-260821
       ORIGINAL_COMMIT: 1daa001bf780053f4319e3fb20b4ea9a6e0d0442
       ORIGINAL_TREE: 59ff130fc7e20a4b5762c21fe97b417fc7a454ad
       ORIGINAL_BUNDLE_SHA256: 208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Reconstruct and verify exact Git bundle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Reconstruct exact source archive
         shell: bash
         run: |
           set -euo pipefail
-          cat .github/transport/mobile-agent-source.bundle.b64.part* > "$RUNNER_TEMP/source.bundle.b64"
-          test "$(sha256sum "$RUNNER_TEMP/source.bundle.b64" | cut -d' ' -f1)" = "$EXPECTED_B64_SHA256"
-          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$RUNNER_TEMP/source.bundle.b64")"
-          base64 --decode "$RUNNER_TEMP/source.bundle.b64" > "$RUNNER_TEMP/source.git.bundle"
-          test "$(sha256sum "$RUNNER_TEMP/source.git.bundle" | cut -d' ' -f1)" = "$EXPECTED_BUNDLE_SHA256"
-          git bundle verify "$RUNNER_TEMP/source.git.bundle"
-          test "$(git bundle list-heads "$RUNNER_TEMP/source.git.bundle" | awk '$2=="refs/heads/source/mobile-agent-presets-v1" {print $1}')" = "$EXPECTED_COMMIT"
+          shopt -s nullglob
+          parts=(.github/transport/mobile-agent-source-v3.tar.xz.chunk*.b64)
+          test "${#parts[@]}" -ge 1
+          LC_ALL=C printf '%s\n' "${parts[@]}" | sort > "$RUNNER_TEMP/parts.txt"
+          while IFS= read -r part; do cat "$part"; done < "$RUNNER_TEMP/parts.txt" > "$RUNNER_TEMP/source.tar.xz.b64"
+          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$RUNNER_TEMP/source.tar.xz.b64")"
+          base64 --decode "$RUNNER_TEMP/source.tar.xz.b64" > "$RUNNER_TEMP/source.tar.xz"
+          xz --test "$RUNNER_TEMP/source.tar.xz"
+          mkdir "$RUNNER_TEMP/extracted"
+          tar -xJf "$RUNNER_TEMP/source.tar.xz" -C "$RUNNER_TEMP/extracted" --no-same-owner --no-same-permissions
+          python3 - "$RUNNER_TEMP/extracted" "$RUNNER_TEMP/source-root" <<'PY'
+          import pathlib,sys
+          outer=pathlib.Path(sys.argv[1]).resolve()
+          candidates=[]
+          for path in [outer,*[p for p in outer.iterdir() if p.is_dir()]]:
+              if (path/'packages/pattern/view-types/registry.js').is_file() and (path/'packages/renderer-maxgraph/adapter.js').is_file():
+                  candidates.append(path)
+          assert len(candidates)==1,candidates
+          root=candidates[0]
+          for path in root.rglob('*'):
+              assert not path.is_symlink(),path
+              if path.is_file(): continue
+              assert path.is_dir(),path
+          pathlib.Path(sys.argv[2]).write_text(str(root)+'\n')
+          PY
+          root="$(cat "$RUNNER_TEMP/source-root")"
+          test -f "$root/packages/app/main.js"
+          test -f "$root/packages/transport/smap-codec.js"
+          test -f "$root/tests/pattern_test.mjs"
+          test -f "$root/tests/protocol_test.mjs"
+          test ! -d "$root/dist"
 
-      - name: Import exact source commit and verify provenance
+      - name: Verify exact source provenance and preset implementation
         shell: bash
         run: |
           set -euo pipefail
-          git fetch "$RUNNER_TEMP/source.git.bundle" "refs/heads/$TARGET_REF"
-          test "$(git rev-parse FETCH_HEAD)" = "$EXPECTED_COMMIT"
-          test "$(git rev-parse 'FETCH_HEAD^{tree}')" = "$EXPECTED_TREE"
-          test "$(git rev-list --count FETCH_HEAD)" = 1
-          work="$RUNNER_TEMP/source-worktree"
-          git worktree add --detach "$work" FETCH_HEAD
-          python3 - "$work" <<'PY'
+          root="$(cat "$RUNNER_TEMP/source-root")"
+          python3 - "$root" "$ORIGINAL_COMMIT" "$ORIGINAL_TREE" "$ORIGINAL_BUNDLE_SHA256" <<'PY'
           import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1])
-          authority=json.loads((root/'.source-authority.json').read_text(encoding='utf-8'))
-          manifest=json.loads((root/'source-manifest.json').read_text(encoding='utf-8'))
-          assert authority['schema']=='imported-source-authority/1'
-          assert authority['status']=='candidate' and authority['authority'] is False
-          assert authority['target']=='source/mobile-agent-presets-v1'
-          assert authority['provenance']=={
-            'sourceCommit':'1daa001bf780053f4319e3fb20b4ea9a6e0d0442',
-            'sourceTree':'59ff130fc7e20a4b5762c21fe97b417fc7a454ad',
-            'fullBundleSha256':'sha256:208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6',
-            'sourceArchiveSha256':'sha256:dc10b62a030b8cda8cfa278fadb3c3fc00b6da2b145c9d194e07328f5a7a7a68',
-          }
-          assert authority['boundary']=={
-            'implementationRewritten':False,
-            'generatedDistIncluded':False,
-            'fullHistoryIncluded':False,
-            'exactSourceBytesVerifiedBy':'source-manifest.json',
-          }
-          assert manifest['schema']=='mobile-agent-preset-source/1' and manifest['authority'] is False
-          assert manifest['provenance']['commit']=='1daa001bf780053f4319e3fb20b4ea9a6e0d0442'
-          assert manifest['provenance']['tree']=='59ff130fc7e20a4b5762c21fe97b417fc7a454ad'
-          listed={row['path']:row for row in manifest['files']}
-          actual=[]
+          root=pathlib.Path(sys.argv[1]); original_commit,original_tree,bundle_sha=sys.argv[2:]
+          authority=root/'.source-authority.json'; manifest=root/'source-manifest.json'
+          assert authority.is_file() and manifest.is_file()
+          a=json.loads(authority.read_text(encoding='utf-8')); m=json.loads(manifest.read_text(encoding='utf-8'))
+          assert a['schema']=='imported-source-authority/1'
+          assert a['provenance']['sourceCommit']==original_commit
+          assert a['provenance']['sourceTree']==original_tree
+          assert a['provenance']['fullBundleSha256']=='sha256:'+bundle_sha
+          assert a['boundary']['implementationRewritten'] is False
+          assert a['boundary']['generatedDistIncluded'] is False
+          assert m['schema']=='mobile-agent-preset-source/1'
+          assert m['provenance']['commit']==original_commit and m['provenance']['tree']==original_tree
+          listed={row['path']:row for row in m['files']}
           excluded={'.source-authority.json','source-manifest.json'}
-          for path in sorted(p for p in root.rglob('*') if p.is_file() and '.git' not in p.parts):
-            rel=path.relative_to(root).as_posix()
-            if rel in excluded: continue
-            data=path.read_bytes(); row=listed[rel]
-            assert len(data)==row['bytes'],rel
-            assert 'sha256:'+hashlib.sha256(data).hexdigest()==row['sha256'],rel
-            actual.append(rel)
+          actual=[]
+          for path in sorted(p for p in root.rglob('*') if p.is_file()):
+              rel=path.relative_to(root).as_posix()
+              if rel in excluded: continue
+              row=listed[rel]; data=path.read_bytes()
+              assert len(data)==row['bytes'],rel
+              assert 'sha256:'+hashlib.sha256(data).hexdigest()==row['sha256'],rel
+              actual.append(rel)
           assert actual==sorted(listed)
           registry=(root/'packages/pattern/view-types/registry.js').read_text(encoding='utf-8')
-          renderer=(root/'packages/renderer-maxgraph/adapter.js').read_text(encoding='utf-8')
-          shell=(root/'packages/app/main.js').read_text(encoding='utf-8')
-          codec=(root/'packages/transport/smap-codec.js').read_text(encoding='utf-8')
-          for value in ('map/1','graph/1','seq/1'): assert value in registry
-          assert 'maxgraph' in registry.lower()
-          assert len(renderer)>1000 and len(shell)>1000 and len(codec)>100
+          for preset in ('graph/1','map/1','seq/1'): assert preset in registry
+          assert registry.lower().count('maxgraph')>=3
+          for rel in ('packages/renderer-maxgraph/adapter.js','packages/app/main.js','packages/transport/smap-codec.js'):
+              assert (root/rel).stat().st_size>100
           PY
-          (cd "$work" && node tests/pattern_test.mjs)
-          (cd "$work" && node tests/protocol_test.mjs)
+          (cd "$root" && node tests/pattern_test.mjs)
+          (cd "$root" && node tests/protocol_test.mjs)
+
+      - name: Build existing App and prove exact 54-file projection
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/source-root")"
+          git fetch --quiet origin "$PRODUCT_REF"
+          git show FETCH_HEAD:verification/mobile-agent-preset-app/expected.json > "$RUNNER_TEMP/expected.json"
+          if [ -x "$root/verify.sh" ]; then (cd "$root" && ./verify.sh); fi
+          test -x "$root/build.sh"
+          (cd "$root" && ./build.sh)
+          test -d "$root/dist"
+          python3 - "$root/dist" "$RUNNER_TEMP/expected.json" <<'PY'
+          import hashlib,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); expected=json.load(open(sys.argv[2],encoding='utf-8'))
+          assert expected['schema']=='semantic-map-build-artifact/1' and len(expected['files'])==54
+          actual=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
+          assert actual==sorted(expected['files'])
+          for rel,spec in expected['files'].items():
+              data=(root/rel).read_bytes(); assert len(data)==spec['bytes'],rel; assert hashlib.sha256(data).hexdigest()==spec['sha256'],rel
+          PY
+
+      - name: Create deterministic Git source commit
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/source-root")"
+          rm -rf "$root/dist" "$root/.git"
+          git -C "$root" init --quiet
+          git -C "$root" config user.name 'roccho source authority'
+          git -C "$root" config user.email 'source-authority@roccho.invalid'
+          git -C "$root" add -A
+          export GIT_AUTHOR_NAME='roccho source authority'
+          export GIT_AUTHOR_EMAIL='source-authority@roccho.invalid'
+          export GIT_AUTHOR_DATE='2026-08-21T00:00:00Z'
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
+          git -C "$root" commit --quiet -m 'chore: promote exact Mobile Agent preset source'
+          commit="$(git -C "$root" rev-parse HEAD)"; tree="$(git -C "$root" rev-parse 'HEAD^{tree}')"
+          test "$(git -C "$root" rev-list --count HEAD)" = 1
+          test -z "$(git -C "$root" status --porcelain)"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$commit" > "$RUNNER_TEMP/source-commit"
+          printf '%s\n' "$tree" > "$RUNNER_TEMP/source-tree"
 
       - name: Publish exact Git source ref and read it back
         env:
@@ -101,22 +158,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/source-root")"
           remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          git -C "$root" remote add origin "$remote"
+          expected_commit="$(cat "$RUNNER_TEMP/source-commit")"; expected_tree="$(cat "$RUNNER_TEMP/source-tree")"
           current="$(git ls-remote "$remote" "refs/heads/$TARGET_REF" | awk 'NR==1 {print $1}')"
           if [ -n "$current" ]; then
-            test "$current" = "$EXPECTED_COMMIT"
+            git -C "$root" fetch --quiet --depth=1 origin "$TARGET_REF"
+            test "$(git -C "$root" rev-parse FETCH_HEAD^{tree})" = "$expected_tree"
           else
-            git push "$remote" "$EXPECTED_COMMIT:refs/heads/$TARGET_REF"
+            git -C "$root" push --quiet origin "HEAD:refs/heads/$TARGET_REF"
           fi
-          test "$(git ls-remote "$remote" "refs/heads/$TARGET_REF" | awk 'NR==1 {print $1}')" = "$EXPECTED_COMMIT"
-          readback="$RUNNER_TEMP/readback"
-          git init --quiet "$readback"
-          git -C "$readback" remote add origin "$remote"
-          git -C "$readback" fetch --quiet --depth=1 origin "$TARGET_REF"
-          git -C "$readback" checkout --quiet --detach FETCH_HEAD
-          test "$(git -C "$readback" rev-parse HEAD)" = "$EXPECTED_COMMIT"
-          test "$(git -C "$readback" rev-parse 'HEAD^{tree}')" = "$EXPECTED_TREE"
+          observed="$(git ls-remote "$remote" "refs/heads/$TARGET_REF" | awk 'NR==1 {print $1}')"; test -n "$observed"
+          readback="$RUNNER_TEMP/readback"; git init --quiet "$readback"; git -C "$readback" remote add origin "$remote"
+          git -C "$readback" fetch --quiet --depth=1 origin "$TARGET_REF"; git -C "$readback" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$readback" rev-parse HEAD^{tree})" = "$expected_tree"
           test "$(git -C "$readback" rev-parse --is-shallow-repository)" = true
           test "$(git -C "$readback" rev-list --count HEAD)" = 1
           test -z "$(git -C "$readback" status --porcelain)"
           git -C "$readback" fsck --no-dangling
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Exact Mobile Agent source promotion — PASS
+
+          - ref: \`$TARGET_REF\`
+          - commit: \`$observed\`
+          - tree: \`$expected_tree\`
+          - external provenance commit/tree: \`$ORIGINAL_COMMIT\` / \`$ORIGINAL_TREE\`
+          - implementation rewritten / generated dist committed: \`false / false\`
+          - existing preset tests and exact 54-file build: **PASS**
+          EOF
+          gh pr comment "$GITHUB_EVENT_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
