@@ -1,0 +1,11 @@
+{"type":"meta","schema":"semantic-map-state/1","root":"delivery","title":"Product delivery graph"}
+{"type":"region","id":"delivery","parent":null,"label":"Product delivery graph","kind":"root","bounds":[0,0,1100,620],"summary":"graph/1で価値提供の接続と判断を表す"}
+{"type":"region","id":"request","parent":"delivery","label":"顧客要求","kind":"input","bounds":[80,230,190,100],"summary":"解くべき成果を受け取る"}
+{"type":"region","id":"decision","parent":"delivery","label":"採否判断","kind":"decision","bounds":[330,215,210,130],"summary":"目的・検証可能性・費用で絞る"}
+{"type":"region","id":"build","parent":"delivery","label":"最小実装","kind":"process","bounds":[610,230,190,100],"summary":"必要な差分だけを作る"}
+{"type":"region","id":"proof","parent":"delivery","label":"検証証跡","kind":"output","bounds":[860,230,190,100],"summary":"再現可能な成果を返す"}
+{"type":"region","id":"stop","parent":"delivery","label":"中断","kind":"terminal","bounds":[350,430,170,90],"summary":"必要条件が欠ける場合は止める"}
+{"type":"relation","id":"g1","from":"request","to":"decision","kind":"flows","label":"評価"}
+{"type":"relation","id":"g2","from":"decision","to":"build","kind":"accepts","label":"採用"}
+{"type":"relation","id":"g3","from":"decision","to":"stop","kind":"rejects","label":"不足"}
+{"type":"relation","id":"g4","from":"build","to":"proof","kind":"proves","label":"検証"}
