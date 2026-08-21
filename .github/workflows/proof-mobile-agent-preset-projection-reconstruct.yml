@@ -1,9 +1,10 @@
 name: Proof existing preset App projection reconstruction
 
 on:
-  push:
-    branches:
-      - proof/mobile-agent-preset-projection-reconstruct-260822
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-mobile-agent-preset-projection-reconstruct.yml'
 
 permissions:
   contents: read
@@ -15,6 +16,8 @@ jobs:
     steps:
       - name: Checkout proof controller
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Checkout exact existing App projection
         uses: actions/checkout@v4
