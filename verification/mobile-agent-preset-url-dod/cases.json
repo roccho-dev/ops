@@ -2,9 +2,14 @@
   "schema": "ops.mobileAgentPresetUrlDodCases/1",
   "authority": false,
   "sourceApp": {
-    "url": "https://mobile-agent.roccho.workers.dev/app/",
-    "bytes": 2026821,
-    "sha256": "sha256:c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4"
+    "projectionRef": "projection/mobile-agent-preset-dist-b0af2ab9",
+    "parts": [
+      "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00",
+      "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01"
+    ],
+    "bytes": 2412388,
+    "sha256": "sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6",
+    "implementationRewritten": false
   },
   "cases": [
     {
@@ -14,7 +19,12 @@
       "sourceJsonl": "examples/graph.jsonl",
       "sourceJsonlSha256": "sha256:6fa8377c6d23aa74b65040eff645024f1c124ea4f8f9bf154aec1c316243891c",
       "recordCount": 11,
-      "labels": ["Product delivery graph", "顧客要求", "採否判断", "検証証跡"]
+      "labels": [
+        "Product delivery graph",
+        "顧客要求",
+        "採否判断",
+        "検証証跡"
+      ]
     },
     {
       "id": "map",
@@ -23,7 +33,12 @@
       "sourceJsonl": "examples/example.jsonl",
       "sourceJsonlSha256": "sha256:51feabbd925dc800a23ad5c016fccd94d295bc9f577c0eebc0e835a6b834c634",
       "recordCount": 18,
-      "labels": ["AI図編集の例", "User", "App", "AI"]
+      "labels": [
+        "AI図編集の例",
+        "User",
+        "App",
+        "AI"
+      ]
     },
     {
       "id": "seq",
@@ -32,7 +47,12 @@
       "sourceJsonl": "examples/sequence.jsonl",
       "sourceJsonlSha256": "sha256:94de0b233bcdfdb8c471484b2505bbfd2a23170d54b1de8fdc46b5b1815bcda4",
       "recordCount": 11,
-      "labels": ["Decision review sequence", "Human", "Agent", "Proposal"]
+      "labels": [
+        "Decision review sequence",
+        "Human",
+        "Agent",
+        "Proposal"
+      ]
     }
   ]
 }
