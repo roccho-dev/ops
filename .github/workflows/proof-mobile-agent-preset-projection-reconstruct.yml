@@ -14,11 +14,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Checkout proof controller
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
       - name: Checkout exact existing App projection
         uses: actions/checkout@v4
         with:
