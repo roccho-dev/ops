@@ -14,31 +14,24 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Checkout exact existing App projection
-        uses: actions/checkout@v4
-        with:
-          ref: projection/mobile-agent-preset-dist-b0af2ab9
-          path: projection
-          fetch-depth: 1
-
-      - name: Checkout preset URL fixtures and black-box smoke
-        uses: actions/checkout@v4
-        with:
-          ref: proposal/mobile-agent-preset-url-dod-260821
-          path: dod
-          fetch-depth: 1
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22.16.0'
-
       - name: Reconstruct and verify exact self-contained App
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           result="$RUNNER_TEMP/result"
-          mkdir -p "$result/dist/app" "$result/proof"
-          cat projection/projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part* > "$RUNNER_TEMP/app-index.br.b64"
+          mkdir -p "$result/dist/app" "$result/proof" "$RUNNER_TEMP/input"
+          fetch_content() {
+            local ref="$1" path="$2" out="$3"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/contents/$path" -f ref="$ref" --jq .content \
+              | tr -d '\n' | base64 --decode > "$out"
+          }
+          fetch_content projection/mobile-agent-preset-dist-b0af2ab9 projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00 "$RUNNER_TEMP/input/part00"
+          fetch_content projection/mobile-agent-preset-dist-b0af2ab9 projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01 "$RUNNER_TEMP/input/part01"
+          fetch_content proposal/mobile-agent-preset-url-dod-260821 verification/mobile-agent-preset-url-dod/cases.json "$result/cases.json"
+          fetch_content proposal/mobile-agent-preset-url-dod-260821 verification/mobile-agent-preset-url-dod/smoke.mjs "$RUNNER_TEMP/smoke.mjs"
+          cat "$RUNNER_TEMP/input/part00" "$RUNNER_TEMP/input/part01" > "$RUNNER_TEMP/app-index.br.b64"
           test "$(wc -c < "$RUNNER_TEMP/app-index.br.b64")" -eq 30024
           base64 --decode "$RUNNER_TEMP/app-index.br.b64" > "$RUNNER_TEMP/app-index.br"
           node - "$RUNNER_TEMP/app-index.br" "$result/dist/app/index.html" <<'JS'
@@ -51,12 +44,12 @@ jobs:
           grep -F 'map/1' "$result/dist/app/index.html" >/dev/null
           grep -F 'seq/1' "$result/dist/app/index.html" >/dev/null
           grep -F 'maxgraph' "$result/dist/app/index.html" >/dev/null
-          cp dod/verification/mobile-agent-preset-url-dod/cases.json "$result/cases.json"
           python3 - "$result/dist/app/index.html" "$result/materialization.json" <<'PY'
           import hashlib,json,pathlib,sys
           data=pathlib.Path(sys.argv[1]).read_bytes()
           value={'schema':'ops.mobileAgentPresetProjectionMaterialization/1','status':'PASS','authority':False,'bytes':len(data),'sha256':'sha256:'+hashlib.sha256(data).hexdigest(),'projectionRef':'projection/mobile-agent-preset-dist-b0af2ab9','implementationRewritten':False}
           pathlib.Path(sys.argv[2]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n')
+          print(json.dumps(value))
           PY
 
       - name: Prove graph/1 map/1 seq/1 and existing maxGraph UX
@@ -74,14 +67,7 @@ jobs:
             sleep .2
           done
           curl -fsS http://127.0.0.1:4173/app/ >/dev/null
-          node dod/verification/mobile-agent-preset-url-dod/smoke.mjs \
-            "$RUNNER_TEMP/result/cases.json" http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/result/proof"
-          "$chrome" --version > "$RUNNER_TEMP/result/chrome-version.txt"
-
-      - name: Upload non-authority proof
-        uses: actions/upload-artifact@v4
-        with:
-          name: mobile-agent-preset-projection-reconstruction-${{ github.run_id }}
-          path: ${{ runner.temp }}/result/
-          if-no-files-found: error
-          retention-days: 14
+          node "$RUNNER_TEMP/smoke.mjs" "$RUNNER_TEMP/result/cases.json" http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/result/proof"
+          "$chrome" --version
+          cat "$RUNNER_TEMP/result/proof/receipt.json"
+          cat "$RUNNER_TEMP/result/proof/urls.json"
