@@ -18,14 +18,20 @@ const receipt = {
   authority: false,
   publicationTree: fixture.publicationTree,
   stableBase: fixture.stableBase,
+  proofOnlyFavicon204: true,
   cases: [],
 };
 try {
   for (const item of fixture.cases) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     const errors = [];
+    const failedResponses = [];
+    await page.route("**/favicon.ico", route => route.fulfill({ status: 204, contentType: "image/x-icon", body: "" }));
     page.on("pageerror", error => errors.push(String(error)));
     page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    page.on("response", response => {
+      if (response.status() >= 400) failedResponses.push({ status: response.status(), url: response.url() });
+    });
     await page.goto(item.url, { waitUntil: "networkidle", timeout: 75_000 });
     await page.waitForFunction(() => document.querySelector("#status")?.textContent?.trim() === "PASS", null, { timeout: 75_000 });
     const observation = await page.evaluate(() => {
@@ -61,6 +67,7 @@ try {
       assert.equal(observation.canvas, null);
     }
     assert.deepEqual(errors, []);
+    assert.deepEqual(failedResponses, []);
     const observed = new URL(observation.href);
     const requested = new URL(item.url);
     assert.equal(observed.origin, requested.origin);
@@ -80,6 +87,7 @@ try {
       capability: "render.a2ui@1",
       outputContract: "a2ui-render-receipt/1",
       browserErrors: 0,
+      failedResponses: 0,
     });
     await page.close();
   }
