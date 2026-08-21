@@ -12,6 +12,7 @@ on:
       - proposals
     paths:
       - .github/workflows/proof-hq-vim-runtime-carry.yml
+      - verification/hq-vim-runtime-carry/request.json
 
 permissions:
   contents: read
