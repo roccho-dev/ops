@@ -24,7 +24,7 @@
   },
   "trigger": {
     "kind": "owner-issue-comment",
-    "issue": 160,
+    "issue": 230,
     "command": "/artifact-runtime-deploy"
   },
   "readback": {
