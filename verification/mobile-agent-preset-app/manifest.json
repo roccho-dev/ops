@@ -1,0 +1,116 @@
+{
+  "architectureIssue": 233,
+  "authority": false,
+  "bootstrap": {
+    "allowedUntilSourceAuthorityPromotion": true,
+    "baseUrl": "https://mobile-agent.roccho.workers.dev/",
+    "kind": "verified-existing-static-projection"
+  },
+  "boundaries": {
+    "gitSourceAuthorityRequiredForFinalClose": true,
+    "mutableLatestAllowed": false,
+    "newCodecAllowed": false,
+    "newPresetAllowed": false,
+    "newRendererAllowed": false,
+    "receiptsAreAuthority": false,
+    "releaseIsProjection": true,
+    "staticHostIsProjection": true,
+    "uploadedZipAllowed": false
+  },
+  "fixtures": [
+    {
+      "id": "graph",
+      "labels": ["Product delivery graph", "顧客要求", "採否判断", "顧客成果"],
+      "path": "fixtures/graph.jsonl",
+      "sha256": "sha256:6fa8377c6d23aa74b65040eff645024f1c124ea4f8f9bf154aec1c316243891c",
+      "view": {"pattern": "graph/1"}
+    },
+    {
+      "id": "map",
+      "labels": ["AI図編集の例", "User", "App", "AI"],
+      "path": "fixtures/map.jsonl",
+      "sha256": "sha256:51feabbd925dc800a23ad5c016fccd94d295bc9f577c0eebc0e835a6b834c634",
+      "view": {"pattern": "map/1"}
+    },
+    {
+      "id": "seq",
+      "labels": ["Decision review sequence", "Human", "Agent"],
+      "path": "fixtures/seq.jsonl",
+      "sha256": "sha256:94de0b233bcdfdb8c471484b2505bbfd2a23170d54b1de8fdc46b5b1815bcda4",
+      "view": {"pattern": "seq/1", "seq": {"axis": "ordinal", "groupBy": "actor"}}
+    }
+  ],
+  "id": "mobile-agent-presets",
+  "operationsIssue": 242,
+  "presetContract": {
+    "interactionShell": "packages/app/main.js",
+    "presets": [
+      {"editable": true, "id": "graph/1", "surface": "maxgraph"},
+      {"editable": true, "id": "map/1", "surface": "maxgraph"},
+      {"editable": true, "id": "seq/1", "surface": "maxgraph"}
+    ],
+    "registry": "packages/pattern/view-types/registry.js",
+    "renderer": "packages/renderer-maxgraph/adapter.js",
+    "urlCodec": "packages/transport/smap-codec.js"
+  },
+  "provider": {
+    "environment": "cloudflare-production",
+    "kind": "cloudflare-pages",
+    "productionBranch": "proposals",
+    "project": "stg-mobile-agent",
+    "rootOwned": true,
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "publication": {
+    "archive": {
+      "bytes": 5221932,
+      "name": "mobile-agent-preset.b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145.tar.gz",
+      "sha256": "sha256:40adad171eb3044f17bfdb9d6f89fa92cdd66c6293b2e946cae390ea7db64924"
+    },
+    "carrier": {
+      "bytes": 6962576,
+      "codec": "standard-base64-no-whitespace",
+      "name": "mobile-agent-preset.b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145.tar.gz.b64.txt",
+      "sha256": "sha256:c13d90e1e9f1c74c23fa2186f1b184324ef9f17d37ae5c384b220c3e92253d77"
+    },
+    "distTreeDigest": "sha256:b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145",
+    "listedFiles": 54,
+    "tag": "mobile-agent-preset-b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145",
+    "totalBytes": 22141991
+  },
+  "readback": {
+    "browser": {
+      "graphDragUndoRedo": true,
+      "handoff": true,
+      "mapZoom": true,
+      "maxGraph": true,
+      "patternSwitch": true,
+      "proposalReview": true,
+      "seqEditUndo": true,
+      "sourceExport": true,
+      "toolbar": true
+    },
+    "expectedFiles": 54,
+    "verifyAllFileHashes": true
+  },
+  "routes": ["/", "/app", "/app/example", "/assets", "/help", "/protocol", "/example", "/.well-known"],
+  "schema": "ops.mobileAgentPresetApp/1",
+  "source": {
+    "externalSourceCommit": "1daa001bf780053f4319e3fb20b4ea9a6e0d0442",
+    "externalSourceTree": "59ff130fc7e20a4b5762c21fe97b417fc7a454ad",
+    "fullBundleSha256": "sha256:208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6",
+    "fullHistoryCommits": 108,
+    "sourceAuthorityCandidate": {
+      "commit": "608229b5a0b6fe370b07cef7c11a062e7add5ae1",
+      "fullHistoryIncluded": false,
+      "generatedDistIncluded": false,
+      "implementationRewritten": false,
+      "ref": "source/mobile-agent-presets-v1",
+      "repository": "roccho-dev/ops",
+      "status": "pending-promotion",
+      "tree": "2abfe78594e92831009236df6d34902990be020d"
+    }
+  },
+  "status": "candidate",
+  "version": "1"
+}
