@@ -1,0 +1,87 @@
+name: Mobile Agent public URL gate selftest
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-public-url-gate-selftest.yml'
+      - '.github/workflows/mobile-agent-public-url-acceptance.yml'
+      - '.github/workflows/mobile-agent-public-url-required.yml'
+      - 'tools/check-mobile-agent-public-url.py'
+      - 'tools/normalize-mobile-agent-public-url.py'
+      - 'verification/mobile-agent-public-url/**'
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    name: proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Compile and self-test the validator
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            tools/check-mobile-agent-public-url.py \
+            tools/normalize-mobile-agent-public-url.py
+          python3 tools/check-mobile-agent-public-url.py selftest \
+            --out "$RUNNER_TEMP/validator-selftest.json"
+
+      - name: Normalize a positive proof and validate it
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/fixture"
+          python3 - "$RUNNER_TEMP/fixture" "$CANDIDATE_SHA" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); sha=sys.argv[2]
+          fragment='smap='+'a'*80
+          envelope={'view':{'pattern':'seq/1'},'proof':'fixture'}
+          stable_url='https://stg-mobile-agent.pages.dev/app/#'+fragment
+          immutable_url='https://abc123.stg-mobile-agent.pages.dev/app/#'+fragment
+          stable_urls={'schema':'ops.mobileAgentPresetUrls/1','authority':False,'base':'https://stg-mobile-agent.pages.dev/','cases':[{'id':'seq','view':{'pattern':'seq/1'},'url':stable_url,'envelope':envelope}]}
+          immutable_urls={'schema':'ops.mobileAgentPresetUrls/1','authority':False,'base':'https://abc123.stg-mobile-agent.pages.dev/','cases':[{'id':'seq','view':{'pattern':'seq/1'},'url':immutable_url,'envelope':envelope}]}
+          controls=[{'id':value,'present':True} for value in ('pattern-select','add-node','undo','redo','delete','source-open','handoff-fab','review-layer')]
+          def browser(url):
+              return {'schema':'ops.mobileAgentPresetBrowserProof/1','status':'PASS','authority':False,'cases':[{'id':'seq','status':'PASS','pattern':'seq/1','maxGraph':True,'controls':controls,'interaction':{'before':'Human','changed':'Human proof','restored':'Human'},'sourceExportBytes':10,'url':url,'browserErrors':0,'failedResponses':0}]}
+          readback={'schema':'ops.mobileAgentPresetPublicReadback/1','status':'PASS','authority':False,'project':'stg-mobile-agent','files':[{'path':'app/index.html','bytes':2412388,'sha256':'3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'}]}
+          manifest={'schema':'ops.mobileAgentPresetApp/1','publication':{'tag':'mobile-agent-preset-fixture','carrier':{'sha256':'sha256:'+'b'*64}}}
+          values={'stable-urls.json':stable_urls,'immutable-urls.json':immutable_urls,'stable-browser.json':browser(stable_url),'immutable-browser.json':browser(immutable_url),'stable-readback.json':readback,'immutable-readback.json':readback,'manifest.json':manifest}
+          for name,value in values.items(): (root/name).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          python3 tools/normalize-mobile-agent-public-url.py \
+            --stable-urls "$RUNNER_TEMP/fixture/stable-urls.json" \
+            --immutable-urls "$RUNNER_TEMP/fixture/immutable-urls.json" \
+            --stable-browser "$RUNNER_TEMP/fixture/stable-browser.json" \
+            --immutable-browser "$RUNNER_TEMP/fixture/immutable-browser.json" \
+            --stable-readback "$RUNNER_TEMP/fixture/stable-readback.json" \
+            --immutable-readback "$RUNNER_TEMP/fixture/immutable-readback.json" \
+            --manifest "$RUNNER_TEMP/fixture/manifest.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --run-id 1 \
+            --artifact-digest "sha256:$(printf 'd%.0s' {1..64})" \
+            --out "$RUNNER_TEMP/public-url-receipt.json"
+          python3 tools/check-mobile-agent-public-url.py check \
+            --contract verification/mobile-agent-public-url/contract.json \
+            --receipt "$RUNNER_TEMP/public-url-receipt.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --out "$RUNNER_TEMP/accepted-public-url-receipt.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-public-url-gate-selftest
+          path: |
+            ${{ runner.temp }}/validator-selftest.json
+            ${{ runner.temp }}/public-url-receipt.json
+            ${{ runner.temp }}/accepted-public-url-receipt.json
+          if-no-files-found: error
+          retention-days: 30
