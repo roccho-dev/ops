@@ -1,0 +1,71 @@
+name: Append Mobile Agent Carrier CI intent
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-append-mobile-agent-carrier-ci-intent.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_BRANCH: proposal/mobile-agent-carrier-pages-260822
+      EXPECTED_HEAD: 65b37abb2da1633fa0e98b22ba6db21beccb90b5
+      TARGET_PATH: .github/workflows/mobile-agent-carrier-pages.yml
+    steps:
+      - name: Append exactly one checked-in CI intent row
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          observed="$(git ls-remote "$remote" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test "$observed" = "$EXPECTED_HEAD"
+          git clone --quiet --depth=1 --branch "$TARGET_BRANCH" "$remote" product
+          python3 - product/ci.intent.v1.jsonl <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          rows = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+          target = '.github/workflows/mobile-agent-carrier-pages.yml'
+          assert not any(row.get('path') == target for row in rows)
+          rows.append({
+              'kind': 'ci.intent.v1',
+              'path': target,
+              'provider': 'github-actions',
+              'role': 'bootstrap_exception',
+              'entrypoint': 'PR reconstruct exact owner-pinned ops#279 Carrier and prove existing maxGraph locally; proposals push or owner /mobile-agent-carrier-deploy -> immutable Release -> dedicated stg-mobile-agent Pages -> full-byte and stable/immutable browser proof',
+              'source': 'ops#279 owner-pinned 32-chunk immutable Carrier plus verification/mobile-agent-carrier-ingress',
+              'authority': False,
+              'dispatch': ['pull_request', 'push', 'issue_comment'],
+              'push_branches': ['proposals'],
+              'generation_mode': 'checked_in',
+              'workflow_definition': 'checked_in',
+              'artifact_source': 'issue-279 Carrier, immutable GitHub Release, Pages deployment and browser receipts',
+              'artifact_generation': 'generated',
+              'final_role': 'mobile_agent_carrier_public_url_projection',
+              'all_repositories_enforced': False,
+              'exception': {
+                  'owner': 'ops#279',
+                  'reason': 'bounded GitHub Issue ingress and Cloudflare Pages adapter; Git source remains authority and existing preset App bytes are not rewritten',
+                  'expiry': '2027-08-22',
+                  'return_condition': 'replace only the issue-comment ingress/provider adapters after an equivalent immutable App Carrier registry is adopted',
+              },
+          })
+          path.write_text('\n'.join(json.dumps(row, sort_keys=True, separators=(',', ':'), ensure_ascii=False) for row in rows) + '\n', encoding='utf-8')
+          PY
+          git -C product diff --check
+          test "$(git -C product diff --name-only)" = ci.intent.v1.jsonl
+          git -C product config user.name github-actions[bot]
+          git -C product config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C product add ci.intent.v1.jsonl
+          git -C product commit --quiet -m 'chore: register Mobile Agent Carrier workflow intent'
+          git -C product push --quiet origin "$TARGET_BRANCH"
