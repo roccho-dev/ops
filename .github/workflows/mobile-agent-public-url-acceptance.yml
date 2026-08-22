@@ -32,7 +32,8 @@ jobs:
     name: gate
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 35
+    environment: cloudflare-production
     steps:
       - name: Checkout trusted acceptance code
         uses: actions/checkout@v4
@@ -62,13 +63,13 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"
           python3 - "$RUNNER_TEMP/run.json" "$RUNNER_TEMP/artifacts.json" \
             verification/mobile-agent-public-url/contract.json > "$RUNNER_TEMP/source.env" <<'PY'
-          import json, re, sys
+          import json,re,sys
           run=json.load(open(sys.argv[1],encoding='utf-8'))
           artifacts=json.load(open(sys.argv[2],encoding='utf-8')).get('artifacts',[])
           contract=json.load(open(sys.argv[3],encoding='utf-8'))
           assert run.get('status')=='completed'
           assert run.get('conclusion')=='success'
-          assert run.get('name') in contract['producerWorkflows'], run.get('name')
+          assert run.get('name') in contract['producerWorkflows'],run.get('name')
           assert run.get('event') in {'pull_request','push','issue_comment','workflow_dispatch'}
           sha=run.get('head_sha','')
           assert re.fullmatch(r'[0-9a-f]{40}',sha)
@@ -76,8 +77,19 @@ jobs:
               assert run.get('head_branch')=='proposals'
           prefixes=tuple(contract['artifactPrefixes'])
           matches=[a for a in artifacts if not a.get('expired') and str(a.get('name','')).startswith(prefixes)]
-          assert len(matches)==1, [(a.get('id'),a.get('name')) for a in matches]
-          artifact=matches[0]
+          final_prefixes=(
+              'mobile-agent-preset-deployment-',
+              'mobile-agent-public-urls-',
+              'mobile-agent-seq-public-url-',
+              'mobile-agent-seq-public-',
+          )
+          finals=[a for a in matches if str(a.get('name','')).startswith(final_prefixes)]
+          staged=[a for a in matches if str(a.get('name','')).startswith('mobile-agent-preset-site-')]
+          if len(finals)==1:
+              artifact=finals[0]
+          else:
+              assert len(finals)==0 and len(staged)==1,[(a.get('id'),a.get('name')) for a in matches]
+              artifact=staged[0]
           digest=artifact.get('digest')
           assert isinstance(digest,str) and re.fullmatch(r'sha256:[0-9a-f]{64}',digest)
           print(f"run_id={run['id']}")
@@ -90,6 +102,14 @@ jobs:
           PY
           cat "$RUNNER_TEMP/source.env" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout exact candidate as untrusted data only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.candidate_sha }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Download the exact producer artifact
         env:
           GH_TOKEN: ${{ github.token }}
@@ -101,7 +121,128 @@ jobs:
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --name "$ARTIFACT_NAME" --dir "$RUNNER_TEMP/proof"
 
-      - name: Normalize or read the canonical public URL receipt
+      - name: Deploy an exact staged candidate when public proof is absent
+        id: public
+        env:
+          CANDIDATE_SHA: ${{ steps.source.outputs.candidate_sha }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stable_urls="$(find "$RUNNER_TEMP/proof" -type f -name stable-urls.json -print -quit)"
+          immutable_urls="$(find "$RUNNER_TEMP/proof" -type f -name immutable-urls.json -print -quit)"
+          stable_readback="$(find "$RUNNER_TEMP/proof" -type f -name readback-stable.json -print -quit)"
+          immutable_readback="$(find "$RUNNER_TEMP/proof" -type f -name readback-immutable.json -print -quit)"
+          manifest="$(find "$RUNNER_TEMP/proof" -type f -name manifest.json -print -quit)"
+
+          if [ -z "$stable_urls" ] || [ -z "$immutable_urls" ] || [ -z "$stable_readback" ] || [ -z "$immutable_readback" ]; then
+            app="$(find "$RUNNER_TEMP/proof" -type f -path '*/dist/app/index.html' -print -quit)"
+            expected="$(find "$RUNNER_TEMP/proof" -type f -name expected.json -print -quit)"
+            test -n "$app"
+            test -n "$expected"
+            test -n "$manifest"
+            dist="$(dirname "$(dirname "$app")")"
+            test -f "$dist/protocol/v3/codec.mjs"
+            python3 - "$manifest" "$expected" <<'PY'
+          import json,sys
+          manifest=json.load(open(sys.argv[1],encoding='utf-8'))
+          expected=json.load(open(sys.argv[2],encoding='utf-8'))
+          assert manifest['schema']=='ops.mobileAgentPresetApp/1'
+          assert expected['schema']=='semantic-map-build-artifact/1'
+          assert len(expected['files'])>0
+          assert manifest['provider']['project']=='stg-mobile-agent'
+          PY
+            test -n "$CLOUDFLARE_ACCOUNT_ID"
+            test -n "$CLOUDFLARE_API_TOKEN"
+            api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/stg-mobile-agent"
+            code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H 'Content-Type: application/json' "$api")"
+            if [ "$code" = 404 ]; then
+              npx --yes wrangler@4.112.0 pages project create stg-mobile-agent \
+                --production-branch proposals
+            elif [ "$code" = 200 ]; then
+              python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['success'] is True
+          assert value['result']['name']=='stg-mobile-agent'
+          assert value['result']['production_branch']=='proposals'
+          PY
+            else
+              cat "$RUNNER_TEMP/project.json" >&2
+              exit 1
+            fi
+
+            output="$(npx --yes wrangler@4.112.0 pages deploy "$dist" \
+              --project-name stg-mobile-agent \
+              --branch proposals \
+              --commit-hash "$CANDIDATE_SHA" \
+              --commit-message 'Mobile Agent candidate public URL acceptance' 2>&1)"
+            printf '%s\n' "$output"
+            deployment="$(printf '%s\n' "$output" \
+              | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' \
+              | grep -v '^https://stg-mobile-agent\.pages\.dev$' \
+              | head -n1 || true)"
+            test -n "$deployment"
+            stable_base='https://stg-mobile-agent.pages.dev/'
+            immutable_base="$deployment/"
+
+            app_bytes="$(wc -c < "$app")"
+            app_sha="$(sha256sum "$app" | cut -d' ' -f1)"
+            for entry in stable="$stable_base" immutable="$immutable_base"; do
+              name="${entry%%=*}"
+              base="${entry#*=}"
+              target="$RUNNER_TEMP/${name}-candidate-app.html"
+              matched=false
+              for attempt in $(seq 1 90); do
+                if curl --fail-with-body --location --silent --show-error \
+                  -H 'Cache-Control: no-cache' "${base}app/" -o "$target"; then
+                  if [ "$(wc -c < "$target")" -eq "$app_bytes" ] && \
+                     [ "$(sha256sum "$target" | cut -d' ' -f1)" = "$app_sha" ]; then
+                    matched=true
+                    break
+                  fi
+                fi
+                sleep 2
+              done
+              test "$matched" = true
+            done
+
+            stable_urls="$RUNNER_TEMP/stable-urls.json"
+            immutable_urls="$RUNNER_TEMP/immutable-urls.json"
+            stable_readback="$RUNNER_TEMP/readback-stable.json"
+            immutable_readback="$RUNNER_TEMP/readback-immutable.json"
+            READBACK_RECEIPT="$stable_readback" python3 \
+              verification/mobile-agent-preset-app/readback.py \
+              "$dist" "$stable_base" "$expected" "$manifest" "$CANDIDATE_SHA"
+            READBACK_RECEIPT="$immutable_readback" python3 \
+              verification/mobile-agent-preset-app/readback.py \
+              "$dist" "$immutable_base" "$expected" "$manifest" "$CANDIDATE_SHA"
+            node verification/mobile-agent-preset-app/generate-urls.mjs \
+              "$dist" "$manifest" "$stable_base" "$stable_urls"
+            node verification/mobile-agent-preset-app/generate-urls.mjs \
+              "$dist" "$manifest" "$immutable_base" "$immutable_urls"
+          fi
+
+          test -n "$stable_urls"
+          test -n "$immutable_urls"
+          test -n "$stable_readback"
+          test -n "$immutable_readback"
+          if [ -z "$manifest" ]; then
+            manifest="$GITHUB_WORKSPACE/candidate/verification/mobile-agent-preset-app/manifest.json"
+          fi
+          test -f "$manifest"
+          {
+            echo "stable_urls=$stable_urls"
+            echo "immutable_urls=$immutable_urls"
+            echo "stable_readback=$stable_readback"
+            echo "immutable_readback=$immutable_readback"
+            echo "manifest=$manifest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Re-open stable and immutable URLs in real Chrome
         env:
           CANDIDATE_SHA: ${{ steps.source.outputs.candidate_sha }}
           RUN_ID: ${{ steps.source.outputs.run_id }}
@@ -109,41 +250,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          direct="$(find "$RUNNER_TEMP/proof" -type f -name public-url-receipt.json -print -quit)"
-          if [ -n "$direct" ]; then
-            cp "$direct" "$RUNNER_TEMP/public-url-receipt.json"
-          else
-            stable_urls="$(find "$RUNNER_TEMP/proof" -type f -name stable-urls.json -print -quit)"
-            immutable_urls="$(find "$RUNNER_TEMP/proof" -type f -name immutable-urls.json -print -quit)"
-            stable_readback="$(find "$RUNNER_TEMP/proof" -type f -name readback-stable.json -print -quit)"
-            immutable_readback="$(find "$RUNNER_TEMP/proof" -type f -name readback-immutable.json -print -quit)"
-            test -n "$stable_urls"
-            test -n "$immutable_urls"
-            test -n "$stable_readback"
-            test -n "$immutable_readback"
-
-            python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-            chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
-            test -n "$chrome"
-            mkdir -p "$RUNNER_TEMP/stable-screenshots" "$RUNNER_TEMP/immutable-screenshots"
-            CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
-              "$stable_urls" "$RUNNER_TEMP/stable-browser.json" "$RUNNER_TEMP/stable-screenshots"
-            CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
-              "$immutable_urls" "$RUNNER_TEMP/immutable-browser.json" "$RUNNER_TEMP/immutable-screenshots"
-
-            python3 tools/normalize-mobile-agent-public-url.py \
-              --stable-urls "$stable_urls" \
-              --immutable-urls "$immutable_urls" \
-              --stable-browser "$RUNNER_TEMP/stable-browser.json" \
-              --immutable-browser "$RUNNER_TEMP/immutable-browser.json" \
-              --stable-readback "$stable_readback" \
-              --immutable-readback "$immutable_readback" \
-              --manifest verification/mobile-agent-preset-app/manifest.json \
-              --candidate-sha "$CANDIDATE_SHA" \
-              --run-id "$RUN_ID" \
-              --artifact-digest "$ARTIFACT_DIGEST" \
-              --out "$RUNNER_TEMP/public-url-receipt.json"
-          fi
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          mkdir -p "$RUNNER_TEMP/stable-screenshots" "$RUNNER_TEMP/immutable-screenshots"
+          CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
+            '${{ steps.public.outputs.stable_urls }}' \
+            "$RUNNER_TEMP/stable-browser.json" "$RUNNER_TEMP/stable-screenshots"
+          CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
+            '${{ steps.public.outputs.immutable_urls }}' \
+            "$RUNNER_TEMP/immutable-browser.json" "$RUNNER_TEMP/immutable-screenshots"
+          python3 tools/normalize-mobile-agent-public-url.py \
+            --stable-urls '${{ steps.public.outputs.stable_urls }}' \
+            --immutable-urls '${{ steps.public.outputs.immutable_urls }}' \
+            --stable-browser "$RUNNER_TEMP/stable-browser.json" \
+            --immutable-browser "$RUNNER_TEMP/immutable-browser.json" \
+            --stable-readback '${{ steps.public.outputs.stable_readback }}' \
+            --immutable-readback '${{ steps.public.outputs.immutable_readback }}' \
+            --manifest '${{ steps.public.outputs.manifest }}' \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --run-id "$RUN_ID" \
+            --artifact-digest "$ARTIFACT_DIGEST" \
+            --out "$RUNNER_TEMP/public-url-receipt.json"
 
       - name: Validate exact candidate and emit the accepted receipt
         env:
@@ -165,6 +293,8 @@ jobs:
             ${{ runner.temp }}/public-url-receipt.json
             ${{ runner.temp }}/accepted-public-url-receipt.json
             ${{ runner.temp }}/public-url-selftest.json
+            ${{ runner.temp }}/stable-browser.json
+            ${{ runner.temp }}/immutable-browser.json
             ${{ runner.temp }}/stable-screenshots/
             ${{ runner.temp }}/immutable-screenshots/
           if-no-files-found: error
