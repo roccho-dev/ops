@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   diagnose:
@@ -77,14 +76,4 @@ jobs:
           }
           fs.writeFileSync(1, JSON.stringify(report,null,2));
           JS
-          python3 - "$RUNNER_TEMP/report.json" > "$RUNNER_TEMP/comment.md" <<'PY'
-          import json,sys
-          value=json.load(open(sys.argv[1],encoding='utf-8'))
-          print('## Mobile Agent Brotli part diagnosis')
-          print()
-          print('```json')
-          print(json.dumps(value,ensure_ascii=False,indent=2))
-          print('```')
-          print('\nRead-only diagnostic; no source, projection, Release, Pages or URL changed.')
-          PY
-          gh pr comment "$GITHUB_EVENT_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          cat "$RUNNER_TEMP/report.json"
