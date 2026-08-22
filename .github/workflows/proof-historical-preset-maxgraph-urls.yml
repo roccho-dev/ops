@@ -1,4 +1,4 @@
-name: Prove historical preset maxGraph URLs
+name: Diagnose historical preset handoff
 
 on:
   pull_request:
@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  prove:
+  diagnose:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -21,28 +21,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-      - name: Open exact existing preset URLs in real Chrome
+      - name: Observe exact handoff payloads and preset behavior
         shell: bash
         run: |
           set -euo pipefail
           npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           test -n "$chrome"
-          sed \
-            -e '/envelope: globalThis.semanticMapRuntime.envelope(),/d' \
-            -e '/assert.equal(state.envelope.view.pattern/d' \
-            verification/mobile-agent-preset-url-dod/historical-smoke.mjs \
-            > verification/mobile-agent-preset-url-dod/historical-smoke-run.mjs
-          node verification/mobile-agent-preset-url-dod/historical-smoke-run.mjs \
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('verification/mobile-agent-preset-url-dod/historical-smoke.mjs')
+          source=path.read_text(encoding='utf-8')
+          old='    assert.ok(handoff.clipboard.includes("#smap="), `${item.id}: handoff exact state URL`);\n'
+          new='    fs.writeFileSync(path.join(out, `handoff-${item.id}.json`), `${JSON.stringify({ id: item.id, href: state.href, clipboard: handoff.clipboard, status: handoff.status, textSize: handoff.textSize }, null, 2)}\\n`);\n'
+          assert source.count(old)==1, source.count(old)
+          path.with_name('historical-smoke-diagnostic.mjs').write_text(source.replace(old,new),encoding='utf-8')
+          PY
+          mkdir -p /tmp/proof
+          set +e
+          node verification/mobile-agent-preset-url-dod/historical-smoke-diagnostic.mjs \
             verification/mobile-agent-preset-url-dod/cases.json \
             https://ea18b86d.stg-mobile.pages.dev/ \
             "$chrome" \
-            /tmp/proof
+            /tmp/proof \
+            > /tmp/proof/stdout.txt 2> /tmp/proof/stderr.txt
+          rc=$?
+          set -e
+          printf '%s\n' "$rc" > /tmp/proof/exit-code.txt
           "$chrome" --version > /tmp/proof/chrome-version.txt
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: historical-preset-maxgraph-urls-${{ github.run_id }}
+          name: historical-preset-handoff-diagnostic-${{ github.run_id }}
           path: /tmp/proof/
+          include-hidden-files: true
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
