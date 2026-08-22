@@ -1,0 +1,244 @@
+name: Mobile Agent public URL acceptance
+
+on:
+  workflow_run:
+    workflows:
+      - Mobile Agent preset static host
+      - Mobile Agent preset Carrier and static host
+      - Mobile Agent preset URL DoD
+      - Mobile Agent live bootstrap deploy
+      - Mobile Agent Seq publish now
+      - Mobile Agent Seq Carrier deploy
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Exact successful producer workflow run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: mobile-agent-public-url-acceptance
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: gate
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout trusted acceptance code
+        uses: actions/checkout@v4
+        with:
+          ref: proposals
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Self-test the fail-closed receipt validator
+        run: |
+          set -euo pipefail
+          python3 tools/check-mobile-agent-public-url.py selftest \
+            --out "$RUNNER_TEMP/public-url-selftest.json"
+
+      - name: Resolve one exact successful producer run and artifact
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="${EVENT_RUN_ID:-${INPUT_RUN_ID:-}}"
+          test -n "$run_id"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" > "$RUNNER_TEMP/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"
+          python3 - "$RUNNER_TEMP/run.json" "$RUNNER_TEMP/artifacts.json" \
+            verification/mobile-agent-public-url/contract.json > "$RUNNER_TEMP/source.env" <<'PY'
+          import json, re, sys
+          run=json.load(open(sys.argv[1],encoding='utf-8'))
+          artifacts=json.load(open(sys.argv[2],encoding='utf-8')).get('artifacts',[])
+          contract=json.load(open(sys.argv[3],encoding='utf-8'))
+          assert run.get('status')=='completed'
+          assert run.get('conclusion')=='success'
+          assert run.get('name') in contract['producerWorkflows'], run.get('name')
+          assert run.get('event') in {'pull_request','push','issue_comment','workflow_dispatch'}
+          sha=run.get('head_sha','')
+          assert re.fullmatch(r'[0-9a-f]{40}',sha)
+          if run.get('event')!='pull_request':
+              assert run.get('head_branch')=='proposals'
+          prefixes=tuple(contract['artifactPrefixes'])
+          matches=[a for a in artifacts if not a.get('expired') and str(a.get('name','')).startswith(prefixes)]
+          assert len(matches)==1, [(a.get('id'),a.get('name')) for a in matches]
+          artifact=matches[0]
+          digest=artifact.get('digest')
+          assert isinstance(digest,str) and re.fullmatch(r'sha256:[0-9a-f]{64}',digest)
+          print(f"run_id={run['id']}")
+          print(f"candidate_sha={sha}")
+          print(f"producer={run['name']}")
+          print(f"producer_event={run['event']}")
+          print(f"artifact_id={artifact['id']}")
+          print(f"artifact_name={artifact['name']}")
+          print(f"artifact_digest={digest}")
+          PY
+          cat "$RUNNER_TEMP/source.env" >> "$GITHUB_OUTPUT"
+
+      - name: Download the exact producer artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.source.outputs.run_id }}
+          ARTIFACT_NAME: ${{ steps.source.outputs.artifact_name }}
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/proof"
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$ARTIFACT_NAME" --dir "$RUNNER_TEMP/proof"
+
+      - name: Normalize or read the canonical public URL receipt
+        env:
+          CANDIDATE_SHA: ${{ steps.source.outputs.candidate_sha }}
+          RUN_ID: ${{ steps.source.outputs.run_id }}
+          ARTIFACT_DIGEST: ${{ steps.source.outputs.artifact_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          direct="$(find "$RUNNER_TEMP/proof" -type f -name public-url-receipt.json -print -quit)"
+          if [ -n "$direct" ]; then
+            cp "$direct" "$RUNNER_TEMP/public-url-receipt.json"
+          else
+            stable_urls="$(find "$RUNNER_TEMP/proof" -type f -name stable-urls.json -print -quit)"
+            immutable_urls="$(find "$RUNNER_TEMP/proof" -type f -name immutable-urls.json -print -quit)"
+            stable_readback="$(find "$RUNNER_TEMP/proof" -type f -name readback-stable.json -print -quit)"
+            immutable_readback="$(find "$RUNNER_TEMP/proof" -type f -name readback-immutable.json -print -quit)"
+            test -n "$stable_urls"
+            test -n "$immutable_urls"
+            test -n "$stable_readback"
+            test -n "$immutable_readback"
+
+            python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+            chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+            test -n "$chrome"
+            mkdir -p "$RUNNER_TEMP/stable-screenshots" "$RUNNER_TEMP/immutable-screenshots"
+            CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
+              "$stable_urls" "$RUNNER_TEMP/stable-browser.json" "$RUNNER_TEMP/stable-screenshots"
+            CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
+              "$immutable_urls" "$RUNNER_TEMP/immutable-browser.json" "$RUNNER_TEMP/immutable-screenshots"
+
+            python3 tools/normalize-mobile-agent-public-url.py \
+              --stable-urls "$stable_urls" \
+              --immutable-urls "$immutable_urls" \
+              --stable-browser "$RUNNER_TEMP/stable-browser.json" \
+              --immutable-browser "$RUNNER_TEMP/immutable-browser.json" \
+              --stable-readback "$stable_readback" \
+              --immutable-readback "$immutable_readback" \
+              --manifest verification/mobile-agent-preset-app/manifest.json \
+              --candidate-sha "$CANDIDATE_SHA" \
+              --run-id "$RUN_ID" \
+              --artifact-digest "$ARTIFACT_DIGEST" \
+              --out "$RUNNER_TEMP/public-url-receipt.json"
+          fi
+
+      - name: Validate exact candidate and emit the accepted receipt
+        env:
+          CANDIDATE_SHA: ${{ steps.source.outputs.candidate_sha }}
+        run: |
+          set -euo pipefail
+          python3 tools/check-mobile-agent-public-url.py check \
+            --contract verification/mobile-agent-public-url/contract.json \
+            --receipt "$RUNNER_TEMP/public-url-receipt.json" \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --out "$RUNNER_TEMP/accepted-public-url-receipt.json"
+
+      - name: Upload the only reportable URL receipt
+        id: accepted_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-public-url-receipt-${{ steps.source.outputs.run_id }}
+          path: |
+            ${{ runner.temp }}/public-url-receipt.json
+            ${{ runner.temp }}/accepted-public-url-receipt.json
+            ${{ runner.temp }}/public-url-selftest.json
+            ${{ runner.temp }}/stable-screenshots/
+            ${{ runner.temp }}/immutable-screenshots/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Advance the accepted receipt ref by fast-forward only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ steps.source.outputs.candidate_sha }}
+          RUN_ID: ${{ steps.source.outputs.run_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ steps.source.outputs.artifact_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          accepted="$RUNNER_TEMP/accepted"
+          git init --quiet "$accepted"
+          git -C "$accepted" config user.name github-actions[bot]
+          git -C "$accepted" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$accepted" remote add origin "$remote"
+          old="$(git ls-remote "$remote" refs/heads/accepted/mobile-agent-public-url | awk 'NR==1 {print $1}')"
+          if [ -n "$old" ]; then
+            git -C "$accepted" fetch --quiet --depth=1 origin refs/heads/accepted/mobile-agent-public-url
+            git -C "$accepted" checkout --quiet -b accepted FETCH_HEAD
+            git -C "$accepted" rm -rf . >/dev/null 2>&1 || true
+          else
+            git -C "$accepted" checkout --quiet --orphan accepted
+          fi
+          mkdir -p "$accepted/accepted"
+          cp "$RUNNER_TEMP/accepted-public-url-receipt.json" \
+            "$accepted/accepted/public-url-receipt.json"
+          python3 - "$accepted/accepted/provenance.json" <<'PY'
+          import json,os,pathlib,sys
+          value={
+            'schema':'ops.mobileAgentPublicUrlAcceptedProvenance/1',
+            'authority':False,
+            'candidateSha':os.environ['CANDIDATE_SHA'],
+            'producerRunId':int(os.environ['RUN_ID']),
+            'producerArtifactDigest':os.environ['SOURCE_ARTIFACT_DIGEST'],
+          }
+          pathlib.Path(sys.argv[1]).write_text(
+            json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',
+            encoding='utf-8',
+          )
+          PY
+          git -C "$accepted" add accepted
+          git -C "$accepted" commit --quiet -m \
+            "accept: Mobile Agent public URLs for $CANDIDATE_SHA"
+          git -C "$accepted" push --quiet origin \
+            HEAD:refs/heads/accepted/mobile-agent-public-url
+
+      - name: Report URLs from the accepted receipt only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACCEPTANCE_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RECEIPT_ARTIFACT_ID: ${{ steps.accepted_artifact.outputs.artifact-id }}
+          RECEIPT_ARTIFACT_DIGEST: ${{ steps.accepted_artifact.outputs.artifact-digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/accepted-public-url-receipt.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,os,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['status']=='PASS'
+          print('## Mobile Agent public URL acceptance — PASS\n')
+          print(f"- candidate: `{value['candidateSha']}`")
+          for case in value['cases']:
+              print(f"- `{case['preset']}`: {case['stableUrl']}")
+          print(f"- acceptance run: {os.environ['ACCEPTANCE_RUN_URL']}")
+          print(f"- receipt artifact: `{os.environ['RECEIPT_ARTIFACT_ID']}` / `{os.environ['RECEIPT_ARTIFACT_DIGEST']}`")
+          print('- accepted ref: `accepted/mobile-agent-public-url`')
+          print('\nOnly this PASS receipt is reportable. Missing receipt means verified URL count is 0.')
+          PY
+          for issue in 242 233 279; do
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" \
+              --body-file "$RUNNER_TEMP/comment.md"
+          done
