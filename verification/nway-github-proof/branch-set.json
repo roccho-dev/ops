@@ -1,42 +1,42 @@
 {
   "schema": "shiftleft-nway-branch-set/2",
-  "setId": "github-proof.fefd986e.semantic-r3",
+  "setId": "github-proof.fefd986e.semantic-conflict-r4",
   "baseCommit": "fefd986e460756b17cc03231c0c7d3274bb48e26",
   "baseTree": "e5f3c455f43b81acb100f6e0229777fe4cae707c",
   "closedWorld": true,
-  "refPrefix": "refs/heads/proof/nway-semantic-fefd986e-r3/",
+  "refPrefix": "refs/heads/proof/nway-semantic-fefd986e-r4/",
   "members": [
     {
       "id": "provider",
-      "ref": "refs/heads/proof/nway-semantic-fefd986e-r3/provider",
-      "candidateCommit": "191f2fcb3906e7ba99da2b6c7b19ad9f05a6d1b6",
-      "candidateTree": "4cc081020eb106443667a119978a845dbdde1514",
+      "ref": "refs/heads/proof/nway-semantic-fefd986e-r4/provider",
+      "candidateCommit": "b662a1df315a7b9d7eb6d788ac9005ace302bd11",
+      "candidateTree": "e8fc6da53a2e25db5de95dbc484ff91f90796fcf",
       "required": true,
       "intent": "provider candidate",
       "declaredScopes": [
-        "verification/nway-semantic-fefd986e-r3/provider.json"
+        "verification/nway-semantic-fefd986e-r4/provider.json"
       ]
     },
     {
       "id": "consumer",
-      "ref": "refs/heads/proof/nway-semantic-fefd986e-r3/consumer",
-      "candidateCommit": "a80bcbf5ca17413403b4f248a0e9b929d91ac604",
-      "candidateTree": "f8159ee48a6eed98ae8f051e4e48ae80b2961142",
+      "ref": "refs/heads/proof/nway-semantic-fefd986e-r4/consumer",
+      "candidateCommit": "794818371009dee0691604cbe3854388ff6e7b9a",
+      "candidateTree": "e36ca9996138440477078581efe1de29737f711d",
       "required": true,
       "intent": "consumer candidate",
       "declaredScopes": [
-        "verification/nway-semantic-fefd986e-r3/consumer.json"
+        "verification/nway-semantic-fefd986e-r4/consumer.json"
       ]
     },
     {
       "id": "independent",
-      "ref": "refs/heads/proof/nway-semantic-fefd986e-r3/independent",
-      "candidateCommit": "d8f87e1e0faca11de0a002195e68f8b2549f4508",
-      "candidateTree": "df97e1b736f82e1ca1e8a700ace920f1903ab634",
+      "ref": "refs/heads/proof/nway-semantic-fefd986e-r4/independent",
+      "candidateCommit": "aaa050ccc0750309ae9359ea30e9153c021b6864",
+      "candidateTree": "b7442cd96d9d9f55865b5b3f29acc31804dec457",
       "required": true,
       "intent": "independent candidate",
       "declaredScopes": [
-        "verification/nway-semantic-fefd986e-r3/independent.txt"
+        "verification/nway-semantic-fefd986e-r4/independent.txt"
       ]
     }
   ],
@@ -51,7 +51,7 @@
           "memberId": "provider",
           "direction": "provides",
           "provider": "json-pointer",
-          "path": "verification/nway-semantic-fefd986e-r3/provider.json",
+          "path": "verification/nway-semantic-fefd986e-r4/provider.json",
           "selector": "/value",
           "required": true
         },
@@ -60,7 +60,7 @@
           "memberId": "consumer",
           "direction": "requires",
           "provider": "json-pointer",
-          "path": "verification/nway-semantic-fefd986e-r3/consumer.json",
+          "path": "verification/nway-semantic-fefd986e-r4/consumer.json",
           "selector": "/expected",
           "required": true
         }

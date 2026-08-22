@@ -1,1 +1,1 @@
-{"terminalState":"COMPLETED","stopReason":"NONE","decisionRequired":false,"effectApplied":true}
+{"terminalState":"CURRENT_ATTEMPT_ENDED","stopReason":"S5_BLOCK","decisionRequired":true,"effectApplied":false}
