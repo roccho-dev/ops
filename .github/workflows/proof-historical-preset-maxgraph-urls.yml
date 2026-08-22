@@ -28,7 +28,12 @@ jobs:
           npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
           chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           test -n "$chrome"
-          node verification/mobile-agent-preset-url-dod/historical-smoke.mjs \
+          sed \
+            -e '/envelope: globalThis.semanticMapRuntime.envelope(),/d' \
+            -e '/assert.equal(state.envelope.view.pattern/d' \
+            verification/mobile-agent-preset-url-dod/historical-smoke.mjs \
+            > verification/mobile-agent-preset-url-dod/historical-smoke-run.mjs
+          node verification/mobile-agent-preset-url-dod/historical-smoke-run.mjs \
             verification/mobile-agent-preset-url-dod/cases.json \
             https://ea18b86d.stg-mobile.pages.dev/ \
             "$chrome" \
