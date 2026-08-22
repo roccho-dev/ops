@@ -1,0 +1,40 @@
+{
+  "schema": "ops.mobileAgentSeqIngress/2",
+  "authority": false,
+  "issue": 286,
+  "transport": {
+    "prefix": "SEQ-CARRIER-CHUNK/2",
+    "chunks": 10,
+    "base64Bytes": 568192,
+    "base64Sha256": "sha256:4d137be8ae864a1a634c59664343d65da6298bb680f003faf71d4421234e2213",
+    "archiveName": "mobile-agent-seq-carrier.tar.xz",
+    "archiveBytes": 426144,
+    "archiveSha256": "sha256:516a740503c8a22b1b4e0051fab3f5b9a942578fea8fd016323a0ccbe54c3e0d"
+  },
+  "app": {
+    "path": "dist/app/index.html",
+    "bytes": 2412388,
+    "sha256": "sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+  },
+  "runtime": {
+    "preset": "seq/1",
+    "fixture": "fixtures/seq.jsonl",
+    "fixtureSha256": "sha256:94de0b233bcdfdb8c471484b2505bbfd2a23170d54b1de8fdc46b5b1815bcda4",
+    "compiler": "bin/compile-url.mjs",
+    "codec": "dist/protocol/v3/codec.mjs",
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "project": "stg-mobile-agent",
+    "productionBranch": "proposals"
+  },
+  "boundary": {
+    "sourceCloneUsed": false,
+    "sourceBuildUsed": false,
+    "customSeqImplementation": false,
+    "exampleHtmlIsProof": false,
+    "publicChromeRequired": true,
+    "mutableLatestAllowed": false
+  }
+}
