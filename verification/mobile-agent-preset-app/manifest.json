@@ -20,7 +20,7 @@
   "fixtures": [
     {
       "id": "graph",
-      "labels": ["Product delivery graph", "顧客要求", "採否判断", "顧客成果"],
+      "labels": ["Product delivery graph", "顧客要求", "採否判断", "検証証跡"],
       "path": "fixtures/graph.jsonl",
       "sha256": "sha256:6fa8377c6d23aa74b65040eff645024f1c124ea4f8f9bf154aec1c316243891c",
       "view": {"pattern": "graph/1"}
