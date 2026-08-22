@@ -4,6 +4,7 @@
   "repository": "roccho-dev/ops",
   "acceptedRef": "accepted/mobile-agent-public-url",
   "requiredCheck": "Mobile Agent public URL required / gate",
+  "requiredBranchRuleIssue": 293,
   "stableOrigin": "https://stg-mobile-agent.pages.dev",
   "allowedPresets": [
     "graph/1",
