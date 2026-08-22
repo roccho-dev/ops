@@ -1,0 +1,42 @@
+{
+  "schema": "ops.mobileAgentPublicUrlContract/1",
+  "authority": false,
+  "repository": "roccho-dev/ops",
+  "acceptedRef": "accepted/mobile-agent-public-url",
+  "requiredCheck": "Mobile Agent public URL required / gate",
+  "stableOrigin": "https://stg-mobile-agent.pages.dev",
+  "allowedPresets": [
+    "graph/1",
+    "map/1",
+    "seq/1"
+  ],
+  "producerWorkflows": [
+    "Mobile Agent preset static host",
+    "Mobile Agent preset Carrier and static host",
+    "Mobile Agent preset URL DoD",
+    "Mobile Agent live bootstrap deploy",
+    "Mobile Agent Seq publish now",
+    "Mobile Agent Seq Carrier deploy"
+  ],
+  "artifactPrefixes": [
+    "mobile-agent-preset-deployment-",
+    "mobile-agent-public-urls-",
+    "mobile-agent-seq-public-url-",
+    "mobile-agent-seq-public-"
+  ],
+  "reporting": {
+    "receiptOnly": true,
+    "missingReceiptMeansZeroUrls": true,
+    "manualHostSubstitutionAllowed": false,
+    "exampleHtmlIsProof": false
+  },
+  "acceptance": {
+    "stableAndImmutableByteReadback": true,
+    "stableAndImmutableChrome": true,
+    "exactSmapFragmentIdentity": true,
+    "runtimePatternEqualsPreset": true,
+    "maxGraph": true,
+    "browserErrors": 0,
+    "failedResponses": 0
+  }
+}
