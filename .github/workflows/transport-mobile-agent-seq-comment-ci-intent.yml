@@ -1,0 +1,66 @@
+name: Transport Mobile Agent Seq comment ingress CI intent
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-mobile-agent-seq-comment-ci-intent.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_BRANCH: proposal/mobile-agent-seq-comment-ingress-260823
+      EXPECTED_HEAD: 5aa7e4f7d1634cd9c9ef2b806ed4e257cc3b0da0
+    steps:
+      - name: Append exactly one CI intent row to exact product head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          observed="$(git ls-remote "$remote" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test "$observed" = "$EXPECTED_HEAD"
+          git clone --quiet --depth=1 --branch "$TARGET_BRANCH" "$remote" product
+          python3 - product/ci.intent.v1.jsonl <<'PY'
+          import json,pathlib,sys
+          path=pathlib.Path(sys.argv[1])
+          rows=[json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+          target='.github/workflows/mobile-agent-seq-comment-ingress.yml'
+          assert not any(row.get('path')==target for row in rows)
+          rows.append({
+            'kind':'ci.intent.v1',
+            'path':target,
+            'provider':'github-actions',
+            'role':'bootstrap_exception',
+            'entrypoint':'owner /run-seq-comment-ingress on ops#286 -> exact 11-chunk App Carrier reconstruction -> local seq/1 Chrome proof -> immutable Release readback -> stg-mobile-agent stable/immutable deploy and byte readback -> public Chrome proof -> canonical receipt -> accepted/mobile-agent-public-url -> receipt-only URL report',
+            'source':'fixed-hash one-shot owner issue comments plus checked-in existing seq/1 case and trusted public URL validator',
+            'authority':False,
+            'dispatch':['issue_comment'],
+            'generation_mode':'checked_in',
+            'workflow_definition':'checked_in',
+            'artifact_source':'exact Carrier, stable/immutable browser evidence, and accepted public URL receipt',
+            'artifact_generation':'generated',
+            'final_role':'mobile_agent_seq_public_url_acceptance',
+            'all_repositories_enforced':False,
+            'exception':{
+              'owner':'ops#286',
+              'reason':'one-shot exact App ingress until the immutable GitHub Carrier becomes the normal fresh-thread source',
+              'expiry':'2026-09-30',
+              'return_condition':'retire comment ingress after the immutable Carrier and accepted receipt are durable; retain public URL validator and accepted ref',
+            },
+          })
+          path.write_text('\n'.join(json.dumps(row,sort_keys=True,separators=(',',':'),ensure_ascii=False) for row in rows)+'\n',encoding='utf-8')
+          PY
+          git -C product diff --check
+          test "$(git -C product diff --name-only)" = ci.intent.v1.jsonl
+          git -C product config user.name github-actions[bot]
+          git -C product config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C product add ci.intent.v1.jsonl
+          git -C product commit --quiet -m 'chore: register Seq comment ingress CI intent'
+          git -C product push --quiet origin "$TARGET_BRANCH"
