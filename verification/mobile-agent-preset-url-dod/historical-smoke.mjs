@@ -56,15 +56,36 @@ try {
 
     let interaction;
     if (item.id === "graph") {
+      interaction = await page.evaluate(() => {
+        const region = [...semanticMapApp.store.domain.regions.values()].find(value => value.parent !== null);
+        const cell = semanticMapApp.adapter.cellsByRegionId.get(region.id);
+        const editable = semanticMapApp.adapter.graph.isCellEditable(cell);
+        const movable = semanticMapApp.adapter.graph.isCellMovable(cell);
+        const before = region.label;
+        semanticMapApp.operation({ type: "RenameRegion", regionId: region.id, label: `${before} proof` });
+        const changed = semanticMapApp.store.domain.regions.get(region.id).label;
+        semanticMapApp.undo();
+        const undone = semanticMapApp.store.domain.regions.get(region.id).label;
+        semanticMapApp.redo();
+        const redone = semanticMapApp.store.domain.regions.get(region.id).label;
+        return { before, changed, undone, redone, editable, movable };
+      });
+      assert.equal(interaction.editable, true, "graph: label editable");
+      assert.equal(interaction.movable, false, "graph: auto-layout geometry fixed");
+      assert.notEqual(interaction.changed, interaction.before, "graph: edit");
+      assert.equal(interaction.undone, interaction.before, "graph: undo");
+      assert.equal(interaction.redone, interaction.changed, "graph: redo");
+    } else if (item.id === "map") {
       const drag = await page.evaluate(() => {
         const region = [...semanticMapApp.store.domain.regions.values()].find(value => value.parent !== null);
         const cell = semanticMapApp.adapter.cellsByRegionId.get(region.id);
         const state = semanticMapApp.adapter.graph.view.getState(cell);
         const node = state?.shape?.node || state?.text?.node;
-        if (!node) throw new Error("graph: rendered node unavailable");
+        if (!node) throw new Error("map: rendered node unavailable");
         const box = node.getBoundingClientRect();
-        return { regionId: region.id, before: { ...region.bounds }, box: { x: box.x, y: box.y, width: box.width, height: box.height } };
+        return { regionId: region.id, before: { ...region.bounds }, movable: semanticMapApp.adapter.graph.isCellMovable(cell), box: { x: box.x, y: box.y, width: box.width, height: box.height } };
       });
+      assert.equal(drag.movable, true, "map: geometry editable");
       const startX = drag.box.x + drag.box.width / 2;
       const startY = drag.box.y + drag.box.height / 2;
       await page.mouse.move(startX, startY);
@@ -73,23 +94,22 @@ try {
       await page.mouse.up();
       await page.waitForTimeout(300);
       const moved = await page.evaluate(regionId => ({ ...semanticMapApp.store.domain.regions.get(regionId).bounds }), drag.regionId);
-      assert.notEqual(moved.x, drag.before.x, "graph: real drag");
+      assert.notEqual(moved.x, drag.before.x, "map: real drag");
       await page.locator("#undo").click();
       await page.waitForTimeout(200);
       const undone = await page.evaluate(regionId => ({ ...semanticMapApp.store.domain.regions.get(regionId).bounds }), drag.regionId);
       await page.locator("#redo").click();
       await page.waitForTimeout(200);
       const redone = await page.evaluate(regionId => ({ ...semanticMapApp.store.domain.regions.get(regionId).bounds }), drag.regionId);
-      interaction = { before: drag.before, moved, undone, redone };
-      assert.deepEqual(undone, drag.before, "graph: undo");
-      assert.deepEqual(redone, moved, "graph: redo");
-    } else if (item.id === "map") {
-      interaction = await page.evaluate(() => {
+      assert.deepEqual(undone, drag.before, "map: undo");
+      assert.deepEqual(redone, moved, "map: redo");
+      const zoom = await page.evaluate(() => {
         const before = semanticMapApp.snapshot().camera;
         semanticMapApp.zoomAtWorld(0, 0, before.scale * 1.25);
         return { before, after: semanticMapApp.snapshot().camera };
       });
-      assert.ok(interaction.after.scale > interaction.before.scale, "map: zoom");
+      assert.ok(zoom.after.scale > zoom.before.scale, "map: zoom");
+      interaction = { before: drag.before, moved, undone, redone, zoom };
     } else {
       interaction = await page.evaluate(() => {
         const region = [...semanticMapApp.store.domain.regions.values()].find(value => value.parent !== null);
