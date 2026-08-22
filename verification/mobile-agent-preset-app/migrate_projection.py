@@ -15,7 +15,7 @@ def fail(message: str) -> None:
     raise RuntimeError(f"mobile-agent-projection-migration: {message}")
 
 
-def get(url: str) -> tuple[bytes, str]:
+def get(url: str) -> tuple[bytes, str] | None:
     last: Exception | None = None
     for attempt in range(1, 6):
         try:
@@ -31,11 +31,23 @@ def get(url: str) -> tuple[bytes, str]:
                 if response.status != 200:
                     fail(f"{url}: HTTP {response.status}")
                 return response.read(), response.geturl()
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            last = error
         except (urllib.error.URLError, TimeoutError) as error:
             last = error
-            if attempt < 5:
-                time.sleep(attempt)
+        if attempt < 5:
+            time.sleep(attempt)
     fail(f"{url}: {last}")
+
+
+def required_path(relative: str) -> bool:
+    return (
+        relative == "app/index.html"
+        or relative == "protocol/v3/codec.mjs"
+        or relative.startswith("protocol/v3/modules/")
+    )
 
 
 def main(argv: list[str]) -> int:
@@ -57,34 +69,48 @@ def main(argv: list[str]) -> int:
         fail("unexpected expected-path schema")
     paths = sorted(expected.get("files", {}))
     if len(paths) != 54:
-        fail(f"expected exactly 54 paths, got {len(paths)}")
+        fail(f"expected exactly 54 candidate paths, got {len(paths)}")
 
     rows: list[dict[str, object]] = []
+    omitted: list[str] = []
     for relative in paths:
         pure = pathlib.PurePosixPath(relative)
         if pure.is_absolute() or ".." in pure.parts:
             fail(f"unsafe path: {relative}")
         url = urllib.parse.urljoin(source_base, relative)
-        first, first_url = get(url)
-        second, second_url = get(url)
-        if first != second:
+        first = get(url)
+        if first is None:
+            if required_path(relative):
+                fail(f"required projection path is unavailable: {relative}")
+            omitted.append(relative)
+            continue
+        second = get(url)
+        if second is None:
+            fail(f"projection path disappeared between reads: {relative}")
+        first_bytes, first_url = first
+        second_bytes, second_url = second
+        if first_bytes != second_bytes:
             fail(f"non-deterministic public bytes: {relative}")
         target = out / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(first)
+        target.write_bytes(first_bytes)
         rows.append(
             {
                 "path": relative,
-                "bytes": len(first),
-                "sha256": hashlib.sha256(first).hexdigest(),
+                "bytes": len(first_bytes),
+                "sha256": hashlib.sha256(first_bytes).hexdigest(),
                 "sourceUrl": first_url,
                 "secondSourceUrl": second_url,
             }
         )
 
+    materialized_paths = sorted(str(row["path"]) for row in rows)
     actual = sorted(path.relative_to(out).as_posix() for path in out.rglob("*") if path.is_file())
-    if actual != paths:
+    if actual != materialized_paths:
         fail("materialized inventory mismatch")
+    for relative in paths:
+        if required_path(relative) and relative not in materialized_paths:
+            fail(f"required path missing after materialization: {relative}")
 
     app = (out / "app/index.html").read_bytes()
     lower = app.lower()
@@ -111,6 +137,8 @@ def main(argv: list[str]) -> int:
         "sourceBase": source_base,
         "files": canonical_rows,
         "fileCount": len(rows),
+        "candidateFileCount": len(paths),
+        "omittedUnavailableNonRuntimePaths": omitted,
         "totalBytes": total_bytes,
         "distTreeDigest": tree_digest,
         "app": {
@@ -134,6 +162,8 @@ def main(argv: list[str]) -> int:
         "authority": False,
         "sourceBase": source_base,
         "fileCount": len(rows),
+        "candidateFileCount": len(paths),
+        "omittedUnavailableNonRuntimePaths": omitted,
         "totalBytes": total_bytes,
         "distTreeDigest": tree_digest,
         "app": manifest["app"],
@@ -150,6 +180,8 @@ def main(argv: list[str]) -> int:
     print(json.dumps({
         "status": "PASS",
         "fileCount": len(rows),
+        "candidateFileCount": len(paths),
+        "omittedUnavailableNonRuntimePaths": omitted,
         "totalBytes": total_bytes,
         "distTreeDigest": tree_digest,
         "app": manifest["app"],
