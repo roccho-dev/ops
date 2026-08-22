@@ -97,11 +97,28 @@ def main(argv: list[str]) -> int:
     invariant(not dist.exists(), "output dist already exists")
     dist.mkdir(parents=True)
 
-    app = fetch(urllib.parse.urljoin(base, "app/"))
-    app_text = app.decode("utf-8")
-    invariant(len(app) > 1_500_000, "App HTML is unexpectedly small")
-    for marker in ("graph/1", "map/1", "seq/1", "maxgraph"):
-        invariant(marker.lower() in app_text.lower(), f"App is missing {marker}")
+    required_markers = ("graph/1", "map/1", "seq/1", "maxgraph")
+    observations: list[dict] = []
+    app = None
+    app_text = None
+    app_source_url = None
+    for relative in ("app", "app/", "app/index.html", "app/example", "app/example/", "app/example/index.html"):
+        url = urllib.parse.urljoin(base, relative)
+        try:
+            candidate = fetch(url)
+            text = candidate.decode("utf-8")
+        except Exception as error:
+            observations.append({"url": url, "error": str(error)})
+            continue
+        present = [marker for marker in required_markers if marker.lower() in text.lower()]
+        observations.append({"url": url, "bytes": len(candidate), "sha256": sha256(candidate), "markers": present})
+        if len(candidate) > 1_500_000 and len(present) == len(required_markers):
+            app = candidate
+            app_text = text
+            app_source_url = url
+            break
+    invariant(app is not None and app_text is not None and app_source_url is not None, f"existing preset App not found: {json.dumps(observations, sort_keys=True)}")
+
     app_path = dist / "app/index.html"
     app_path.parent.mkdir(parents=True, exist_ok=True)
     app_path.write_bytes(app)
@@ -166,10 +183,12 @@ def main(argv: list[str]) -> int:
         "authority": False,
         "status": "PASS",
         "sourceBase": base,
+        "sourceAppUrl": app_source_url,
+        "sourceObservations": observations,
         "sourceExpectedSchema": expected["schema"],
         "distTreeDigest": tree_digest,
         "files": rows,
-        "app": {"bytes": len(app), "sha256": sha256(app)},
+        "app": {"bytes": len(app), "sha256": sha256(app), "sourceUrl": app_source_url},
         "codecProjection": {
             "source": "embedded import map",
             "entrypoints": list(roots),
