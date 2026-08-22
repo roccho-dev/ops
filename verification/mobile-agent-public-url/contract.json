@@ -20,6 +20,7 @@
     "Mobile Agent Seq Carrier deploy"
   ],
   "artifactPrefixes": [
+    "mobile-agent-preset-site-",
     "mobile-agent-preset-deployment-",
     "mobile-agent-public-urls-",
     "mobile-agent-seq-public-url-",
@@ -32,6 +33,7 @@
     "exampleHtmlIsProof": false
   },
   "acceptance": {
+    "candidateStagingDeployBeforeMerge": true,
     "stableAndImmutableByteReadback": true,
     "stableAndImmutableChrome": true,
     "exactSmapFragmentIdentity": true,
