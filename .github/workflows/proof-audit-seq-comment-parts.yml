@@ -1,0 +1,88 @@
+name: Proof audit Seq comment parts
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-audit-seq-comment-parts.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Audit every Seq ingress comment against fixed chunk identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/286/comments" \
+            -f per_page=100 --paginate --slurp > "$RUNNER_TEMP/pages.json"
+          python3 - "$RUNNER_TEMP/pages.json" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import hashlib,json,re,sys
+          pages=json.load(open(sys.argv[1],encoding='utf-8'))
+          comments=[row for page in pages for row in page]
+          expected={
+            0:(50000,'c0ecc10891b7e5dd4ad3fa2b5cf5b0703c296cb1e329a0ef793a569f5e01762a'),
+            1:(50000,'863290833dfa6daa435152adfa0cbb3b6464306eb66cbf3db22ae14cbe840909'),
+            2:(50000,'756ba2ea077166f4a2e6d4d903f137d6b6c5cc7990d91ae2e9e8ba76d40a513c'),
+            3:(50000,'97ef9f401906ae787210fb8afa41b139123c8381cbfba47d1c6d2f0de85ca80e'),
+            4:(50000,'2332f6e7fe4789e7582cd890b16527afac4c13762db92fa7e50ec95030962ca5'),
+            5:(50000,'5fdbcfbafa40de90631e52998f13a6717544ed44a89631aeba49628d065b7755'),
+            6:(50000,'59825071989604256e1705cd8b97ad7c66b8d1c13be93abceaedb0fd6c085e95'),
+            7:(50000,'8cf76a6067899818f271a6fbdfd606d7c25fe48578698bb03ad7068ef2bc2b0e'),
+            8:(50000,'f1d7e6de4aa509aa0e4f6e2c216dd953d3fc4676cf4eedae9fd467c2494a4901'),
+            9:(50000,'b4f813973bea05816a1bf6ecc4cdc275b3f286ee3eb485626da73c636d780f8c'),
+            10:(9996,'d4eafde357e6b54765d559618743ad923544d281db575862b183a79a34141c0a'),
+          }
+          pattern=re.compile(r'^SEQ-APP-BR/1 ([0-9]{2})/11\n([A-Za-z0-9+/=]+)$')
+          rows=[]
+          for comment in comments:
+              body=str(comment.get('body',''))
+              if not body.startswith('SEQ-APP-BR/1 '):
+                  continue
+              first=body.split('\n',1)[0]
+              match=pattern.fullmatch(body)
+              index=None
+              header=re.fullmatch(r'SEQ-APP-BR/1 ([0-9]{2})/11',first)
+              if header:
+                  index=int(header.group(1))
+              payload=body.split('\n',1)[1] if '\n' in body else ''
+              digest=hashlib.sha256(payload.encode()).hexdigest()
+              target=expected.get(index)
+              exact=bool(match and target and len(payload)==target[0] and digest==target[1])
+              rows.append({
+                'id':comment['id'],'index':index,'header':first,'bodyChars':len(body),
+                'payloadChars':len(payload),'payloadSha256':digest,'exact':exact,
+                'url':comment.get('html_url'),
+              })
+          exact_by_index={i:[row for row in rows if row['index']==i and row['exact']] for i in expected}
+          all_exact=all(len(exact_by_index[i])==1 for i in expected)
+          print('## Seq ingress comment-part audit')
+          print()
+          print(f"- status: `{'PASS' if all_exact else 'FAIL'}`")
+          print('- required: exactly one fixed-hash comment for each `00/11` through `10/11`')
+          print('- parts:')
+          for i in expected:
+              candidates=[row for row in rows if row['index']==i]
+              exact=[row for row in candidates if row['exact']]
+              state='PASS' if len(exact)==1 else 'MISSING' if not candidates else 'INVALID_OR_DUPLICATE'
+              print(f"  - `{i:02d}/11`: `{state}`")
+              for row in candidates:
+                  mark='exact' if row['exact'] else 'invalid'
+                  print(f"    - comment `{row['id']}`: `{mark}`; payload `{row['payloadChars']}`; sha `{row['payloadSha256']}`")
+          unknown=[row for row in rows if row['index'] not in expected]
+          if unknown:
+              print('- unknown headers:')
+              for row in unknown: print(f"  - comment `{row['id']}`: `{row['header']}`")
+          print()
+          print('Read-only diagnostic. This PR must never merge.')
+          if all_exact:
+              print('\n`/run-seq-comment-ingress` may now be issued once.')
+          PY
+          gh issue comment 286 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
