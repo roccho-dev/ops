@@ -1,0 +1,58 @@
+{
+  "schema": "ops.mobileAgentPresetUrlDodCases/1",
+  "authority": false,
+  "sourceApp": {
+    "projectionRef": "projection/mobile-agent-preset-dist-b0af2ab9",
+    "parts": [
+      "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00",
+      "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01"
+    ],
+    "bytes": 2412388,
+    "sha256": "sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6",
+    "implementationRewritten": false
+  },
+  "cases": [
+    {
+      "id": "graph",
+      "preset": "graph/1",
+      "fragment": "smap=H4sIAAAAAAAAA52VTW_TSBjHvwqa81T1S-MkvnJZDkjcMYexPWkNtseMJ0UoqtRJAVVi25SqsFroAoHSBETDy-4WVoXyYSZ2zLdAsRtqx1vIruTT-Jn5__7Py0wLuGQR6KBlABJgiphD_NAA-uWWATwUXLANoBsgxB7ymWPNeSjQA0pIQ1-kKFiaCygOMTMANADFFqH2ZC8lhKVbbew6y5jeTGNCawl7qHTkXMgQw_NyGsMc5uI05BIldtNi5yZHnEs1s6CbQRbjYYYMsAJbBjBJ08_0JShBWZYkqCnSFWgAxy6jXHP8bDUjhQZwkYndnwkHiGJ_7Mxvuu7YUdPz0PhI3QBp1LwseG943I1W9-LO1vD4keCDePPF6PCh4P1ofS9-cCDa20m3L_jvRSsULzrEL5mpSVBRJSjXJShLeTsUX2_ikBXdOH7QnLbztduLBs-SfR6_axdNTJcnZybpPRe8I_g_gm_E61vx413R3o46vwl-L-o8EO27M8GrqgQVuQIVWYKyWiyG5YTpljx-YfXUQbzZjbb2s-zN7GD0aDB6eEusHcV7u0n_U9R5k6x9jld7Yu0oeX802ukL3hv9_XhWK5p8ViHMpuPaRR8BJRYOw2kbu6vR2040eJI8vz2zjejL7WSfC_4q-jCI1u8I_lTwe6K9Pfy8Oyt6TTsLPZ3lIjppsnILZSkcfx-6s5Pf2Rh1jrO8C_7qexclX3ZmbX61IsGFMXlVgvU8eMhIUORmmHqOj9wp8uHHg__SNFm24z-6w6NDwX-NX2fZvhs9_SvaWhf8TXzwTLT5jzPfoMQrjegJ-KJcxG645MZ0nyQv7w-PszwzUp6LnKibXtjTsoXoia5S1EWWhQNW6tDN7minn1c-be7_J6tO3bb4KrZKssOPG8nhn3nZ7_X9qeop4ERyoTSLy7hkNG3ovOLpKPyb5JX8-nmKEcMXUXDyo_QonPHMTRI0n9UiffV-QeFSFrmElIqmW6he02wkm6Zd05BWw3ZVqldqDdNEWDWtqqVINSzbqqlqCq6gal2xqw1NliqKrZjqgmqAFcMHcGwnICFyT6BOmIBeJML-MnZJgOdVAMGyg28AvQUCxBimPtAnLxpYWfkGmwmtLygIAAA",
+      "sourceJsonl": "examples/graph.jsonl",
+      "sourceJsonlSha256": "sha256:6fa8377c6d23aa74b65040eff645024f1c124ea4f8f9bf154aec1c316243891c",
+      "recordCount": 11,
+      "labels": [
+        "Product delivery graph",
+        "顧客要求",
+        "採否判断",
+        "検証証跡"
+      ]
+    },
+    {
+      "id": "map",
+      "preset": "map/1",
+      "fragment": "smap=H4sIAAAAAAAAA6WYWW_b2BXHv4rBvoowd1IG-iBRK7VRsjaqGgiX5KVESdypzYYfZEyMpGmQNG3RppkCTRG0wRSdNkiBCdqZzIdh5GSe5isMtDmyPYo0iB7Jc_j_3x8Pzz1Xp0jfaiNHyGkTsWzoAl-3TK-JHP3qtIkYwE6rTeSoiXjQAKavK6gB7CPbtSztyAA2arvQg34TCTURFyqWq64zXcvyF4kGsBe3PaUDDXDrWajnAx8e4osYX_f7cBESSc-evnr39Yvvn14E06_evrm_vD-xl7cN6IMmchY6bSKyNTCXqlgIC-E4h4VYBvss1ER09ZqBnm4uLyythZpIH8iw_xE5G7jQnK_CHPT78yUMDAO4k0XG7NFvgumfjufmg_PHBrAP2y6wO4cedILp69nFg8tf_2H27ctg-iQ4v2HehW3dMm_ZJ-lQGAvhJBZiiQ37Aw-61_0DxbfcGwuorKOuPG-Q37D99s1fvv_rN8H0xeW9795_-SA4f3x5_04wvXj7-v9vv_3dvj4Jmr5tFNj2bp-RVdAOm0uu0xeiC4c6HM1t3nv5s21SxE_wBPoeLtP7mLz8_OHst69mz-9dPv3v5bO7wfnj99_9Ppg--RkmCQxbvHQKC7HchkkXOgPo-ded-sDr3TCKHyxf6D52Z_9-8_7ls194BrCD6YuV7c8fzp6-muN9_SyYPll6hoZtuWAucHqFZ7MQFdCHpgrcZQBcuSMwgkExDsXIpbIPXP_WjbNQE7FcVTfXj19mYxsJ2NnZPm-XxUIEjYVw-gY5Bdj-wIU7yREHixqb3Xl5-cW9ffDFoKJ7umVmrXYwvR-c33v38M3sixfrDuBCdaDAjwJcfyA7-DHb-FFb-REbCfhe_GgaC1E4fZuf3QfmTnjkgehatuXNXez7nRTWe0tw_hg_WNMMpq-D6Ztg-iI4n141ym389D3w4dg2fOxWfNRGArkXPpZclR9F38C3bFg7CVIH4kbkDoBR4M1LbPb8XjC9G0z_rFlu72BZcJv7yyeVHU5s4YbjW7nRGwn0XtzCq35H3sCmWKamu8ZObPRBRFGg7e_V777-anb3Ijh__O5v_5tvddM_rva83cj2bHX4tlaHb291zEYCszezRa3dhAZsuz_ZiYw5iNj2Qns3svVXPd8fFvONPPGhF5w_XjS91-DDgz6x2Kht4Lb3OHYjgd0bHDX_UOdjALc5EtqW669618fQVUrZA3ER-sM3dy_vP5s9_8cP3yw3C8MaLDieNhHPVRbRh8C2F7vrL1OUl46sfwxeK9da5eNOOZwJ1zyBc6WyQaYKY8orFgRB53FDqQ01ISH7ybrCUXIt4_XadV4sxkvFioAVCrYG2tlxOl3l8WNUs8ZZfsjxQoUt69VcOUJw1UldHJgpUTRjg0ZE6if6ZKdHRQslq12s8g2WHmc9nIv3eEauFwWaFnO9ScSZdCxBiDKDCC4knUKdqkoalPi8FdUSVgW1ypNismg1zHA1nc4fe8NeIp9LDIujNqj6SbrHdyp4V-8nS7oZzwwkIdqP13gXM7g4mtDAyJedBoEV-Zo14tVYYRgTOoPuSbGd7HajTi4n2wMvPKwIeJLKJqUTyqvXi_oQPy6O5GQGNcq9uG6S5RRKxjkGOJrAR0nbqhQzfKouDXipi1NCsiIplIGmVJZTWLTGomjejGGo2B2KJYwcY71CoobhXbeUHzhZzFOP4TjZ1lt4IyY4uZqDJVPVnAtUKI6SKJGPVkoZo-uQolRPsbSSLRJjcyCOhy11Qmpk-YQNoyg5Kp7QTMFlWygcutGWaUGZZcOcwYYnipYKK3VNSjhMnMLdhBAGRca1Wk4ykTHT6RxNhjFUS6VPhmLDtUTTGotmt8WzVkMu551BesJAK9vrxDw3U4VFuQHiZLg0UkGpVZCtVmug-lRd6sSFfOVY6Hp5u8N6ZEyJKOV0kY4kIoYKykkZxKBExBKNUUaIOqCWSGvldNbG2bwfSROpPBg5SkXy4SirxW2zxKaOnajHeAkJq7OTZD5egbSTIxuEyBQ5rWCxMp-TxUwOiMe5Ss7NJS260VfiPJWOYOEaPTCLBZQzhExEplqcUavCWqUKjYpTqkl-YzxxWKGaEsOOw9EdFYyYSVjAMQVPsSfHBZKjqw7n-FWnKvf7jXZL4f1upyxgLo61DK3eywG9XOwbyfrxmBZKKCt1-5xasyi017UqE7SdlxsnZdezJ6hIc_EKXe1LE4B31BpwY24OjTtpxZUGkowOtSzmxTv1MF_o-xLsNCpiSuZrKg-4lp-kqvU0bNcmURQwbDE5UWXRL6RBFrcaXSOSkFK1Uocfk4ZvnxQ9FcvjWCVXwCjTyw8lTyEjsQGOE4QTw0aApOhC52RkqCY3zuHxUZkrSdW0jMa8ij4GpURGGHAq1cbTfM_p0AnRq_q5tiqm2ZoU8zO8CGs1SxCqmI0OelqBK7odK5frcOIwgseVEu5lIpHIsjXuaOHv__7l4iB6cKxAE84u7gTTf87-9ciDzvLKfI64eDB7_Z_Zo7uXdx99-sBF4Nt6-faBK7yRwH2kl2uuZdw6D62PSPj1_m1AzwNteKOFLxrycpHWrfPBhmh_MZrelN0MXssS-8guTgWbsldj9U7Nq8i1ILmP4LV5fK25MWHult0IXitT15U7wFQtTbuhrOqrS2vAG6PcbsAbwWtV-sa-7OrtNrx1Qv8wBq50P0xDO1U_hK41meuaKpwPOtBUJjcXC32g971rlD_MEj8l_Nnmdd6FwIe5eUUubtz6g2nLf2Tq6rR0eDWk-zAFvM4ysgMImjkisTAn4xRGAjJMYThDEVgYgxzLqJRG0bgsYwwjyxzNhFVM1hiNpkkGk0maISABMIpuImdNEwkh9qqSVqZWnpCj646gOYR9y4aHJBJC5oWDHJ0iNvB96JrI0bwzHeLI2dmP20QbsVwUAAA",
+      "sourceJsonl": "examples/example.jsonl",
+      "sourceJsonlSha256": "sha256:51feabbd925dc800a23ad5c016fccd94d295bc9f577c0eebc0e835a6b834c634",
+      "recordCount": 18,
+      "labels": [
+        "AI図編集の例",
+        "User",
+        "App",
+        "AI"
+      ]
+    },
+    {
+      "id": "seq",
+      "preset": "seq/1",
+      "fragment": "smap=H4sIAAAAAAAAA61Wy27bRhT9FWPWI2hIyiTFXdosUqAFgmzDLK7JK5kIOTMejtIYghbyIkhQ5AG3QBLEgd3CiyCLrLIInNfH0JGbvygkyvKIMiO26UoA59w55545dzRDkoo-CcgwJEKiAp0InockuDkMSQbypzgkQUhyzIDrJGplIAOphOgFOe60pMIcdUhoSBRGQsXnlUoIPS_cGSCPcIbJo23MYGXDVq5BY9uaYXSiU5xBrmKU5IngGwrvJPjrxtJWeleWqAw1hGREhyHZEgNeKmCUUYsxRjdddouGJIlXxdxOePm11EpDksIWpuupJSjk0-74IE2nXQ2yDNTurBAiLdRGChyL8Suh4oRD-vXo3peTx8Xe_uTZo7Pjk2L8tBgf5rjTtjZ6yV09UJWOFPYTwVd6shl1GLU6jHq20dP2IAO-3NBMRKWjawvYQn71cIw2Jo-fTP68X-ztn356-fXoQzF-Onnw-e_XD4vx82Lvt9N3708__t5c9CWqoT_TsE71lQWsierrSkiRQ1rs7Z_9cTi5_2Sq-_hgcvj-P-hmtMuo5TPqmwlSU-68olxDfrsi_IaBayL9y_GDyYu3pdulQMykUDDdbbjwZum4I0iRx6BKBM612Mx2W8xvWazk0KD0ysKIhmQeTrOaGQVsNGpgU4cx6riX-CTnR7HWqOsmsFE0D16DlMjjYvzmfEy_6dhF1NY4Ztc5ZtU6ZhkFViPH3JpgQRShXJ-rKxewfzkR5QD_P9ly6pxyap2yjQK7kVN-XbbK419v1QWsiVXnWfpZ9IvxO4Pju3PVqXOrU-uWYxQ433Crp0S2ci9d_Nm1lLVsU4Z5Dn2sOGVeO2J1fA3qdPY8qJIvoU12uwn72V8ni2CK6iys5TawJrPThNkcCVGN1mXMt8zvPyoEjb-AnC-sPAtqHjvxPGjtxX2j8Rrk2yVyG-xNNwBkm3bX8ywfnS3PsiNwesjiDnrM73ix5_pbvo8Y97xe5Hax59qRG7ubrtMFrwt-LySjkBO6OJm5qLkmEiwrQn4HUyGx7RBKpu8dEgyJBK1R8Rl2p20ROv2dLsDdJCfBeWoJJX0lBvKHXRKUw0FGo9E_mE7LBVUKAAA",
+      "sourceJsonl": "examples/sequence.jsonl",
+      "sourceJsonlSha256": "sha256:94de0b233bcdfdb8c471484b2505bbfd2a23170d54b1de8fdc46b5b1815bcda4",
+      "recordCount": 11,
+      "labels": [
+        "Decision review sequence",
+        "Human",
+        "Agent",
+        "Proposal"
+      ]
+    }
+  ]
+}
