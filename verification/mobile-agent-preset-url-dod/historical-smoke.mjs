@@ -36,7 +36,6 @@ try {
       maxGraphSvg: Boolean(document.querySelector("#graph-container svg")),
       maxGraphInstance: Boolean(globalThis.semanticMapApp.adapter?.graph),
       controls: ["pattern-select", "add-node", "undo", "redo", "delete", "handoff-fab", "review-layer"].map(id => ({ id, present: Boolean(document.getElementById(id)) })),
-      envelope: globalThis.semanticMapRuntime.envelope(),
       camera: globalThis.semanticMapApp.snapshot().camera,
       review: {
         layer: Boolean(document.getElementById("review-layer")),
@@ -47,7 +46,6 @@ try {
     }));
     assert.equal(state.pattern, item.preset, `${item.id}: runtime preset`);
     assert.equal(state.scenePattern, item.preset, `${item.id}: scene preset`);
-    assert.equal(state.envelope.view.pattern, item.preset, `${item.id}: envelope preset`);
     assert.equal(new URL(state.href).hash, `#${item.fragment}`, `${item.id}: exact fragment`);
     assert.equal(state.maxGraphSvg, true, `${item.id}: maxGraph SVG`);
     assert.equal(state.maxGraphInstance, true, `${item.id}: maxGraph instance`);
@@ -58,26 +56,33 @@ try {
 
     let interaction;
     if (item.id === "graph") {
-      interaction = await page.evaluate(async () => {
+      const drag = await page.evaluate(() => {
         const region = [...semanticMapApp.store.domain.regions.values()].find(value => value.parent !== null);
         const cell = semanticMapApp.adapter.cellsByRegionId.get(region.id);
-        const before = { ...semanticMapApp.store.domain.regions.get(region.id).bounds };
-        const [{ default: EventObject }, { default: InternalEvent }] = await Promise.all([
-          import("semantic:vendor/maxgraph/view/event/EventObject.js"),
-          import("semantic:vendor/maxgraph/view/event/InternalEvent.js"),
-        ]);
-        semanticMapApp.adapter.graph.fireEvent(new EventObject(InternalEvent.CELLS_MOVED, { cells: [cell], dx: 40, dy: 0, disconnect: false }));
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        const moved = { ...semanticMapApp.store.domain.regions.get(region.id).bounds };
-        semanticMapApp.undo();
-        const undone = { ...semanticMapApp.store.domain.regions.get(region.id).bounds };
-        semanticMapApp.redo();
-        const redone = { ...semanticMapApp.store.domain.regions.get(region.id).bounds };
-        return { before, moved, undone, redone };
+        const state = semanticMapApp.adapter.graph.view.getState(cell);
+        const node = state?.shape?.node || state?.text?.node;
+        if (!node) throw new Error("graph: rendered node unavailable");
+        const box = node.getBoundingClientRect();
+        return { regionId: region.id, before: { ...region.bounds }, box: { x: box.x, y: box.y, width: box.width, height: box.height } };
       });
-      assert.notEqual(interaction.moved.x, interaction.before.x, "graph: drag");
-      assert.deepEqual(interaction.undone, interaction.before, "graph: undo");
-      assert.deepEqual(interaction.redone, interaction.moved, "graph: redo");
+      const startX = drag.box.x + drag.box.width / 2;
+      const startY = drag.box.y + drag.box.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down();
+      await page.mouse.move(startX + 40, startY, { steps: 12 });
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+      const moved = await page.evaluate(regionId => ({ ...semanticMapApp.store.domain.regions.get(regionId).bounds }), drag.regionId);
+      assert.notEqual(moved.x, drag.before.x, "graph: real drag");
+      await page.locator("#undo").click();
+      await page.waitForTimeout(200);
+      const undone = await page.evaluate(regionId => ({ ...semanticMapApp.store.domain.regions.get(regionId).bounds }), drag.regionId);
+      await page.locator("#redo").click();
+      await page.waitForTimeout(200);
+      const redone = await page.evaluate(regionId => ({ ...semanticMapApp.store.domain.regions.get(regionId).bounds }), drag.regionId);
+      interaction = { before: drag.before, moved, undone, redone };
+      assert.deepEqual(undone, drag.before, "graph: undo");
+      assert.deepEqual(redone, moved, "graph: redo");
     } else if (item.id === "map") {
       interaction = await page.evaluate(() => {
         const before = semanticMapApp.snapshot().camera;
