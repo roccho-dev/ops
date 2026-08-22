@@ -1,0 +1,47 @@
+name: Prove historical preset maxGraph URLs
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-historical-preset-maxgraph-urls.yml'
+      - 'verification/mobile-agent-preset-url-dod/**'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Build exact public URLs from existing fragments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,pathlib
+          cases=json.load(open('verification/mobile-agent-preset-url-dod/cases.json',encoding='utf-8'))['cases']
+          base='https://ea18b86d.stg-mobile.pages.dev/app'
+          value={'schema':'mobile-agent-preset-urls/1','authority':False,'base':base,'urls':{row['id']:f"{base}#{row['fragment']}" for row in cases}}
+          pathlib.Path('/tmp/urls.json').write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          node verification/mobile-agent-preset-url-dod/smoke.mjs /tmp/urls.json "$chrome" /tmp/proof
+          cp /tmp/urls.json /tmp/proof/urls.json
+          "$chrome" --version > /tmp/proof/chrome-version.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: historical-preset-maxgraph-urls-${{ github.run_id }}
+          path: /tmp/proof/
+          if-no-files-found: error
+          retention-days: 14
