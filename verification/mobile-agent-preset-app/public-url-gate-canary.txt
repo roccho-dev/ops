@@ -1,0 +1,2 @@
+canary_id=mobile-agent-public-url-required-wiring.1
+expected=required-check-starts-and-does-not-pass-without-exact-accepted-receipt
