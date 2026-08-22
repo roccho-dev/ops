@@ -1,0 +1,78 @@
+name: Mobile Agent public URL required
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-preset-static-host.yml'
+      - '.github/workflows/mobile-agent-preset-url-dod.yml'
+      - '.github/workflows/mobile-agent-live-bootstrap-deploy.yml'
+      - '.github/workflows/mobile-agent-seq-carrier.yml'
+      - '.github/workflows/mobile-agent-seq-carrier-deploy.yml'
+      - '.github/workflows/mobile-agent-seq-publish-now.yml'
+      - '.github/transport/mobile-agent-**'
+      - 'verification/mobile-agent-preset-app/**'
+      - 'verification/mobile-agent-preset-url-dod/**'
+      - 'verification/mobile-agent-live-bootstrap/**'
+      - 'verification/mobile-agent-seq-carrier/**'
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout trusted validator
+        uses: actions/checkout@v4
+        with:
+          ref: proposals
+          path: trusted
+          persist-credentials: false
+
+      - name: Prove the validator rejects destructive receipts
+        run: |
+          set -euo pipefail
+          python3 trusted/tools/check-mobile-agent-public-url.py selftest \
+            --out "$RUNNER_TEMP/public-url-selftest.json"
+
+      - name: Require the accepted ref receipt for the exact PR head
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://github.com/$GITHUB_REPOSITORY.git"
+          for attempt in $(seq 1 120); do
+            rm -rf "$RUNNER_TEMP/accepted"
+            if git clone --quiet --depth=1 --branch accepted/mobile-agent-public-url \
+              "$remote" "$RUNNER_TEMP/accepted" 2>/dev/null; then
+              receipt="$RUNNER_TEMP/accepted/accepted/public-url-receipt.json"
+              if [ -f "$receipt" ]; then
+                receipt_sha="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["candidateSha"])' "$receipt")"
+                if [ "$receipt_sha" = "$CANDIDATE_SHA" ]; then
+                  python3 trusted/tools/check-mobile-agent-public-url.py check \
+                    --contract trusted/verification/mobile-agent-public-url/contract.json \
+                    --receipt "$receipt" \
+                    --candidate-sha "$CANDIDATE_SHA" \
+                    --out "$RUNNER_TEMP/required-public-url-receipt.json"
+                  exit 0
+                fi
+              fi
+            fi
+            sleep 10
+          done
+          echo "No PASS public URL receipt exists for exact PR head $CANDIDATE_SHA" >&2
+          exit 1
+
+      - name: Upload the exact accepted receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: required-mobile-agent-public-url-receipt
+          path: |
+            ${{ runner.temp }}/required-public-url-receipt.json
+            ${{ runner.temp }}/public-url-selftest.json
+          if-no-files-found: error
+          retention-days: 30
