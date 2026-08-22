@@ -1,0 +1,13 @@
+{
+  "name": "mobile-agent-business-model-presentation",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:examples": "node scripts/build-layout-samples.mjs",
+    "check": "node scripts/check.mjs",
+    "proof": "python3 scripts/browser-proof.py",
+    "test:e2e": "npm run build:examples && python3 tests/e2e/layout_preservation.py",
+    "test": "npm run build && npm run check && npm run test:e2e"
+  }
+}

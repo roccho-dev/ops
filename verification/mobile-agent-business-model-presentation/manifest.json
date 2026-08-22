@@ -1,0 +1,44 @@
+{
+  "schema": "mobile-agent.business-model-presentation/1",
+  "id": "business-model-presentation",
+  "variableInputs": [
+    "examples/2-actors.jsonl"
+  ],
+  "examples": [
+    "examples/2-actors.jsonl",
+    "examples/3-actors.jsonl",
+    "examples/4-actors.jsonl"
+  ],
+  "fixedUi": {
+    "profiles": [
+      "profiles/two-party-service.json",
+      "profiles/three-party-service.json",
+      "profiles/four-party-service.json"
+    ],
+    "entry": "apps/business-model-presentation-minimal/src/main.mjs",
+    "theme": "apps/business-model-presentation-minimal/public/styles.css",
+    "compiler": "packages/business-model-compiler/src/index.mjs"
+  },
+  "e2e": {
+    "fixtureManifest": "tests/e2e/fixtures.json",
+    "runner": "tests/e2e/layout_preservation.py",
+    "command": "npm run test:e2e",
+    "examplesAreFixtures": true
+  },
+  "build": "npm run build",
+  "check": "npm run check",
+  "test": "npm test",
+  "output": "dist/index.html",
+  "referenceHtmlSha256": "fcee971464e3ee465e25c180f0bd1c0ac39d0936b81583649de48303929c7307",
+  "authority": false,
+  "sourceRole": "candidate-for-mobile-agent-preset",
+  "layoutContract": {
+    "baseline": "examples/2-actors.jsonl",
+    "invariant": "outer-layout-byte-and-browser-regression",
+    "extensions": [
+      "examples/3-actors.jsonl",
+      "examples/4-actors.jsonl"
+    ],
+    "rule": "add alternating actor/exchange columns only; preserve all outer layout regions"
+  }
+}

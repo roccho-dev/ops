@@ -1,0 +1,18 @@
+{
+  "schema": "business-model-projection-profile/1",
+  "id": "two-party-service/1",
+  "label": "二者間サービス",
+  "actorRoles": ["customer", "provider"],
+  "requiredExchangeKinds": ["input", "offer", "payment"],
+  "view": {
+    "orientation": "lr",
+    "exchangeStrategy": "adjacent-pairs",
+    "stageFocus": "primary-activity",
+    "nesting": "owner-parent"
+  },
+  "coverage": {
+    "a2uiExcludeTypes": ["transitions"],
+    "seqExcludeTypes": ["nodes"],
+    "mapExcludeTypes": ["stages", "activities", "transitions"]
+  }
+}
