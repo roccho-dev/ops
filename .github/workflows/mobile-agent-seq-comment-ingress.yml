@@ -1,0 +1,399 @@
+name: Mobile Agent Seq comment ingress
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+
+env:
+  ISSUE_NUMBER: '286'
+  CHUNK_PREFIX: 'SEQ-APP-BR/1'
+  CHUNK_COUNT: '11'
+  BASE64_BYTES: '509996'
+  BASE64_SHA256: a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01
+  BROTLI_BYTES: '382497'
+  BROTLI_SHA256: 4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97
+  APP_BYTES: '2412388'
+  APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+  RELEASE_TAG: mobile-agent-seq-app-3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+  RELEASE_ASSET: mobile-agent-seq-app.3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6.html.br
+
+jobs:
+  publish-deploy:
+    if: >-
+      github.event.issue.number == 286 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == '/run-seq-comment-ingress'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment: cloudflare-production
+    steps:
+      - name: Checkout trusted ingress and proof code
+        uses: actions/checkout@v4
+        with:
+          ref: proposals
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Reconstruct exact existing App Carrier from owner comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          mkdir -p "$root/dist/app" "$root/local-proof" "$root/stable-proof" "$root/immutable-proof"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            -f per_page=100 --paginate --slurp > "$root/comment-pages.json"
+          python3 - "$root/comment-pages.json" "$root/app.br.b64" <<'PY'
+          import hashlib,json,os,pathlib,re,sys
+          pages=json.load(open(sys.argv[1],encoding='utf-8'))
+          comments=[comment for page in pages for comment in page]
+          owner=os.environ['GITHUB_REPOSITORY_OWNER']
+          prefix=re.escape(os.environ['CHUNK_PREFIX'])
+          total=int(os.environ['CHUNK_COUNT'])
+          pattern=re.compile(rf'^{prefix} ([0-9]{{2}})/{total:02d}\n([A-Za-z0-9+/=]+)$')
+          chunks={}
+          for comment in comments:
+              if comment.get('user',{}).get('login') != owner:
+                  continue
+              match=pattern.fullmatch(str(comment.get('body','')))
+              if not match:
+                  continue
+              index=int(match.group(1))
+              assert 0 <= index < total
+              assert index not in chunks, f'duplicate chunk {index}'
+              chunks[index]=match.group(2)
+          assert sorted(chunks)==list(range(total)), sorted(chunks)
+          joined=''.join(chunks[index] for index in range(total))
+          assert len(joined)==int(os.environ['BASE64_BYTES'])
+          assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['BASE64_SHA256']
+          pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
+          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined)}))
+          PY
+          base64 --decode "$root/app.br.b64" > "$root/app.br"
+          test "$(wc -c < "$root/app.br")" -eq "$BROTLI_BYTES"
+          test "$(sha256sum "$root/app.br" | cut -d' ' -f1)" = "$BROTLI_SHA256"
+          node -e 'const fs=require("node:fs"),zlib=require("node:zlib");fs.writeFileSync(process.argv[2],zlib.brotliDecompressSync(fs.readFileSync(process.argv[1])));' \
+            "$root/app.br" "$root/dist/app/index.html"
+          test "$(wc -c < "$root/dist/app/index.html")" -eq "$APP_BYTES"
+          test "$(sha256sum "$root/dist/app/index.html" | cut -d' ' -f1)" = "$APP_SHA256"
+          grep -F 'seq/1' "$root/dist/app/index.html" >/dev/null
+          grep -Fi 'maxgraph' "$root/dist/app/index.html" >/dev/null
+          cp verification/mobile-agent-seq-comment-ingress/case.json "$root/case.json"
+
+      - name: Prove existing seq/1 locally before any effect
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$root/dist" > "$root/http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          curl -fsS http://127.0.0.1:4173/app/ >/dev/null
+          node verification/mobile-agent-seq-comment-ingress/smoke.mjs \
+            "$root/case.json" http://127.0.0.1:4173/ "$chrome" "$root/local-proof"
+          "$chrome" --version > "$root/chrome-version.txt"
+
+      - name: Publish and read back immutable GitHub Carrier
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          cp "$root/app.br" "$root/$RELEASE_ASSET"
+          assets=("$root/$RELEASE_ASSET" "$root/case.json" "$root/local-proof/receipt.json")
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title 'Mobile Agent existing seq/1 App Carrier' \
+              --notes 'Immutable non-authority Carrier for existing seq/1 maxGraph App.' \
+              "${assets[@]}"
+          else
+            mkdir "$root/release-readback"
+            for asset in "${assets[@]}"; do
+              name="$(basename "$asset")"
+              gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$root/release-readback"
+              cmp "$asset" "$root/release-readback/$name"
+            done
+          fi
+          rm -rf "$root/release-readback"
+          mkdir "$root/release-readback"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$RELEASE_ASSET" --dir "$root/release-readback"
+          test "$(wc -c < "$root/release-readback/$RELEASE_ASSET")" -eq "$BROTLI_BYTES"
+          test "$(sha256sum "$root/release-readback/$RELEASE_ASSET" | cut -d' ' -f1)" = "$BROTLI_SHA256"
+
+      - name: Create or verify stg-mobile-agent Pages project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/stg-mobile-agent"
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create stg-mobile-agent --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['success'] is True
+          assert value['result']['name']=='stg-mobile-agent'
+          assert value['result']['production_branch']=='proposals'
+          PY
+          else
+            cat "$RUNNER_TEMP/project.json" >&2
+            exit 1
+          fi
+
+      - name: Deploy the exact Carrier App and resolve both hosts
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$root/dist" \
+            --project-name stg-mobile-agent \
+            --branch proposals \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message 'Audited existing seq/1 Carrier' 2>&1)"
+          printf '%s\n' "$output"
+          deployment="$(printf '%s\n' "$output" \
+            | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' \
+            | grep -v '^https://stg-mobile-agent\.pages\.dev$' \
+            | head -n1 || true)"
+          test -n "$deployment"
+          echo 'stable_base=https://stg-mobile-agent.pages.dev/' >> "$GITHUB_OUTPUT"
+          echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
+
+      - name: Require exact public bytes on stable and immutable hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          verify() {
+            local name="$1" base="$2" target="$root/${name}-app.html"
+            for attempt in $(seq 1 90); do
+              if curl --fail-with-body --location --silent --show-error \
+                -H 'Cache-Control: no-cache' "${base}app/" -o "$target"; then
+                if [ "$(wc -c < "$target")" -eq "$APP_BYTES" ] && \
+                   [ "$(sha256sum "$target" | cut -d' ' -f1)" = "$APP_SHA256" ]; then
+                  return 0
+                fi
+              fi
+              sleep 2
+            done
+            return 1
+          }
+          verify stable '${{ steps.deploy.outputs.stable_base }}'
+          verify immutable '${{ steps.deploy.outputs.deployment_base }}'
+
+      - name: Re-open both public Seq URLs in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          node verification/mobile-agent-seq-comment-ingress/smoke.mjs \
+            "$root/case.json" '${{ steps.deploy.outputs.stable_base }}' "$chrome" "$root/stable-proof"
+          node verification/mobile-agent-seq-comment-ingress/smoke.mjs \
+            "$root/case.json" '${{ steps.deploy.outputs.deployment_base }}' "$chrome" "$root/immutable-proof"
+
+      - name: Emit raw audited public evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          python3 - "$root" '${{ steps.deploy.outputs.stable_base }}' '${{ steps.deploy.outputs.deployment_base }}' <<'PY'
+          import json,os,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          stable=json.load(open(root/'stable-proof/receipt.json',encoding='utf-8'))
+          immutable=json.load(open(root/'immutable-proof/receipt.json',encoding='utf-8'))
+          assert stable['status']==immutable['status']=='PASS'
+          assert stable['preset']==immutable['preset']=='seq/1'
+          assert stable['runtimePattern']==immutable['runtimePattern']=='seq/1'
+          assert stable['maxGraph'] is immutable['maxGraph'] is True
+          assert stable['interaction']['changed'] != stable['interaction']['before']
+          assert stable['interaction']['restored'] == stable['interaction']['before']
+          assert immutable['interaction']['changed'] != immutable['interaction']['before']
+          assert immutable['interaction']['restored'] == immutable['interaction']['before']
+          value={
+            'schema':'ops.mobileAgentPublicUrlEvidence/1',
+            'status':'PASS',
+            'authority':False,
+            'repository':os.environ['GITHUB_REPOSITORY'],
+            'candidateSha':os.environ['GITHUB_SHA'],
+            'carrier':{'tag':os.environ['RELEASE_TAG'],'sha256':'sha256:'+os.environ['BROTLI_SHA256']},
+            'provider':{'kind':'cloudflare-pages','project':'stg-mobile-agent','stableBase':sys.argv[2],'deploymentBase':sys.argv[3]},
+            'app':{'bytes':int(os.environ['APP_BYTES']),'sha256':'sha256:'+os.environ['APP_SHA256'],'stableReadback':'PASS','immutableReadback':'PASS'},
+            'stable':stable,
+            'immutable':immutable,
+          }
+          (root/'public-url-evidence.json').write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+
+      - name: Upload raw browser and byte evidence
+        id: evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-seq-public-evidence-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/result/public-url-evidence.json
+            ${{ runner.temp }}/result/local-proof/
+            ${{ runner.temp }}/result/stable-proof/
+            ${{ runner.temp }}/result/immutable-proof/
+            ${{ runner.temp }}/result/stable-app.html
+            ${{ runner.temp }}/result/immutable-app.html
+            ${{ runner.temp }}/result/chrome-version.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Bind the exact evidence artifact and validate the canonical receipt
+        env:
+          EVIDENCE_ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          python3 - "$root/public-url-evidence.json" "$root/public-url-receipt.json" <<'PY'
+          import json,os,pathlib,sys
+          evidence=json.load(open(sys.argv[1],encoding='utf-8'))
+          stable=evidence.pop('stable')
+          immutable=evidence.pop('immutable')
+          receipt={
+            'schema':'ops.mobileAgentPublicUrlReceipt/1',
+            'status':'PASS',
+            'authority':False,
+            'repository':evidence['repository'],
+            'candidateSha':evidence['candidateSha'],
+            'carrier':evidence['carrier'],
+            'provider':evidence['provider'],
+            'app':evidence['app'],
+            'cases':[{
+              'preset':'seq/1',
+              'stableUrl':stable['url'],
+              'immutableUrl':immutable['url'],
+              'runtimePattern':'seq/1',
+              'maxGraph':True,
+              'interaction':'edit→undo',
+              'browserErrors':0,
+              'failedResponses':0,
+              'roundTripExact':True,
+            }],
+            'proof':{
+              'stableChrome':'PASS',
+              'immutableChrome':'PASS',
+              'runId':int(os.environ['GITHUB_RUN_ID']),
+              'artifactDigest':os.environ['EVIDENCE_ARTIFACT_DIGEST'],
+            },
+          }
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          python3 tools/check-mobile-agent-public-url.py selftest \
+            --out "$root/validator-selftest.json"
+          python3 tools/check-mobile-agent-public-url.py check \
+            --contract verification/mobile-agent-public-url/contract.json \
+            --receipt "$root/public-url-receipt.json" \
+            --candidate-sha "$GITHUB_SHA" \
+            --out "$root/accepted-validation.json"
+
+      - name: Upload the only reportable PASS receipt
+        id: accepted
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-public-url-receipt-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/result/public-url-receipt.json
+            ${{ runner.temp }}/result/accepted-validation.json
+            ${{ runner.temp }}/result/validator-selftest.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Advance the accepted receipt ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+          ACCEPTED_ARTIFACT_DIGEST: ${{ steps.accepted.outputs.artifact-digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          accepted="$RUNNER_TEMP/accepted"
+          git init --quiet "$accepted"
+          git -C "$accepted" config user.name github-actions[bot]
+          git -C "$accepted" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$accepted" remote add origin "$remote"
+          old="$(git ls-remote "$remote" refs/heads/accepted/mobile-agent-public-url | awk 'NR==1 {print $1}')"
+          if [ -n "$old" ]; then
+            git -C "$accepted" fetch --quiet --depth=1 origin refs/heads/accepted/mobile-agent-public-url
+            git -C "$accepted" checkout --quiet -b accepted FETCH_HEAD
+            git -C "$accepted" rm -rf . >/dev/null 2>&1 || true
+          else
+            git -C "$accepted" checkout --quiet --orphan accepted
+          fi
+          mkdir -p "$accepted/accepted"
+          cp "$root/public-url-receipt.json" "$accepted/accepted/public-url-receipt.json"
+          cp "$root/accepted-validation.json" "$accepted/accepted/validation.json"
+          python3 - "$accepted/accepted/provenance.json" <<'PY'
+          import json,os,pathlib,sys
+          value={
+            'schema':'ops.mobileAgentPublicUrlAcceptedProvenance/1',
+            'authority':False,
+            'candidateSha':os.environ['GITHUB_SHA'],
+            'producerRunId':int(os.environ['GITHUB_RUN_ID']),
+            'producerEvidenceArtifactDigest':os.environ['EVIDENCE_ARTIFACT_DIGEST'],
+            'acceptedReceiptArtifactDigest':os.environ['ACCEPTED_ARTIFACT_DIGEST'],
+          }
+          pathlib.Path(sys.argv[1]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          git -C "$accepted" add accepted
+          git -C "$accepted" commit --quiet -m "accept: audited seq/1 URL for $GITHUB_SHA"
+          git -C "$accepted" push --quiet origin HEAD:refs/heads/accepted/mobile-agent-public-url
+
+      - name: Report the URL from the accepted receipt only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          EVIDENCE_ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+          ACCEPTED_ARTIFACT_ID: ${{ steps.accepted.outputs.artifact-id }}
+          ACCEPTED_ARTIFACT_DIGEST: ${{ steps.accepted.outputs.artifact-digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cases"][0]["stableUrl"])' "$root/public-url-receipt.json")"
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Mobile Agent public URL acceptance — PASS
+
+          - \`seq/1\`: $url
+          - candidate: \`$GITHUB_SHA\`
+          - producer run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          - evidence artifact: \`$EVIDENCE_ARTIFACT_ID\` / \`$EVIDENCE_ARTIFACT_DIGEST\`
+          - accepted receipt artifact: \`$ACCEPTED_ARTIFACT_ID\` / \`$ACCEPTED_ARTIFACT_DIGEST\`
+          - accepted ref: \`accepted/mobile-agent-public-url\`
+
+          Stable and deployment-specific App bytes were identical to the Carrier and both URLs passed real-Chrome seq/1, maxGraph, Source/handoff/review, edit→undo, browser errors 0, and failed responses 0.
+          EOF
+          for issue in 286 242 233 279; do
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          done
