@@ -4,8 +4,14 @@ set -euo pipefail
 root="$RUNNER_TEMP/result"
 mkdir -p "$root"
 gh api "repos/$GITHUB_REPOSITORY/issues/286/comments?per_page=100" > "$root/comments.json"
-python3 verification/mobile-agent-seq-ingress-v2/reconstruct.py \
+python3 verification/mobile-agent-seq-ingress-v2/normalize_comments.py \
   "$root/comments.json" \
+  "$root/normalized-comments.json" \
+  "$root/comment-diagnostics.json" \
+  "$GITHUB_REPOSITORY_OWNER" \
+  'SEQ-CARRIER-CHUNK/2'
+python3 verification/mobile-agent-seq-ingress-v2/reconstruct.py \
+  "$root/normalized-comments.json" \
   verification/mobile-agent-seq-ingress-v2/contract.json \
   "$root" \
   "$GITHUB_REPOSITORY_OWNER"
