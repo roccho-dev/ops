@@ -1,7 +1,7 @@
 package hq
 
 var inventoryTestNameAliases = map[string]string{
-	"TestCLIProofBoundaryAndHelpMeanings":                        "TestCLIExposesProofBoundaryAndUsage",
+	"TestCLIProofBoundaryAndHelpMeanings":                        "TestCLIExposesCanonicalBoundaryAndUsage",
 	"TestCoreCLIRequiredSerializedMeanings":                      "TestCLICommandsPreserveJSONLContracts",
 	"TestPromotionCLIRequiredSerializedMeanings":                 "TestPromotionCLIIsReadOnlyAndFailClosed",
 	"TestQueueValidatorRequiredSerializedMeanings":               "TestQueueValidationIsExplicitAndFailClosed",

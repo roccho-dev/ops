@@ -72,6 +72,19 @@
             ];
             doCheck = true;
           };
+          hq-modeling-runtime = nixpkgs.legacyPackages.${system}.buildGoModule {
+            pname = "hq-modeling-runtime";
+            version = "1.0.0";
+            src = ./packages/hq-modeling-runtime;
+            vendorHash = null;
+            subPackages = [ "cmd/hq-modeling-runtime" ];
+            ldflags = [
+              "-s"
+              "-w"
+              "-buildid="
+            ];
+            doCheck = true;
+          };
           shiftleft-admission =
             let
               pkgs = nixpkgs.legacyPackages.${system};
@@ -123,6 +136,7 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
             let
               pkgs = nixpkgs.legacyPackages.${system};

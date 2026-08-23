@@ -4,26 +4,34 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { runAdmissionGateJsonl } from '../../hq-modeling-runtime/lib/admission-gate.mjs';
-import { buildRepoMapProjectionFromQueueJsonl } from '../../hq-modeling-runtime/lib/projection-builder.mjs';
 import { sourceObservationRow, sourceReceiptFromObservation, sourceReceiptsToJsonl } from '../../hq-source-evidence-runtime/lib/source-receipt-writer.mjs';
 import { checkModelSourceReconcile } from '../lib/reconcile-checker.mjs';
 
-const modelQueue = {
-  kind: 'hq.modelCommitQueued.v1',
-  id: 'mq_package_ceo_repo_adrs',
-  status: 'queued',
-  targetRef: { kind: 'repoMap.edge', id: 'package:ceo->repo:adrs' },
-  op: 'addEdge',
-  payload: { from: 'package:ceo', to: 'repo:adrs', type: 'located_in' },
-  confirmedBy: 'human',
-  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_package_ceo_repo_adrs', confirmedBy: 'human' },
+const here = path.dirname(fileURLToPath(import.meta.url));
+const modelProjection = {
+  kind: 'repoMap.projection.v1',
+  projectionId: 'repoMap.localShadow.v1',
+  projectionDigest: 'sha256:model-fixture',
+  evidenceOnly: true,
+  nonAuthority: true,
+  nodes: [
+    { kind: 'package', id: 'package:ceo', label: 'package:ceo', evidenceOnly: true },
+    { kind: 'package', id: 'repo:adrs', label: 'repo:adrs', evidenceOnly: true },
+  ],
+  edges: [{
+    id: 'edge:package:ceo->repo:adrs:located_in',
+    from: 'package:ceo',
+    to: 'repo:adrs',
+    type: 'located_in',
+    sourceQueueId: 'mq_package_ceo_repo_adrs',
+    evidenceOnly: true,
+  }],
+  pendingAgentTasks: [],
+  receipts: [],
+  errors: [],
 };
-
-const modelProjection = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(modelQueue)).projection;
 
 const observedInAdrs = sourceObservationRow({
   id: 'obs:package:ceo:repo:adrs',
@@ -121,28 +129,6 @@ const missingInAdrs = sourceObservationRow({
   assert.equal(result.rows[0].result, 'invalid_source_receipt');
 }
 
-{
-  const reconcileRow = checkModelSourceReconcile({
-    modelProjection,
-    sourceObservations: [observedInAdrs],
-    sourceReceipts: [sourceReceiptFromObservation(observedInAdrs)],
-  }).rows[0];
-  const direct = runAdmissionGateJsonl(JSON.stringify(reconcileRow));
-  assert.equal(direct.ok, false);
-  assert.equal(direct.admitted, 0);
-  assert.ok(direct.errors.some((error) => error.code === 'unknown-kind'));
-
-  const smuggled = runAdmissionGateJsonl(JSON.stringify({
-    ...modelQueue,
-    id: 'mq_smuggled_reconcile',
-    origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_smuggled_reconcile', confirmedBy: 'human' },
-    payload: { embedded: reconcileRow },
-  }));
-  assert.equal(smuggled.ok, false);
-  assert.equal(smuggled.admitted, 0);
-  assert.ok(smuggled.errors.some((error) => error.code === 'payload-smuggled-row'));
-}
-
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'model-source-reconcile-'));
 try {
   const modelPath = path.join(tmp, 'model.json');
@@ -152,7 +138,6 @@ try {
   fs.writeFileSync(sourcePath, JSON.stringify(observedInAdrs));
   fs.writeFileSync(receiptsPath, sourceReceiptsToJsonl([sourceReceiptFromObservation(observedInAdrs)]));
 
-  const here = path.dirname(fileURLToPath(import.meta.url));
   const siblingBin = path.join(here, '..', 'bin', 'model-source-reconcile.mjs');
   const cmd = fs.existsSync(siblingBin)
     ? [process.execPath, siblingBin]

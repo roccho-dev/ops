@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/roccho-dev/ops/packages/hq-modeling-runtime-go-proof/internal/hq"
+	"github.com/roccho-dev/ops/packages/hq-modeling-runtime/internal/hq"
 )
 
 func main() {

@@ -4,24 +4,35 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import { buildRepoMapProjectionFromQueueJsonl } from '../../hq-modeling-runtime/lib/projection-builder.mjs';
 import { sourceObservationRow, sourceReceiptFromObservation, sourceReceiptsToJsonl } from '../../hq-source-evidence-runtime/lib/source-receipt-writer.mjs';
 import { buildReconcileProjection } from '../lib/reconcile-projection.mjs';
 
-const queue = {
-  kind: 'hq.modelCommitQueued.v1',
-  id: 'mq_package_ceo_repo_adrs',
-  status: 'queued',
-  targetRef: { kind: 'repoMap.edge', id: 'package:ceo->repo:adrs' },
-  op: 'addEdge',
-  payload: { from: 'package:ceo', to: 'repo:adrs', type: 'located_in' },
-  confirmedBy: 'human',
-  origin: { kind: 'direct-human.v1', confirmationId: 'confirmation:mq_package_ceo_repo_adrs', confirmedBy: 'human' },
+const here = path.dirname(fileURLToPath(import.meta.url));
+const modelProjection = {
+  kind: 'repoMap.projection.v1',
+  projectionId: 'repoMap.localShadow.v1',
+  projectionDigest: 'sha256:model-fixture',
+  evidenceOnly: true,
+  nonAuthority: true,
+  nodes: [
+    { kind: 'package', id: 'package:ceo', label: 'package:ceo', evidenceOnly: true },
+    { kind: 'package', id: 'repo:adrs', label: 'repo:adrs', evidenceOnly: true },
+  ],
+  edges: [{
+    id: 'edge:package:ceo->repo:adrs:located_in',
+    from: 'package:ceo',
+    to: 'repo:adrs',
+    type: 'located_in',
+    sourceQueueId: 'mq_package_ceo_repo_adrs',
+    evidenceOnly: true,
+  }],
+  pendingAgentTasks: [],
+  receipts: [],
+  errors: [],
 };
-const modelProjection = buildRepoMapProjectionFromQueueJsonl(JSON.stringify(queue)).projection;
+
 const observation = sourceObservationRow({
   id: 'obs:package:ceo:repo:adrs',
   status: 'observed',
@@ -79,7 +90,6 @@ try {
   fs.writeFileSync(sourcePath, JSON.stringify(observation));
   fs.writeFileSync(receiptsPath, sourceReceiptsToJsonl([receipt]));
 
-  const here = path.dirname(fileURLToPath(import.meta.url));
   const siblingBin = path.join(here, '..', 'bin', 'model-source-reconcile.mjs');
   const cmd = fs.existsSync(siblingBin)
     ? [process.execPath, siblingBin]

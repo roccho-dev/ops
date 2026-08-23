@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var implementedSubset = []any{
+var implementedCapabilities = []any{
 	"queue-schema-validator",
 	"local-worker",
 	"receipt-writer",
@@ -19,22 +19,17 @@ var implementedSubset = []any{
 
 func BoundarySummary() Object {
 	return Object{
-		"kind":                  "hq.modelingRuntime.goParityProof.boundary.v1",
-		"packageName":           "hq-modeling-runtime-go-proof",
-		"canonicalPackage":      "hq-modeling-runtime",
-		"ownerRepo":             "ops",
-		"proofOnly":             true,
-		"nonAuthority":          true,
-		"cutoverReady":          false,
-		"replacementAuthorized": false,
-		"inputBoundary":         "serialized JSON and JSONL bytes",
-		"implementedSubset":     implementedSubset,
-		"excluded": []any{
-			"JavaScript object descriptor, Proxy, getter, sparse-array, and prototype semantics",
-			"CUE append-contract execution",
-			"local serve, CI, GitHub readback, and canonical promotion adapters",
-			"package registry replacement",
-			"production authority",
+		"kind":           "hq.modelingRuntime.boundary.v1",
+		"packageName":    "hq-modeling-runtime",
+		"ownerRepo":      "ops",
+		"implementation": "go",
+		"canonical":      true,
+		"nonAuthority":   true,
+		"inputBoundary":  "serialized JSON and JSONL bytes",
+		"capabilities":   implementedCapabilities,
+		"retired": []any{
+			"arbitrary in-process JavaScript object semantics",
+			"unused CUE, local serve, CI, GitHub readback, and staged canonical-promotion adapters",
 		},
 	}
 }
