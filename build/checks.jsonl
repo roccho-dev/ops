@@ -42,3 +42,4 @@
 {"deps":["nodejs","structured-diagnostic"],"kind":"check","name":"structured-diagnostic","script":"packages/structured-diagnostic/tests/e2e.mjs"}
 {"deps":["ast-grep","nodejs","git","go","python3","ops-git-write-closure"],"kind":"check","name":"ops-git-write-closure-mandatory-admission","script":"packages/ops-git-write-closure/tests/mandatory-admission.mjs"}
 {"deps":["nodejs","python3","duckdb","git","ops-decision-closure"],"kind":"check","name":"ops-decision-closure","script":"packages/ops-decision-closure/tests/final-e2e.mjs"}
+{"deps":["nodejs","python3","ops-decision-closure"],"kind":"check","name":"ops-decision-closure-world-core","script":"packages/ops-decision-closure/tests/world-core.mjs"}

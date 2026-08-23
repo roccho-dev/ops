@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.unit/1",
+  "title": "World unit registry row",
+  "type": "object",
+  "required": ["schema", "id", "name", "aliases"],
+  "properties": {
+    "schema": {"const": "world.unit/1"},
+    "id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "aliases": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

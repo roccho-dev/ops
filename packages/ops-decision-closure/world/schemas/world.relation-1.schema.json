@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.relation/1",
+  "title": "World relation registry row",
+  "type": "object",
+  "required": ["schema", "id", "name", "aliases"],
+  "properties": {
+    "schema": {"const": "world.relation/1"},
+    "id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "inverse": {"type": "string"},
+    "symmetric": {"type": "boolean"},
+    "uses": {"type": "integer", "minimum": 0}
+  },
+  "additionalProperties": false
+}

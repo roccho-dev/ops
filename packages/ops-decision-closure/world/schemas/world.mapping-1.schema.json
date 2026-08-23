@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.mapping/1",
+  "title": "World source mapping receipt",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "source",
+    "line",
+    "mapper",
+    "quality",
+    "outputs",
+    "source_sha256"
+  ],
+  "properties": {
+    "schema": { "const": "world.mapping/1" },
+    "id": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "line": { "type": "integer", "minimum": 1 },
+    "mapper": { "type": "string", "minLength": 1 },
+    "quality": { "enum": ["semantic", "structural", "preserved"] },
+    "strategy": { "type": "string", "minLength": 1 },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "kept": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "source_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  },
+  "additionalProperties": false
+}

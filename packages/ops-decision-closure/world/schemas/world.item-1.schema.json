@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.item/1",
+  "title": "World item",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "kind",
+    "recorded_at",
+    "origin",
+    "status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "world.item/1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recorded_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin": {
+      "type": "object",
+      "required": [
+        "source",
+        "line"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "path": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "mapper": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "status": {
+      "enum": [
+        "active",
+        "withdrawn"
+      ]
+    },
+    "language": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
