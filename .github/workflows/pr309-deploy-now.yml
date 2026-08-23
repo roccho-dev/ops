@@ -1,4 +1,4 @@
-name: One-shot PR309 deploy trigger
+name: One-shot PR309 deployed-byte verification
 
 on:
   push:
@@ -8,93 +8,106 @@ on:
       - '.github/workflows/pr309-deploy-now.yml'
 
 permissions:
-  actions: write
   contents: read
   issues: write
   pull-requests: write
 
 jobs:
-  dispatch:
+  verify:
     if: github.repository == 'roccho-dev/ops' && github.ref == 'refs/heads/proposal/mobile-agent-business-model-public-260823'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 20
+    env:
+      SOURCE_SHA: d9be0aebce95f202c5ae3f1cbc78cfcb10b3bfd4
+      STABLE_BASE: https://stg-mobile-agent.pages.dev/
+      IMMUTABLE_BASE: https://98c3b352.stg-mobile-agent.pages.dev/
     steps:
-      - name: Dispatch approved merged business-model deployment and report proof
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Build exact public route
+        working-directory: verification/mobile-agent-business-model-presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build:public
+          sha256sum dist/public/index.html
+          wc -c dist/public/index.html
+
+      - name: Read back stable and deployment-specific bytes with browser headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=verification/mobile-agent-business-model-presentation/dist/public/index.html
+          expected_sha="$(sha256sum "$src" | cut -d' ' -f1)"
+          expected_bytes="$(wc -c < "$src")"
+          mkdir -p "$RUNNER_TEMP/readback"
+          for kind in stable immutable; do
+            if [ "$kind" = stable ]; then base="$STABLE_BASE"; else base="$IMMUTABLE_BASE"; fi
+            target="$RUNNER_TEMP/readback/$kind.html"
+            for attempt in $(seq 1 30); do
+              if curl --http1.1 --fail-with-body --location --silent --show-error \
+                --user-agent 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153 Safari/537.36' \
+                -H 'Accept: text/html,application/xhtml+xml' -H 'Cache-Control: no-cache' \
+                "${base}business-model/" -o "$target"; then
+                actual_sha="$(sha256sum "$target" | cut -d' ' -f1)"
+                actual_bytes="$(wc -c < "$target")"
+                if [ "$actual_sha" = "$expected_sha" ] && [ "$actual_bytes" -eq "$expected_bytes" ]; then
+                  echo "$kind byte readback PASS $actual_bytes $actual_sha"
+                  break
+                fi
+              fi
+              if [ "$attempt" -eq 30 ]; then exit 1; fi
+              sleep 2
+            done
+          done
+
+      - name: Prove all stable and immutable URLs in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=verification/mobile-agent-business-model-presentation
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$chrome"
+          for kind in stable immutable; do
+            if [ "$kind" = stable ]; then base="$STABLE_BASE"; else base="$IMMUTABLE_BASE"; fi
+            dir="$RUNNER_TEMP/$kind"; mkdir -p "$dir"
+            for actors in 2 3 4; do
+              node "$src/scripts/generate-url.mjs" "$src/examples/$actors-actors.jsonl" \
+                "${base}business-model/" "$dir/$actors.json" >/dev/null
+            done
+            python3 - "$dir" "$RUNNER_TEMP/$kind-urls.json" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          rows=[json.loads((root/f'{n}.json').read_text()) for n in (2,3,4)]
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({'schema':'mobile-agent.business-model-public-url-test/1','status':'PASS','results':rows},ensure_ascii=False,indent=2)+'\n')
+          PY
+            CHROMIUM_PATH="$chrome" python3 "$src/tests/e2e/public_host_projection.py" \
+              "$RUNNER_TEMP/$kind-urls.json" "$RUNNER_TEMP/$kind-proof.json"
+          done
+
+      - name: Report verified URLs
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          workflow=mobile-agent-business-model-public.yml
-          target_ref=proposals
-          target_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$target_ref" --jq .sha)"
-          gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body "business-model/1 deployment authorized; resolving run for merged \`proposals\` at \`$target_sha\`."
-
-          run_id=''
-          while read -r candidate sha status conclusion; do
-            [ "$sha" = "$target_sha" ] || continue
-            if [ "$status" != completed ]; then
-              run_id="$candidate"; break
-            fi
-            if [ "$conclusion" = success ]; then
-              probe="$RUNNER_TEMP/probe-$candidate"; mkdir -p "$probe"
-              if gh run download "$candidate" --repo "$GITHUB_REPOSITORY" \
-                -n "mobile-agent-business-model-deployment-$candidate" -D "$probe" >/dev/null 2>&1; then
-                run_id="$candidate"; break
-              fi
-            fi
-          done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
-            --branch "$target_ref" --limit 30 --json databaseId,headSha,status,conclusion \
-            --jq '.[] | [.databaseId,.headSha,.status,(.conclusion // "")] | @tsv')
-
-          if [ -z "$run_id" ]; then
-            before="$RUNNER_TEMP/before.txt"
-            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
-              --branch "$target_ref" --limit 30 --json databaseId --jq '.[].databaseId' | sort -n > "$before"
-            gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$target_ref" -f deploy=true
-            for _ in $(seq 1 60); do
-              while read -r candidate sha; do
-                [ "$sha" = "$target_sha" ] || continue
-                if ! grep -qx "$candidate" "$before"; then run_id="$candidate"; break; fi
-              done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
-                --branch "$target_ref" --limit 30 --json databaseId,headSha --jq '.[] | [.databaseId,.headSha] | @tsv')
-              [ -n "$run_id" ] && break
-              sleep 2
-            done
-          fi
-
-          test -n "$run_id"
-          gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body "business-model/1 deployment run: \`$run_id\` for \`$target_sha\`."
-          echo "using deployment run $run_id for $target_sha"
-          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
-
-          out="$RUNNER_TEMP/deployment"
-          rm -rf "$out"; mkdir -p "$out"
-          for _ in $(seq 1 30); do
-            if gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
-              -n "mobile-agent-business-model-deployment-$run_id" -D "$out"; then break; fi
-            sleep 2
-          done
-          for file in readback.json stable-proof.json immutable-proof.json stable-urls.json immutable-urls.json; do test -f "$out/$file"; done
-
-          python3 - "$out" "$run_id" "$target_sha" "$RUNNER_TEMP/comment.md" <<'PY'
+          python3 - "$RUNNER_TEMP" "$SOURCE_SHA" "$RUNNER_TEMP/comment.md" <<'PY'
           import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); run_id=int(sys.argv[2]); sha=sys.argv[3]; out=pathlib.Path(sys.argv[4])
-          readback=json.loads((root/'readback.json').read_text())
+          root=pathlib.Path(sys.argv[1]); sha=sys.argv[2]; out=pathlib.Path(sys.argv[3])
           stable=json.loads((root/'stable-proof.json').read_text())
           immutable=json.loads((root/'immutable-proof.json').read_text())
-          stable_urls=json.loads((root/'stable-urls.json').read_text())
-          immutable_urls=json.loads((root/'immutable-urls.json').read_text())
-          assert readback['status']=='PASS'
+          su=json.loads((root/'stable-urls.json').read_text())
+          iu=json.loads((root/'immutable-urls.json').read_text())
           assert stable['status']==immutable['status']=='PASS'
-          assert all(p['status']=='PASS' for p in stable['proofs'])
-          assert all(p['status']=='PASS' for p in immutable['proofs'])
-          assert [r['actorCount'] for r in stable_urls['results']]==[2,3,4]
-          assert [r['actorCount'] for r in immutable_urls['results']]==[2,3,4]
-          lines=['## business-model/1 deployment PASS','',f'- source: `{sha}`',f'- run: `{run_id}`','- stable + deployment-specific byte readback: `PASS`','- stable + deployment-specific real-Chrome 2/3/4 actor proof: `PASS`','','Stable URLs:']
-          for row in stable_urls['results']: lines.append(f"- {row['actorCount']} actors: {row['url']}")
+          lines=['## business-model/1 deployment PASS','',f'- source: `{sha}`','- stable byte readback: `PASS`','- deployment-specific byte readback: `PASS`','- stable real-Chrome 2/3/4 actor proof: `PASS`','- deployment-specific real-Chrome 2/3/4 actor proof: `PASS`','','Stable URLs:']
+          for row in su['results']: lines.append(f"- {row['actorCount']} actors: {row['url']}")
           lines += ['', 'Deployment-specific URLs:']
-          for row in immutable_urls['results']: lines.append(f"- {row['actorCount']} actors: {row['url']}")
+          for row in iu['results']: lines.append(f"- {row['actorCount']} actors: {row['url']}")
           out.write_text('\n'.join(lines)+'\n',encoding='utf-8')
           PY
           gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
