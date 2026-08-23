@@ -1,0 +1,76 @@
+name: Proof alternate three-actor business model
+
+on:
+  push:
+    branches:
+      - proof/business-model-alt-3-actor-260824
+    paths:
+      - '.github/workflows/proof-business-model-alt-3-actor.yml'
+      - 'proof/business-model-alt-3-actor.jsonl'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Generate URL from only the alternate semantic JSONL
+        working-directory: verification/mobile-agent-business-model-presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/generate-url.mjs \
+            "$GITHUB_WORKSPACE/proof/business-model-alt-3-actor.jsonl" \
+            'https://stg-mobile-agent.pages.dev/business-model/' \
+            "$RUNNER_TEMP/receipt.json"
+          python3 - "$RUNNER_TEMP/receipt.json" "$RUNNER_TEMP/urls.json" <<'PY'
+          import json,pathlib,sys
+          receipt=json.load(open(sys.argv[1]))
+          assert receipt['status']=='PASS'
+          assert receipt['pattern']=='business-model/1'
+          assert receipt['actorCount']==3
+          assert receipt['urlChars']<=8192
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({
+              'schema':'mobile-agent.business-model-public-url-test/1',
+              'status':'PASS',
+              'results':[receipt],
+          },ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+      - name: Open generated URL in real Chrome
+        working-directory: verification/mobile-agent-business-model-presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$chrome"
+          CHROMIUM_PATH="$chrome" python3 tests/e2e/public_host_projection.py \
+            "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/proof.json"
+      - name: Report alternate example URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/receipt.json" "$RUNNER_TEMP/proof.json" "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,pathlib,sys
+          receipt=json.load(open(sys.argv[1])); proof=json.load(open(sys.argv[2]))
+          assert proof['status']=='PASS' and proof['pass'] is True
+          out=pathlib.Path(sys.argv[3])
+          out.write_text(
+              '## 別ビジネスの3主体例 — real Chrome PASS\n\n'
+              '**設備停止を減らすほど、保険まで安くなる**\n\n'
+              '`工場 ⇄ 予兆保全運営 ⇄ 保険会社`\n\n'
+              f"- JSONL → business-model/1 → URL: PASS\n- URL chars: `{receipt['urlChars']} / 8192`\n- URL: {receipt['url']}\n",
+              encoding='utf-8',
+          )
+          PY
+          gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
