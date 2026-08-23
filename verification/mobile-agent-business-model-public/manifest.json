@@ -25,9 +25,17 @@
     "test": "npm test"
   },
   "baseApp": {
-    "source": "accepted immutable one-HTML Carrier from ops#286",
+    "source": "accepted exact one-HTML Carrier reconstructed from owner-only ops#286 comments; hash-pinned non-authority transport",
     "carrier": {
-      "tag": "mobile-agent-seq-app-3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6",
+      "kind": "github-issue-owner-comments",
+      "authority": false,
+      "issue": 286,
+      "prefix": "SEQ-APP-BR/1",
+      "chunkCount": 11,
+      "base64": {
+        "bytes": 509996,
+        "sha256": "a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01"
+      },
       "asset": {
         "name": "mobile-agent-seq-app.3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6.html.br",
         "codec": "brotli",
@@ -67,6 +75,8 @@
     "existingMaxGraphAppRewritten": false,
     "exactAcceptedAppHtmlPreserved": true,
     "old54FileBootstrapRetired": true,
+    "missingReleaseDependencyRetired": true,
+    "carrierCommentTransportAuthority": false,
     "newUrlCodec": false,
     "newBackend": false,
     "newDatabase": false,
