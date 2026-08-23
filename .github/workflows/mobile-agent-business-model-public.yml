@@ -132,6 +132,7 @@ jobs:
           total=int(os.environ['CARRIER_CHUNKS'])
           header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{total:02d}$')
           chunks={}
+          duplicate_counts={}
           for comment in comments:
               if comment.get('user',{}).get('login') != owner:
                   continue
@@ -146,14 +147,17 @@ jobs:
               assert re.fullmatch(r'[A-Za-z0-9+/=]+',payload),match.group(1)
               index=int(match.group(1))
               assert 0 <= index < total,index
-              assert index not in chunks,f'duplicate chunk {index}'
+              if index in chunks:
+                  assert chunks[index] == payload,f'conflicting duplicate chunk {index}'
+                  duplicate_counts[index]=duplicate_counts.get(index,0)+1
+                  continue
               chunks[index]=payload
           assert sorted(chunks)==list(range(total)),sorted(chunks)
           joined=''.join(chunks[index] for index in range(total))
           assert len(joined)==int(os.environ['CARRIER_BASE64_BYTES']),len(joined)
           assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['CARRIER_BASE64_SHA']
           pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
-          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined)}))
+          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined),'identicalDuplicateChunks':duplicate_counts},sort_keys=True))
           PY
           base64 --decode "$carrier_b64" > "$asset"
           test "$(wc -c < "$asset")" -eq "$BASE_ASSET_BYTES"
