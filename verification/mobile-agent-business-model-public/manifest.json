@@ -9,10 +9,7 @@
     "id": "business-model/1",
     "route": "/business-model/",
     "fragment": "presentation",
-    "actorCount": {
-      "min": 2,
-      "max": 4
-    },
+    "actorCount": {"min": 2, "max": 4},
     "actorOrder": "connected exchange path; earliest endpoint input chooses the left edge",
     "urlLimitChars": 8192
   },
@@ -25,22 +22,22 @@
     "test": "npm test"
   },
   "baseApp": {
-    "source": "accepted exact one-HTML Carrier reconstructed from owner-only ops#286 comments; hash-pinned non-authority transport",
+    "source": "exact complete App Carrier from owner-only ops#286 comments; hash-pinned non-authority transport",
     "carrier": {
       "kind": "github-issue-owner-comments",
       "authority": false,
       "issue": 286,
-      "prefix": "SEQ-APP-BR/1",
-      "chunkCount": 11,
+      "prefix": "SEQ-CARRIER-CHUNK/2",
+      "chunkCount": 10,
       "base64": {
-        "bytes": 509996,
-        "sha256": "a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01"
+        "bytes": 568192,
+        "sha256": "4d137be8ae864a1a634c59664343d65da6298bb680f003faf71d4421234e2213"
       },
-      "asset": {
-        "name": "mobile-agent-seq-app.3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6.html.br",
-        "codec": "brotli",
-        "bytes": 382497,
-        "sha256": "4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97"
+      "archive": {
+        "name": "mobile-agent-seq-carrier.tar.xz",
+        "codec": "tar.xz",
+        "bytes": 426144,
+        "sha256": "516a740503c8a22b1b4e0051fab3f5b9a942578fea8fd016323a0ccbe54c3e0d"
       }
     },
     "appHtml": {
@@ -48,11 +45,7 @@
       "bytes": 2412388,
       "sha256": "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
     },
-    "preservedPatterns": [
-      "graph/1",
-      "map/1",
-      "seq/1"
-    ],
+    "preservedPatterns": ["graph/1", "map/1", "seq/1"],
     "preserveExactAcceptedAppHtml": true
   },
   "provider": {
@@ -64,10 +57,7 @@
   },
   "publication": {
     "mode": "content-addressed immutable Release plus explicit Pages deployment",
-    "files": [
-      "app/index.html",
-      "business-model/index.html"
-    ],
+    "files": ["app/index.html", "business-model/index.html"],
     "releaseOn": "push to proposals",
     "deployOn": "explicit workflow_dispatch"
   },
