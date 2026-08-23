@@ -37,7 +37,10 @@ def main() -> None:
             launch["executable_path"] = executable
         browser = playwright.chromium.launch(**launch)
         for item in manifest["results"]:
-            count = int(item["count"])
+            count_value = item.get("actorCount", item.get("count"))
+            if count_value is None:
+                raise RuntimeError("URL proof item has neither actorCount nor count")
+            count = int(count_value)
             errors: list[str] = []
             page = browser.new_page(viewport={"width": 1600, "height": 900}, device_scale_factor=1)
             page.on("pageerror", lambda error, bucket=errors: bucket.append(str(error)))
