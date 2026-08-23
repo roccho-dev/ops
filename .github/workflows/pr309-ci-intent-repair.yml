@@ -4,17 +4,11 @@ on:
   pull_request:
     paths:
       - '.github/workflows/pr309-ci-intent-repair.yml'
-      - '.github/workflows/mobile-agent-business-model-public.yml'
-      - 'verification/mobile-agent-business-model-public/**'
-      - 'verification/mobile-agent-business-model-presentation/**'
   push:
     branches:
       - proposal/mobile-agent-business-model-public-260823
     paths:
       - '.github/workflows/pr309-ci-intent-repair.yml'
-      - '.github/workflows/mobile-agent-business-model-public.yml'
-      - 'verification/mobile-agent-business-model-public/**'
-      - 'verification/mobile-agent-business-model-presentation/**'
 
 permissions:
   contents: write
@@ -29,7 +23,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
-      - name: Normalize current workflow declarations
+      - name: Replace only PR309 workflow intent
         shell: bash
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -42,13 +36,8 @@ jobs:
 
           path=Path('ci.intent.v1.jsonl')
           records=[json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
-          self_path='.github/workflows/pr309-ci-intent-repair.yml'
           target='.github/workflows/mobile-agent-business-model-public.yml'
-          actual={item.as_posix() for item in Path('.github/workflows').glob('*.yml') if item.as_posix()!=self_path}
-
-          current={record['path']:record for record in records if record.get('path') in actual}
-          assert target in current,target
-          current[target]={
+          replacement={
               'all_repositories_enforced':False,
               'artifact_generation':'generated',
               'artifact_source':'content-addressed one-file business-model/1 static projection and provider readback receipts',
@@ -71,16 +60,11 @@ jobs:
               'source':'verification/mobile-agent-business-model-presentation plus verification/mobile-agent-business-model-public/manifest.json',
               'workflow_definition':'checked_in'
           }
-
-          ordered=[]; emitted=set()
-          for record in records:
-              workflow=record.get('path')
-              if workflow not in actual or workflow in emitted:
-                  continue
-              ordered.append(current[workflow]); emitted.add(workflow)
-          assert emitted==actual, {'missing':sorted(actual-emitted),'stale':sorted(emitted-actual)}
-          path.write_text(''.join(json.dumps(record,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n' for record in ordered),encoding='utf-8')
-          print(json.dumps({'status':'PASS','workflows':len(actual),'removedRecords':len(records)-len(ordered),'updated':target}))
+          matches=[i for i,record in enumerate(records) if record.get('path')==target]
+          assert len(matches)==1,matches
+          records[matches[0]]=replacement
+          path.write_text(''.join(json.dumps(record,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n' for record in records),encoding='utf-8')
+          print(json.dumps({'status':'PASS','records':len(records),'updated':target}))
           PY
           git diff --check
           git config user.name roccho
