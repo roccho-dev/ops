@@ -1,0 +1,24 @@
+{
+  "schema": "world.mapper/1",
+  "id": "ops.fcc/1",
+  "source": ["fact", "condition", "claim"],
+  "target": ["world.item/1", "world.claim/1"],
+  "authority": "source",
+  "projection_authority": false,
+  "rules": {
+    "fact": {"basis": "observed", "mode": "actual"},
+    "condition.goal": {"basis": "declared", "mode": "desired"},
+    "condition.constraint": {"basis": "declared", "mode": "required"},
+    "condition.threshold": {"basis": "declared", "mode": "required"},
+    "condition.freshness": {"basis": "declared", "mode": "required"},
+    "condition.scope": {"basis": "declared", "mode": "actual"},
+    "claim.decision": {"basis": "declared", "mode": "selected"},
+    "claim.proposal": {"basis": "declared", "mode": "recommended"},
+    "claim.derived.calc": {"basis": "computed", "mode": "actual"},
+    "claim.derived.judge": {"basis": "inferred", "mode": "actual"}
+  },
+  "unknown_field_rule": "preserve_under_data.legacy.extra",
+  "relation_rule": "project_each_rel_as_claim",
+  "reverse_rule": "rebuild_canonical_fcc_from_legacy_mapping",
+  "identity_rule": "same_kind_and_exact_key_only"
+}

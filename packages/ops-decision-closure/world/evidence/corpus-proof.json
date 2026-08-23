@@ -1,0 +1,58 @@
+{
+  "authority": false,
+  "checks": {
+    "all_legacy_shapes_have_mapper": true,
+    "all_mapper_fields_classified": true,
+    "all_mapping_outputs_resolve": true,
+    "all_relations_registered": true,
+    "all_subjects_resolve": true,
+    "all_target_refs_resolve": true,
+    "core_contracts_valid": true,
+    "every_source_record_mapped": true,
+    "normalization_goldens_pass": true,
+    "relation_names_normalized": true,
+    "source_files_unchanged": true,
+    "sqlite_counts_match": true,
+    "sqlite_integrity_ok": true
+  },
+  "claim_ceiling": [
+    "the bounded corpus can be preserved and projected into item plus claim",
+    "facts constraints proposals and inferences can be regenerated as SQLite views",
+    "preserved mappings retain source meaning without claiming semantic interpretation"
+  ],
+  "counts": {
+    "claims": 65201,
+    "items": 6256,
+    "mapper_fields": 8925,
+    "mappers": 800,
+    "mappings": 10494,
+    "source_files": 93,
+    "source_records": 10494,
+    "source_shapes": 608
+  },
+  "generated_at": "2026-08-23T18:05:00+09:00",
+  "mapping_quality": {
+    "preserved": 2248,
+    "semantic": 3035,
+    "structural": 5211
+  },
+  "not_claimed": [
+    "the corpus covers every possible future world log",
+    "all preserved rows are semantically normalized",
+    "the generated SQLite database is authority",
+    "production cutover is complete"
+  ],
+  "proof_artifact": "260823180718.6a8a9370-155c-83ee-8553-4b2ff700cf92.dist.zip",
+  "proof_zip_sha256": "51ae1e5a8a84f4dfe1b41f8d0d65fff378f0dd1e779cb20848441ef517fee832",
+  "schema": "world.corpus-proof/1",
+  "source_discussion": "6a8a9370-155c-83ee-8553-4b2ff700cf92",
+  "source_issue": "roccho-dev/adrs#314",
+  "status": "PASS",
+  "views": {
+    "attributes": 62351,
+    "constraints": 842,
+    "facts": 4561,
+    "inferences": 1393,
+    "proposals": 1386
+  }
+}

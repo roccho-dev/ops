@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.claim/1",
+  "title": "World claim",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "subject",
+    "relation",
+    "target",
+    "basis",
+    "mode",
+    "recorded_at",
+    "origin",
+    "status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "world.claim/1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recorded_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin": {
+      "type": "object",
+      "required": [
+        "source",
+        "line"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "path": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "mapper": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "status": {
+      "enum": [
+        "active",
+        "withdrawn"
+      ]
+    },
+    "language": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "relation": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "type": "string"
+        },
+        "value": {},
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "scale": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "ref"
+          ]
+        },
+        {
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "required": [
+            "min"
+          ]
+        },
+        {
+          "required": [
+            "max"
+          ]
+        }
+      ]
+    },
+    "basis": {
+      "enum": [
+        "assumed",
+        "computed",
+        "declared",
+        "inferred",
+        "observed",
+        "reported"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "actual",
+        "desired",
+        "expected",
+        "forbidden",
+        "permitted",
+        "possible",
+        "recommended",
+        "required",
+        "selected"
+      ]
+    },
+    "negated": {
+      "type": "boolean"
+    },
+    "time": {
+      "type": "object",
+      "properties": {
+        "valid_at": {
+          "type": "string"
+        },
+        "valid_from": {
+          "type": "string"
+        },
+        "valid_to": {
+          "type": "string"
+        },
+        "observed_at": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object"
+    },
+    "confidence": {
+      "type": "object",
+      "required": [
+        "scale"
+      ],
+      "properties": {
+        "scale": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "level": {
+          "type": "string"
+        },
+        "raw": {},
+        "data": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
