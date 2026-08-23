@@ -42,28 +42,18 @@ The E2E tests verify:
 - each generated URL decodes and renders in real Chromium;
 - URL length stays within 8,192 characters.
 
-## Public Mobile Agent projection
+## Public projection
 
-The public App revision is assembled without rebuilding the accepted Mobile Agent App.
+`business-model/1` is a self-contained static route. Its publication does not reconstruct, rewrite, or publish the historical Mobile Agent maxGraph App.
 
 ```text
-accepted immutable one-HTML Carrier
-→ exact /app/index.html
-+ generated /business-model/index.html
-→ content-addressed Release
+fixed UI + semantic JSONL
+→ generated /business-model/index.html
+→ content-addressed immutable Release
 → explicit Cloudflare Pages deployment
 ```
 
-The accepted App HTML is fixed at:
-
-```text
-SHA-256 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
-bytes   2412388
-```
-
-The combined browser proof re-runs `graph/1`, `map/1`, and `seq/1`, then renders the 2-, 3-, and 4-actor `business-model/1` URLs.
-
-The old 54-file bootstrap workflow is retired. Its historical Release is absent and its mutable public bootstrap no longer matches the fixed file manifest. The exact accepted one-HTML Carrier is now the only base used by this publication path.
+The publication artifact contains exactly one file: `business-model/index.html`. The existing `graph/1`, `map/1`, and `seq/1` App is an independent closure and remains out of scope here. Deployment therefore fails closed if `/app/` already exists on the target project, preventing this one-file projection from overwriting a later full-App publication.
 
 ## Repository boundary
 
