@@ -22,26 +22,16 @@
     "test": "npm test"
   },
   "baseApp": {
-    "source": "exact existing App reconstructed from the hash-pinned Git projection proven by proof-mobile-agent-preset-projection-reconstruct",
+    "source": "exact 54-file existing Mobile Agent projection discovered read-only from Cloudflare Pages and accepted only after every size/SHA gate passes",
     "projection": {
-      "kind": "git-projection-parts",
+      "kind": "verified-existing-cloudflare-pages-deployment",
       "authority": false,
-      "repository": "roccho-dev/ops",
-      "ref": "projection/mobile-agent-preset-dist-b0af2ab9",
-      "parts": [
-        {
-          "path": "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00",
-          "gitBlob": "f65a8c180f0b65317ff0455712c2ecd5934a7031",
-          "bytes": 10000
-        },
-        {
-          "path": "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01",
-          "gitBlob": "a0904cf208a3a9ac87afa37b8b6dfc4fe13c368f",
-          "bytes": 20024
-        }
-      ],
-      "joinedBase64Bytes": 30024,
-      "codec": "base64+brotli"
+      "expectedManifest": "verification/mobile-agent-preset-app/expected.json",
+      "expectedFileCount": 54,
+      "expectedDistTreeDigest": "sha256:b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145",
+      "preferredProject": "stg-mobile-agent",
+      "discoverAllProjectsIfNeeded": true,
+      "verifyEveryFileHash": true
     },
     "appHtml": {
       "path": "app/index.html",
@@ -49,7 +39,8 @@
       "sha256": "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
     },
     "preservedPatterns": ["graph/1", "map/1", "seq/1"],
-    "preserveExactAcceptedAppHtml": true
+    "preserveExactAcceptedAppHtml": true,
+    "preserveExactAccepted54FileTree": true
   },
   "provider": {
     "kind": "cloudflare-pages",
@@ -60,15 +51,17 @@
   },
   "publication": {
     "mode": "content-addressed immutable Release plus explicit Pages deployment",
-    "files": ["app/index.html", "business-model/index.html"],
+    "baseFileCount": 54,
+    "addedFiles": ["business-model/index.html"],
+    "fileCount": 55,
     "releaseOn": "push to proposals",
     "deployOn": "explicit workflow_dispatch"
   },
   "boundaries": {
     "existingMaxGraphAppRewritten": false,
     "exactAcceptedAppHtmlPreserved": true,
-    "old54FileBootstrapRetired": true,
-    "missingReleaseDependencyRetired": true,
+    "exactAccepted54FileTreePreserved": true,
+    "truncatedGitProjectionRetired": true,
     "issueCommentCarrierRetired": true,
     "baseProjectionAuthority": false,
     "newUrlCodec": false,
