@@ -24,7 +24,6 @@ on:
 
 permissions:
   contents: write
-  issues: read
 
 jobs:
   materialize:
@@ -59,22 +58,25 @@ jobs:
           assert x['baseApp']['preserveExactAcceptedAppHtml'] is True
           assert x['boundaries']['existingMaxGraphAppRewritten'] is False
           assert x['boundaries']['missingReleaseDependencyRetired'] is True
-          assert x['boundaries']['carrierCommentTransportAuthority'] is False
+          assert x['boundaries']['issueCommentCarrierRetired'] is True
+          assert x['boundaries']['baseProjectionAuthority'] is False
           assert x['boundaries']['newUrlCodec'] is False
-          c=x['baseApp']['carrier']; b=c['base64']; a=c['archive']; h=x['baseApp']['appHtml']
-          assert c['kind']=='github-issue-owner-comments' and c['authority'] is False
-          assert a['codec']=='tar.xz'
+          p=x['baseApp']['projection']; h=x['baseApp']['appHtml']
+          assert p['kind']=='git-projection-parts' and p['authority'] is False
+          assert p['repository']=='roccho-dev/ops'
+          assert p['ref']=='projection/mobile-agent-preset-dist-b0af2ab9'
+          assert p['codec']=='base64+brotli'
+          assert len(p['parts'])==2 and p['joinedBase64Bytes']==30024
+          for i,row in enumerate(p['parts']):
+              assert row['path'].startswith('projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part')
+              print(f'part{i}_path={row["path"]}')
+              print(f'part{i}_blob={row["gitBlob"]}')
+              print(f'part{i}_bytes={row["bytes"]}')
           for k,v in {
             'project':x['provider']['project'],
             'stable_base':x['provider']['stableBase'],
-            'carrier_issue':c['issue'],
-            'carrier_prefix':c['prefix'],
-            'carrier_chunks':c['chunkCount'],
-            'carrier_base64_bytes':b['bytes'],
-            'carrier_base64_sha':b['sha256'],
-            'carrier_archive':a['name'],
-            'carrier_archive_bytes':a['bytes'],
-            'carrier_archive_sha':a['sha256'],
+            'projection_ref':p['ref'],
+            'joined_base64_bytes':p['joinedBase64Bytes'],
             'base_app_bytes':h['bytes'],
             'base_app_sha':h['sha256'],
           }.items(): print(f'{k}={v}')
@@ -99,14 +101,11 @@ jobs:
         id: pack
         env:
           GH_TOKEN: ${{ github.token }}
-          CARRIER_ISSUE: ${{ steps.contract.outputs.carrier_issue }}
-          CARRIER_PREFIX: ${{ steps.contract.outputs.carrier_prefix }}
-          CARRIER_CHUNKS: ${{ steps.contract.outputs.carrier_chunks }}
-          CARRIER_BASE64_BYTES: ${{ steps.contract.outputs.carrier_base64_bytes }}
-          CARRIER_BASE64_SHA: ${{ steps.contract.outputs.carrier_base64_sha }}
-          CARRIER_ARCHIVE: ${{ steps.contract.outputs.carrier_archive }}
-          CARRIER_ARCHIVE_BYTES: ${{ steps.contract.outputs.carrier_archive_bytes }}
-          CARRIER_ARCHIVE_SHA: ${{ steps.contract.outputs.carrier_archive_sha }}
+          PART0_BLOB: ${{ steps.contract.outputs.part0_blob }}
+          PART0_BYTES: ${{ steps.contract.outputs.part0_bytes }}
+          PART1_BLOB: ${{ steps.contract.outputs.part1_blob }}
+          PART1_BYTES: ${{ steps.contract.outputs.part1_bytes }}
+          JOINED_BASE64_BYTES: ${{ steps.contract.outputs.joined_base64_bytes }}
           BASE_APP_BYTES: ${{ steps.contract.outputs.base_app_bytes }}
           BASE_APP_SHA: ${{ steps.contract.outputs.base_app_sha }}
           STABLE_BASE: ${{ steps.contract.outputs.stable_base }}
@@ -116,74 +115,25 @@ jobs:
           set -euo pipefail
           src=verification/mobile-agent-business-model-presentation
           contract=verification/mobile-agent-business-model-public/manifest.json
-          site="$RUNNER_TEMP/site"; parts="$RUNNER_TEMP/url-parts"
-          mkdir -p "$site/app" "$site/business-model" "$parts"
+          site="$RUNNER_TEMP/site"; parts="$RUNNER_TEMP/url-parts"; input="$RUNNER_TEMP/base-app"
+          mkdir -p "$site/app" "$site/business-model" "$parts" "$input"
 
-          comment_pages="$RUNNER_TEMP/carrier-comment-pages.json"
-          carrier_b64="$RUNNER_TEMP/carrier.tar.xz.b64"
-          archive="$RUNNER_TEMP/$CARRIER_ARCHIVE"
-          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/$CARRIER_ISSUE/comments" \
-            -f per_page=100 --paginate --slurp > "$comment_pages"
-          python3 - "$comment_pages" "$carrier_b64" <<'PY'
-          import hashlib,json,os,pathlib,re,sys
-          pages=json.load(open(sys.argv[1],encoding='utf-8'))
-          comments=[comment for page in pages for comment in page]
-          owner=os.environ['GITHUB_REPOSITORY_OWNER']
-          prefix=os.environ['CARRIER_PREFIX']
-          total=int(os.environ['CARRIER_CHUNKS'])
-          header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{total:02d}$')
-          alphabet=frozenset('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
-          chunks={}; duplicates={}; normalized={}
-          for comment in comments:
-              if comment.get('user',{}).get('login') != owner:
-                  continue
-              body=str(comment.get('body','')).replace('\r\n','\n').strip()
-              first,separator,rest=body.partition('\n')
-              if not separator:
-                  continue
-              match=header.fullmatch(first.strip())
-              if not match:
-                  continue
-              compact=re.sub(r'\s+','',rest)
-              payload=''.join(ch for ch in compact if ch in alphabet)
-              index=int(match.group(1)); assert 1 <= index <= total,index
-              removed=len(compact)-len(payload)
-              if removed: normalized[index]=normalized.get(index,0)+removed
-              if index in chunks:
-                  assert chunks[index] == payload,f'conflicting normalized duplicate chunk {index}'
-                  duplicates[index]=duplicates.get(index,0)+1
-                  continue
-              chunks[index]=payload
-          assert sorted(chunks)==list(range(1,total+1)),sorted(chunks)
-          joined=''.join(chunks[index] for index in range(1,total+1))
-          assert len(joined)==int(os.environ['CARRIER_BASE64_BYTES']),len(joined)
-          assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['CARRIER_BASE64_SHA']
-          pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
-          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined),'identicalDuplicateChunks':duplicates,'discardedNonBase64Chars':normalized},sort_keys=True))
-          PY
-          base64 --decode "$carrier_b64" > "$archive"
-          test "$(wc -c < "$archive")" -eq "$CARRIER_ARCHIVE_BYTES"
-          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$CARRIER_ARCHIVE_SHA"
-
-          python3 - "$archive" "$site/app/index.html" <<'PY'
-          import hashlib,os,pathlib,sys,tarfile
-          archive=pathlib.Path(sys.argv[1]); out=pathlib.Path(sys.argv[2])
-          expected_bytes=int(os.environ['BASE_APP_BYTES']); expected_sha=os.environ['BASE_APP_SHA']
-          matches=[]
-          with tarfile.open(archive,'r:xz') as tf:
-              for member in tf.getmembers():
-                  if not member.isfile() or member.size != expected_bytes:
-                      continue
-                  fh=tf.extractfile(member)
-                  assert fh is not None
-                  data=fh.read()
-                  if hashlib.sha256(data).hexdigest()==expected_sha:
-                      matches.append((member.name,data))
-          assert len(matches)==1,[name for name,_ in matches]
-          name,data=matches[0]
-          out.write_bytes(data)
-          print({'status':'PASS','appMember':name,'bytes':len(data),'sha256':expected_sha})
-          PY
+          fetch_blob() {
+            local sha="$1" expected_bytes="$2" out="$3"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/git/blobs/$sha" --jq .content \
+              | tr -d '\n' | base64 --decode > "$out"
+            test "$(wc -c < "$out")" -eq "$expected_bytes"
+          }
+          fetch_blob "$PART0_BLOB" "$PART0_BYTES" "$input/part00"
+          fetch_blob "$PART1_BLOB" "$PART1_BYTES" "$input/part01"
+          cat "$input/part00" "$input/part01" > "$input/app-index.br.b64"
+          test "$(wc -c < "$input/app-index.br.b64")" -eq "$JOINED_BASE64_BYTES"
+          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$input/app-index.br.b64")"
+          base64 --decode "$input/app-index.br.b64" > "$input/app-index.br"
+          node - "$input/app-index.br" "$site/app/index.html" <<'JS'
+          const fs=require('node:fs'); const zlib=require('node:zlib');
+          fs.writeFileSync(process.argv[3],zlib.brotliDecompressSync(fs.readFileSync(process.argv[2])));
+          JS
           test "$(wc -c < "$site/app/index.html")" -eq "$BASE_APP_BYTES"
           test "$(sha256sum "$site/app/index.html" | cut -d' ' -f1)" = "$BASE_APP_SHA"
           for marker in graph/1 map/1 seq/1 maxgraph; do grep -Fi "$marker" "$site/app/index.html" >/dev/null; done
@@ -216,12 +166,12 @@ jobs:
           (out/'identity.env').write_text(f'digest={digest}\ntag=mobile-agent-business-model-{digest}\n')
           PY
           . "$RUNNER_TEMP/identity.env"
-          archive_out="mobile-agent-business-model.$digest.tar.gz"; carrier_out="$archive_out.b64.txt"
-          (cd "$site" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - .) | gzip -n > "$RUNNER_TEMP/$archive_out"
-          base64 -w0 "$RUNNER_TEMP/$archive_out" > "$RUNNER_TEMP/$carrier_out"
+          archive="mobile-agent-business-model.$digest.tar.gz"; carrier="$archive.b64.txt"
+          (cd "$site" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - .) | gzip -n > "$RUNNER_TEMP/$archive"
+          base64 -w0 "$RUNNER_TEMP/$archive" > "$RUNNER_TEMP/$carrier"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "archive=$archive_out" >> "$GITHUB_OUTPUT"
-          echo "carrier=$carrier_out" >> "$GITHUB_OUTPUT"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "carrier=$carrier" >> "$GITHUB_OUTPUT"
 
       - name: Prove combined App in Chrome
         shell: bash
