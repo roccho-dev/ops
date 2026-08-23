@@ -1,0 +1,23 @@
+name: tmp capture Mobile Agent Worker
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tmp-capture-mobile-agent-worker.yml'
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Capture current Worker App
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 10 --retry-delay 2 -H 'Cache-Control: no-cache' https://mobile-agent.roccho.workers.dev/app/ -o "$RUNNER_TEMP/app.html"
+          wc -c "$RUNNER_TEMP/app.html"
+          sha256sum "$RUNNER_TEMP/app.html"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-mobile-agent-worker-${{ github.run_id }}
+          path: ${{ runner.temp }}/app.html
+          if-no-files-found: error
+          retention-days: 1
