@@ -1,0 +1,119 @@
+name: Transport repair Seq Carrier comment payload
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-repair-seq-comment-payload.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      ISSUE_NUMBER: '286'
+      PREFIX: 'SEQ-APP-BR/1'
+      COUNT: '11'
+      BASE64_BYTES: '509996'
+      BASE64_SHA256: a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01
+    steps:
+      - name: Normalize only formatting characters after exact global SHA proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/repair"
+          mkdir -p "$root/patches"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            -f per_page=100 --paginate --slurp > "$root/pages.json"
+          python3 - "$root/pages.json" "$root" <<'PY'
+          import hashlib,json,os,pathlib,re,sys
+          pages=json.load(open(sys.argv[1],encoding='utf-8'))
+          root=pathlib.Path(sys.argv[2])
+          owner=os.environ['GITHUB_REPOSITORY_OWNER']
+          prefix=os.environ['PREFIX']
+          count=int(os.environ['COUNT'])
+          header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{count:02d}$')
+          chunks={}
+          comments={}
+          changes=[]
+          for comment in [item for page in pages for item in page]:
+              if comment.get('user',{}).get('login') != owner:
+                  continue
+              body=str(comment.get('body','')).replace('\r\n','\n').strip()
+              first,sep,rest=body.partition('\n')
+              if not sep:
+                  continue
+              match=header.fullmatch(first.strip())
+              if not match:
+                  continue
+              index=int(match.group(1))
+              assert index not in chunks,f'duplicate {index}'
+              payload=''.join(re.findall(r'[A-Za-z0-9+/=]',rest))
+              assert payload,index
+              chunks[index]=payload
+              comments[index]=comment
+          assert sorted(chunks)==list(range(count)),sorted(chunks)
+          joined=''.join(chunks[index] for index in range(count))
+          assert len(joined)==int(os.environ['BASE64_BYTES']),len(joined)
+          assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['BASE64_SHA256']
+          manifest=[]
+          for index in range(count):
+              canonical=f'{prefix} {index:02d}/{count:02d}\n{chunks[index]}'
+              original=str(comments[index].get('body','')).replace('\r\n','\n').strip()
+              if original != canonical:
+                  comment_id=int(comments[index]['id'])
+                  patch=root/'patches'/f'{comment_id}.json'
+                  patch.write_text(json.dumps({'body':canonical},separators=(',',':'))+'\n',encoding='utf-8')
+                  manifest.append((comment_id,str(patch),index,len(original),len(canonical)))
+          with (root/'manifest.tsv').open('w',encoding='utf-8') as out:
+              for row in manifest:
+                  out.write('\t'.join(map(str,row))+'\n')
+          (root/'receipt.json').write_text(json.dumps({
+              'schema':'ops.seqCommentPayloadRepair/1','status':'PASS','authority':False,
+              'chunks':count,'joinedBytes':len(joined),'joinedSha256':'sha256:'+hashlib.sha256(joined.encode()).hexdigest(),
+              'changedIndexes':[row[2] for row in manifest],
+          },sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          print(json.dumps({'status':'PASS','changedIndexes':[row[2] for row in manifest]}))
+          PY
+          while IFS=$'\t' read -r comment_id patch index original_bytes canonical_bytes; do
+            test -n "$comment_id"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              --input "$patch" >/dev/null
+            printf 'normalized chunk %s: %s -> %s chars\n' "$index" "$original_bytes" "$canonical_bytes"
+          done < "$root/manifest.tsv"
+
+          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            -f per_page=100 --paginate --slurp > "$root/readback.json"
+          python3 - "$root/readback.json" <<'PY'
+          import hashlib,json,os,re,sys
+          pages=json.load(open(sys.argv[1],encoding='utf-8'))
+          owner=os.environ['GITHUB_REPOSITORY_OWNER']; prefix=os.environ['PREFIX']; count=int(os.environ['COUNT'])
+          pattern=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{count:02d}\n([A-Za-z0-9+/=]+)$')
+          chunks={}
+          for comment in [item for page in pages for item in page]:
+              if comment.get('user',{}).get('login') != owner: continue
+              match=pattern.fullmatch(str(comment.get('body','')).replace('\r\n','\n').strip())
+              if not match: continue
+              index=int(match.group(1)); assert index not in chunks; chunks[index]=match.group(2)
+          assert sorted(chunks)==list(range(count)),sorted(chunks)
+          joined=''.join(chunks[index] for index in range(count))
+          assert len(joined)==int(os.environ['BASE64_BYTES'])
+          assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['BASE64_SHA256']
+          print(json.dumps({'status':'PASS','canonicalChunks':count}))
+          PY
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body '/run-seq-comment-ingress-v2'
+
+      - name: Upload repair receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: seq-comment-payload-repair-${{ github.run_id }}
+          path: ${{ runner.temp }}/repair/receipt.json
+          if-no-files-found: error
+          retention-days: 30
