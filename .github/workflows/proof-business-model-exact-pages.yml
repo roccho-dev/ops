@@ -1,0 +1,71 @@
+name: Proof exact Mobile Agent Pages source for business-model
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/proof-business-model-exact-pages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Find exact accepted 54-file deployment in stg-mobile-agent
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
+          python3 - verification/mobile-agent-preset-app/expected.json <<'PY'
+          import hashlib,json,os,sys,urllib.error,urllib.parse,urllib.request
+          expected=json.load(open(sys.argv[1],encoding='utf-8'))
+          account=os.environ['CLOUDFLARE_ACCOUNT_ID']; token=os.environ['CLOUDFLARE_API_TOKEN']
+          api=f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/stg-mobile-agent/deployments?per_page=100'
+          headers={'Authorization':f'Bearer {token}','Content-Type':'application/json','User-Agent':'ops-exact-pages-proof/1'}
+          with urllib.request.urlopen(urllib.request.Request(api,headers=headers),timeout=30) as response:
+              value=json.load(response)
+          assert value.get('success') is True,value.get('errors')
+          deployments=value.get('result') or []
+          print(json.dumps({'deployments':len(deployments)}))
+          sentinel=['app/index.html','protocol/v3/codec.mjs','.well-known/semantic-map.json']
+          def read(url):
+              request=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ops-exact-pages-proof/1'})
+              try:
+                  with urllib.request.urlopen(request,timeout=30) as response: return response.read(),response.status
+              except urllib.error.HTTPError as error: return error.read(),error.code
+              except Exception: return b'',0
+          for deployment in deployments:
+              urls=[]
+              if isinstance(deployment.get('url'),str): urls.append(deployment['url'])
+              for alias in deployment.get('aliases') or []:
+                  if isinstance(alias,str): urls.append(alias if alias.startswith('http') else 'https://'+alias)
+              for candidate in dict.fromkeys(urls):
+                  base=candidate.rstrip('/')+'/'
+                  ok=True
+                  for rel in sentinel:
+                      spec=expected['files'][rel]; data,status=read(urllib.parse.urljoin(base,rel))
+                      if status!=200 or len(data)!=spec['bytes'] or hashlib.sha256(data).hexdigest()!=spec['sha256']:
+                          ok=False; break
+                  if not ok: continue
+                  failed=[]
+                  for rel,spec in sorted(expected['files'].items()):
+                      data,status=read(urllib.parse.urljoin(base,rel)); sha=hashlib.sha256(data).hexdigest()
+                      if status!=200 or len(data)!=spec['bytes'] or sha!=spec['sha256']:
+                          failed.append({'path':rel,'status':status,'bytes':len(data),'sha256':sha})
+                  print(json.dumps({'candidate':base,'deploymentId':deployment.get('id'),'failed':failed[:5],'failedCount':len(failed)}))
+                  if not failed:
+                      print('EXACT_BASE='+base)
+                      print('EXACT_DEPLOYMENT_ID='+str(deployment.get('id')))
+                      print('EXACT_FILE_COUNT=54')
+                      raise SystemExit(0)
+          raise RuntimeError('no exact accepted 54-file deployment in stg-mobile-agent')
+          PY
