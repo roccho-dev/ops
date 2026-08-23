@@ -86,6 +86,28 @@ jobs:
           node-version: '22.16.0'
       - name: Install public browser proof dependency
         run: python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+      - name: Create or verify dedicated Pages project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PROJECT: ${{ needs.materialize.outputs.project }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test "$PROJECT" = stg-mobile-agent
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT"
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create "$PROJECT" --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1])); assert x['success'] is True; assert x['result']['name']=='stg-mobile-agent'; assert x['result']['production_branch']=='proposals'
+          PY
+          else
+            cat "$RUNNER_TEMP/project.json" >&2
+            exit 1
+          fi
       - name: Deploy and prove URL generation plus rendering
         id: deploy
         env:

@@ -73,6 +73,8 @@ def preserve_current_site(stable, site, known_manifest_path):
                 continue
             raise
         except urllib.error.URLError:
+            if not rows:
+                return rows
             raise
         target = site / rel
         target.parent.mkdir(parents=True, exist_ok=True)
