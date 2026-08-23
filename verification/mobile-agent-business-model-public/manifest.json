@@ -22,23 +22,26 @@
     "test": "npm test"
   },
   "baseApp": {
-    "source": "exact complete App Carrier from owner-only ops#286 comments; hash-pinned non-authority transport",
-    "carrier": {
-      "kind": "github-issue-owner-comments",
+    "source": "exact existing App reconstructed from the hash-pinned Git projection proven by proof-mobile-agent-preset-projection-reconstruct",
+    "projection": {
+      "kind": "git-projection-parts",
       "authority": false,
-      "issue": 286,
-      "prefix": "SEQ-CARRIER-CHUNK/2",
-      "chunkCount": 10,
-      "base64": {
-        "bytes": 568192,
-        "sha256": "4d137be8ae864a1a634c59664343d65da6298bb680f003faf71d4421234e2213"
-      },
-      "archive": {
-        "name": "mobile-agent-seq-carrier.tar.xz",
-        "codec": "tar.xz",
-        "bytes": 426144,
-        "sha256": "516a740503c8a22b1b4e0051fab3f5b9a942578fea8fd016323a0ccbe54c3e0d"
-      }
+      "repository": "roccho-dev/ops",
+      "ref": "projection/mobile-agent-preset-dist-b0af2ab9",
+      "parts": [
+        {
+          "path": "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00",
+          "gitBlob": "f65a8c180f0b65317ff0455712c2ecd5934a7031",
+          "bytes": 10000
+        },
+        {
+          "path": "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01",
+          "gitBlob": "a0904cf208a3a9ac87afa37b8b6dfc4fe13c368f",
+          "bytes": 20024
+        }
+      ],
+      "joinedBase64Bytes": 30024,
+      "codec": "base64+brotli"
     },
     "appHtml": {
       "path": "app/index.html",
@@ -66,7 +69,8 @@
     "exactAcceptedAppHtmlPreserved": true,
     "old54FileBootstrapRetired": true,
     "missingReleaseDependencyRetired": true,
-    "carrierCommentTransportAuthority": false,
+    "issueCommentCarrierRetired": true,
+    "baseProjectionAuthority": false,
     "newUrlCodec": false,
     "newBackend": false,
     "newDatabase": false,
