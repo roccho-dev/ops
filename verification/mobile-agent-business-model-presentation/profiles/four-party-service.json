@@ -1,0 +1,18 @@
+{
+  "schema": "business-model-projection-profile/1",
+  "id": "four-party-service/1",
+  "label": "四者間サービス",
+  "actorRoles": ["owner","operator","contractor","supplier"],
+  "requiredExchangeKinds": ["input", "offer", "payment"],
+  "view": {
+    "orientation": "lr",
+    "exchangeStrategy": "adjacent-pairs",
+    "stageFocus": "primary-activity",
+    "nesting": "owner-parent"
+  },
+  "coverage": {
+    "a2uiExcludeTypes": ["transitions"],
+    "seqExcludeTypes": ["nodes"],
+    "mapExcludeTypes": ["stages", "activities", "transitions"]
+  }
+}

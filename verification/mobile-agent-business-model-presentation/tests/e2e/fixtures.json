@@ -1,0 +1,30 @@
+{
+  "schema": "business-model-layout-e2e-fixtures/1",
+  "uiSourceSha256": "8a9767a94f783f1458553c5af3417b177c82867844539f1b8c837d688fcfc42d",
+  "fixtures": [
+    {
+      "id": "2-actors",
+      "input": "examples/2-actors.jsonl",
+      "profile": "profiles/two-party-service.json",
+      "actorCount": 2,
+      "includeUiSourceMeta": false,
+      "expectedHtmlSha256": "fcee971464e3ee465e25c180f0bd1c0ac39d0936b81583649de48303929c7307"
+    },
+    {
+      "id": "3-actors",
+      "input": "examples/3-actors.jsonl",
+      "profile": "profiles/three-party-service.json",
+      "actorCount": 3,
+      "includeUiSourceMeta": true,
+      "expectedHtmlSha256": "ed3a5dbdd60ea0cb9b3a8026e2586782772a747f82b59cd7c827d926af5a1306"
+    },
+    {
+      "id": "4-actors",
+      "input": "examples/4-actors.jsonl",
+      "profile": "profiles/four-party-service.json",
+      "actorCount": 4,
+      "includeUiSourceMeta": true,
+      "expectedHtmlSha256": "faf0d73a8fe3eb743ca6877d784ccbb8c9a6dac03eba94989b52447aa41f8443"
+    }
+  ]
+}
