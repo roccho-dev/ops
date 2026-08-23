@@ -37,7 +37,7 @@
   },
   "existingAppBoundary": {
     "status": "out-of-scope",
-    "reason": "stg-mobile-agent has no current Pages project and the historic 54-file auxiliary projection is not required to publish business-model/1",
+    "reason": "the business-model/1 projection is self-contained; historic Mobile Agent App recovery is a separate closure",
     "acceptedAppHtml": {
       "path": "app/index.html",
       "bytes": 2412388,
