@@ -1,0 +1,61 @@
+{
+  "schema": "ops.mobileAgentBusinessModelPublic/1",
+  "id": "mobile-agent-business-model-public",
+  "version": "1",
+  "status": "candidate",
+  "authority": false,
+  "architectureIssue": 233,
+  "pattern": {
+    "id": "business-model/1",
+    "route": "/business-model/",
+    "fragment": "presentation",
+    "actorCount": {"min": 2, "max": 4},
+    "actorOrder": "connected exchange path; earliest endpoint input chooses the left edge",
+    "urlLimitChars": 8192
+  },
+  "source": {
+    "repository": "roccho-dev/ops",
+    "path": "verification/mobile-agent-business-model-presentation",
+    "role": "temporary source authority until a dedicated mobile-agent repository exists",
+    "build": "npm run build:public",
+    "generateUrl": "npm run generate:url -- <semantic.jsonl> [baseUrl] [receipt.json]",
+    "test": "npm test"
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "environment": "cloudflare-production",
+    "project": "stg-mobile-agent",
+    "productionBranch": "proposals",
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "publication": {
+    "mode": "content-addressed immutable Release plus explicit Pages deployment",
+    "files": ["business-model/index.html"],
+    "fileCount": 1,
+    "releaseOn": "push to proposals",
+    "deployOn": "explicit workflow_dispatch"
+  },
+  "existingAppBoundary": {
+    "status": "out-of-scope",
+    "reason": "the business-model/1 projection is self-contained; historic Mobile Agent App recovery is a separate closure",
+    "acceptedAppHtml": {
+      "path": "app/index.html",
+      "bytes": 2412388,
+      "sha256": "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+    },
+    "presets": ["graph/1", "map/1", "seq/1"],
+    "touchedByThisChange": false,
+    "publishedByThisChange": false,
+    "futureAppRouteOverwriteBlocked": true
+  },
+  "boundaries": {
+    "existingMaxGraphAppRewritten": false,
+    "existingMaxGraphAppPublished": false,
+    "historical54FileProjectionPublished": false,
+    "newUrlCodec": false,
+    "newBackend": false,
+    "newDatabase": false,
+    "mutableLatestAllowed": false,
+    "uploadedZipAllowed": false
+  }
+}

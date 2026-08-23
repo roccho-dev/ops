@@ -1,6 +1,6 @@
 {
-  "schema": "mobile-agent.business-model-presentation/1",
-  "id": "business-model-presentation",
+  "schema": "ui-jsonl-reproducer/1",
+  "id": "ceo-260816.business-model-presentation",
   "variableInputs": [
     "examples/2-actors.jsonl"
   ],
@@ -30,15 +30,17 @@
   "test": "npm test",
   "output": "dist/index.html",
   "referenceHtmlSha256": "fcee971464e3ee465e25c180f0bd1c0ac39d0936b81583649de48303929c7307",
-  "authority": false,
-  "sourceRole": "candidate-for-mobile-agent-preset",
-  "layoutContract": {
-    "baseline": "examples/2-actors.jsonl",
-    "invariant": "outer-layout-byte-and-browser-regression",
-    "extensions": [
-      "examples/3-actors.jsonl",
-      "examples/4-actors.jsonl"
-    ],
-    "rule": "add alternating actor/exchange columns only; preserve all outer layout regions"
+  "publicProjection": {
+    "pattern": "business-model/1",
+    "route": "/business-model/",
+    "build": "npm run build:public",
+    "generateUrl": "npm run generate:url -- <semantic.jsonl> [baseUrl] [receipt.json]",
+    "fragment": "presentation",
+    "urlLimitChars": 8192,
+    "actorCount": {
+      "min": 2,
+      "max": 4
+    },
+    "actorOrder": "connected exchange path; earliest endpoint input chooses the left edge"
   }
 }

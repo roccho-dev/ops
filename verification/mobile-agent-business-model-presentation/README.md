@@ -3,7 +3,10 @@
 The accepted two-actor business-presentation layout is the immutable base. Three- and four-actor variants only add alternating actor/exchange columns inside the existing scene.
 
 ```text
-JSONL -> business-model compiler -> A2UI Slides + Actor Seq -> one HTML
+semantic JSONL
+→ business-model/1 compiler
+→ fixed A2UI Slides + Actor Seq
+→ one HTML or #presentation URL
 ```
 
 ## Examples are the E2E fixtures
@@ -16,32 +19,42 @@ There is no duplicate fixture data. The exact same JSONL files serve as document
 | `examples/3-actors.jsonl` | Existing layout + one actor | `ed3a5dbdd60ea0cb9b3a8026e2586782772a747f82b59cd7c827d926af5a1306` |
 | `examples/4-actors.jsonl` | Existing layout + two actors | `faf0d73a8fe3eb743ca6877d784ccbb8c9a6dac03eba94989b52447aa41f8443` |
 
-`tests/e2e/fixtures.json` binds each example to one fixed UI profile and its exact expected HTML. The JSONL remains the only example-specific semantic input; profiles live under `profiles/` as fixed UI policy. Both the builder and E2E test consume the same manifest.
+`tests/e2e/fixtures.json` binds each example to one fixed UI profile and its exact expected HTML. The JSONL remains the only example-specific semantic input; profiles, theme, renderer, and validation remain fixed UI policy.
 
 ## Run
 
 ```text
 npm run build           # original 2-actor HTML -> dist/index.html
 npm run build:examples  # 2/3/4 actor HTML -> dist/layout-samples/
-npm run check           # original byte-exact regression
-npm run test:e2e        # real Chromium interaction + layout preservation
-npm test                # all of the above
+npm run build:public    # business-model/1 host HTML -> dist/public/index.html
+npm run generate:url -- <semantic.jsonl> [baseUrl] [receipt.json]
+npm test                # byte regression + browser E2E + URL roundtrip
 ```
 
-The E2E test verifies:
+The E2E tests verify:
 
 - exact HTML SHA for all three examples;
 - all timeline stages are operable;
 - Actor Seq opens and closes;
 - actor/exchange columns remain `actor | exchange | actor | ...`;
 - header and timeline rectangles remain identical across 2/3/4 actors;
-- the page itself does not gain horizontal overflow;
-- no browser page error occurs.
+- page overflow and browser errors remain zero;
+- each generated URL decodes and renders in real Chromium;
+- URL length stays within 8,192 characters.
 
-Python Playwright and Chromium are required only for `npm run test:e2e`. `CHROMIUM_PATH` may override the detected browser executable.
+## Public projection
+
+`business-model/1` is a self-contained static route. Its publication does not reconstruct, rewrite, or publish the historical Mobile Agent maxGraph App.
+
+```text
+fixed UI + semantic JSONL
+→ generated /business-model/index.html
+→ content-addressed immutable Release
+→ explicit Cloudflare Pages deployment
+```
+
+The publication artifact contains exactly one file: `business-model/index.html`. The existing `graph/1`, `map/1`, and `seq/1` App is an independent closure and remains out of scope here. Deployment therefore fails closed if `/app/` already exists on the target project, preventing this one-file projection from overwriting a later full-App publication.
 
 ## Repository boundary
 
-This directory is a self-contained source candidate for the Mobile Agent App. It does not modify the accepted `graph/1`, `map/1`, or `seq/1` maxGraph runtime. A later admission step may move these source paths into the dedicated Mobile Agent source repository and bind the resulting exact commit/tree into the Ops Carrier manifest.
-
-The variable semantic inputs are only `examples/*.jsonl`. Theme, renderer, profiles, and validation remain fixed UI policy.
+This directory remains a self-contained source candidate until a dedicated Mobile Agent source repository exists. It does not rewrite the accepted maxGraph App, add a backend, add a database, or introduce a second URL codec.
