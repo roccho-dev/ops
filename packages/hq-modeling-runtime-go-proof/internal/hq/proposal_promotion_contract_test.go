@@ -264,11 +264,11 @@ func TestPromotionContinuityAndTamperDetection(t *testing.T) {
 	}
 }
 
-// RED: the Node pure promotion core snapshots the proposal before deriving its
+// GREEN: the Node pure promotion core snapshots the proposal before deriving its
 // queue row. A Go replacement must not share mutable maps or slices with the
 // caller, otherwise later caller mutation silently changes a previously
 // returned queue intent and its digest-linked evidence.
-func TestPromotionOutputIsDetachedFromCallerInput_RED(t *testing.T) {
+func TestPromotionOutputIsDetachedFromCallerInput(t *testing.T) {
 	proposal := validProposalForContract()
 	confirmation := validConfirmationForContract(proposal)
 	proposalBefore := cloneObjectForTest(t, proposal)
@@ -299,12 +299,12 @@ func TestPromotionOutputIsDetachedFromCallerInput_RED(t *testing.T) {
 	}
 }
 
-// RED: the Node oracle validates a 20,000-level JSON-compatible proposal
+// GREEN: the Node oracle validates a 20,000-level JSON-compatible proposal
 // without throwing. Running that exact depth against the current Go traversal
 // exhausts the sandbox because each recursive step copies the entire pointer
 // path. This bounded growth check preserves the same scalability meaning while
 // failing safely instead of OOM-killing CI.
-func TestSerializedDeepNestingHasBoundedResourceGrowth_RED(t *testing.T) {
+func TestSerializedDeepNestingHasBoundedResourceGrowth(t *testing.T) {
 	measure := func(depth int) uint64 {
 		proposal := validProposalForContract()
 		deep := Object{}
@@ -334,5 +334,19 @@ func TestSerializedDeepNestingHasBoundedResourceGrowth_RED(t *testing.T) {
 	deep := measure(1_024)
 	if deep > shallow*3 {
 		t.Fatalf("deep validation allocation growth is unbounded: depth512=%d depth1024=%d ratio=%.2f; Node oracle target depth=20000", shallow, deep, float64(deep)/float64(shallow))
+	}
+
+	proposal := validProposalForContract()
+	root := Object{}
+	cursor := root
+	for index := 0; index < 20_000; index++ {
+		next := Object{}
+		cursor["next"] = next
+		cursor = next
+	}
+	proposal["extra"] = root
+	_, errors := validateModelingProposal(proposal, 1)
+	if len(errors) != 0 {
+		t.Fatalf("20,000-level proposal rejected: %s", describeForTest(objectSliceToAny(errors)))
 	}
 }

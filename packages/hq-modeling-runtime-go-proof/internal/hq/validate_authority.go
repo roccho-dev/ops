@@ -152,19 +152,25 @@ func sortedKeys(object Object) []string {
 
 func findAuthorityBearingShapes(value any) []Object {
 	findings := []Object{}
-	var visit func(any, []string)
-	visit = func(node any, path []string) {
+	// Reuse a single DFS path. Materialize path segments only for actual
+	// findings so a deeply nested but valid JSON document remains O(N).
+	path := make([]string, 0, 32)
+	segmentsForFinding := func() []any {
+		return stringsToAny(append([]string(nil), path...))
+	}
+	var visit func(any)
+	visit = func(node any) {
 		switch typed := node.(type) {
 		case Object:
-			visit(map[string]any(typed), path)
+			visit(map[string]any(typed))
 		case map[string]any:
 			for _, key := range sortedKeys(Object(typed)) {
 				nested := typed[key]
-				fieldPath := append(append([]string{}, path...), key)
+				path = append(path, key)
 				token := NormalizeBoundaryToken(key)
 				if concept := forbiddenFieldConcept(key, nested); concept != "" {
 					findings = append(findings, Object{
-						"segments":        stringsToAny(fieldPath),
+						"segments":        segmentsForFinding(),
 						"reason":          "forbidden-field",
 						"field":           key,
 						"normalizedField": token,
@@ -179,7 +185,7 @@ func findAuthorityBearingShapes(value any) []Object {
 								reason = "forbidden-kind"
 							}
 							findings = append(findings, Object{
-								"segments":        stringsToAny(fieldPath),
+								"segments":        segmentsForFinding(),
 								"reason":          reason,
 								"value":           text,
 								"normalizedValue": NormalizeBoundaryToken(text),
@@ -188,15 +194,18 @@ func findAuthorityBearingShapes(value any) []Object {
 						}
 					}
 				}
-				visit(nested, fieldPath)
+				visit(nested)
+				path = path[:len(path)-1]
 			}
 		case []any:
 			for index, nested := range typed {
-				visit(nested, append(append([]string{}, path...), fmt.Sprint(index)))
+				path = append(path, fmt.Sprint(index))
+				visit(nested)
+				path = path[:len(path)-1]
 			}
 		}
 	}
-	visit(value, nil)
+	visit(value)
 	return findings
 }
 

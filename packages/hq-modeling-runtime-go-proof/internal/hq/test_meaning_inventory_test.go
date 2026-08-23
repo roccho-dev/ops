@@ -214,14 +214,19 @@ func TestCanonicalMJSMeaningInventoryIsComplete(t *testing.T) {
 		t.Fatalf("canonical assertion sites=%d, want 540", assertionCount)
 	}
 
-	// Make the two deliberately RED meanings impossible to accidentally remove
-	// from the inventory while leaving the suite superficially green.
+	// Keep the two high-risk meanings that drove the RED phase explicit after
+	// GREEN, and reject stale RED test names at the current head.
 	for _, required := range []string{
 		"promotion.success-linkage-detachment",
 		"proposal.deep-nesting-resource-safety",
 	} {
 		if !ids[required] {
-			t.Fatal(fmt.Sprintf("missing required RED meaning %s", required))
+			t.Fatal(fmt.Sprintf("missing required high-risk meaning %s", required))
+		}
+	}
+	for name := range goTestNames {
+		if strings.HasSuffix(name, "_RED") {
+			t.Fatalf("stale RED test name after GREEN: %s", name)
 		}
 	}
 }

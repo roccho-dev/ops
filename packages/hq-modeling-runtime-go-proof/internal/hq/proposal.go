@@ -72,6 +72,10 @@ func PromoteProposalToModelQueue(proposalValue, confirmationValue any) Object {
 	if len(proposalErrors) > 0 {
 		return Object{"ok": false, "errors": objectSliceToAny(proposalErrors), "queueRow": nil}
 	}
+	// The Node canonical core snapshots complete JSON data once before it
+	// derives any digest or output. Detach the validated proposal here so the
+	// returned queue intent cannot retain caller-owned maps or slices.
+	proposal = CloneJSON(proposal).(map[string]any)
 	digest := ProposalDigest(proposal)
 	errors := []Object{}
 	confirmationInput, ok := AsObject(confirmationValue)

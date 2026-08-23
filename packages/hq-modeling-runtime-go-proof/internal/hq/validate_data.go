@@ -8,30 +8,39 @@ import (
 
 func serializedDataFindings(value any) []Object {
 	findings := []Object{}
-	var visit func(any, []any)
-	visit = func(node any, path []any) {
+	// Keep one mutable traversal path and copy it only when a finding must be
+	// retained. Copying the complete path for every edge makes a depth-N JSON
+	// document allocate O(N^2) memory even when it has no findings.
+	path := make([]any, 0, 32)
+	var visit func(any)
+	visit = func(node any) {
 		switch typed := node.(type) {
 		case float64:
 			if typed == 0 && math.Signbit(typed) {
+				segments := append([]any(nil), path...)
 				findings = append(findings, Object{
-					"path":     pointerFromAny(path),
-					"segments": append([]any{}, path...),
+					"path":     pointerFromAny(segments),
+					"segments": segments,
 					"reason":   "negative-zero",
 				})
 			}
 		case Object:
-			visit(map[string]any(typed), path)
+			visit(map[string]any(typed))
 		case map[string]any:
 			for _, key := range sortedKeys(Object(typed)) {
-				visit(typed[key], append(append([]any{}, path...), key))
+				path = append(path, key)
+				visit(typed[key])
+				path = path[:len(path)-1]
 			}
 		case []any:
 			for index, nested := range typed {
-				visit(nested, append(append([]any{}, path...), index))
+				path = append(path, index)
+				visit(nested)
+				path = path[:len(path)-1]
 			}
 		}
 	}
-	visit(value, nil)
+	visit(value)
 	return findings
 }
 
