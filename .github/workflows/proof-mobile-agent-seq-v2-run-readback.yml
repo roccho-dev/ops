@@ -1,0 +1,69 @@
+name: Proof Mobile Agent Seq v2 run readback
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-mobile-agent-seq-v2-run-readback.yml'
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read exact latest v2 issue-comment run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs="$RUNNER_TEMP/runs.json"
+          jobs="$RUNNER_TEMP/jobs.json"
+          log="$RUNNER_TEMP/failed.log"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/mobile-agent-seq-comment-ingress-v2.yml/runs" \
+            -f event=issue_comment -f per_page=10 > "$runs"
+          run_id="$(jq -r '.workflow_runs[0].id // empty' "$runs")"
+          test -n "$run_id"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" > "$jobs"
+          : > "$log"
+          status="$(jq -r '.workflow_runs[0].status' "$runs")"
+          conclusion="$(jq -r '.workflow_runs[0].conclusion // "pending"' "$runs")"
+          if [ "$status" = completed ] && [ "$conclusion" != success ]; then
+            gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --log-failed > "$log" 2>&1 || true
+          fi
+          python3 - "$runs" "$jobs" "$log" > "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,pathlib,sys
+          run=json.load(open(sys.argv[1],encoding='utf-8'))['workflow_runs'][0]
+          jobs=json.load(open(sys.argv[2],encoding='utf-8'))['jobs']
+          log=pathlib.Path(sys.argv[3]).read_text(encoding='utf-8',errors='replace')
+          if len(log)>14000: log=log[-14000:]
+          print('## Seq v2 audited deployment run readback')
+          print()
+          print(f"- run: `{run['id']}`")
+          print(f"- status / conclusion: `{run['status']} / {run.get('conclusion')}`")
+          print(f"- head SHA: `{run['head_sha']}`")
+          print(f"- event / created: `{run['event']} / {run['created_at']}`")
+          print(f"- URL: {run['html_url']}")
+          print('- jobs:')
+          for job in jobs:
+              print(f"  - `{job['name']}`: `{job['status']} / {job.get('conclusion')}` (job `{job['id']}`)")
+              for step in job.get('steps',[]):
+                  if step.get('conclusion') not in (None,'success','skipped'):
+                      print(f"    - failed step `{step['number']} {step['name']}`: `{step['conclusion']}`")
+          if log.strip():
+              print()
+              print('<details><summary>failed log tail</summary>')
+              print()
+              print('```text')
+              print(log.rstrip())
+              print('```')
+              print('</details>')
+          print()
+          print('Read-only diagnostic; this PR must never merge.')
+          PY
+          gh issue comment 286 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
