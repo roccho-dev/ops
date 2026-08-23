@@ -1,0 +1,29 @@
+name: One-shot PR309 deploy trigger
+
+on:
+  push:
+    branches:
+      - proposal/mobile-agent-business-model-public-260823
+    paths:
+      - '.github/workflows/pr309-deploy-now.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: github.repository == 'roccho-dev/ops' && github.ref == 'refs/heads/proposal/mobile-agent-business-model-public-260823'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch approved business-model deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run mobile-agent-business-model-public.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref proposal/mobile-agent-business-model-public-260823 \
+            -f deploy=true
