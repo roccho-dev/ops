@@ -7,6 +7,12 @@ on:
     paths:
       - '.github/workflows/proof-business-model-alt-3-actor.yml'
       - 'proof/business-model-alt-3-actor.jsonl'
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - '.github/workflows/proof-business-model-alt-3-actor.yml'
+      - 'proof/business-model-alt-3-actor.jsonl'
 
 permissions:
   contents: read
