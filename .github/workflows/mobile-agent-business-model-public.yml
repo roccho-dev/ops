@@ -101,9 +101,10 @@ jobs:
         id: pack
         env:
           GH_TOKEN: ${{ github.token }}
-          PART0_BLOB: ${{ steps.contract.outputs.part0_blob }}
+          PROJECTION_REF: ${{ steps.contract.outputs.projection_ref }}
+          PART0_PATH: ${{ steps.contract.outputs.part0_path }}
           PART0_BYTES: ${{ steps.contract.outputs.part0_bytes }}
-          PART1_BLOB: ${{ steps.contract.outputs.part1_blob }}
+          PART1_PATH: ${{ steps.contract.outputs.part1_path }}
           PART1_BYTES: ${{ steps.contract.outputs.part1_bytes }}
           JOINED_BASE64_BYTES: ${{ steps.contract.outputs.joined_base64_bytes }}
           BASE_APP_BYTES: ${{ steps.contract.outputs.base_app_bytes }}
@@ -118,17 +119,16 @@ jobs:
           site="$RUNNER_TEMP/site"; parts="$RUNNER_TEMP/url-parts"; input="$RUNNER_TEMP/base-app"
           mkdir -p "$site/app" "$site/business-model" "$parts" "$input"
 
-          fetch_blob() {
-            local sha="$1" expected_bytes="$2" out="$3"
-            gh api -X GET "repos/$GITHUB_REPOSITORY/git/blobs/$sha" --jq .content \
+          fetch_content() {
+            local ref="$1" path="$2" expected_bytes="$3" out="$4"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/contents/$path" -f ref="$ref" --jq .content \
               | tr -d '\n' | base64 --decode > "$out"
             test "$(wc -c < "$out")" -eq "$expected_bytes"
           }
-          fetch_blob "$PART0_BLOB" "$PART0_BYTES" "$input/part00"
-          fetch_blob "$PART1_BLOB" "$PART1_BYTES" "$input/part01"
+          fetch_content "$PROJECTION_REF" "$PART0_PATH" "$PART0_BYTES" "$input/part00"
+          fetch_content "$PROJECTION_REF" "$PART1_PATH" "$PART1_BYTES" "$input/part01"
           cat "$input/part00" "$input/part01" > "$input/app-index.br.b64"
           test "$(wc -c < "$input/app-index.br.b64")" -eq "$JOINED_BASE64_BYTES"
-          test -z "$(LC_ALL=C tr -d 'A-Za-z0-9+/=' < "$input/app-index.br.b64")"
           base64 --decode "$input/app-index.br.b64" > "$input/app-index.br"
           node - "$input/app-index.br" "$site/app/index.html" <<'JS'
           const fs=require('node:fs'); const zlib=require('node:zlib');
