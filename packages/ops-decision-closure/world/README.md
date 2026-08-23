@@ -1,29 +1,32 @@
-# World-core compatibility
+# World log
 
-Status: proposed compatibility layer for `roccho-dev/adrs#314`.
+Implementation: merged in `roccho-dev/ops`. Meaning acceptance remains governed by `roccho-dev/adrs#314`.
 
-This directory does not replace the existing Fact / Condition / Claim JSONL authority of `roccho-dev/adrs#300`. It proves that the same records can depend on a smaller semantic core without changing the selected SQLite-shard read model or the existing eight-query contract.
-
-## Purpose
-
-World logs must be easy to append before every future analysis is known. The shared semantic core is therefore limited to two record kinds:
+Search names:
 
 ```text
-item  = something that needs a stable identity
+調査基盤
+調査台帳
+research ledger
+world log
+```
+
+## One semantic core
+
+```text
+item  = something with a stable identity
 claim = one statement about an item or another claim
 ```
 
 Identity, relation, unit, and scale registries normalize repeated vocabulary. They are helper projections, not additional semantic-core kinds.
 
-## Core contract
-
 | Schema | Meaning |
 |---|---|
 | `world.item/1` | A person, company, product, place, event, source, rule, decision, or other identifiable thing |
 | `world.claim/1` | An attribute, relation, observation, report, computation, inference, constraint, goal, proposal, or selection |
-| `world.mapping/1` | A source-line receipt binding one legacy row to its projected world records |
+| `world.mapping/1` | A source-line receipt binding one source row to projected world records |
 
-Every item and claim carries the common record envelope:
+Every item and claim carries:
 
 - `schema`
 - `id`
@@ -32,7 +35,7 @@ Every item and claim carries the common record envelope:
 - `status`
 - optional `language` and `data`
 
-The claim-specific keys are deliberately plain:
+A claim adds:
 
 - `subject`
 - `relation`
@@ -40,6 +43,27 @@ The claim-specific keys are deliberately plain:
 - `basis`
 - `mode`
 - optional `negated`, `time`, `scope`, `confidence`, and `text`
+
+## Canonical use
+
+There is exactly one user-facing example:
+
+```text
+world/golden/
+```
+
+Start with:
+
+```text
+world/golden/request.txt
+→ world/golden/README.md
+→ world/golden/input/
+→ world/golden/expected.json
+```
+
+`golden` fixes the operation and completion boundary. It does not force every future domain to use Fact / Condition / Claim as its authoring schema. A domain-specific JSONL may use its own mapper, but it must produce the same `item + claim`, source-line receipt, normalization, projection, and verification boundary.
+
+Additional cases belong in tests. They are not alternative recipes.
 
 ## Meaning split
 
@@ -70,6 +94,12 @@ The claim-specific keys are deliberately plain:
 
 ## Existing Fact / Condition / Claim mapping
 
+The current proven mapper is:
+
+```text
+world/mappers/ops-fcc-1.json
+```
+
 | Existing record | World projection |
 |---|---|
 | Fact | `basis=observed`, `mode=actual` claim |
@@ -81,9 +111,9 @@ The claim-specific keys are deliberately plain:
 | Decision | `mode=selected` claim |
 | `rel[]` | claim about another claim, such as `depends_on`, `contradicts`, `supersedes`, or `result_of` |
 
-The compatibility mapper keeps every legacy field in `data.legacy`. `to-fcc` reconstructs the three source streams exactly, so the projection does not require a destructive migration.
+The mapper keeps every legacy field in `data.legacy`. `to-fcc` reconstructs the three source streams exactly, so compatibility does not require destructive migration.
 
-## Normalization rules
+## Normalization
 
 ### Identity
 
@@ -91,40 +121,41 @@ The public mapper uses exact `domain + subject` identity. Display-name similarit
 
 ### Relation
 
-A small alias registry maps known equivalent words to one canonical direction. The source word remains in the mapping data for exact reconstruction. Unknown words are retained as deterministic normalized terms rather than guessed into an existing relation.
+Known aliases map to one canonical direction. The source word remains recoverable. Unknown words receive a stable normalized term and are not guessed into an existing relation.
 
 ### Unit
 
-Known aliases such as `円/年` and `JPY/year` map to `jpy_per_year`. Unknown units receive a stable normalized term. The original unit remains in the legacy data.
+Known aliases such as `円/年` and `JPY/year` map to `jpy_per_year`. The source unit remains recoverable. Conversion rates and conversion times are separate claims.
 
 ### Scale
 
-Numeric confidence remains numeric. Named levels remain named and are listed in the generated scale registry. Named levels are not silently converted to numeric scores.
+Numeric confidence remains numeric. Named levels remain named. A level is never silently converted into a score.
 
 ## Mapping quality
 
 | Quality | Meaning |
 |---|---|
-| `semantic` | The mapper has an explicit meaning rule |
-| `structural` | Fields and references are preserved structurally without a stronger semantic claim |
+| `semantic` | An explicit meaning rule exists |
+| `structural` | Fields and references are preserved structurally |
 | `preserved` | The complete source row is retained because semantic interpretation would be unsafe |
 
-Only `semantic` rows enter semantic facts, constraints, proposals, and inference views by default. `preserved` is a safe result, not a fact claim.
+Only `semantic` rows enter semantic facts, constraints, proposals, and inference views by default. `preserved` is safe retention, not a fact claim.
 
 ## Authority boundary
 
 ```text
-legacy JSONL authority
-→ deterministic world projection
-→ SQLite views
+source JSONL authority
+→ deterministic item + claim projection
+→ read-only SQLite views
 → facts / constraints / proposals / inferences / graph views
 ```
 
-- Legacy JSONL remains unchanged.
+- Source JSONL is not overwritten.
 - The world projection is regenerable.
-- SQLite and its views are non-authority.
-- The private 93-file corpus is proof input and is not committed to this public repository.
-- `world/evidence/corpus-proof.json` records only aggregate counts, checks, limitations, and the exact proof ZIP digest.
+- SQLite and views are non-authority.
+- The private 93-file corpus is not committed.
+- `world/evidence/corpus-proof.json` stores only aggregate proof and the exact proof ZIP digest.
+- Generated SQLite is deliberately absent from the golden; `expected.json` stores its readable contract and digest.
 
 ## Commands
 
@@ -133,17 +164,17 @@ legacy JSONL authority
 - `from-fcc`: project Fact / Condition / Claim JSONL into item + claim and SQLite views.
 - `to-fcc`: reconstruct the original three JSONL streams.
 - `verify`: reject unresolved subjects, targets, relations, mappings, duplicate IDs, and invalid basis/mode values.
-- `verify-proof`: independently read and validate the bounded private corpus proof directory.
+- `verify-proof`: independently validate a bounded private corpus proof directory.
 
-The normal package test is `tests/world-core.mjs`. It checks deterministic output, exact reverse reconstruction, SQLite view counts, identity separation, relation and unit normalization, and nine destructive cases.
+The package check `tests/world-core.mjs` proves discovery, golden hash equality, reverse reconstruction, deterministic SQLite, normalization, existing-fixture compatibility, and destructive cases.
 
 ## Claim ceiling
 
-This compatibility layer establishes that:
+This package establishes that:
 
-1. the existing decision ledger can depend on `item + claim`;
-2. its source rows can be recovered exactly;
+1. source schemas can depend on `item + claim`;
+2. source rows can be recovered when their mapper promises reversibility;
 3. facts, constraints, proposals, and inferences can be regenerated as views;
-4. the bounded 93-file corpus can be retained with explicit semantic, structural, or preserved mapping receipts.
+4. the bounded 93-file corpus can be retained with `semantic`, `structural`, or `preserved` receipts.
 
 It does not establish that every future domain has already been observed, that every preserved row has been semantically understood, that SQLite is meaning authority, or that production cutover is complete.

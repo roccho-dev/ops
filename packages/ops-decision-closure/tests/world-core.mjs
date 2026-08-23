@@ -7,12 +7,15 @@ import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { normalizeRows, parseProjection, searchPackages } from "../../find-packages/lib/find-packages-core.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(packageRoot, "../..");
 const cli = path.join(packageRoot, "bin/world-core.py");
-const fixtures = path.join(packageRoot, "world/compatibility");
+const golden = path.join(packageRoot, "world/golden");
+const input = path.join(golden, "input");
+const expected = JSON.parse(fs.readFileSync(path.join(golden, "expected.json"), "utf8"));
 const pythonCommand = process.env.OPS_PYTHON || "python3";
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "ops-world-core-"));
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
@@ -40,7 +43,7 @@ function requireReject(result, pattern) {
   assert.match(`${result.stderr}${result.stdout}`, pattern);
 }
 
-function project(outDir, inputRoot = fixtures) {
+function project(outDir, inputRoot = input) {
   return run([
     "from-fcc",
     "--facts", path.join(inputRoot, "facts.jsonl"),
@@ -56,6 +59,26 @@ function cloneDir(source, target) {
 }
 
 try {
+  const request = fs.readFileSync(path.join(golden, "request.txt"), "utf8");
+  assert.match(request, /調査基盤/);
+  assert.match(request, /canonical golden/);
+  assert.ok(fs.existsSync(path.join(packageRoot, "world/mappers/ops-fcc-1.json")));
+  assert.equal(expected.schema, "world.golden/1");
+  assert.equal(expected.mapper, "ops.fcc/1");
+  assert.equal(expected.authority.input, true);
+  assert.equal(expected.authority.output, false);
+  for (const stream of ["facts", "conditions", "claims"]) {
+    const name = `${stream}.jsonl`;
+    assert.equal(readJsonl(path.join(input, name)).length, expected.input.lines[name]);
+    assert.equal(sha256(fs.readFileSync(path.join(input, name))), expected.input.sha256[name]);
+  }
+
+  const catalog = normalizeRows(parseProjection(fs.readFileSync(path.join(repoRoot, "build/packages.jsonl"), "utf8")));
+  const discovered = searchPackages(catalog, { query: "調査基盤" });
+  assert.equal(discovered.length, 1, "調査基盤 must resolve to one canonical package");
+  assert.equal(discovered[0].pkg, "ops-decision-closure");
+  assert.equal(discovered[0].examples, "packages/ops-decision-closure/world/golden/README.md");
+
   const outA = path.join(work, "out-a");
   const outB = path.join(work, "out-b");
   const receiptA = requirePass(project(outA));
@@ -70,7 +93,7 @@ try {
     { items: 3, claims: 30, mappings: 14, relations: 15, identities: 3, units: 2, scales: 1 },
   );
 
-  const generated = [
+  const generatedOutputs = [
     "items.jsonl",
     "claims.jsonl",
     "mappings.jsonl",
@@ -81,16 +104,20 @@ try {
     "receipt.json",
     "world.sqlite3",
   ];
-  for (const name of generated) {
-    assert.equal(sha256(fs.readFileSync(path.join(outA, name))), sha256(fs.readFileSync(path.join(outB, name))), `nondeterministic ${name}`);
+  for (const name of generatedOutputs) {
+    const actualA = fs.readFileSync(path.join(outA, name));
+    const actualB = fs.readFileSync(path.join(outB, name));
+    assert.equal(sha256(actualA), sha256(actualB), `nondeterministic ${name}`);
+    assert.equal(sha256(actualA), expected.output.sha256[name], `golden drift in ${name}`);
   }
+  assert.deepEqual(receiptA, expected.output.receipt);
 
   const reverse = path.join(work, "reverse");
   requirePass(run(["to-fcc", "--items", path.join(outA, "items.jsonl"), "--claims", path.join(outA, "claims.jsonl"), "--out-dir", reverse]));
   for (const stream of ["facts", "conditions", "claims"]) {
     assert.equal(
       fs.readFileSync(path.join(reverse, `${stream}.jsonl`), "utf8"),
-      fs.readFileSync(path.join(fixtures, `${stream}.jsonl`), "utf8"),
+      fs.readFileSync(path.join(input, `${stream}.jsonl`), "utf8"),
       `${stream} did not reconstruct exactly`,
     );
   }
@@ -117,8 +144,12 @@ try {
     .map((file) => readJsonl(file).length)
     .reduce((sum, count) => sum + count, 0);
   assert.equal(existingReceiptA.mappings, existingSourceCount);
-  for (const name of ["items.jsonl", "claims.jsonl", "mappings.jsonl", "relations.jsonl", "identities.jsonl", "units.jsonl", "scales.jsonl", "receipt.json", "world.sqlite3"]) {
-    assert.equal(sha256(fs.readFileSync(path.join(existingA, name))), sha256(fs.readFileSync(path.join(existingB, name))), `nondeterministic existing fixture ${name}`);
+  for (const name of generatedOutputs) {
+    assert.equal(
+      sha256(fs.readFileSync(path.join(existingA, name))),
+      sha256(fs.readFileSync(path.join(existingB, name))),
+      `nondeterministic existing fixture ${name}`,
+    );
   }
   const existingReverse = path.join(work, "existing-reverse");
   requirePass(run(["to-fcc", "--items", path.join(existingA, "items.jsonl"), "--claims", path.join(existingA, "claims.jsonl"), "--out-dir", existingReverse]));
@@ -147,7 +178,7 @@ try {
   const sqliteProbe = String.raw`
 import json, sqlite3, sys
 con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
-names = ["world_items", "world_claims", "v_world_facts", "v_world_constraints", "v_world_proposals", "v_world_inferences", "world_units", "world_scales"]
+names = ["world_items", "world_claims", "v_world_attributes", "v_world_facts", "v_world_constraints", "v_world_proposals", "v_world_inferences", "v_world_edges", "world_units", "world_scales"]
 result = {name: con.execute(f"select count(*) from {name}").fetchone()[0] for name in names}
 result["integrity"] = con.execute("pragma integrity_check").fetchone()[0]
 print(json.dumps(result, sort_keys=True, separators=(",", ":")))
@@ -155,34 +186,24 @@ print(json.dumps(result, sort_keys=True, separators=(",", ":")))
   const sqlite = spawnSync(pythonCommand, ["-c", sqliteProbe, path.join(outA, "world.sqlite3")], { encoding: "utf8" });
   if (sqlite.error) throw sqlite.error;
   if (sqlite.status !== 0) throw new Error(`${sqlite.stdout}\n${sqlite.stderr}`);
-  assert.deepEqual(JSON.parse(sqlite.stdout), {
-    integrity: "ok",
-    v_world_constraints: 3,
-    v_world_facts: 4,
-    v_world_inferences: 1,
-    v_world_proposals: 5,
-    world_claims: 30,
-    world_items: 3,
-    world_scales: 1,
-    world_units: 2,
-  });
+  assert.deepEqual(JSON.parse(sqlite.stdout), expected.output.views);
 
-  const badType = cloneDir(fixtures, path.join(work, "bad-type"));
+  const badType = cloneDir(input, path.join(work, "bad-type"));
   const badTypeFacts = readJsonl(path.join(badType, "facts.jsonl"));
   badTypeFacts[0].record_type = "claim";
   fs.writeFileSync(path.join(badType, "facts.jsonl"), `${badTypeFacts.map((row) => JSON.stringify(row)).join("\n")}\n`);
   requireReject(project(path.join(work, "bad-type-out"), badType), /expected record_type='fact'/);
 
-  const malformed = cloneDir(fixtures, path.join(work, "malformed"));
+  const malformed = cloneDir(input, path.join(work, "malformed"));
   fs.appendFileSync(path.join(malformed, "facts.jsonl"), "{not-json}\n");
   requireReject(project(path.join(work, "malformed-out"), malformed), /malformed JSON/);
 
-  const duplicateSource = cloneDir(fixtures, path.join(work, "duplicate-source"));
+  const duplicateSource = cloneDir(input, path.join(work, "duplicate-source"));
   const duplicateSourceFacts = fs.readFileSync(path.join(duplicateSource, "facts.jsonl"), "utf8");
   fs.appendFileSync(path.join(duplicateSource, "facts.jsonl"), `${duplicateSourceFacts.split("\n")[0]}\n`);
   requireReject(project(path.join(work, "duplicate-source-out"), duplicateSource), /duplicate FCC id/);
 
-  const unresolvedInput = cloneDir(fixtures, path.join(work, "unresolved-input"));
+  const unresolvedInput = cloneDir(input, path.join(work, "unresolved-input"));
   const unresolvedClaims = readJsonl(path.join(unresolvedInput, "claims.jsonl"));
   unresolvedClaims[0].rel.push({ target: "missing-record", type: "depends_on" });
   fs.writeFileSync(path.join(unresolvedInput, "claims.jsonl"), `${unresolvedClaims.map((row) => JSON.stringify(row)).join("\n")}\n`);
@@ -223,7 +244,14 @@ print(json.dumps(result, sort_keys=True, separators=(",", ":")))
   assert.deepEqual(corpusProof.counts, { claims: 65201, items: 6256, mapper_fields: 8925, mappers: 800, mappings: 10494, source_files: 93, source_records: 10494, source_shapes: 608 });
   assert.deepEqual(corpusProof.mapping_quality, { preserved: 2248, semantic: 3035, structural: 5211 });
 
-  process.stdout.write(`${JSON.stringify({ status: "PASS_WORLD_CORE_COMPATIBILITY", ...receiptA, existingFixtureRecords: existingSourceCount, destructiveCases: 9 })}\n`);
+  process.stdout.write(`${JSON.stringify({
+    status: "PASS_WORLD_CORE_GOLDEN",
+    ...receiptA,
+    goldenOutputs: generatedOutputs.length,
+    existingFixtureRecords: existingSourceCount,
+    destructiveCases: 9,
+    discoveryQuery: "調査基盤",
+  })}\n`);
 } finally {
   fs.rmSync(work, { recursive: true, force: true });
 }

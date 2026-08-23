@@ -1,0 +1,1 @@
+roccho-dev/opsのcurrent proposals HEADを固定し、「調査基盤」を探してexact carry。canonical goldenだけを規約として今回の調査を追記し、原本不変・item + claim・mapping receipt・SQLite views・検証receiptまで閉じて。

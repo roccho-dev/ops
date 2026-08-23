@@ -1,0 +1,65 @@
+{
+  "authority": {
+    "input": true,
+    "output": false
+  },
+  "id": "research-ledger",
+  "input": {
+    "lines": {
+      "claims.jsonl": 5,
+      "conditions.jsonl": 5,
+      "facts.jsonl": 4
+    },
+    "sha256": {
+      "claims.jsonl": "61f98819e8cb8c2d7e2a4bb67520266df88d6327ef0571384454ae8fc2b9a191",
+      "conditions.jsonl": "693d96a6da4373cec720ec6e152d6419c1afe332f93d9d1eb0352b672f0c8100",
+      "facts.jsonl": "b39586fafca1adfdc164bd39ce07e8faf3484e4848ea5b28db90b2148cd4e9ac"
+    }
+  },
+  "mapper": "ops.fcc/1",
+  "output": {
+    "receipt": {
+      "claims": 30,
+      "identities": 3,
+      "items": 3,
+      "mapped_outputs": 44,
+      "mapper": "ops.fcc/1",
+      "mapping_quality": {
+        "semantic": 14
+      },
+      "mappings": 14,
+      "relations": 15,
+      "scales": 1,
+      "schema": "world.compatibility.receipt/1",
+      "sqlite": "world.sqlite3",
+      "status": "PASS",
+      "units": 2
+    },
+    "sha256": {
+      "claims.jsonl": "5f096a6ca91f2961c56171e24ae40a30a7fbeb5c036c306fa5654adaadc2b48a",
+      "identities.jsonl": "19196e7383a3333384048ff815fb68ffbcddf835122a081d94dbe6678b6cde94",
+      "items.jsonl": "ab25d7569cd98c736326de6a71068103e824277cf43a3e9ed1e3206be9298ad0",
+      "mappings.jsonl": "1dbe2ccbf96f0fcc0b2b385b103e0fff7dc4c4fc40aea37b364e2e679ba678e2",
+      "receipt.json": "ab7f0494b8c3e3223116a17449bdcb45cf3357502cba6449ebbaabf239f2bd70",
+      "relations.jsonl": "aa5f9ae07ca8977e808e6d2bff75b0b198ab8dc5291aeed2dab2606960252642",
+      "scales.jsonl": "634263bb9eb044fcbee53b31c6ffd0dc27c53d4f901509e2563155378a501a53",
+      "units.jsonl": "ef8491016afec3e583556e35210adf5c3053987c69e9973fc7722ea610cc49d9",
+      "world.sqlite3": "9835d0863595b4982058787f185b9652c854ad52e1c468a2415ddd22973ebef7"
+    },
+    "views": {
+      "integrity": "ok",
+      "v_world_attributes": 22,
+      "v_world_constraints": 3,
+      "v_world_edges": 16,
+      "v_world_facts": 4,
+      "v_world_inferences": 1,
+      "v_world_proposals": 5,
+      "world_claims": 30,
+      "world_items": 3,
+      "world_scales": 1,
+      "world_units": 2
+    }
+  },
+  "reverse": "byte-identical",
+  "schema": "world.golden/1"
+}
