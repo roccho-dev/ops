@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.scale/1",
+  "title": "World scale registry row",
+  "type": "object",
+  "required": ["schema", "id", "name", "ordered", "values"],
+  "properties": {
+    "schema": {"const": "world.scale/1"},
+    "id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "ordered": {"type": "boolean"},
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {"type": "string"},
+          "rank": {"type": "integer"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

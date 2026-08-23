@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "world.identity/1",
+  "title": "World identity registry row",
+  "type": "object",
+  "required": ["schema", "id", "kind", "key", "item", "rule"],
+  "properties": {
+    "schema": {"const": "world.identity/1"},
+    "id": {"type": "string", "minLength": 1},
+    "kind": {"type": "string", "minLength": 1},
+    "key": {},
+    "item": {"type": "string", "minLength": 1},
+    "name": {"type": "string"},
+    "domain": {"type": "string"},
+    "uses": {"type": "integer", "minimum": 0},
+    "rule": {"enum": ["exact", "alias", "same_as"]}
+  },
+  "additionalProperties": false
+}

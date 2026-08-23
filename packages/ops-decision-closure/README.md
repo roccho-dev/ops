@@ -23,3 +23,17 @@ Engine selection uses the exact eight-query contract repeated five times against
 ## Selected normal runtime
 
 `bin/query.py` is the normal read-only entry and accepts only `ops.sqliteShardProjection.v1`. It depends on Python standard-library SQLite, requires the expected manifest SHA-256, and verifies a closed set of manifest-declared SQLite assets before query. Duplicate names, path traversal, missing assets, extra files, and content mismatch are rejected. DuckDB remains only in the exact comparison/check path and is not a normal runtime dependency.
+
+## World-core compatibility
+
+`world/` adds the proposed `roccho-dev/adrs#314` compatibility boundary:
+
+```text
+existing Fact / Condition / Claim JSONL
+→ exact source-line mappings
+→ item + claim
+→ identity / relation / unit / scale registries
+→ the existing read-only SQLite projection boundary
+```
+
+The existing authority and selected runtime do not change. The compatibility mapper is reversible, and facts, constraints, proposals, and inferences remain generated views. The 93-file private corpus is not committed; only its aggregate proof receipt and exact ZIP digest are retained.
