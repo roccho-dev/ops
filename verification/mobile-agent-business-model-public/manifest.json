@@ -21,27 +21,6 @@
     "generateUrl": "npm run generate:url -- <semantic.jsonl> [baseUrl] [receipt.json]",
     "test": "npm test"
   },
-  "baseApp": {
-    "source": "exact 54-file existing Mobile Agent projection discovered read-only from Cloudflare Pages and accepted only after every size/SHA gate passes",
-    "projection": {
-      "kind": "verified-existing-cloudflare-pages-deployment",
-      "authority": false,
-      "expectedManifest": "verification/mobile-agent-preset-app/expected.json",
-      "expectedFileCount": 54,
-      "expectedDistTreeDigest": "sha256:b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145",
-      "preferredProject": "stg-mobile-agent",
-      "discoverAllProjectsIfNeeded": true,
-      "verifyEveryFileHash": true
-    },
-    "appHtml": {
-      "path": "app/index.html",
-      "bytes": 2412388,
-      "sha256": "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
-    },
-    "preservedPatterns": ["graph/1", "map/1", "seq/1"],
-    "preserveExactAcceptedAppHtml": true,
-    "preserveExactAccepted54FileTree": true
-  },
   "provider": {
     "kind": "cloudflare-pages",
     "environment": "cloudflare-production",
@@ -51,19 +30,28 @@
   },
   "publication": {
     "mode": "content-addressed immutable Release plus explicit Pages deployment",
-    "baseFileCount": 54,
-    "addedFiles": ["business-model/index.html"],
-    "fileCount": 55,
+    "files": ["business-model/index.html"],
+    "fileCount": 1,
     "releaseOn": "push to proposals",
     "deployOn": "explicit workflow_dispatch"
   },
+  "existingAppBoundary": {
+    "status": "out-of-scope",
+    "reason": "stg-mobile-agent has no current Pages project and the historic 54-file auxiliary projection is not required to publish business-model/1",
+    "acceptedAppHtml": {
+      "path": "app/index.html",
+      "bytes": 2412388,
+      "sha256": "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+    },
+    "presets": ["graph/1", "map/1", "seq/1"],
+    "touchedByThisChange": false,
+    "publishedByThisChange": false,
+    "futureAppRouteOverwriteBlocked": true
+  },
   "boundaries": {
     "existingMaxGraphAppRewritten": false,
-    "exactAcceptedAppHtmlPreserved": true,
-    "exactAccepted54FileTreePreserved": true,
-    "truncatedGitProjectionRetired": true,
-    "issueCommentCarrierRetired": true,
-    "baseProjectionAuthority": false,
+    "existingMaxGraphAppPublished": false,
+    "historical54FileProjectionPublished": false,
     "newUrlCodec": false,
     "newBackend": false,
     "newDatabase": false,
