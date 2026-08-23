@@ -1,0 +1,83 @@
+name: Mobile Agent Seq restore chunk03
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-seq-restore-chunk03.yml'
+      - '.github/transport/mobile-agent-seq-raw/chunk03.part*.b64'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  restore-and-trigger:
+    name: restore-and-trigger
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact Git-backed missing chunk
+        id: chunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          root='.github/transport/mobile-agent-seq-raw'
+          out="$RUNNER_TEMP/chunk03.b64"
+          : > "$out"
+          for i in 0 1 2 3 4 5; do
+            f="$root/chunk03.part${i}.b64"
+            test -f "$f"
+            test "$(wc -c < "$f")" -eq 8000
+            cat "$f" >> "$out"
+          done
+          test "$(wc -c < "$out")" -eq 48000
+          test "$(sha256sum "$out" | cut -d' ' -f1)" = '6cdb51bb89b9c40c2a3b9892907545048b0e99c23b8b0e306c814cf676dffc7c'
+          python3 - "$out" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding='ascii').read()
+          assert re.fullmatch(r'[A-Za-z0-9+/=]+',s)
+          PY
+
+      - name: Restore archived owner chunk and authoritative readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(cat "$RUNNER_TEMP/chunk03.b64")"
+          body="$RUNNER_TEMP/comment.txt"
+          printf 'SEQ-APP-BR/1 03/11\n%s' "$payload" > "$body"
+          gh api -X PATCH \
+            "repos/$GITHUB_REPOSITORY/issues/comments/5381546599" \
+            --input <(python3 - "$body" <<'PY'
+          import json,sys
+          print(json.dumps({'body':open(sys.argv[1],encoding='ascii').read()}))
+          PY
+          ) > "$RUNNER_TEMP/patch.json"
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/5381546599" > "$RUNNER_TEMP/readback.json"
+          python3 - "$RUNNER_TEMP/readback.json" <<'PY'
+          import hashlib,json,re,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          body=x['body'].replace('\r\n','\n')
+          head,sep,payload=body.partition('\n')
+          assert sep and head=='SEQ-APP-BR/1 03/11'
+          payload=re.sub(r'\s+','',payload)
+          assert len(payload)==48000
+          assert hashlib.sha256(payload.encode()).hexdigest()=='6cdb51bb89b9c40c2a3b9892907545048b0e99c23b8b0e306c814cf676dffc7c'
+          print(json.dumps({'status':'PASS','commentId':x['id'],'payloadBytes':len(payload)}))
+          PY
+
+      - name: Trigger the already-merged audited Seq deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue comment 286 --repo "$GITHUB_REPOSITORY" --body '/run-seq-comment-ingress-v2'
