@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Deploy the exact materialized App revision to stg-mobile-agent
+        description: Deploy the exact App revision to stg-mobile-agent
         required: true
         default: false
         type: boolean
@@ -31,8 +31,8 @@ jobs:
     timeout-minutes: 30
     outputs:
       source_sha: ${{ steps.identity.outputs.source_sha }}
-      tag: ${{ steps.publication.outputs.tag }}
       project: ${{ steps.contract.outputs.project }}
+      tag: ${{ steps.pack.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,193 +41,162 @@ jobs:
         with:
           node-version: '22.16.0'
 
-      - name: Validate public projection contract
+      - name: Validate contract
         id: contract
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json,pathlib
-          p=pathlib.Path('verification/mobile-agent-business-model-public/manifest.json')
-          x=json.loads(p.read_text(encoding='utf-8'))
+          x=json.loads(pathlib.Path('verification/mobile-agent-business-model-public/manifest.json').read_text())
           assert x['schema']=='ops.mobileAgentBusinessModelPublic/1'
           assert x['authority'] is False and x['status']=='candidate'
           assert x['pattern']['id']=='business-model/1'
-          assert x['pattern']['route']=='/business-model/'
-          assert x['pattern']['urlLimitChars']==8192
           assert x['pattern']['actorCount']=={'min':2,'max':4}
+          assert x['pattern']['urlLimitChars']==8192
           assert x['baseApp']['preservedPatterns']==['graph/1','map/1','seq/1']
-          assert x['baseApp']['preserveEveryExistingFileByte'] is True
-          assert x['provider']['project']=='stg-mobile-agent'
+          assert x['baseApp']['preserveExactAcceptedAppHtml'] is True
           assert x['boundaries']['existingMaxGraphAppRewritten'] is False
           assert x['boundaries']['newUrlCodec'] is False
-          print(f"project={x['provider']['project']}")
-          print(f"stable_base={x['provider']['stableBase']}")
-          print(f"base_tag={x['baseApp']['tag']}")
-          print(f"base_archive={x['baseApp']['archive']['name']}")
-          print(f"base_archive_bytes={x['baseApp']['archive']['bytes']}")
-          print(f"base_archive_sha={x['baseApp']['archive']['sha256']}")
+          c=x['baseApp']['carrier']; a=c['asset']; h=x['baseApp']['appHtml']
+          for k,v in {
+            'project':x['provider']['project'],
+            'stable_base':x['provider']['stableBase'],
+            'base_tag':c['tag'],
+            'base_asset':a['name'],
+            'base_asset_bytes':a['bytes'],
+            'base_asset_sha':a['sha256'],
+            'base_app_bytes':h['bytes'],
+            'base_app_sha':h['sha256'],
+          }.items(): print(f'{k}={v}')
           PY
 
-      - name: Record exact source identity
+      - name: Record source identity
         id: identity
         shell: bash
         run: echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Prove fixed UI plus JSONL locally
-        shell: bash
+      - name: Prove fixed UI and JSONL
         working-directory: verification/mobile-agent-business-model-presentation
+        shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
           test -n "$chrome"
           CHROMIUM_PATH="$chrome" npm test
 
-      - name: Materialize exact base App plus business-model route
-        id: publication
+      - name: Materialize exact accepted App
+        id: pack
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_TAG: ${{ steps.contract.outputs.base_tag }}
-          BASE_ARCHIVE: ${{ steps.contract.outputs.base_archive }}
-          BASE_ARCHIVE_BYTES: ${{ steps.contract.outputs.base_archive_bytes }}
-          BASE_ARCHIVE_SHA: ${{ steps.contract.outputs.base_archive_sha }}
+          BASE_ASSET: ${{ steps.contract.outputs.base_asset }}
+          BASE_ASSET_BYTES: ${{ steps.contract.outputs.base_asset_bytes }}
+          BASE_ASSET_SHA: ${{ steps.contract.outputs.base_asset_sha }}
+          BASE_APP_BYTES: ${{ steps.contract.outputs.base_app_bytes }}
+          BASE_APP_SHA: ${{ steps.contract.outputs.base_app_sha }}
           STABLE_BASE: ${{ steps.contract.outputs.stable_base }}
+          SOURCE_SHA: ${{ steps.identity.outputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          source_root=verification/mobile-agent-business-model-presentation
-          app_contract=verification/mobile-agent-business-model-public/manifest.json
-          base_expected=verification/mobile-agent-preset-app/expected.json
-          site="$RUNNER_TEMP/site"
-          base_archive="$RUNNER_TEMP/$BASE_ARCHIVE"
-          urls_dir="$RUNNER_TEMP/urls"
-          mkdir -p "$site" "$urls_dir"
-
-          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE_ARCHIVE" --dir "$RUNNER_TEMP"
-          test "$(wc -c < "$base_archive")" -eq "$BASE_ARCHIVE_BYTES"
-          test "$(sha256sum "$base_archive" | cut -d' ' -f1)" = "$BASE_ARCHIVE_SHA"
-          tar -xzf "$base_archive" -C "$site"
-
-          python3 - "$site" "$base_expected" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); expected=json.load(open(sys.argv[2],encoding='utf-8'))
-          actual=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
-          assert actual==sorted(expected['files'])
-          for rel,spec in expected['files'].items():
-              data=(root/rel).read_bytes()
-              assert len(data)==spec['bytes']
-              assert hashlib.sha256(data).hexdigest()==spec['sha256']
-          PY
-
-          mkdir -p "$site/business-model"
-          cp "$source_root/dist/public/index.html" "$site/business-model/index.html"
-          for count in 2 3 4; do
-            node "$source_root/scripts/generate-url.mjs" \
-              "$source_root/examples/$count-actors.jsonl" \
-              "${STABLE_BASE}business-model/" \
-              "$urls_dir/$count-actors.json"
+          src=verification/mobile-agent-business-model-presentation
+          contract=verification/mobile-agent-business-model-public/manifest.json
+          site="$RUNNER_TEMP/site"; parts="$RUNNER_TEMP/url-parts"
+          mkdir -p "$site/app" "$site/business-model" "$parts"
+          asset="$RUNNER_TEMP/$BASE_ASSET"
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$BASE_ASSET" --dir "$RUNNER_TEMP"
+          test "$(wc -c < "$asset")" -eq "$BASE_ASSET_BYTES"
+          test "$(sha256sum "$asset" | cut -d' ' -f1)" = "$BASE_ASSET_SHA"
+          node -e 'const f=require("node:fs"),z=require("node:zlib");f.writeFileSync(process.argv[2],z.brotliDecompressSync(f.readFileSync(process.argv[1])));' "$asset" "$site/app/index.html"
+          test "$(wc -c < "$site/app/index.html")" -eq "$BASE_APP_BYTES"
+          test "$(sha256sum "$site/app/index.html" | cut -d' ' -f1)" = "$BASE_APP_SHA"
+          for marker in graph/1 map/1 seq/1 maxgraph; do grep -Fi "$marker" "$site/app/index.html" >/dev/null; done
+          cp "$src/dist/public/index.html" "$site/business-model/index.html"
+          for n in 2 3 4; do
+            node "$src/scripts/generate-url.mjs" "$src/examples/$n-actors.jsonl" "${STABLE_BASE}business-model/" "$parts/$n.json"
           done
-          python3 - "$urls_dir" "$RUNNER_TEMP/urls.json" <<'PY'
-          import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1])
-          rows=[]
-          for count in (2,3,4):
-              x=json.loads((root/f'{count}-actors.json').read_text(encoding='utf-8'))
-              assert x['status']=='PASS' and x['pattern']=='business-model/1'
-              assert x['actorCount']==count and x['urlChars']<=8192
-              rows.append({k:x[k] for k in ('count','actorOrder','tokenChars','urlChars','url') if k in x} | {'count':count})
-          out={'schema':'mobile-agent.business-model-public-url-test/1','status':'PASS','results':rows}
-          pathlib.Path(sys.argv[2]).write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          PY
-
-          python3 - "$site" "$RUNNER_TEMP/expected.json" "$RUNNER_TEMP/identity.env" <<'PY'
+          python3 - "$site" "$parts" "$contract" "$RUNNER_TEMP" "$SOURCE_SHA" <<'PY'
           import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); rows={}
-          for p in sorted(x for x in root.rglob('*') if x.is_file()):
-              data=p.read_bytes(); rel=p.relative_to(root).as_posix()
-              rows[rel]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
-          canonical=json.dumps([{'path':p,**rows[p]} for p in sorted(rows)],sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
-          digest=hashlib.sha256(canonical).hexdigest()
-          expected={'schema':'mobile-agent-business-model-publication/1','fileCount':len(rows),'distTreeDigest':'sha256:'+digest,'files':rows}
-          pathlib.Path(sys.argv[2]).write_text(json.dumps(expected,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          pathlib.Path(sys.argv[3]).write_text(f'digest={digest}\ntag=mobile-agent-business-model-{digest}\n',encoding='utf-8')
+          site,parts,contract,out=map(pathlib.Path,sys.argv[1:5]); source=sys.argv[5]
+          urls=[]
+          for n in (2,3,4):
+              x=json.loads((parts/f'{n}.json').read_text())
+              assert x['status']=='PASS' and x['pattern']=='business-model/1'
+              assert x['actorCount']==n and x['urlChars']<=8192
+              urls.append(x)
+          (out/'urls.json').write_text(json.dumps({'schema':'mobile-agent.business-model-public-url-test/1','status':'PASS','results':urls},ensure_ascii=False,indent=2)+'\n')
+          files={}
+          for p in sorted(x for x in site.rglob('*') if x.is_file()):
+              b=p.read_bytes(); files[p.relative_to(site).as_posix()]={'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()}
+          assert sorted(files)==['app/index.html','business-model/index.html']
+          rows=[{'path':p,**files[p]} for p in sorted(files)]
+          digest=hashlib.sha256(json.dumps(rows,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+          expected={'schema':'mobile-agent-business-model-publication/1','fileCount':2,'distTreeDigest':'sha256:'+digest,'files':files}
+          (out/'expected.json').write_text(json.dumps(expected,indent=2)+'\n')
+          c=json.loads(contract.read_text())
+          publication={'schema':'ops.mobileAgentBusinessModelPublication/1','status':'PASS','pass':True,'sourceCommit':source,'pattern':c['pattern'],'baseApp':c['baseApp'],'publication':{'tag':'mobile-agent-business-model-'+digest,'fileCount':2,'distTreeDigest':'sha256:'+digest}}
+          (out/'publication.json').write_text(json.dumps(publication,indent=2)+'\n')
+          (out/'identity.env').write_text(f'digest={digest}\ntag=mobile-agent-business-model-{digest}\n')
           PY
           . "$RUNNER_TEMP/identity.env"
-          archive="mobile-agent-business-model.$digest.tar.gz"
-          carrier="$archive.b64.txt"
-          (cd "$site" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$RUNNER_TEMP/$archive"
+          archive="mobile-agent-business-model.$digest.tar.gz"; carrier="$archive.b64.txt"
+          (cd "$site" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - .) | gzip -n > "$RUNNER_TEMP/$archive"
           base64 -w0 "$RUNNER_TEMP/$archive" > "$RUNNER_TEMP/$carrier"
-          python3 - "$RUNNER_TEMP/$archive" "$RUNNER_TEMP/$carrier" "$RUNNER_TEMP/expected.json" "$app_contract" "$RUNNER_TEMP/publication.json" <<'PY'
-          import hashlib,json,pathlib,sys
-          archive=pathlib.Path(sys.argv[1]); carrier=pathlib.Path(sys.argv[2])
-          expected=json.load(open(sys.argv[3],encoding='utf-8')); contract=json.load(open(sys.argv[4],encoding='utf-8'))
-          out={
-            'schema':'ops.mobileAgentBusinessModelPublication/1','status':'PASS','pass':True,
-            'sourceCommit':'${{ steps.identity.outputs.source_sha }}',
-            'pattern':contract['pattern'],'baseApp':contract['baseApp'],
-            'publication':{
-              'tag':'mobile-agent-business-model-'+expected['distTreeDigest'][7:],
-              'fileCount':expected['fileCount'],'distTreeDigest':expected['distTreeDigest'],
-              'archive':{'name':archive.name,'bytes':archive.stat().st_size,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()},
-              'carrier':{'name':carrier.name,'bytes':carrier.stat().st_size,'sha256':hashlib.sha256(carrier.read_bytes()).hexdigest()},
-            }
-          }
-          pathlib.Path(sys.argv[5]).write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          PY
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
           echo "carrier=$carrier" >> "$GITHUB_OUTPUT"
+
+      - name: Prove combined App in Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          src=verification/mobile-agent-business-model-presentation
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/site" >/dev/null 2>&1 &
+          server=$!; trap 'kill $server 2>/dev/null || true' EXIT
+          for _ in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          node verification/mobile-agent-live-bootstrap/smoke.mjs verification/mobile-agent-live-bootstrap/cases.json http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/existing-proof"
+          python3 - "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/local-urls.json" <<'PY'
+          import json,pathlib,sys
+          x=json.load(open(sys.argv[1]))
+          for row in x['results']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','http://127.0.0.1:4173/')
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(x,ensure_ascii=False,indent=2)+'\n')
+          PY
+          CHROMIUM_PATH="$chrome" python3 "$src/tests/e2e/public_host_projection.py" "$RUNNER_TEMP/local-urls.json" "$RUNNER_TEMP/business-proof.json"
 
       - name: Publish immutable Release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.publication.outputs.tag }}
-          ARCHIVE: ${{ steps.publication.outputs.archive }}
-          CARRIER: ${{ steps.publication.outputs.carrier }}
+          TAG: ${{ steps.pack.outputs.tag }}
+          ARCHIVE: ${{ steps.pack.outputs.archive }}
+          CARRIER: ${{ steps.pack.outputs.carrier }}
         shell: bash
         run: |
           set -euo pipefail
-          assets=(
-            "$RUNNER_TEMP/$ARCHIVE"
-            "$RUNNER_TEMP/$CARRIER"
-            "$RUNNER_TEMP/expected.json"
-            "$RUNNER_TEMP/publication.json"
-            "$RUNNER_TEMP/urls.json"
-            "verification/mobile-agent-business-model-public/manifest.json"
-            "verification/mobile-agent-business-model-presentation/dist/public/build-receipt.json"
-            "verification/mobile-agent-business-model-presentation/dist/public/browser-proof.json"
-          )
+          assets=("$RUNNER_TEMP/$ARCHIVE" "$RUNNER_TEMP/$CARRIER" "$RUNNER_TEMP/expected.json" "$RUNNER_TEMP/publication.json" "$RUNNER_TEMP/urls.json" "verification/mobile-agent-business-model-public/manifest.json")
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "Mobile Agent business-model/1 App revision" \
-              --notes "Immutable non-authority projection preserving the existing graph/1, map/1 and seq/1 bytes and adding /business-model/." \
-              "${assets[@]}"
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Mobile Agent business-model/1 App revision" --notes "Exact accepted Mobile Agent App HTML plus /business-model/." "${assets[@]}"
           else
             mkdir "$RUNNER_TEMP/release-check"
-            for asset in "${assets[@]}"; do
-              name="$(basename "$asset")"
-              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-check"
-              cmp "$asset" "$RUNNER_TEMP/release-check/$name"
-            done
+            for f in "${assets[@]}"; do n="$(basename "$f")"; gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$n" --dir "$RUNNER_TEMP/release-check"; cmp "$f" "$RUNNER_TEMP/release-check/$n"; done
           fi
 
-      - name: Stage exact App revision
+      - name: Stage and upload App revision
         shell: bash
         run: |
           set -euo pipefail
-          result="$RUNNER_TEMP/result"
-          mkdir -p "$result"
-          cp -a "$RUNNER_TEMP/site" "$result/dist"
-          cp "$RUNNER_TEMP/expected.json" "$result/expected.json"
-          cp "$RUNNER_TEMP/publication.json" "$result/publication.json"
-          cp "$RUNNER_TEMP/urls.json" "$result/urls.json"
-          cp verification/mobile-agent-business-model-public/manifest.json "$result/manifest.json"
-          cp verification/mobile-agent-business-model-presentation/dist/public/browser-proof.json "$result/local-browser-proof.json"
-
-      - name: Upload staged App revision
-        uses: actions/upload-artifact@v4
+          r="$RUNNER_TEMP/result"; mkdir -p "$r"
+          cp -a "$RUNNER_TEMP/site" "$r/dist"
+          cp "$RUNNER_TEMP"/{expected.json,publication.json,urls.json,business-proof.json} "$r/"
+          cp "$RUNNER_TEMP/existing-proof/receipt.json" "$r/existing-proof.json"
+          cp verification/mobile-agent-business-model-public/manifest.json "$r/manifest.json"
+      - uses: actions/upload-artifact@v4
         with:
           name: mobile-agent-business-model-site-${{ github.run_id }}
           path: ${{ runner.temp }}/result/
@@ -248,8 +217,10 @@ jobs:
         with:
           name: mobile-agent-business-model-site-${{ github.run_id }}
           path: ${{ runner.temp }}/staged
-
-      - name: Deploy exact App revision
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Deploy and prove public bytes
         id: deploy
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -259,76 +230,48 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
-          test "$PROJECT" = stg-mobile-agent
-          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/staged/dist" \
-            --project-name "$PROJECT" --branch proposals --commit-hash "$SOURCE_SHA" \
-            --commit-message 'Mobile Agent business-model/1 App revision' 2>&1)"
-          printf '%s\n' "$output"
-          urls="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | awk '!seen[$0]++')"
-          deployment="$(printf '%s\n' "$urls" | grep -v -F "https://$PROJECT.pages.dev" | head -n1 || true)"
-          test -n "$deployment"
-          echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
-          echo "stable_base=https://$PROJECT.pages.dev/" >> "$GITHUB_OUTPUT"
-
-      - name: Read back every file from stable and immutable hosts
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - "$RUNNER_TEMP/staged/expected.json" "${{ steps.deploy.outputs.stable_base }}" "${{ steps.deploy.outputs.deployment_base }}" "$RUNNER_TEMP/readback.json" <<'PY'
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test "$PROJECT" = stg-mobile-agent
+          o="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/staged/dist" --project-name "$PROJECT" --branch proposals --commit-hash "$SOURCE_SHA" --commit-message 'Mobile Agent business-model/1' 2>&1)"
+          printf '%s\n' "$o"
+          urls="$(printf '%s\n' "$o" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | awk '!seen[$0]++')"
+          immutable="$(printf '%s\n' "$urls" | grep -v -F "https://$PROJECT.pages.dev" | head -n1)"; test -n "$immutable"
+          stable="https://$PROJECT.pages.dev/"
+          python3 - "$RUNNER_TEMP/staged/expected.json" "$stable" "$immutable/" "$RUNNER_TEMP/readback.json" <<'PY'
           import hashlib,json,pathlib,sys,urllib.parse,urllib.request
-          expected=json.load(open(sys.argv[1],encoding='utf-8')); bases=sys.argv[2:4]; proofs=[]
-          for base in bases:
-              for rel,spec in expected['files'].items():
-                  url=urllib.parse.urljoin(base,urllib.parse.quote(rel))
-                  with urllib.request.urlopen(url,timeout=45) as response: data=response.read()
-                  assert len(data)==spec['bytes'], (url,len(data),spec['bytes'])
-                  assert hashlib.sha256(data).hexdigest()==spec['sha256'], url
-              proofs.append({'base':base,'fileCount':expected['fileCount'],'status':'PASS'})
-          pathlib.Path(sys.argv[4]).write_text(json.dumps({'schema':'mobile-agent-business-model-readback/1','status':'PASS','proofs':proofs},indent=2)+'\n')
+          e=json.load(open(sys.argv[1])); proof=[]
+          for base in sys.argv[2:4]:
+              for rel,spec in e['files'].items():
+                  with urllib.request.urlopen(urllib.parse.urljoin(base,rel),timeout=45) as r: b=r.read()
+                  assert len(b)==spec['bytes'] and hashlib.sha256(b).hexdigest()==spec['sha256']
+              proof.append({'base':base,'fileCount':e['fileCount'],'status':'PASS'})
+          pathlib.Path(sys.argv[4]).write_text(json.dumps({'schema':'mobile-agent-business-model-readback/1','status':'PASS','proofs':proof},indent=2)+'\n')
           PY
+          echo "stable=$stable" >> "$GITHUB_OUTPUT"
 
-      - name: Prove existing presets and business-model URLs in Chrome
+      - name: Prove stable public URLs in Chrome
         shell: bash
         run: |
           set -euo pipefail
-          source_root=verification/mobile-agent-business-model-presentation
-          stable="${{ steps.deploy.outputs.stable_base }}"
-          node verification/mobile-agent-preset-app/generate-urls.mjs \
-            "$RUNNER_TEMP/staged/dist" verification/mobile-agent-preset-app/manifest.json \
-            "$stable" "$RUNNER_TEMP/existing-urls.json"
-          mkdir -p "$RUNNER_TEMP/stable-url-parts"
-          for count in 2 3 4; do
-            node "$source_root/scripts/generate-url.mjs" \
-              "$source_root/examples/$count-actors.jsonl" "${stable}business-model/" \
-              "$RUNNER_TEMP/stable-url-parts/$count-actors.json"
-          done
-          python3 - "$RUNNER_TEMP/stable-url-parts" "$RUNNER_TEMP/business-model-urls.json" <<'PY'
-          import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); rows=[]
-          for count in (2,3,4):
-              x=json.loads((root/f'{count}-actors.json').read_text(encoding='utf-8'))
-              rows.append({'count':count,'actorOrder':x['actorOrder'],'tokenChars':x['tokenChars'],'urlChars':x['urlChars'],'url':x['url']})
-          pathlib.Path(sys.argv[2]).write_text(json.dumps({'schema':'mobile-agent.business-model-public-url-test/1','status':'PASS','results':rows},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          PY
+          src=verification/mobile-agent-business-model-presentation
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
           python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
-          test -n "$chrome"
-          CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py \
-            "$RUNNER_TEMP/existing-urls.json" "$RUNNER_TEMP/existing-browser-proof.json" "$RUNNER_TEMP/existing-shots"
-          CHROME_BIN="$chrome" python3 "$source_root/tests/e2e/public_host_projection.py" \
-            "$RUNNER_TEMP/business-model-urls.json" "$RUNNER_TEMP/business-model-browser-proof.json"
-
-      - name: Upload deployment evidence
-        uses: actions/upload-artifact@v4
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          base="${{ steps.deploy.outputs.stable }}"
+          node verification/mobile-agent-live-bootstrap/smoke.mjs verification/mobile-agent-live-bootstrap/cases.json "$base" "$chrome" "$RUNNER_TEMP/existing-proof"
+          python3 - "$RUNNER_TEMP/staged/urls.json" "$RUNNER_TEMP/public-urls.json" "$base" <<'PY'
+          import json,pathlib,sys
+          x=json.load(open(sys.argv[1]))
+          for row in x['results']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/',sys.argv[3])
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(x,ensure_ascii=False,indent=2)+'\n')
+          PY
+          CHROMIUM_PATH="$chrome" python3 "$src/tests/e2e/public_host_projection.py" "$RUNNER_TEMP/public-urls.json" "$RUNNER_TEMP/business-proof.json"
+      - uses: actions/upload-artifact@v4
         with:
           name: mobile-agent-business-model-deployment-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/readback.json
-            ${{ runner.temp }}/existing-urls.json
-            ${{ runner.temp }}/business-model-urls.json
-            ${{ runner.temp }}/existing-browser-proof.json
-            ${{ runner.temp }}/business-model-browser-proof.json
-            ${{ runner.temp }}/existing-shots/
+            ${{ runner.temp }}/existing-proof/
+            ${{ runner.temp }}/business-proof.json
+            ${{ runner.temp }}/public-urls.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90

@@ -1,9 +1,12 @@
-# ceo-260816 business-model presentation — fixed UI + JSONL
+# Mobile Agent business-model presentation — fixed UI + JSONL
 
-The original two-actor presentation layout is the immutable base. Three- and four-actor variants only add alternating actor/exchange columns inside the existing scene.
+The accepted two-actor business-presentation layout is the immutable base. Three- and four-actor variants only add alternating actor/exchange columns inside the existing scene.
 
 ```text
-JSONL -> business-model compiler -> A2UI Slides + Actor Seq -> one HTML
+semantic JSONL
+→ business-model/1 compiler
+→ fixed A2UI Slides + Actor Seq
+→ one HTML or #presentation URL
 ```
 
 ## Examples are the E2E fixtures
@@ -16,38 +19,52 @@ There is no duplicate fixture data. The exact same JSONL files serve as document
 | `examples/3-actors.jsonl` | Existing layout + one actor | `ed3a5dbdd60ea0cb9b3a8026e2586782772a747f82b59cd7c827d926af5a1306` |
 | `examples/4-actors.jsonl` | Existing layout + two actors | `faf0d73a8fe3eb743ca6877d784ccbb8c9a6dac03eba94989b52447aa41f8443` |
 
-`tests/e2e/fixtures.json` binds each example to one fixed UI profile and its exact expected HTML. The JSONL remains the only example-specific semantic input; profiles live under `profiles/` as fixed UI policy. Both the builder and E2E test consume the same manifest.
+`tests/e2e/fixtures.json` binds each example to one fixed UI profile and its exact expected HTML. The JSONL remains the only example-specific semantic input; profiles, theme, renderer, and validation remain fixed UI policy.
 
 ## Run
 
 ```text
 npm run build           # original 2-actor HTML -> dist/index.html
 npm run build:examples  # 2/3/4 actor HTML -> dist/layout-samples/
-npm run check           # original byte-exact regression
-npm run test:e2e        # real Chromium interaction + layout preservation
-npm test                # all of the above
+npm run build:public    # business-model/1 host HTML -> dist/public/index.html
+npm run generate:url -- <semantic.jsonl> [baseUrl] [receipt.json]
+npm test                # byte regression + browser E2E + URL roundtrip
 ```
 
-The E2E test verifies:
+The E2E tests verify:
 
 - exact HTML SHA for all three examples;
 - all timeline stages are operable;
 - Actor Seq opens and closes;
 - actor/exchange columns remain `actor | exchange | actor | ...`;
 - header and timeline rectangles remain identical across 2/3/4 actors;
-- the page itself does not gain horizontal overflow;
-- no browser page error occurs.
+- page overflow and browser errors remain zero;
+- each generated URL decodes and renders in real Chromium;
+- URL length stays within 8,192 characters.
 
-Python Playwright and Chromium are required only for `npm run test:e2e`. `CHROMIUM_PATH` may override the detected browser executable.
+## Public Mobile Agent projection
 
-## Public `business-model/1` URL projection
-
-The public projection keeps the accepted presentation UI and derives only actor ordering from the semantic JSONL. The actor exchange graph must be one connected path of 2–4 actors. The endpoint that sends the earliest `input` exchange becomes the left edge, preserving the accepted 2/3/4-actor examples without a second design input.
+The public App revision is assembled without rebuilding the accepted Mobile Agent App.
 
 ```text
-npm run build:public
-npm run generate:url -- examples/4-actors.jsonl https://stg-mobile-agent.pages.dev/business-model/ dist/4-actors.url.json
-npm run test:url
+accepted immutable one-HTML Carrier
+→ exact /app/index.html
++ generated /business-model/index.html
+→ content-addressed Release
+→ explicit Cloudflare Pages deployment
 ```
 
-The generated URL carries a compact A2UI/Seq payload in `#presentation`. All 2/3/4-actor fixtures remain below the existing 8,192-character URL gate. The existing byte-exact two-actor baseline and its build remain unchanged.
+The accepted App HTML is fixed at:
+
+```text
+SHA-256 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+bytes   2412388
+```
+
+The combined browser proof re-runs `graph/1`, `map/1`, and `seq/1`, then renders the 2-, 3-, and 4-actor `business-model/1` URLs.
+
+The old 54-file bootstrap workflow is retired. Its historical Release is absent and its mutable public bootstrap no longer matches the fixed file manifest. The exact accepted one-HTML Carrier is now the only base used by this publication path.
+
+## Repository boundary
+
+This directory remains a self-contained source candidate until a dedicated Mobile Agent source repository exists. It does not rewrite the accepted maxGraph App, add a backend, add a database, or introduce a second URL codec.

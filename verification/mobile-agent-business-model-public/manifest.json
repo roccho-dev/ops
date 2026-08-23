@@ -25,19 +25,27 @@
     "test": "npm test"
   },
   "baseApp": {
-    "tag": "mobile-agent-preset-b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145",
-    "archive": {
-      "name": "mobile-agent-preset.b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145.tar.gz",
-      "bytes": 5221932,
-      "sha256": "40adad171eb3044f17bfdb9d6f89fa92cdd66c6293b2e946cae390ea7db64924"
+    "source": "accepted immutable one-HTML Carrier from ops#286",
+    "carrier": {
+      "tag": "mobile-agent-seq-app-3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6",
+      "asset": {
+        "name": "mobile-agent-seq-app.3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6.html.br",
+        "codec": "brotli",
+        "bytes": 382497,
+        "sha256": "4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97"
+      }
     },
-    "expected": "verification/mobile-agent-preset-app/expected.json",
+    "appHtml": {
+      "path": "app/index.html",
+      "bytes": 2412388,
+      "sha256": "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+    },
     "preservedPatterns": [
       "graph/1",
       "map/1",
       "seq/1"
     ],
-    "preserveEveryExistingFileByte": true
+    "preserveExactAcceptedAppHtml": true
   },
   "provider": {
     "kind": "cloudflare-pages",
@@ -47,21 +55,22 @@
     "stableBase": "https://stg-mobile-agent.pages.dev/"
   },
   "publication": {
-    "mode": "content-addressed-overlay",
-    "generatedFiles": [
+    "mode": "content-addressed immutable Release plus explicit Pages deployment",
+    "files": [
+      "app/index.html",
       "business-model/index.html"
     ],
-    "releaseOnProposalsPush": true,
-    "deployOnWorkflowDispatch": true,
-    "releaseAndHostAreNonAuthority": true
+    "releaseOn": "push to proposals",
+    "deployOn": "explicit workflow_dispatch"
   },
   "boundaries": {
     "existingMaxGraphAppRewritten": false,
+    "exactAcceptedAppHtmlPreserved": true,
+    "old54FileBootstrapRetired": true,
     "newUrlCodec": false,
     "newBackend": false,
     "newDatabase": false,
-    "generatedDistCommitted": false,
     "mutableLatestAllowed": false,
-    "sourceCommitIsAuthority": true
+    "uploadedZipAllowed": false
   }
 }

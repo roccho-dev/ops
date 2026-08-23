@@ -1,0 +1,81 @@
+name: One-shot PR309 CI intent repair
+
+on:
+  push:
+    branches:
+      - proposal/mobile-agent-business-model-public-260823
+    paths:
+      - '.github/workflows/pr309-ci-intent-repair.yml'
+      - '.github/workflows/mobile-agent-business-model-public.yml'
+      - 'verification/mobile-agent-business-model-public/**'
+      - 'verification/mobile-agent-business-model-presentation/**'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.repository == 'roccho-dev/ops' && github.ref == 'refs/heads/proposal/mobile-agent-business-model-public-260823'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposal/mobile-agent-business-model-public-260823
+          fetch-depth: 0
+      - name: Add exact missing workflow declarations
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          python3 - <<'PY'
+          import base64
+          import json
+          from pathlib import Path
+
+          path = Path("ci.intent.v1.jsonl")
+          records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+          additions = json.loads(base64.b64decode("W3siYXV0aG9yaXR5IjpmYWxzZSwiZGlzcGF0Y2giOlsicHVzaCIsIndvcmtmbG93X2Rpc3BhdGNoIl0sImVudHJ5cG9pbnQiOiJkaXNwYXRjaCBwaW5uZWQgVmltL05peCBydW50aW1lIHByb29mIiwiZ2VuZXJhdGlvbl9tb2RlIjoiY2hlY2tlZF9pbiIsImtpbmQiOiJjaS5pbnRlbnQudjEiLCJwYXRoIjoiLmdpdGh1Yi93b3JrZmxvd3MvZGlzcGF0Y2gtdmltLW5peC1leGFjdC1ydW50aW1lLnltbCIsInByb3ZpZGVyIjoiZ2l0aHViLWFjdGlvbnMiLCJyb2xlIjoibWFudWFsX2Rpc3BhdGNoX2FsaWFzIn0seyJhdXRob3JpdHkiOmZhbHNlLCJkaXNwYXRjaCI6WyJwdWxsX3JlcXVlc3QiLCJwdXNoIl0sImVudHJ5cG9pbnQiOiJwcm92ZSBhbmQgcHVibGlzaCBleGFjdCBNr2JpbGUgQWdlbnQgb25lLUhUTUwgQ2FycmllciIsImV4Y2VwdGlvbiI6eyJleHBpcnkiOiIyMDI2LTA5LTMwIiwib3duZXIiOiJvcHMjMjkzIiwicmVhc29uIjoiYm91bmRlZCBsaXZlIGJvb3RzdHJhcCIsInJldHVybl9jb25kaXRpb24iOiJyZXRpcmUgYWZ0ZXIgaW1tdXRhYmxlIENhcnJpZXIgYWRvcHRpb24ifSwiZ2VuZXJhdGlvbl9tb2RlIjoiY2hlY2tlZF9pbiIsImtpbmQiOiJjaS5pbnRlbnQudjEiLCJwYXRoIjoiLmdpdGh1Yi93b3JrZmxvd3MvbW9iaWxlLWFnZW50LWxpdmUtYm9vdHN3cmFwLWRlcGxveS55bWwiLCJwcm92aWRlciI6ImdpdGh1Yi1hY3Rpb25zIiwicm9sZSI6ImJvb3RzdHJhcF9leGNlcHRpb24ifSx7ImF1dGhvcml0eSI6ZmFsc2UsImRpc3BhdGNoIjpbImlzc3VlX2NvbW1lbnQiXSwiZW50cnlwb2ludCI6Im93bmVyIGNvbW1lbnQgcHVibGlzaGVzIGFuZCBwcm92ZXMgZXhhY3QgTW9iaWxlIEFnZW50IENhcnJpZXIiLCJleGNlcHRpb24iOnsiZXhwaXJ5IjoiMjAyNi0wOS0zMCIsIm93bmVyIjoib3BzIzI4NiIsInJlYXNvbiI6Im9uZS1zaG90IGluZ3Jlc3MiLCJyZXR1cm5fY29uZGl0aW9uIjoicmV0aXJlIGFmdGVyIGltbXV0YWJsZSBDYXJyaWVyIGFkb3B0aW9uIn0sImdlbmVyYXRpb25fbW9kZSI6ImNoZWNrZWRfaW4iLCJraW5kIjoiY2kuaW50ZW50LnYxIiwicGF0aCI6Ii5naXRodWIvd29ya2Zsb3dzL21vYmlsZS1hZ2VudC1zZXEtY29tbWVudC1pbmdyZXNzLXYyLnltbCIsInByb3ZpZGVyIjoiZ2l0aHViLWFjdGlvbnMiLCJyb2xlIjoiYm9vdHN3cmFwX2V4Y2VwdGlvbiJ9LHsiYXV0aG9yaXR5IjpmYWxzZSwiZGlzcGF0Y2giOlsicHVzaCIsInB1bGxfcmVxdWVzdCJdLCJlbnRyeXBvaW50IjoibWF0ZXJpYWxpemUgcGlubmVkIEhRL1ZpbSBydW50aW1lIENhcnJ5IHByb29mIiwiZ2VuZXJhdGlvbl9tb2RlIjoiY2hlY2tlZF9pbiIsImtpbmQiOiJjaS5pbnRlbnQudjEiLCJwYXRoIjoiLmdpdGh1Yi93b3JrZmxvd3MvcHJvb2YtaHEtdmltLXJ1bnRpbWUtY2FycnkueW1sIiwicHJvdmlkZXIiOiJnaXRodWItYWN0aW9ucyIsInJvbGUiOiJhcnRpZmFjdF9leHBvcnRlciJ9LHsiYXV0aG9yaXR5IjpmYWxzZSwiZGlzcGF0Y2giOlsicHVzaCIsIndvcmtmbG93X2Rpc3BhdGNoIl0sImVudHJ5cG9pbnQiOiJtYXRlcmlhbGl6ZSBwaW5uZWQgZXhhY3QgVmltL05peCBydW50aW1lIHByb29mIiwiZ2VuZXJhdGlvbl9tb2RlIjoiY2hlY2tlZF9pbiIsImtpbmQiOiJjaS5pbnRlbnQudjEiLCJwYXRoIjoiLmdpdGh1Yi93b3JrZmxvd3MvcHJvb2YtdmltLW5peC1leGFjdC1ydW50aW1lLWN1cnJlbnQtc2FuZGJveC55bWwiLCJwcm92aWRlciI6ImdpdGh1Yi1hY3Rpb25zIiwicm9sZSI6ImFydGlmYWN0X2V4cG9ydGVyIn0seyJhdXRob3JpdHkiOmZhbHNlLCJkaXNwYXRjaCI6WyJwdWxsX3JlcXVlc3QiXSwiZW50cnlwb2ludCI6ImRpc3BhdGNoIHJlZ2lzdGVyZWQgY29tcGxldGUgVmltIEhRIENhcnJ5IG1hdGVyaWFsaXplciIsImdlbmVyYXRpb25fbW9kZSI6ImNoZWNrZWRfaW4iLCJraW5kIjoiY2kuaW50ZW50LnYxIiwicGF0aCI6Ii5naXRodWIvd29ya2Zsb3dzL3ZpbS1ocS1jb21wbGV0ZS1jYXJyeS1wci1kaXNwYXRjaC55bWwiLCJwcm92aWRlciI6ImdpdGh1Yi1hY3Rpb25zIiwicm9sZSI6Im1hbnVhbF9kaXNwYXRjaF9hbGlhcyJ9LHsiYXV0aG9yaXR5IjpmYWxzZSwiZGlzcGF0Y2giOlsicHVsbF9yZXF1ZXN0X3RhcmdldCJdLCJlbnRyeXBvaW50IjoibWF0ZXJpYWxpemUgcGlubmVkIGV4YWN0IFZpbSBIUSBzb3VyY2UgQ2FycnkiLCJnZW5lcmF0aW9uX21vZGUiOiJjaGVja2VkX2luIiwia2luZCI6ImNpLmludGVudC52MSIsInBhdGgiOiIuZ2l0aHViL3dvcmtmbG93cy92aW0taHEtc291cmNlLWNvbXBsZXRlLXRhcmdldC55bWwiLCJwcm92aWRlciI6ImdpdGh1Yi1hY3Rpb25zIiwicm9sZSI6ImFydGlmYWN0X2V4cG9ydGVyIn0seyJhdXRob3JpdHkiOmZhbHNlLCJkaXNwYXRjaCI6WyJwdXNoIiwid29ya2Zsb3dfZGlzcGF0Y2giXSwiZW50cnlwb2ludCI6Im1hdGVyaWFsaXplIHBpbm5lZCBleGFjdCBWaW0vTml4IHJ1bnRpbWUiLCJnZW5lcmF0aW9uX21vZGUiOiJjaGVja2VkX2luIiwia2luZCI6ImNpLmludGVudC52MSIsInBhdGgiOiIuZ2l0aHViL3dvcmtmbG93cy92aW0tbml4LWN1cnJlbnQtcnVudGltZS55bWwiLCJwcm92aWRlciI6ImdpdGh1Yi1hY3Rpb25zIiwicm9sZSI6ImFydGlmYWN0X2V4cG9ydGVyIn1d").decode("utf-8"))
+          by_path = {record["path"]: record for record in records}
+          for record in additions:
+              by_path.setdefault(record["path"], record)
+
+          output = []
+          emitted = set()
+          for record in records:
+              workflow = record["path"]
+              if workflow in emitted:
+                  continue
+              output.append(by_path[workflow])
+              emitted.add(workflow)
+          for record in additions:
+              workflow = record["path"]
+              if workflow not in emitted:
+                  output.append(record)
+                  emitted.add(workflow)
+
+          actual = {
+              item.as_posix()
+              for item in Path(".github/workflows").glob("*.yml")
+              if item.name != "pr309-ci-intent-repair.yml"
+          }
+          assert emitted == actual, {
+              "missing": sorted(actual - emitted),
+              "stale": sorted(emitted - actual),
+          }
+          path.write_text(
+              "".join(json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n" for record in output),
+              encoding="utf-8",
+          )
+          PY
+          git diff --check
+          git config user.name roccho
+          git config user.email 40359643+roccho-dev@users.noreply.github.com
+          git add ci.intent.v1.jsonl
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix: declare all checked-in workflows"
+          git push origin HEAD:proposal/mobile-agent-business-model-public-260823
