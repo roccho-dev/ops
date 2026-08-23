@@ -1,0 +1,54 @@
+{
+  "schema": "ops.mobileAgentUrlOnlyRuntime/2",
+  "id": "mobile-agent-url-only-runtime",
+  "status": "candidate",
+  "authority": false,
+  "basePullRequest": 309,
+  "pattern": {
+    "id": "business-model/1",
+    "route": "/business-model/",
+    "fragment": "presentation",
+    "actorCount": {
+      "min": 2,
+      "max": 4
+    },
+    "urlLimitChars": 8192
+  },
+  "compiler": {
+    "route": "/business-model/compiler/",
+    "module": "/business-model/compiler/index.mjs",
+    "input": "semantic JSONL",
+    "output": "URL + receipt",
+    "sourceCloneUsed": false,
+    "sourceBuildUsed": false,
+    "providerWriteUsed": false
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "environment": "cloudflare-production",
+    "project": "stg-mobile-agent",
+    "productionBranch": "proposals",
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "publication": {
+    "mode": "deploy-once hosted compiler + independent pattern projection",
+    "acceptedRef": "accepted/mobile-agent-business-model-public-url",
+    "receiptSchema": "ops.mobileAgentUrlOnlyRuntimeReceipt/2"
+  },
+  "acceptance": {
+    "stableAndImmutableByteReadback": true,
+    "stableAndImmutableChrome": true,
+    "hostedCompilerRoundTrip": true,
+    "generatedUrlMustRender": true,
+    "receiptOnly": true
+  },
+  "boundaries": {
+    "independentPatternProjection": true,
+    "existingAppReconstructed": false,
+    "existingAppDeployed": false,
+    "newUrlCodec": false,
+    "newBackend": false,
+    "newDatabase": false,
+    "mutableLatestAllowed": false
+  }
+}
