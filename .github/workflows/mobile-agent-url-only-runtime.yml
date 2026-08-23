@@ -68,7 +68,7 @@ jobs:
 
   deploy:
     needs: materialize
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: cloudflare-production
