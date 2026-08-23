@@ -1,0 +1,120 @@
+name: Mobile Agent deploy-once URL runtime
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-url-only-runtime.yml'
+      - 'verification/mobile-agent-url-only-runtime/**'
+      - 'verification/mobile-agent-business-model-presentation/**'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-url-only-runtime.yml'
+      - 'verification/mobile-agent-url-only-runtime/**'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy and accept the exact candidate
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  ROOT: verification/mobile-agent-url-only-runtime
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      source_sha: ${{ steps.build.outputs.source_sha }}
+      project: ${{ steps.build.outputs.project }}
+      stable_base: ${{ steps.build.outputs.stable_base }}
+      tag: ${{ steps.build.outputs.tag }}
+      archive: ${{ steps.build.outputs.archive }}
+      carrier: ${{ steps.build.outputs.carrier }}
+      tree_digest: ${{ steps.build.outputs.tree_digest }}
+      file_count: ${{ steps.build.outputs.file_count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Install browser proof dependency
+        run: python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+      - name: Build hosted compiler and prove generated URL renders
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$chrome"
+          CHROMIUM_PATH="$chrome" python3 "$ROOT/build.py" \
+            --source-sha "$(git rev-parse HEAD)" \
+            --out "$RUNNER_TEMP/result" \
+            --github-output "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-url-only-runtime-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    needs: materialize
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.materialize.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-agent-url-only-runtime-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/staged
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Install public browser proof dependency
+        run: python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+      - name: Deploy and prove URL generation plus rendering
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"
+          test -n "$chrome"
+          CHROMIUM_PATH="$chrome" python3 "$ROOT/deploy.py" \
+            --staged "$RUNNER_TEMP/staged" \
+            --source-sha "${{ needs.materialize.outputs.source_sha }}" \
+            --out "$RUNNER_TEMP/public-proof" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Upload accepted proof
+        id: accepted
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-business-model-public-url-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/public-proof/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Advance accepted receipt ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          "$ROOT/advance_accepted_ref.sh" \
+            "$RUNNER_TEMP/public-proof/accepted-public-url-receipt.json" \
+            "${{ needs.materialize.outputs.source_sha }}" \
+            "${{ steps.accepted.outputs.artifact-digest }}"
