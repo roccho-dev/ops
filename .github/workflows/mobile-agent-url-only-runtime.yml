@@ -60,40 +60,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          root="$RUNNER_TEMP/result"; mkdir -p "$root/site/app"
-          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/286/comments" -f per_page=100 --paginate --slurp > "$root/comments.json"
-          python3 - "$root/comments.json" "$root/app.br.b64" <<'PY'
-          import hashlib,json,pathlib,re,sys
-          pages=json.load(open(sys.argv[1],encoding='utf-8'))
-          comments=[c for page in pages for c in page] if pages and isinstance(pages[0],list) else pages
-          chunks={}
-          for c in comments:
-              body=str(c.get('body','')).replace('\r\n','\n')
-              head,sep,payload=body.partition('\n')
-              m=re.fullmatch(r'SEQ-APP-BR/1 ([0-9]{2})/11',head.strip())
-              if not sep or not m: continue
-              payload=re.sub(r'\s+','',payload)
-              if not re.fullmatch(r'[A-Za-z0-9+/=]+',payload): continue
-              i=int(m.group(1))
-              if i in chunks: assert chunks[i]==payload, f'conflicting chunk {i}'
-              else: chunks[i]=payload
-          assert sorted(chunks)==list(range(11)), sorted(chunks)
-          joined=''.join(chunks[i] for i in range(11))
-          assert len(joined)==509996
-          assert hashlib.sha256(joined.encode()).hexdigest()=='a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01'
-          pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
-          print(json.dumps({'status':'PASS','chunks':11,'bytes':len(joined)}))
-          PY
-          base64 --decode "$root/app.br.b64" > "$root/app.br"
-          test "$(wc -c < "$root/app.br")" -eq 382497
-          test "$(sha256sum "$root/app.br" | cut -d' ' -f1)" = 4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97
-          node -e 'const fs=require("node:fs"),z=require("node:zlib");fs.writeFileSync(process.argv[2],z.brotliDecompressSync(fs.readFileSync(process.argv[1])));' "$root/app.br" "$root/site/app/index.html"
-          test "$(wc -c < "$root/site/app/index.html")" -eq 2412388
-          test "$(sha256sum "$root/site/app/index.html" | cut -d' ' -f1)" = 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
-          grep -F 'graph/1' "$root/site/app/index.html" >/dev/null
-          grep -F 'map/1' "$root/site/app/index.html" >/dev/null
-          grep -F 'seq/1' "$root/site/app/index.html" >/dev/null
-          grep -Fi maxgraph "$root/site/app/index.html" >/dev/null
+          python3 "$ROOT/restore_app.py" "$RUNNER_TEMP/result/site/app/index.html"
 
       - name: Validate exact Carrier-compiled preset URLs
         run: |
