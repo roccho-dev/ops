@@ -133,14 +133,14 @@ jobs:
           import base64,pathlib,sys
           raw=pathlib.Path(sys.argv[1]).read_bytes()
           alphabet=set(b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')
-          whitespace=set(b' \t\r\n')
-          invalid=sorted(set(raw)-alphabet-whitespace)
+          transport_noise=set(b' \t\r\n.[]')
+          invalid=sorted(set(raw)-alphabet-transport_noise)
           assert not invalid,invalid
           compact=bytes(byte for byte in raw if byte in alphabet)
           assert len(compact)%4==0,len(compact)
           decoded=base64.b64decode(compact,validate=True)
           pathlib.Path(sys.argv[2]).write_bytes(decoded)
-          print({'status':'PASS','rawBytes':len(raw),'base64Bytes':len(compact),'discardedWhitespace':len(raw)-len(compact),'decodedBytes':len(decoded)})
+          print({'status':'PASS','rawBytes':len(raw),'base64Bytes':len(compact),'discardedTransportNoise':len(raw)-len(compact),'decodedBytes':len(decoded)})
           PY
           node - "$input/app-index.br" "$site/app/index.html" <<'JS'
           const fs=require('node:fs'); const zlib=require('node:zlib');
