@@ -1,4 +1,4 @@
-name: tmp inspect Mobile Agent Worker
+name: tmp prove current Mobile Agent Worker
 on:
   pull_request:
     paths:
@@ -6,42 +6,31 @@ on:
 permissions:
   contents: read
 jobs:
-  inspect:
+  prove:
     runs-on: ubuntu-24.04
-    environment: cloudflare-production
     steps:
-      - name: Capture current Worker and inspect Cloudflare deployment history
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Prove Graph Map Seq against current Worker
         run: |
           set -euo pipefail
-          root="$RUNNER_TEMP/cf"; mkdir -p "$root"
-          curl -fsSL -H 'Cache-Control: no-cache' https://mobile-agent.roccho.workers.dev/app/ -o "$root/current-app.html"
-          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
-          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json')
-          curl -sS "${auth[@]}" "$api/workers/scripts" -o "$root/scripts.json"
-          for script in mobile-agent stg-mobile-agent; do
-            curl -sS "${auth[@]}" "$api/workers/scripts/$script/deployments" -o "$root/$script-deployments.json" || true
-            curl -sS "${auth[@]}" "$api/workers/scripts/$script/versions" -o "$root/$script-versions.json" || true
-          done
-          python3 - "$root" <<'PY'
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          python3 - verification/mobile-agent-url-only-runtime/preset-render-cases.json "$RUNNER_TEMP/urls.json" <<'PY'
           import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1])
-          for p in sorted(root.glob('*.json')):
-              try:
-                  x=json.loads(p.read_text())
-                  result=x.get('result')
-                  if isinstance(result,list):
-                      print(p.name,'success=',x.get('success'),'count=',len(result))
-                      for row in result[:20]:
-                          if isinstance(row,dict): print(' ',{k:row.get(k) for k in ('id','script','created_on','modified_on','number') if k in row})
-                  else: print(p.name,'success=',x.get('success'),'resultType=',type(result).__name__)
-              except Exception as e: print(p.name,'ERROR',e)
+          x=json.load(open(sys.argv[1]))
+          for row in x['cases']:
+              row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','https://mobile-agent.roccho.workers.dev/')
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
           PY
+          CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/receipt.json" "$RUNNER_TEMP/shots"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: mobile-agent-worker-history-${{ github.run_id }}
-          path: ${{ runner.temp }}/cf/
-          if-no-files-found: error
+          name: current-worker-behavior-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/receipt.json
+            ${{ runner.temp }}/shots/
+          if-no-files-found: ignore
           retention-days: 1
