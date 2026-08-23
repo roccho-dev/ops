@@ -28,38 +28,53 @@ jobs:
           workflow=mobile-agent-business-model-public.yml
           target_ref=proposals
           target_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$target_ref" --jq .sha)"
-          before="$RUNNER_TEMP/before.txt"
-          gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
-            --branch "$target_ref" --limit 30 --json databaseId --jq '.[].databaseId' | sort -n > "$before"
-
-          gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$target_ref" -f deploy=true
+          gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body "business-model/1 deployment authorized; resolving run for merged \`proposals\` at \`$target_sha\`."
 
           run_id=''
-          for _ in $(seq 1 60); do
-            while read -r candidate sha; do
-              [ "$sha" = "$target_sha" ] || continue
-              if ! grep -qx "$candidate" "$before"; then run_id="$candidate"; break; fi
-            done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
-              --branch "$target_ref" --limit 30 --json databaseId,headSha --jq '.[] | [.databaseId,.headSha] | @tsv')
-            [ -n "$run_id" ] && break
-            sleep 2
-          done
+          while read -r candidate sha status conclusion; do
+            [ "$sha" = "$target_sha" ] || continue
+            if [ "$status" != completed ]; then
+              run_id="$candidate"; break
+            fi
+            if [ "$conclusion" = success ]; then
+              probe="$RUNNER_TEMP/probe-$candidate"; mkdir -p "$probe"
+              if gh run download "$candidate" --repo "$GITHUB_REPOSITORY" \
+                -n "mobile-agent-business-model-deployment-$candidate" -D "$probe" >/dev/null 2>&1; then
+                run_id="$candidate"; break
+              fi
+            fi
+          done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
+            --branch "$target_ref" --limit 30 --json databaseId,headSha,status,conclusion \
+            --jq '.[] | [.databaseId,.headSha,.status,(.conclusion // "")] | @tsv')
+
+          if [ -z "$run_id" ]; then
+            before="$RUNNER_TEMP/before.txt"
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
+              --branch "$target_ref" --limit 30 --json databaseId --jq '.[].databaseId' | sort -n > "$before"
+            gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$target_ref" -f deploy=true
+            for _ in $(seq 1 60); do
+              while read -r candidate sha; do
+                [ "$sha" = "$target_sha" ] || continue
+                if ! grep -qx "$candidate" "$before"; then run_id="$candidate"; break; fi
+              done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
+                --branch "$target_ref" --limit 30 --json databaseId,headSha --jq '.[] | [.databaseId,.headSha] | @tsv')
+              [ -n "$run_id" ] && break
+              sleep 2
+            done
+          fi
+
           test -n "$run_id"
-          echo "dispatched run $run_id for $target_sha"
+          echo "using deployment run $run_id for $target_sha"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
           out="$RUNNER_TEMP/deployment"
-          mkdir -p "$out"
+          rm -rf "$out"; mkdir -p "$out"
           for _ in $(seq 1 30); do
             if gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
               -n "mobile-agent-business-model-deployment-$run_id" -D "$out"; then break; fi
             sleep 2
           done
-          test -f "$out/readback.json"
-          test -f "$out/stable-proof.json"
-          test -f "$out/immutable-proof.json"
-          test -f "$out/stable-urls.json"
-          test -f "$out/immutable-urls.json"
+          for file in readback.json stable-proof.json immutable-proof.json stable-urls.json immutable-urls.json; do test -f "$out/$file"; done
 
           python3 - "$out" "$run_id" "$target_sha" "$RUNNER_TEMP/comment.md" <<'PY'
           import json,pathlib,sys
@@ -75,18 +90,10 @@ jobs:
           assert all(p['status']=='PASS' for p in immutable['proofs'])
           assert [r['actorCount'] for r in stable_urls['results']]==[2,3,4]
           assert [r['actorCount'] for r in immutable_urls['results']]==[2,3,4]
-          lines=[
-              '## business-model/1 deployment PASS','',
-              f'- source: `{sha}`', f'- run: `{run_id}`',
-              '- stable + deployment-specific byte readback: `PASS`',
-              '- stable + deployment-specific real-Chrome 2/3/4 actor proof: `PASS`','',
-              'Stable URLs:'
-          ]
-          for row in stable_urls['results']:
-              lines.append(f"- {row['actorCount']} actors: {row['url']}")
+          lines=['## business-model/1 deployment PASS','',f'- source: `{sha}`',f'- run: `{run_id}`','- stable + deployment-specific byte readback: `PASS`','- stable + deployment-specific real-Chrome 2/3/4 actor proof: `PASS`','','Stable URLs:']
+          for row in stable_urls['results']: lines.append(f"- {row['actorCount']} actors: {row['url']}")
           lines += ['', 'Deployment-specific URLs:']
-          for row in immutable_urls['results']:
-              lines.append(f"- {row['actorCount']} actors: {row['url']}")
+          for row in immutable_urls['results']: lines.append(f"- {row['actorCount']} actors: {row['url']}")
           out.write_text('\n'.join(lines)+'\n',encoding='utf-8')
           PY
           gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
