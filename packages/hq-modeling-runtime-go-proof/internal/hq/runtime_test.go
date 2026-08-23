@@ -10,7 +10,7 @@ const validQueueFixture = `{"kind":"hq.modelCommitQueued.v1","id":"m1","status":
 {"kind":"hq.receipt.v1","id":"r1","status":"processed","queueId":"m0"}
 `
 
-func TestValidQueueRunsThroughProofPipeline(t *testing.T) {
+func TestQueueFlowsFromValidationToProjection(t *testing.T) {
 	validated := ValidateJSONL(strings.NewReader(validQueueFixture))
 	if validated["ok"] != true || validated["records"] != 3 {
 		t.Fatalf("validation result: %#v", validated)
@@ -26,7 +26,7 @@ func TestValidQueueRunsThroughProofPipeline(t *testing.T) {
 	}
 }
 
-func TestAuthorityAndSourceSmugglingFailClosed(t *testing.T) {
+func TestQueueRejectsAuthorityAndSourceSmuggling(t *testing.T) {
 	fixture := `{"kind":"hq.modelCommitQueued.v1","id":"bad-source","status":"queued","targetRef":{"kind":"package","id":"pkg:a"},"op":"addEdge","payload":{"nested":{"kind":"source.observation.v1"}},"confirmedBy":"human","origin":{"kind":"direct-human.v1","confirmationId":"c1","confirmedBy":"human"}}
 {"kind":"hq.agentTaskQueued.v1","id":"bad-authority","status":"queued","targetRef":{"kind":"package","id":"pkg:a"},"goal":"inspect","confirmedBy":"human","modelAuthoritativeClaim":true}
 `

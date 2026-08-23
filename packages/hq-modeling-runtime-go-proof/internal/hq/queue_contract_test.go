@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestQueueValidatorRequiredSerializedMeanings(t *testing.T) {
+func TestQueueValidationIsExplicitAndFailClosed(t *testing.T) {
 	t.Run("valid model agent and receipt", func(t *testing.T) {
 		result := ValidateJSONL(rowsReaderForTest(t, validModelForContract(), validAgentForContract(), validReceiptForContract()))
 		if result["ok"] != true || result["records"] != 3 {
@@ -110,7 +110,7 @@ func mutationPayloadForTest(t *testing.T, record Object) Object {
 	return payload
 }
 
-func TestAuthorityVocabularyRequiredSerializedMeanings(t *testing.T) {
+func TestAuthorityVocabularyIsBoundedAndFailClosed(t *testing.T) {
 	type mutation struct {
 		name      string
 		apply     func(Object)
@@ -218,7 +218,7 @@ func TestAuthorityVocabularyRequiredSerializedMeanings(t *testing.T) {
 	})
 }
 
-func TestSourceAndReconcileRowsCannotBeSmuggledIntoModelPayload(t *testing.T) {
+func TestModelPayloadRejectsSourceAndReconcileRows(t *testing.T) {
 	for _, embeddedKind := range []string{"source.observation.v1", "SOURCE.RECEIPT.V1", "model_source_reconcile.v1"} {
 		t.Run(embeddedKind, func(t *testing.T) {
 			model := cloneObjectForTest(t, validModelForContract())

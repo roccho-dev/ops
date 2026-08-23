@@ -22,13 +22,15 @@ This proof inventories every assertion meaning in the canonical Node/MJS tests. 
 
 ## Inventory contract
 
-`TestCanonicalMJSMeaningInventoryIsComplete` fails unless:
+`TestCanonicalTestMeaningInventoryIsComplete` fails unless:
 
 - all 16 canonical MJS files are represented and their SHA-256 values match;
 - every one of the 540 `assert.*` call sites belongs to exactly one meaning row;
 - all 154 meaning IDs are unique and use an allowed disposition;
-- every `ported-required` or `selective-port` row names an existing Go test;
+- every `ported-required` or `selective-port` row resolves to an existing Go test;
 - the two high-risk RED meanings remain explicit and no `_RED` test remains.
+
+Historical inventory rows retain the test names used when the meaning was first captured. A checked compatibility map resolves those names to the current behavior-oriented Go test names; stale aliases or missing targets fail the inventory test.
 
 ## Canon TDD closure
 

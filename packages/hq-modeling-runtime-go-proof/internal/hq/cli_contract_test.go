@@ -41,7 +41,7 @@ func writeJSONLFileForTest(t *testing.T, dir, name string, rows ...any) string {
 	return path
 }
 
-func TestCLIProofBoundaryAndHelpMeanings(t *testing.T) {
+func TestCLIExposesProofBoundaryAndUsage(t *testing.T) {
 	for _, args := range [][]string{nil, []string{"--json"}} {
 		status, stdout, stderr := runCLIForTest(t, args...)
 		if status != 0 || stderr != "" {
@@ -81,7 +81,7 @@ func TestCLIProofBoundaryAndHelpMeanings(t *testing.T) {
 	}
 }
 
-func TestCoreCLIRequiredSerializedMeanings(t *testing.T) {
+func TestCLICommandsPreserveJSONLContracts(t *testing.T) {
 	dir := t.TempDir()
 	model := validModelForContract()
 	agent := validAgentForContract()
@@ -184,7 +184,7 @@ func TestCoreCLIRequiredSerializedMeanings(t *testing.T) {
 	})
 }
 
-func TestPromotionCLIRequiredSerializedMeanings(t *testing.T) {
+func TestPromotionCLIIsReadOnlyAndFailClosed(t *testing.T) {
 	dir := t.TempDir()
 	proposal := validProposalForContract()
 	confirmation := validConfirmationForContract(proposal)

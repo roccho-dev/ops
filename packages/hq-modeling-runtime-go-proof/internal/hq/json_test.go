@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestStableStringifyMatchesNodeFixture(t *testing.T) {
+func TestCanonicalJSONMatchesNodeOracle(t *testing.T) {
 	value, err := DecodeJSON([]byte("{\"z\":\"<>&\u2028\u2029\",\"a\":[null,true,-0,1e-7,1e21,1.5],\"m\":{\"β\":\"value\",\"A\":\"first\"}}"))
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +23,7 @@ func TestStableStringifyMatchesNodeFixture(t *testing.T) {
 	}
 }
 
-func TestVisitJSONLLinesHasNoScannerTokenCeiling(t *testing.T) {
+func TestJSONLReaderAcceptsLargeRecords(t *testing.T) {
 	large := strings.Repeat("x", 128*1024)
 	input := "{\"id\":\"" + large + "\"}\n"
 	visited := 0
