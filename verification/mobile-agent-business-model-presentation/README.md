@@ -1,6 +1,6 @@
-# Mobile Agent business-model presentation — fixed UI + JSONL
+# ceo-260816 business-model presentation — fixed UI + JSONL
 
-The accepted two-actor business-presentation layout is the immutable base. Three- and four-actor variants only add alternating actor/exchange columns inside the existing scene.
+The original two-actor presentation layout is the immutable base. Three- and four-actor variants only add alternating actor/exchange columns inside the existing scene.
 
 ```text
 JSONL -> business-model compiler -> A2UI Slides + Actor Seq -> one HTML
@@ -40,8 +40,14 @@ The E2E test verifies:
 
 Python Playwright and Chromium are required only for `npm run test:e2e`. `CHROMIUM_PATH` may override the detected browser executable.
 
-## Repository boundary
+## Public `business-model/1` URL projection
 
-This directory is a self-contained source candidate for the Mobile Agent App. It does not modify the accepted `graph/1`, `map/1`, or `seq/1` maxGraph runtime. A later admission step may move these source paths into the dedicated Mobile Agent source repository and bind the resulting exact commit/tree into the Ops Carrier manifest.
+The public projection keeps the accepted presentation UI and derives only actor ordering from the semantic JSONL. The actor exchange graph must be one connected path of 2–4 actors. The endpoint that sends the earliest `input` exchange becomes the left edge, preserving the accepted 2/3/4-actor examples without a second design input.
 
-The variable semantic inputs are only `examples/*.jsonl`. Theme, renderer, profiles, and validation remain fixed UI policy.
+```text
+npm run build:public
+npm run generate:url -- examples/4-actors.jsonl https://stg-mobile-agent.pages.dev/business-model/ dist/4-actors.url.json
+npm run test:url
+```
+
+The generated URL carries a compact A2UI/Seq payload in `#presentation`. All 2/3/4-actor fixtures remain below the existing 8,192-character URL gate. The existing byte-exact two-actor baseline and its build remain unchanged.

@@ -1,0 +1,67 @@
+{
+  "schema": "ops.mobileAgentBusinessModelPublic/1",
+  "id": "mobile-agent-business-model-public",
+  "version": "1",
+  "status": "candidate",
+  "authority": false,
+  "architectureIssue": 233,
+  "pattern": {
+    "id": "business-model/1",
+    "route": "/business-model/",
+    "fragment": "presentation",
+    "actorCount": {
+      "min": 2,
+      "max": 4
+    },
+    "actorOrder": "connected exchange path; earliest endpoint input chooses the left edge",
+    "urlLimitChars": 8192
+  },
+  "source": {
+    "repository": "roccho-dev/ops",
+    "path": "verification/mobile-agent-business-model-presentation",
+    "role": "temporary source authority until a dedicated mobile-agent repository exists",
+    "build": "npm run build:public",
+    "generateUrl": "npm run generate:url -- <semantic.jsonl> [baseUrl] [receipt.json]",
+    "test": "npm test"
+  },
+  "baseApp": {
+    "tag": "mobile-agent-preset-b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145",
+    "archive": {
+      "name": "mobile-agent-preset.b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145.tar.gz",
+      "bytes": 5221932,
+      "sha256": "40adad171eb3044f17bfdb9d6f89fa92cdd66c6293b2e946cae390ea7db64924"
+    },
+    "expected": "verification/mobile-agent-preset-app/expected.json",
+    "preservedPatterns": [
+      "graph/1",
+      "map/1",
+      "seq/1"
+    ],
+    "preserveEveryExistingFileByte": true
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "environment": "cloudflare-production",
+    "project": "stg-mobile-agent",
+    "productionBranch": "proposals",
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "publication": {
+    "mode": "content-addressed-overlay",
+    "generatedFiles": [
+      "business-model/index.html"
+    ],
+    "releaseOnProposalsPush": true,
+    "deployOnWorkflowDispatch": true,
+    "releaseAndHostAreNonAuthority": true
+  },
+  "boundaries": {
+    "existingMaxGraphAppRewritten": false,
+    "newUrlCodec": false,
+    "newBackend": false,
+    "newDatabase": false,
+    "generatedDistCommitted": false,
+    "mutableLatestAllowed": false,
+    "sourceCommitIsAuthority": true
+  }
+}
