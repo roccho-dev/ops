@@ -64,6 +64,7 @@ jobs:
           fi
 
           test -n "$run_id"
+          gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body "business-model/1 deployment run: \`$run_id\` for \`$target_sha\`."
           echo "using deployment run $run_id for $target_sha"
           gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
