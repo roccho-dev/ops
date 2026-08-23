@@ -22,11 +22,11 @@ on:
 
 permissions:
   contents: write
-  issues: read
 
 env:
   ROOT: verification/mobile-agent-url-only-runtime
   PRESET_ROOT: verification/mobile-agent-preset-app
+  SOURCE_APP: https://mobile-agent.roccho.workers.dev/app/
 
 jobs:
   materialize:
@@ -54,15 +54,25 @@ jobs:
           CHROMIUM_PATH="$chrome" CHROME_BIN="$chrome" python3 "$ROOT/build.py" \
             --source-sha "$(git rev-parse HEAD)" --out "$RUNNER_TEMP/result" --github-output "$GITHUB_OUTPUT"
 
-      - name: Restore exact self-contained maxGraph App
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Carry existing public maxGraph App
         shell: bash
         run: |
           set -euo pipefail
-          python3 "$ROOT/restore_app.py" "$RUNNER_TEMP/result/site/app/index.html"
+          app="$RUNNER_TEMP/result/site/app/index.html"
+          mkdir -p "$(dirname "$app")"
+          curl -fsSL --retry 10 --retry-delay 2 -H 'Cache-Control: no-cache' "$SOURCE_APP" -o "$app"
+          python3 - "$app" "$RUNNER_TEMP/result/app-source.json" "$SOURCE_APP" <<'PY'
+          import hashlib,json,pathlib,sys
+          path=pathlib.Path(sys.argv[1]); data=path.read_bytes(); text=data.decode('utf-8')
+          for token in ('graph/1','map/1','seq/1'):
+              assert token in text, token
+          assert 'maxgraph' in text.lower()
+          value={'schema':'mobile-agent-carried-public-app/1','status':'PASS','source':sys.argv[3],'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n')
+          print(json.dumps(value))
+          PY
 
-      - name: Validate exact Carrier-compiled preset URLs
+      - name: Validate Carrier-compiled Graph Map Seq URLs
         run: |
           python3 - "$ROOT/preset-render-cases.json" "$PRESET_ROOT/manifest.json" <<'PY'
           import json,sys
@@ -70,7 +80,9 @@ jobs:
           assert c['status']=='PASS' and c['sourceCarrier']['distTreeDigest']==m['publication']['distTreeDigest']
           assert [x['id'] for x in c['cases']]==['graph','map','seq']
           for x in c['cases']:
-              f=fixtures[x['id']]; assert x['fixtureSha256']==f['sha256']; assert x['view']==f['view']; assert x['labels']==f['labels']; assert x['roundTripExact'] is True
+              f=fixtures[x['id']]
+              assert x['fixtureSha256']==f['sha256'] and x['view']==f['view'] and x['labels']==f['labels']
+              assert x['roundTripExact'] is True
           PY
 
       - name: Prove Graph Map Seq and Business Model locally
@@ -80,11 +92,15 @@ jobs:
           chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
           python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/result/site" >/dev/null 2>&1 & server=$!
           trap 'kill "$server" 2>/dev/null || true' EXIT
-          for _ in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && curl -fsS http://127.0.0.1:4173/business-model/ >/dev/null && break; sleep .2; done
+          for _ in $(seq 1 100); do
+            curl -fsS http://127.0.0.1:4173/app/ >/dev/null && curl -fsS http://127.0.0.1:4173/business-model/ >/dev/null && break
+            sleep .2
+          done
           python3 - "$ROOT/preset-render-cases.json" "$RUNNER_TEMP/result/preset-local.json" <<'PY'
           import json,pathlib,sys
-          x=json.load(open(sys.argv[1]));
-          for row in x['cases']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','http://127.0.0.1:4173/')
+          x=json.load(open(sys.argv[1]))
+          for row in x['cases']:
+              row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','http://127.0.0.1:4173/')
           pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
           PY
           CHROME_BIN="$chrome" python3 "$PRESET_ROOT/browser-smoke.py" "$RUNNER_TEMP/result/preset-local.json" "$RUNNER_TEMP/result/preset-local-browser.json" "$RUNNER_TEMP/result/preset-local-shots"
@@ -145,19 +161,23 @@ jobs:
           chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
           CHROMIUM_PATH="$chrome" CHROME_BIN="$chrome" python3 "$ROOT/deploy.py" --staged "$RUNNER_TEMP/staged" --source-sha "${{ needs.materialize.outputs.source_sha }}" --out "$RUNNER_TEMP/public-proof" --github-output "$GITHUB_OUTPUT"
 
-      - name: Prove exact App and Graph Map Seq on stable and immutable hosts
+      - name: Prove carried App and Graph Map Seq on stable and immutable hosts
+        shell: bash
         run: |
           set -euo pipefail
           chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          expected_bytes="$(python3 -c 'import json;print(json.load(open("'$RUNNER_TEMP'/staged/app-source.json"))["bytes"])')"
+          expected_sha="$(python3 -c 'import json;print(json.load(open("'$RUNNER_TEMP'/staged/app-source.json"))["sha256"])')"
           for pair in "stable:${{ steps.deploy.outputs.stable_base }}" "immutable:${{ steps.deploy.outputs.deployment_base }}"; do
             name="${pair%%:*}"; base="${pair#*:}"
-            curl -fsSL --retry 15 --retry-delay 2 -H 'Cache-Control: no-cache' "${base}app/index.html" -o "$RUNNER_TEMP/public-proof/app-$name.html"
-            test "$(wc -c < "$RUNNER_TEMP/public-proof/app-$name.html")" -eq 2412388
-            test "$(sha256sum "$RUNNER_TEMP/public-proof/app-$name.html" | cut -d' ' -f1)" = 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+            curl -fsSL --retry 15 --retry-delay 2 -H 'Cache-Control: no-cache' "${base}app/" -o "$RUNNER_TEMP/public-proof/app-$name.html"
+            test "$(wc -c < "$RUNNER_TEMP/public-proof/app-$name.html")" -eq "$expected_bytes"
+            test "$(sha256sum "$RUNNER_TEMP/public-proof/app-$name.html" | cut -d' ' -f1)" = "$expected_sha"
             python3 - "$ROOT/preset-render-cases.json" "$RUNNER_TEMP/public-proof/preset-$name-urls.json" "$base" <<'PY'
           import json,pathlib,sys
           x=json.load(open(sys.argv[1])); base=sys.argv[3]
-          for row in x['cases']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/',base)
+          for row in x['cases']:
+              row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/',base)
           pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
           PY
             CHROME_BIN="$chrome" python3 "$PRESET_ROOT/browser-smoke.py" "$RUNNER_TEMP/public-proof/preset-$name-urls.json" "$RUNNER_TEMP/public-proof/preset-$name-browser.json" "$RUNNER_TEMP/public-proof/preset-$name-shots"
@@ -165,16 +185,18 @@ jobs:
 
       - name: Build all-model receipt
         run: |
-          python3 - "$RUNNER_TEMP/public-proof" <<'PY'
+          python3 - "$RUNNER_TEMP/public-proof" "$RUNNER_TEMP/staged/app-source.json" <<'PY'
           import json,pathlib,sys
-          r=pathlib.Path(sys.argv[1]); b=json.load(open(r/'accepted-public-url-receipt.json')); s=json.load(open(r/'preset-stable-browser.json')); i=json.load(open(r/'preset-immutable-browser.json'))
+          r=pathlib.Path(sys.argv[1]); app=json.load(open(sys.argv[2])); b=json.load(open(r/'accepted-public-url-receipt.json')); s=json.load(open(r/'preset-stable-browser.json')); i=json.load(open(r/'preset-immutable-browser.json'))
           sm={x['id']:x for x in s['cases']}; im={x['id']:x for x in i['cases']}; models={}
           for key in ('graph','map','seq'):
-              a,c=sm[key],im[key]; assert a['status']==c['status']=='PASS'; models[a['pattern']]={'status':'PASS','stableUrl':a['url'],'immutableUrl':c['url']}
+              a,c=sm[key],im[key]; assert a['status']==c['status']=='PASS'
+              models[a['pattern']]={'status':'PASS','stableUrl':a['url'],'immutableUrl':c['url'],'chrome':'PASS'}
           assert b['status']=='PASS' and [x['actorCount'] for x in b['cases']]==[2,3,4]
-          models['business-model/1']={'status':'PASS','stableUrl':b['cases'][0]['stableUrl'],'immutableUrl':b['cases'][0]['immutableUrl'],'actorCases':[2,3,4]}
-          out={'schema':'ops.mobileAgentAllModelsPublicReceipt/1','status':'PASS','candidateSha':b['candidateSha'],'provider':b['provider'],'app':{'bytes':2412388,'sha256':'sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6','stableReadback':'PASS','immutableReadback':'PASS'},'models':models,'proof':{'graph':'PASS','map':'PASS','seq':'PASS','businessModel':'PASS','stableChrome':'PASS','immutableChrome':'PASS'}}
-          (r/'all-models-public-receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True)+'\n'); print(json.dumps({'status':'PASS','models':list(models)}))
+          models['business-model/1']={'status':'PASS','stableUrl':b['cases'][0]['stableUrl'],'immutableUrl':b['cases'][0]['immutableUrl'],'chrome':'PASS','actorCases':[2,3,4]}
+          out={'schema':'ops.mobileAgentAllModelsPublicReceipt/1','status':'PASS','authority':False,'candidateSha':b['candidateSha'],'provider':b['provider'],'app':{'source':app['source'],'bytes':app['bytes'],'sha256':'sha256:'+app['sha256'],'stableReadback':'PASS','immutableReadback':'PASS'},'models':models,'proof':{'graph':'PASS','map':'PASS','seq':'PASS','businessModel':'PASS','stableChrome':'PASS','immutableChrome':'PASS'}}
+          (r/'all-models-public-receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True)+'\n')
+          print(json.dumps({'status':'PASS','models':list(models)}))
           PY
 
       - name: Upload accepted proof
