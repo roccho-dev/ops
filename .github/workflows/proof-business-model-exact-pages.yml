@@ -1,4 +1,4 @@
-name: Proof exact Mobile Agent Pages source for business-model
+name: Proof exact Mobile Agent App ingress for business-model
 
 on:
   pull_request:
@@ -7,85 +7,78 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
   prove:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: cloudflare-production
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Find exact accepted 54-file deployment in stg-mobile-agent
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Reconstruct exact accepted App from owner-pinned ingress
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: '286'
+          CHUNK_PREFIX: 'SEQ-APP-BR/1'
+          CHUNK_COUNT: '11'
+          BASE64_BYTES: '509996'
+          BASE64_SHA256: a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01
+          BROTLI_BYTES: '382497'
+          BROTLI_SHA256: 4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97
+          APP_BYTES: '2412388'
+          APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
-          python3 - verification/mobile-agent-preset-app/expected.json <<'PY'
-          import hashlib,json,os,sys,urllib.error,urllib.parse,urllib.request
-          expected=json.load(open(sys.argv[1],encoding='utf-8'))
-          account=os.environ['CLOUDFLARE_ACCOUNT_ID']; token=os.environ['CLOUDFLARE_API_TOKEN']
-          root=f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects/stg-mobile-agent'
-          headers={'Authorization':f'Bearer {token}','Content-Type':'application/json','User-Agent':'ops-exact-pages-proof/2'}
-          def api_get(url):
-              try:
-                  with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=30) as response:
-                      value=json.load(response)
-              except urllib.error.HTTPError as error:
-                  body=error.read().decode('utf-8','replace')
-                  print(json.dumps({'api':url,'status':error.code,'body':body[:1000]}))
-                  raise
-              assert value.get('success') is True,value.get('errors')
-              return value
-          project=api_get(root)['result']
-          assert project['name']=='stg-mobile-agent'
-          first=api_get(root+'/deployments?per_page=25&page=1')
-          deployments=list(first.get('result') or [])
-          pages=int((first.get('result_info') or {}).get('total_pages') or 1)
-          for page in range(2,pages+1):
-              deployments.extend(api_get(root+f'/deployments?per_page=25&page={page}').get('result') or [])
-          print(json.dumps({'project':project['name'],'deployments':len(deployments),'pages':pages}))
-          sentinel=['app/index.html','protocol/v3/codec.mjs','.well-known/semantic-map.json']
-          def read(url):
-              request=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ops-exact-pages-proof/2'})
-              try:
-                  with urllib.request.urlopen(request,timeout=30) as response: return response.read(),response.status
-              except urllib.error.HTTPError as error: return error.read(),error.code
-              except Exception: return b'',0
-          app_candidates=0
-          for deployment in deployments:
-              urls=[]
-              if isinstance(deployment.get('url'),str): urls.append(deployment['url'])
-              for alias in deployment.get('aliases') or []:
-                  if isinstance(alias,str): urls.append(alias if alias.startswith('http') else 'https://'+alias)
-              for candidate in dict.fromkeys(urls):
-                  base=candidate.rstrip('/')+'/'
-                  spec=expected['files']['app/index.html']; data,status=read(urllib.parse.urljoin(base,'app/index.html'))
-                  if status!=200 or len(data)!=spec['bytes'] or hashlib.sha256(data).hexdigest()!=spec['sha256']:
-                      continue
-                  app_candidates+=1
-                  sent=[]; ok=True
-                  for rel in sentinel[1:]:
-                      spec=expected['files'][rel]; data,status=read(urllib.parse.urljoin(base,rel)); sha=hashlib.sha256(data).hexdigest()
-                      match=status==200 and len(data)==spec['bytes'] and sha==spec['sha256']; sent.append({'path':rel,'status':status,'bytes':len(data),'sha256':sha,'ok':match})
-                      if not match: ok=False
-                  if not ok:
-                      print(json.dumps({'appExactCandidate':base,'deploymentId':deployment.get('id'),'sentinels':sent}))
-                      continue
-                  failed=[]
-                  for rel,spec in sorted(expected['files'].items()):
-                      data,status=read(urllib.parse.urljoin(base,rel)); sha=hashlib.sha256(data).hexdigest()
-                      if status!=200 or len(data)!=spec['bytes'] or sha!=spec['sha256']:
-                          failed.append({'path':rel,'status':status,'bytes':len(data),'sha256':sha})
-                  print(json.dumps({'candidate':base,'deploymentId':deployment.get('id'),'failed':failed[:5],'failedCount':len(failed)}))
-                  if not failed:
-                      print('EXACT_BASE='+base)
-                      print('EXACT_DEPLOYMENT_ID='+str(deployment.get('id')))
-                      print('EXACT_FILE_COUNT=54')
-                      raise SystemExit(0)
-          raise RuntimeError(f'no exact accepted 54-file deployment in stg-mobile-agent; exact app candidates={app_candidates}')
+          root="$RUNNER_TEMP/proof"; mkdir -p "$root/dist/app" "$root/browser"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" -f per_page=100 --paginate --slurp > "$root/comments.json"
+          python3 - "$root/comments.json" "$root/app.br.b64" <<'PY'
+          import hashlib,json,os,pathlib,re,sys
+          pages=json.load(open(sys.argv[1],encoding='utf-8'))
+          comments=[comment for page in pages for comment in page]
+          owner=os.environ['GITHUB_REPOSITORY_OWNER']; prefix=os.environ['CHUNK_PREFIX']; total=int(os.environ['CHUNK_COUNT'])
+          header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{total:02d}$')
+          chunks={}
+          for comment in comments:
+              if comment.get('user',{}).get('login') != owner: continue
+              body=str(comment.get('body','')).replace('\r\n','\n').strip()
+              first,sep,rest=body.partition('\n')
+              if not sep: continue
+              match=header.fullmatch(first.strip())
+              if not match: continue
+              payload=re.sub(r'\s+','',rest)
+              assert re.fullmatch(r'[A-Za-z0-9+/=]+',payload),match.group(1)
+              index=int(match.group(1)); assert 0 <= index < total,index
+              assert index not in chunks,f'duplicate chunk {index}'
+              chunks[index]=payload
+          assert sorted(chunks)==list(range(total)),sorted(chunks)
+          joined=''.join(chunks[index] for index in range(total))
+          assert len(joined)==int(os.environ['BASE64_BYTES']),len(joined)
+          assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['BASE64_SHA256']
+          pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
+          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined),'base64Sha256':hashlib.sha256(joined.encode()).hexdigest()}))
           PY
+          base64 --decode "$root/app.br.b64" > "$root/app.br"
+          test "$(wc -c < "$root/app.br")" -eq "$BROTLI_BYTES"
+          test "$(sha256sum "$root/app.br" | cut -d' ' -f1)" = "$BROTLI_SHA256"
+          node -e 'const fs=require("node:fs"),z=require("node:zlib");fs.writeFileSync(process.argv[2],z.brotliDecompressSync(fs.readFileSync(process.argv[1])));' "$root/app.br" "$root/dist/app/index.html"
+          test "$(wc -c < "$root/dist/app/index.html")" -eq "$APP_BYTES"
+          test "$(sha256sum "$root/dist/app/index.html" | cut -d' ' -f1)" = "$APP_SHA256"
+          for marker in graph/1 map/1 seq/1 maxgraph; do grep -Fi "$marker" "$root/dist/app/index.html" >/dev/null; done
+      - name: Prove existing Graph Map Seq locally in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/proof"
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || true)"; test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$root/dist" >/dev/null 2>&1 &
+          server=$!; trap 'kill $server 2>/dev/null || true' EXIT
+          for _ in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          node verification/mobile-agent-live-bootstrap/smoke.mjs verification/mobile-agent-live-bootstrap/cases.json http://127.0.0.1:4173/ "$chrome" "$root/browser"
+          cat "$root/browser/receipt.json"
