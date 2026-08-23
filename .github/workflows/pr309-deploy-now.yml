@@ -10,20 +10,83 @@ on:
 permissions:
   actions: write
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   dispatch:
     if: github.repository == 'roccho-dev/ops' && github.ref == 'refs/heads/proposal/mobile-agent-business-model-public-260823'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 45
     steps:
-      - name: Dispatch approved business-model deployment
+      - name: Dispatch approved merged business-model deployment and report proof
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run mobile-agent-business-model-public.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref proposal/mobile-agent-business-model-public-260823 \
-            -f deploy=true
+          workflow=mobile-agent-business-model-public.yml
+          target_ref=proposals
+          target_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$target_ref" --jq .sha)"
+          before="$RUNNER_TEMP/before.txt"
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
+            --branch "$target_ref" --limit 30 --json databaseId --jq '.[].databaseId' | sort -n > "$before"
+
+          gh workflow run "$workflow" --repo "$GITHUB_REPOSITORY" --ref "$target_ref" -f deploy=true
+
+          run_id=''
+          for _ in $(seq 1 60); do
+            while read -r candidate sha; do
+              [ "$sha" = "$target_sha" ] || continue
+              if ! grep -qx "$candidate" "$before"; then run_id="$candidate"; break; fi
+            done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event workflow_dispatch \
+              --branch "$target_ref" --limit 30 --json databaseId,headSha --jq '.[] | [.databaseId,.headSha] | @tsv')
+            [ -n "$run_id" ] && break
+            sleep 2
+          done
+          test -n "$run_id"
+          echo "dispatched run $run_id for $target_sha"
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+          out="$RUNNER_TEMP/deployment"
+          mkdir -p "$out"
+          for _ in $(seq 1 30); do
+            if gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+              -n "mobile-agent-business-model-deployment-$run_id" -D "$out"; then break; fi
+            sleep 2
+          done
+          test -f "$out/readback.json"
+          test -f "$out/stable-proof.json"
+          test -f "$out/immutable-proof.json"
+          test -f "$out/stable-urls.json"
+          test -f "$out/immutable-urls.json"
+
+          python3 - "$out" "$run_id" "$target_sha" "$RUNNER_TEMP/comment.md" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); run_id=int(sys.argv[2]); sha=sys.argv[3]; out=pathlib.Path(sys.argv[4])
+          readback=json.loads((root/'readback.json').read_text())
+          stable=json.loads((root/'stable-proof.json').read_text())
+          immutable=json.loads((root/'immutable-proof.json').read_text())
+          stable_urls=json.loads((root/'stable-urls.json').read_text())
+          immutable_urls=json.loads((root/'immutable-urls.json').read_text())
+          assert readback['status']=='PASS'
+          assert stable['status']==immutable['status']=='PASS'
+          assert all(p['status']=='PASS' for p in stable['proofs'])
+          assert all(p['status']=='PASS' for p in immutable['proofs'])
+          assert [r['actorCount'] for r in stable_urls['results']]==[2,3,4]
+          assert [r['actorCount'] for r in immutable_urls['results']]==[2,3,4]
+          lines=[
+              '## business-model/1 deployment PASS','',
+              f'- source: `{sha}`', f'- run: `{run_id}`',
+              '- stable + deployment-specific byte readback: `PASS`',
+              '- stable + deployment-specific real-Chrome 2/3/4 actor proof: `PASS`','',
+              'Stable URLs:'
+          ]
+          for row in stable_urls['results']:
+              lines.append(f"- {row['actorCount']} actors: {row['url']}")
+          lines += ['', 'Deployment-specific URLs:']
+          for row in immutable_urls['results']:
+              lines.append(f"- {row['actorCount']} actors: {row['url']}")
+          out.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
+          gh pr comment 309 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
