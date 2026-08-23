@@ -43,7 +43,7 @@ jobs:
           comments=[comment for page in pages for comment in page]
           owner=os.environ['GITHUB_REPOSITORY_OWNER']; prefix=os.environ['CHUNK_PREFIX']; total=int(os.environ['CHUNK_COUNT'])
           header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{total:02d}$')
-          chunks={}
+          chunks={}; normalized={}
           for comment in comments:
               if comment.get('user',{}).get('login') != owner: continue
               body=str(comment.get('body','')).replace('\r\n','\n').strip()
@@ -51,17 +51,19 @@ jobs:
               if not sep: continue
               match=header.fullmatch(first.strip())
               if not match: continue
-              payload=re.sub(r'\s+','',rest)
-              assert re.fullmatch(r'[A-Za-z0-9+/=]+',payload),match.group(1)
               index=int(match.group(1)); assert 0 <= index < total,index
               assert index not in chunks,f'duplicate chunk {index}'
+              payload=''.join(re.findall(r'[A-Za-z0-9+/=]',rest))
+              assert payload,index
               chunks[index]=payload
+              normalized[index]={'bodyChars':len(rest),'base64Chars':len(payload),'discarded':len(rest)-len(payload)}
           assert sorted(chunks)==list(range(total)),sorted(chunks)
           joined=''.join(chunks[index] for index in range(total))
           assert len(joined)==int(os.environ['BASE64_BYTES']),len(joined)
-          assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['BASE64_SHA256']
+          digest=hashlib.sha256(joined.encode()).hexdigest()
+          assert digest==os.environ['BASE64_SHA256'],digest
           pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
-          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined),'base64Sha256':hashlib.sha256(joined.encode()).hexdigest()}))
+          print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined),'base64Sha256':digest,'normalized':normalized},sort_keys=True))
           PY
           base64 --decode "$root/app.br.b64" > "$root/app.br"
           test "$(wc -c < "$root/app.br")" -eq "$BROTLI_BYTES"
