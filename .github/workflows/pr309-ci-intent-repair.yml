@@ -1,6 +1,12 @@
 name: One-shot PR309 CI intent cleanup
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/pr309-ci-intent-repair.yml'
+      - '.github/workflows/mobile-agent-business-model-public.yml'
+      - 'verification/mobile-agent-business-model-public/**'
+      - 'verification/mobile-agent-business-model-presentation/**'
   push:
     branches:
       - proposal/mobile-agent-business-model-public-260823
@@ -15,18 +21,18 @@ permissions:
 
 jobs:
   repair:
-    if: github.repository == 'roccho-dev/ops' && github.ref == 'refs/heads/proposal/mobile-agent-business-model-public-260823'
+    if: github.repository == 'roccho-dev/ops' && (github.event_name == 'pull_request' || github.ref == 'refs/heads/proposal/mobile-agent-business-model-public-260823')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: proposal/mobile-agent-business-model-public-260823
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: Normalize current workflow declarations
         shell: bash
         env:
-          EXPECTED_HEAD: ${{ github.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
