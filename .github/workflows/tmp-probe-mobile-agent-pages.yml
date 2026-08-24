@@ -26,7 +26,7 @@ jobs:
           root="$RUNNER_TEMP/probe"
           mkdir -p "$root/zips" "$root/exact"
           python3 - "$root" <<'PY'
-          import bz2, gzip, hashlib, io, json, lzma, os, pathlib, re, tarfile, urllib.request, zipfile
+          import bz2, gzip, hashlib, io, json, lzma, os, pathlib, re, subprocess, tarfile, urllib.request, zipfile
 
           root=pathlib.Path(__import__('sys').argv[1])
           repo=os.environ['GITHUB_REPOSITORY']
@@ -36,7 +36,7 @@ jobs:
           max_expanded=128*1024*1024
           name_filter=re.compile(r'(mobile.?agent|preset|seq|carrier|semantic.?map|smap)',re.I)
 
-          def api(path):
+          def api_json(path):
               request=urllib.request.Request(
                   'https://api.github.com/'+path,
                   headers={
@@ -47,11 +47,25 @@ jobs:
                   },
               )
               with urllib.request.urlopen(request,timeout=120) as response:
-                  return response.read()
+                  return json.loads(response.read())
+
+          def artifact_zip(artifact_id):
+              target=root/'zips'/f'{artifact_id}.zip'
+              with target.open('wb') as output:
+                  process=subprocess.run(
+                      ['gh','api',f'repos/{repo}/actions/artifacts/{artifact_id}/zip'],
+                      stdout=output,stderr=subprocess.PIPE,check=False,
+                  )
+              if process.returncode:
+                  raise RuntimeError(process.stderr.decode(errors='replace'))
+              value=target.read_bytes()
+              if not zipfile.is_zipfile(target):
+                  raise RuntimeError('artifact response is not a ZIP')
+              return value
 
           artifacts=[]
           for page in range(1,101):
-              value=json.loads(api(f'repos/{repo}/actions/artifacts?per_page=100&page={page}'))
+              value=api_json(f'repos/{repo}/actions/artifacts?per_page=100&page={page}')
               rows=value.get('artifacts') or []
               artifacts.extend(rows)
               if len(rows)<100: break
@@ -75,16 +89,13 @@ jobs:
           def inspect(data,label,depth=0):
               if exact(data): return data,label
               if depth>=5 or len(data)>max_expanded: return None
-              # ZIP, including Actions artifact and nested dist ZIPs.
               try:
                   with zipfile.ZipFile(io.BytesIO(data)) as source:
                       for info in source.infolist():
                           if info.is_dir() or info.file_size>max_expanded: continue
-                          value=source.read(info)
-                          found=inspect(value,label+'!/'+info.filename,depth+1)
+                          found=inspect(source.read(info),label+'!/'+info.filename,depth+1)
                           if found: return found
               except (zipfile.BadZipFile,RuntimeError,ValueError): pass
-              # Tar archives, with any compression supported by tarfile.
               try:
                   with tarfile.open(fileobj=io.BytesIO(data),mode='r:*') as source:
                       for member in source.getmembers():
@@ -96,24 +107,20 @@ jobs:
                           found=inspect(value,label+'!/'+member.name,depth+1)
                           if found: return found
               except (tarfile.TarError,EOFError,OSError): pass
-              # Single-stream compressed payloads.
               for decoder,suffix in ((gzip.decompress,'!gzip'),(bz2.decompress,'!bz2'),(lzma.decompress,'!xz')):
-                  try:
-                      value=decoder(data)
-                  except Exception:
-                      continue
+                  try: value=decoder(data)
+                  except Exception: continue
                   if len(value)<=max_expanded:
                       found=inspect(value,label+suffix,depth+1)
                       if found: return found
               return None
 
           report=[]
-          for index,row in enumerate(candidates):
+          for row in candidates:
               artifact_id=row['id']
               label=f"artifact:{artifact_id}:{row['name']}"
               try:
-                  data=api(f'repos/{repo}/actions/artifacts/{artifact_id}/zip')
-                  (root/'zips'/f'{artifact_id}.zip').write_bytes(data)
+                  data=artifact_zip(artifact_id)
                   found=inspect(data,label)
                   report.append({'id':artifact_id,'name':row['name'],'zipBytes':len(data),'found':bool(found)})
                   if found:
