@@ -9,6 +9,7 @@ on:
       - '.github/workflows/mobile-agent-persistent-carry-publish-once.yml'
 
 permissions:
+  actions: read
   contents: read
   issues: read
 
@@ -22,7 +23,7 @@ jobs:
         with:
           node-version: '22.16.0'
 
-      - name: Restore exact App and close Carrier locally
+      - name: Recover exact App and close Carrier locally
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
