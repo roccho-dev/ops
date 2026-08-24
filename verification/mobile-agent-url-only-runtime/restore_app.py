@@ -3,23 +3,22 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import io
 import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
-import tarfile
+import tempfile
 
 ISSUE = 286
-PREFIX = "SEQ-CARRIER-CHUNK/2"
+PREFIX = "SEQ-APP-BR/1"
 LAST_INDEX = 10
 COUNT = LAST_INDEX + 1
-BASE64_BYTES = 571_088
-BASE64_SHA256 = "63e73cdbbe14a14ac01a013fe92feb5686e392333e696e0b3a850028604fea24"
-ARCHIVE_BYTES = 428_316
-ARCHIVE_SHA256 = "f0781226a3c302269a0507d3947867f8a5d2ef3a72ad1054454fed18598416ec"
+BASE64_BYTES = 509_996
+BASE64_SHA256 = "a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01"
+PACKED_BYTES = 382_497
+PACKED_SHA256 = "4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97"
 APP_BYTES = 2_412_388
 APP_SHA256 = "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
 APP_GIT_BLOB = "ebdb39084fa3cc57b0295818f6f339f62f0fca90"
@@ -45,10 +44,10 @@ def gh_pages(endpoint: str):
 
 
 def parse(body: str):
-    normalized = str(body).replace("\r\n", "\n")
+    normalized = str(body).replace("\r\n", "\n").strip()
     head, separator, payload = normalized.partition("\n")
     match = re.fullmatch(
-        rf"{re.escape(PREFIX)} ([0-9]{{2}})/{LAST_INDEX:02d}",
+        rf"{re.escape(PREFIX)} ([0-9]{{2}})/{COUNT:02d}",
         head.strip(),
     )
     if not separator or not match:
@@ -57,9 +56,11 @@ def parse(body: str):
     if not 0 <= index <= LAST_INDEX:
         raise RuntimeError(f"unexpected Carrier chunk index: {index}")
 
+    # GitHub may wrap long comment payloads. Keep only canonical Base64
+    # characters, then close exactness with whole-carrier length and SHA gates.
     encoded = "".join(character for character in payload if character in BASE64_ALPHABET)
     if not encoded:
-        raise RuntimeError(f"Carrier payload missing: {index:02d}/{LAST_INDEX:02d}")
+        raise RuntimeError(f"Carrier payload missing: {index:02d}/{COUNT:02d}")
     return index, encoded
 
 
@@ -73,9 +74,7 @@ def read_carrier(repository: str) -> bytes:
             index, value = parsed
             previous = chunks.get(index)
             if previous is not None and previous != value:
-                raise RuntimeError(
-                    f"conflicting Carrier chunk: {index:02d}/{LAST_INDEX:02d}"
-                )
+                raise RuntimeError(f"conflicting Carrier chunk: {index:02d}/{COUNT:02d}")
             chunks[index] = value
 
     expected = set(range(COUNT))
@@ -107,46 +106,35 @@ def read_carrier(repository: str) -> bytes:
             )
         )
 
-    archive = base64.b64decode(encoded, validate=True)
-    if len(archive) != ARCHIVE_BYTES or sha256(archive) != ARCHIVE_SHA256:
-        raise RuntimeError("Carrier archive identity mismatch")
-    return archive
+    packed = base64.b64decode(encoded, validate=True)
+    if len(packed) != PACKED_BYTES or sha256(packed) != PACKED_SHA256:
+        raise RuntimeError("Carrier Brotli identity mismatch")
+    return packed
 
 
-def app_from_carrier(archive: bytes) -> tuple[str, bytes]:
-    matches: list[tuple[str, bytes]] = []
-    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:xz") as source:
-        for member in source.getmembers():
-            path = pathlib.PurePosixPath(member.name)
-            if path.is_absolute() or ".." in path.parts:
-                raise RuntimeError(f"unsafe Carrier member path: {member.name}")
-            if member.issym() or member.islnk() or member.isdev():
-                raise RuntimeError(f"unsafe Carrier member type: {member.name}")
-            if not member.isfile():
-                continue
-            handle = source.extractfile(member)
-            if handle is None:
-                raise RuntimeError(f"Carrier member unreadable: {member.name}")
-            data = handle.read()
-            if len(data) == APP_BYTES and sha256(data) == APP_SHA256:
-                matches.append((member.name, data))
-
-    if len(matches) != 1:
-        raise RuntimeError(
-            "Carrier must contain exactly one exact Mobile Agent App: "
-            + json.dumps([name for name, _ in matches])
+def restore_app(packed: bytes, output: pathlib.Path) -> bytes:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="mobile-agent-carry-") as temp:
+        packed_path = pathlib.Path(temp) / "app.br"
+        packed_path.write_bytes(packed)
+        subprocess.run(
+            [
+                "node",
+                "-e",
+                (
+                    "const fs=require('node:fs'),zlib=require('node:zlib');"
+                    "fs.writeFileSync(process.argv[2],"
+                    "zlib.brotliDecompressSync(fs.readFileSync(process.argv[1])));"
+                ),
+                str(packed_path),
+                str(output),
+            ],
+            check=True,
         )
-    return matches[0]
 
-
-def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: restore_app.py OUT_HTML")
-
-    repository = os.environ.get("GITHUB_REPOSITORY", "roccho-dev/ops")
-    archive = read_carrier(repository)
-    source_path, app = app_from_carrier(archive)
-
+    app = output.read_bytes()
+    if len(app) != APP_BYTES or sha256(app) != APP_SHA256:
+        raise RuntimeError("App identity mismatch")
     git_blob = hashlib.sha1(f"blob {len(app)}\0".encode() + app).hexdigest()
     if git_blob != APP_GIT_BLOB:
         raise RuntimeError("App Git blob identity mismatch")
@@ -157,23 +145,32 @@ def main() -> None:
             raise RuntimeError(f"App contract token missing: {token}")
     if "maxgraph" not in text.lower():
         raise RuntimeError("maxGraph token missing")
+    return app
 
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        raise SystemExit("usage: restore_app.py OUT_HTML")
+
+    repository = os.environ.get("GITHUB_REPOSITORY", "roccho-dev/ops")
     output = pathlib.Path(sys.argv[1])
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(app)
+    packed = read_carrier(repository)
+    app = restore_app(packed, output)
 
     print(
         json.dumps(
             {
                 "status": "PASS_TEMPORARY_MOBILE_AGENT_INGRESS",
-                "source": "roccho-dev/ops#286",
+                "source": "roccho-dev/ops#286:SEQ-APP-BR/1",
                 "carrier": {
-                    "bytes": ARCHIVE_BYTES,
-                    "sha256": ARCHIVE_SHA256,
+                    "codec": "brotli+standard-base64",
+                    "packedBytes": PACKED_BYTES,
+                    "packedSha256": PACKED_SHA256,
+                    "base64Bytes": BASE64_BYTES,
+                    "base64Sha256": BASE64_SHA256,
                     "chunks": COUNT,
                 },
                 "app": {
-                    "sourcePath": source_path,
                     "bytes": len(app),
                     "sha256": APP_SHA256,
                     "gitBlob": APP_GIT_BLOB,
