@@ -1,0 +1,22 @@
+name: actrun JSONL task graph fixture
+
+on:
+  push:
+
+jobs:
+  task-graph:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Execute JSONL target
+        run: >-
+          node verification/actrun-jsonl-task-graph/run-task-graph.mjs
+          --graph verification/actrun-jsonl-task-graph/tasks.jsonl
+          --target verify
+          --receipt verification/actrun-jsonl-task-graph/out/receipt.json
+      - name: Verify materialized result
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat verification/actrun-jsonl-task-graph/out/value.txt)" = "42"
+          test "$(cat verification/actrun-jsonl-task-graph/out/status.txt)" = "PASS"
