@@ -53,10 +53,15 @@ def parse(body: str):
     index = int(match.group(1))
     if not 0 <= index <= LAST_INDEX:
         raise RuntimeError(f"unexpected Carrier chunk index: {index}")
-    payload = re.sub(r"\s+", "", payload)
-    if not payload or not re.fullmatch(r"[A-Za-z0-9+/=]+", payload):
-        raise RuntimeError(f"invalid Carrier payload: {index:02d}/{LAST_INDEX:02d}")
-    return index, payload
+
+    encoded_lines = []
+    for line in payload.splitlines():
+        candidate = line.strip()
+        if candidate and re.fullmatch(r"[A-Za-z0-9+/=]+", candidate):
+            encoded_lines.append(candidate)
+    if not encoded_lines:
+        raise RuntimeError(f"Carrier payload missing: {index:02d}/{LAST_INDEX:02d}")
+    return index, "".join(encoded_lines)
 
 
 def read_carrier(repository: str) -> bytes:
@@ -91,7 +96,17 @@ def read_carrier(repository: str) -> bytes:
 
     encoded = "".join(chunks[index] for index in range(COUNT)).encode("ascii")
     if len(encoded) != BASE64_BYTES or sha256(encoded) != BASE64_SHA256:
-        raise RuntimeError("Carrier Base64 identity mismatch")
+        raise RuntimeError(
+            "Carrier Base64 identity mismatch: "
+            + json.dumps(
+                {
+                    "observedBytes": len(encoded),
+                    "observedSha256": sha256(encoded),
+                    "chunkBytes": [len(chunks[index]) for index in range(COUNT)],
+                },
+                sort_keys=True,
+            )
+        )
 
     archive = base64.b64decode(encoded, validate=True)
     if len(archive) != ARCHIVE_BYTES or sha256(archive) != ARCHIVE_SHA256:
