@@ -23,6 +23,9 @@ ARCHIVE_SHA256 = "f0781226a3c302269a0507d3947867f8a5d2ef3a72ad1054454fed18598416
 APP_BYTES = 2_412_388
 APP_SHA256 = "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
 APP_GIT_BLOB = "ebdb39084fa3cc57b0295818f6f339f62f0fca90"
+BASE64_ALPHABET = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+)
 
 
 def sha256(data: bytes) -> str:
@@ -54,14 +57,10 @@ def parse(body: str):
     if not 0 <= index <= LAST_INDEX:
         raise RuntimeError(f"unexpected Carrier chunk index: {index}")
 
-    encoded_lines = []
-    for line in payload.splitlines():
-        candidate = line.strip()
-        if candidate and re.fullmatch(r"[A-Za-z0-9+/=]+", candidate):
-            encoded_lines.append(candidate)
-    if not encoded_lines:
+    encoded = "".join(character for character in payload if character in BASE64_ALPHABET)
+    if not encoded:
         raise RuntimeError(f"Carrier payload missing: {index:02d}/{LAST_INDEX:02d}")
-    return index, "".join(encoded_lines)
+    return index, encoded
 
 
 def read_carrier(repository: str) -> bytes:
