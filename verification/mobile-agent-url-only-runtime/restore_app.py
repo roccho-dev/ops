@@ -10,9 +10,16 @@ import subprocess
 import sys
 import tempfile
 
-PART_BLOBS = (
-    "f65a8c180f0b65317ff0455712c2ecd5934a7031",
-    "a0904cf208a3a9ac87afa37b8b6dfc4fe13c368f",
+PROJECTION_REF = "projection/mobile-agent-preset-dist-b0af2ab9"
+PARTS = (
+    (
+        "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00",
+        "f65a8c180f0b65317ff0455712c2ecd5934a7031",
+    ),
+    (
+        "projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01",
+        "a0904cf208a3a9ac87afa37b8b6dfc4fe13c368f",
+    ),
 )
 CARRIER_RAW_BYTES = 30_024
 APP_BYTES = 2_412_388
@@ -30,24 +37,32 @@ def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(header + data).hexdigest()
 
 
-def read_git_blob(repository: str, blob_sha: str) -> bytes:
+def read_part(repository: str, path: str, blob_sha: str) -> bytes:
     value = json.loads(
         subprocess.check_output(
-            ["gh", "api", f"repos/{repository}/git/blobs/{blob_sha}"],
+            [
+                "gh",
+                "api",
+                "-X",
+                "GET",
+                f"repos/{repository}/contents/{path}",
+                "-f",
+                f"ref={PROJECTION_REF}",
+            ],
             text=True,
         )
     )
     if value.get("sha") != blob_sha or value.get("encoding") != "base64":
-        raise RuntimeError(f"unexpected Git blob response: {blob_sha}")
+        raise RuntimeError(f"unexpected Git content response: {path}")
     encoded = "".join(str(value.get("content", "")).split())
     data = base64.b64decode(encoded, validate=True)
     if git_blob_sha(data) != blob_sha:
-        raise RuntimeError(f"Git blob identity mismatch: {blob_sha}")
+        raise RuntimeError(f"Git blob identity mismatch: {path}")
     return data
 
 
 def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
-    parts = [read_git_blob(repository, blob_sha) for blob_sha in PART_BLOBS]
+    parts = [read_part(repository, path, blob_sha) for path, blob_sha in PARTS]
     carrier_raw = b"".join(parts)
     if len(carrier_raw) != CARRIER_RAW_BYTES:
         raise RuntimeError(
@@ -94,10 +109,14 @@ def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
         raise RuntimeError("maxGraph token missing")
 
     return {
-        "status": "PASS_PERSISTENT_MOBILE_AGENT_GIT_BLOBS",
+        "status": "PASS_PERSISTENT_MOBILE_AGENT_GIT_PARTS",
         "source": {
             "repository": repository,
-            "partBlobs": list(PART_BLOBS),
+            "projectionRef": PROJECTION_REF,
+            "parts": [
+                {"path": path, "gitBlob": blob_sha}
+                for path, blob_sha in PARTS
+            ],
             "carrierRawBytes": len(carrier_raw),
             "carrierRawSha256": sha256(carrier_raw),
             "carrierBytes": len(carrier),
