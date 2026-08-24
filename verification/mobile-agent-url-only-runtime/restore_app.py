@@ -9,18 +9,10 @@ import pathlib
 import re
 import subprocess
 import sys
-import zlib
 
 ISSUE = 286
 PREFIX = "SEQ-APP-BR/1"
 COUNT = 11
-DIRECT_COMMENT_IDS = {
-    4: 5381568336,
-    5: 5381582415,
-    6: 5381594577,
-    8: 5381733151,
-    9: 5381756373,
-}
 BASE64_BYTES = 509_996
 BASE64_SHA256 = "a45fda69531262da67ba592fa026007107a1605117228bf149ccec64e8e3bd01"
 BROTLI_BYTES = 382_497
@@ -29,8 +21,16 @@ APP_BYTES = 2_412_388
 APP_SHA256 = "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
 
 
-def gh_json(*args: str):
-    return json.loads(subprocess.check_output(["gh", "api", *args], text=True))
+def gh_pages(endpoint: str):
+    pages = json.loads(
+        subprocess.check_output(
+            ["gh", "api", "--paginate", "--slurp", endpoint],
+            text=True,
+        )
+    )
+    if pages and isinstance(pages[0], dict):
+        return [pages]
+    return pages
 
 
 def parse(body: str):
@@ -48,51 +48,82 @@ def parse(body: str):
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: restore_app.py OUT_HTML")
-    repo = os.environ["GITHUB_REPOSITORY"]
-    pages = gh_json(f"repos/{repo}/issues/{ISSUE}/comments?per_page=100")
+
+    repository = os.environ.get("GITHUB_REPOSITORY", "roccho-dev/ops")
     chunks: dict[int, str] = {}
-    for comment in pages:
-        parsed = parse(comment.get("body", ""))
-        if parsed:
-            chunks[parsed[0]] = parsed[1]
-    for index, comment_id in DIRECT_COMMENT_IDS.items():
-        if index in chunks:
-            continue
-        comment = gh_json(f"repos/{repo}/issues/comments/{comment_id}")
-        parsed = parse(comment.get("body", ""))
-        if parsed is None or parsed[0] != index:
-            raise RuntimeError(f"direct comment {comment_id} did not contain chunk {index:02d}")
-        chunks[index] = parsed[1]
-    if sorted(chunks) != list(range(COUNT)):
-        raise RuntimeError(f"missing chunks: {sorted(set(range(COUNT)) - set(chunks))}")
+    for page in gh_pages(f"repos/{repository}/issues/{ISSUE}/comments?per_page=100"):
+        for comment in page:
+            parsed = parse(comment.get("body", ""))
+            if parsed is None:
+                continue
+            index, value = parsed
+            previous = chunks.get(index)
+            if previous is not None and previous != value:
+                raise RuntimeError(f"conflicting temporary carry chunk: {index:02d}/{COUNT:02d}")
+            chunks[index] = value
+
+    expected = set(range(COUNT))
+    observed = set(chunks)
+    if observed != expected:
+        raise RuntimeError(
+            "temporary carry ingress is incomplete: "
+            + json.dumps(
+                {
+                    "expected": sorted(expected),
+                    "observed": sorted(observed),
+                    "missing": sorted(expected - observed),
+                },
+                sort_keys=True,
+            )
+        )
+
     joined = "".join(chunks[index] for index in range(COUNT))
     if len(joined) != BASE64_BYTES or hashlib.sha256(joined.encode()).hexdigest() != BASE64_SHA256:
         raise RuntimeError("joined Base64 identity mismatch")
+
     compressed = base64.b64decode(joined, validate=True)
     if len(compressed) != BROTLI_BYTES or hashlib.sha256(compressed).hexdigest() != BROTLI_SHA256:
         raise RuntimeError("Brotli identity mismatch")
-    html = zlib.decompress(compressed, wbits=0) if False else None
-    # Python stdlib does not expose Brotli; delegate only the deterministic decompression step to Node.
-    out = pathlib.Path(sys.argv[1])
-    out.parent.mkdir(parents=True, exist_ok=True)
-    br = out.with_suffix(out.suffix + ".br")
-    br.write_bytes(compressed)
-    subprocess.run([
-        "node", "-e",
-        "const fs=require('node:fs'),z=require('node:zlib');fs.writeFileSync(process.argv[2],z.brotliDecompressSync(fs.readFileSync(process.argv[1])));",
-        str(br), str(out),
-    ], check=True)
-    data = out.read_bytes()
-    if len(data) != APP_BYTES or hashlib.sha256(data).hexdigest() != APP_SHA256:
+
+    output = pathlib.Path(sys.argv[1])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    brotli = output.with_suffix(output.suffix + ".br")
+    brotli.write_bytes(compressed)
+    subprocess.run(
+        [
+            "node",
+            "-e",
+            "const fs=require('node:fs'),z=require('node:zlib');"
+            "fs.writeFileSync(process.argv[2],z.brotliDecompressSync(fs.readFileSync(process.argv[1])));",
+            str(brotli),
+            str(output),
+        ],
+        check=True,
+    )
+    brotli.unlink()
+
+    app = output.read_bytes()
+    if len(app) != APP_BYTES or hashlib.sha256(app).hexdigest() != APP_SHA256:
         raise RuntimeError("App identity mismatch")
-    br.unlink()
-    text = data.decode("utf-8", errors="strict")
+    text = app.decode("utf-8", errors="strict")
     for token in ("graph/1", "map/1", "seq/1"):
         if token not in text:
             raise RuntimeError(f"App contract token missing: {token}")
     if "maxgraph" not in text.lower():
         raise RuntimeError("maxGraph token missing")
-    print(json.dumps({"status":"PASS","chunks":COUNT,"bytes":len(data),"sha256":APP_SHA256}))
+
+    print(
+        json.dumps(
+            {
+                "status": "PASS_TEMPORARY_MOBILE_AGENT_INGRESS",
+                "source": "roccho-dev/ops#286",
+                "chunks": COUNT,
+                "bytes": len(app),
+                "sha256": APP_SHA256,
+            },
+            sort_keys=True,
+        )
+    )
 
 
 if __name__ == "__main__":
