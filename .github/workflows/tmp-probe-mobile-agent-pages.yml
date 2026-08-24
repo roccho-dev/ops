@@ -29,18 +29,17 @@ jobs:
           : > "$root/projects.txt"
           : > "$root/bases.txt"
 
-          for page in $(seq 1 20); do
-            response="$root/api/projects/$page.json"
-            code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects?per_page=25&page=$page")"
-            test "$code" = 200
-            count="$(python3 - "$response" "$root/projects.txt" "$root/bases.txt" <<'PY'
+          response="$root/api/projects/all.json"
+          code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects")"
+          test "$code" = 200
+          python3 - "$response" "$root/projects.txt" "$root/bases.txt" <<'PY'
           import json,sys
           value=json.load(open(sys.argv[1],encoding='utf-8'))
           assert value.get('success') is True,value
           rows=value.get('result') or []
-          with open(sys.argv[2],'a',encoding='utf-8') as projects, open(sys.argv[3],'a',encoding='utf-8') as bases:
+          with open(sys.argv[2],'w',encoding='utf-8') as projects, open(sys.argv[3],'w',encoding='utf-8') as bases:
               for row in rows:
                   name=str(row['name'])
                   projects.write(name+'\n')
@@ -53,11 +52,7 @@ jobs:
                       text=str(domain).rstrip('/')
                       if not text.startswith('http'): text='https://'+text
                       bases.write(text+'\n')
-          print(len(rows))
           PY
-          )"
-            test "$count" -gt 0 || break
-          done
           sort -u "$root/projects.txt" -o "$root/projects.txt"
 
           while IFS= read -r project; do
