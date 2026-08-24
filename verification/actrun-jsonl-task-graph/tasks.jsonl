@@ -1,0 +1,2 @@
+{"schema":"ops.taskNode/1","id":"produce","deps":[],"argv":["node","verification/actrun-jsonl-task-graph/task-action.mjs","produce"]}
+{"schema":"ops.taskNode/1","id":"verify","deps":["produce"],"argv":["node","verification/actrun-jsonl-task-graph/task-action.mjs","verify"]}
