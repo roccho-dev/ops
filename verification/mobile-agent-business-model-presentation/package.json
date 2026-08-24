@@ -8,10 +8,11 @@
     "check": "node scripts/check.mjs",
     "proof": "python3 scripts/browser-proof.py",
     "test:e2e": "npm run build:examples && python3 tests/e2e/layout_preservation.py",
-    "test": "npm run build && npm run check && npm run test:e2e && npm run build:public && npm run test:url && npm run test:public-e2e",
+    "test": "npm run build && npm run check && npm run test:e2e && npm run build:public && npm run test:url && npm run test:public-e2e && npm run test:examples-entrypoint",
     "build:public": "node scripts/build-public.mjs",
     "generate:url": "node scripts/generate-url.mjs",
     "test:url": "node tests/public_url_roundtrip.mjs",
-    "test:public-e2e": "python3 tests/e2e/public_url_projection.py"
+    "test:public-e2e": "python3 tests/e2e/public_url_projection.py",
+    "test:examples-entrypoint": "python3 tests/e2e/examples_entrypoint_closure.py examples"
   }
 }

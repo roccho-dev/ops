@@ -1,0 +1,154 @@
+{
+  "schema": "mobile-agent.business-model-examples-entrypoint/1",
+  "packageRoot": "..",
+  "sourceRef": "d9be0aebce95f202c5ae3f1cbc78cfcb10b3bfd4",
+  "sourcePaths": [
+    "apps/business-model-presentation-minimal/public/styles.css",
+    "apps/business-model-presentation-minimal/src/main.mjs",
+    "examples/2-actors.jsonl",
+    "examples/3-actors.jsonl",
+    "examples/4-actors.jsonl",
+    "packages/a2ui-browser/src",
+    "packages/business-model-compiler/src",
+    "packages/url-module/src",
+    "scripts/build-public.mjs",
+    "scripts/generate-url.mjs",
+    "scripts/lib/compile-public-presentation.mjs",
+    "scripts/lib/one-html-module-map.mjs",
+    "tests/e2e/public_host_projection.py"
+  ],
+  "runtime": {
+    "node": {
+      "version": "22.16.0",
+      "command": "node"
+    },
+    "python": {
+      "version": "3",
+      "command": "python3",
+      "requiredFor": "real-browser-check"
+    },
+    "browser": {
+      "engine": "chromium",
+      "driver": "playwright",
+      "driverVersion": "1.55.0",
+      "real": true
+    }
+  },
+  "entrypoints": {
+    "buildPublic": {
+      "command": [
+        "node",
+        "scripts/build-public.mjs"
+      ]
+    },
+    "generateUrl": {
+      "command": [
+        "node",
+        "scripts/generate-url.mjs",
+        "{input}",
+        "{baseUrl}",
+        "{receipt}"
+      ]
+    },
+    "check": {
+      "via": "generateUrl",
+      "assert": {
+        "status": "PASS",
+        "pattern": "business-model/1",
+        "actorCount": {
+          "min": 2,
+          "max": 4
+        },
+        "urlChars": {
+          "maxRef": "limits.urlChars"
+        }
+      }
+    },
+    "browserCheck": {
+      "command": [
+        "python3",
+        "tests/e2e/public_host_projection.py",
+        "{urls}",
+        "{receipt}"
+      ]
+    }
+  },
+  "outputs": {
+    "url": {
+      "source": "stdout-json",
+      "field": "url",
+      "returnDirectly": true
+    },
+    "receipt": {
+      "path": "{receipt}",
+      "schema": "mobile-agent.business-model-public-url/1"
+    }
+  },
+  "host": {
+    "stableBase": "https://stg-mobile-agent.pages.dev/business-model/"
+  },
+  "limits": {
+    "urlChars": 8192
+  },
+  "checks": [
+    {
+      "id": "source-scope",
+      "type": "isolated-source-copy",
+      "expect": "PASS"
+    },
+    {
+      "id": "schema-profile",
+      "from": "entrypoints.check",
+      "expect": "PASS"
+    },
+    {
+      "id": "url-round-trip",
+      "receiptField": "status",
+      "expect": "PASS"
+    },
+    {
+      "id": "real-chrome",
+      "expect": {
+        "documentStatus": "pass",
+        "browserErrors": 0,
+        "pageHorizontalOverflow": 0
+      },
+      "from": "entrypoints.browserCheck"
+    },
+    {
+      "id": "two-actor-byte-identity",
+      "command": [
+        "npm",
+        "run",
+        "check"
+      ],
+      "expect": "PASS"
+    },
+    {
+      "id": "fixtures-2-3-4",
+      "command": [
+        "npm",
+        "run",
+        "test:e2e"
+      ],
+      "expect": "PASS"
+    }
+  ],
+  "examples": [
+    {
+      "path": "examples/2-actors.jsonl",
+      "actorCount": 2,
+      "purpose": "二者が直接交換する事業"
+    },
+    {
+      "path": "examples/3-actors.jsonl",
+      "actorCount": 3,
+      "purpose": "運営が需要側と供給側を仲介する事業"
+    },
+    {
+      "path": "examples/4-actors.jsonl",
+      "actorCount": 4,
+      "purpose": "四者が順につながる供給連鎖型の事業"
+    }
+  ]
+}
