@@ -7,15 +7,27 @@ import process from "node:process";
 const [action] = process.argv.slice(2);
 const root = path.resolve(process.env.TASK_GRAPH_ROOT ?? process.cwd());
 const out = path.join(root, "verification", "actrun-jsonl-task-graph", "out");
+const proofOut = process.env.TASK_GRAPH_PROOF_DIR
+  ? path.join(path.resolve(process.env.TASK_GRAPH_PROOF_DIR), "task-output")
+  : null;
+
+const write = (name, value) => {
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, name), value, "utf8");
+  if (proofOut) {
+    fs.mkdirSync(proofOut, { recursive: true });
+    fs.writeFileSync(path.join(proofOut, name), value, "utf8");
+  }
+};
 
 if (action === "produce") {
   fs.rmSync(out, { recursive: true, force: true });
-  fs.mkdirSync(out, { recursive: true });
-  fs.writeFileSync(path.join(out, "value.txt"), "42\n", "utf8");
+  if (proofOut) fs.rmSync(proofOut, { recursive: true, force: true });
+  write("value.txt", "42\n");
   console.log(JSON.stringify({ task: action, value: 42 }));
 } else if (action === "verify") {
   assert.equal(fs.readFileSync(path.join(out, "value.txt"), "utf8"), "42\n");
-  fs.writeFileSync(path.join(out, "status.txt"), "PASS\n", "utf8");
+  write("status.txt", "PASS\n");
   console.log(JSON.stringify({ task: action, status: "PASS" }));
 } else {
   throw new Error(`unknown task action: ${action ?? "<missing>"}`);
