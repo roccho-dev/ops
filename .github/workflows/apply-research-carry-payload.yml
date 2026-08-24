@@ -1,6 +1,11 @@
 name: Apply research decision stack carry payload
 
 on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - ".github/research-carry-xz/**"
+      - ".github/workflows/apply-research-carry-payload.yml"
   push:
     branches: [proposal/research-decision-stack-carry-260824]
     paths:
@@ -11,8 +16,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: apply-research-decision-stack-carry
+  group: apply-research-decision-stack-carry-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  PAYLOAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   apply:
@@ -22,7 +30,7 @@ jobs:
       - name: Checkout exact payload commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ env.PAYLOAD_COMMIT }}
           fetch-depth: 2
 
       - name: Verify, apply, test, self-delete, and push final tree
@@ -46,7 +54,7 @@ jobs:
               "status":"FAIL",
               "runId":os.environ.get("GITHUB_RUN_ID"),
               "runAttempt":os.environ.get("GITHUB_RUN_ATTEMPT"),
-              "headSha":os.environ.get("GITHUB_SHA"),
+              "headSha":os.environ.get("PAYLOAD_COMMIT"),
               "exitCode":int(rc),
               "line":int(line),
               "command":command,
@@ -59,7 +67,7 @@ jobs:
             exit "$rc"
           }
           trap 'record_failure "$?" "$LINENO" "$BASH_COMMAND"' ERR
-          test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^{commit})" = "$PAYLOAD_COMMIT"
           cat "$GITHUB_WORKSPACE"/.github/research-carry-xz/part-*.b64 > "$RUNNER_TEMP/research-carry-payload.b64"
           base64 --decode "$RUNNER_TEMP/research-carry-payload.b64" > "$RUNNER_TEMP/research-carry-payload.tar.xz"
           payload="$RUNNER_TEMP/research-carry-payload.tar.xz"
