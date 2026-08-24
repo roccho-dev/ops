@@ -5,6 +5,7 @@ proof="$RUNNER_TEMP/actrun-jsonl-proof"
 runs="$RUNNER_TEMP/actrun-runs"
 extract="$RUNNER_TEMP/actrun-extract"
 source_manifest="verification/actrun-jsonl-task-graph/source.json"
+fixture="verification/actrun-jsonl-task-graph"
 mkdir -p "$proof" "$runs" "$extract"
 
 read -r repository tag expected_commit asset_name < <(
@@ -93,35 +94,42 @@ value={
 pathlib.Path(out).write_text(json.dumps(value,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
 PY
 
-TASK_GRAPH_PROOF_DIR="$proof" "$restored" workflow run \
-  verification/actrun-jsonl-task-graph/workflow.yml \
+rm -rf "$fixture/out"
+"$restored" workflow run "$fixture/workflow.yml" \
   --workspace-mode local \
   --no-nix \
   --run-root "$runs"
 
 "$restored" run view run-1 --run-root "$runs" --json > "$proof/actrun-run.json"
 "$restored" run logs run-1 --run-root "$runs" > "$proof/actrun-run.log"
-cat "$proof/actrun-run.log"
 find "$runs" -type f -print | sort > "$proof/actrun-run-files.txt"
+mkdir -p "$proof/actrun-task-logs"
+cp "$runs/run-1/tasks/"* "$proof/actrun-task-logs/"
 
-task_receipt="$proof/task-graph.receipt.json"
-value_file="$proof/task-output/value.txt"
-status_file="$proof/task-output/status.txt"
-python3 - "$proof/carry.receipt.json" "$task_receipt" <<'PY'
+task_receipt="$fixture/out/receipt.json"
+value_file="$fixture/out/value.txt"
+status_file="$fixture/out/status.txt"
+python3 - "$proof/carry.receipt.json" "$task_receipt" "$proof/actrun-run.json" <<'PY'
 import json,sys
 carry=json.load(open(sys.argv[1],encoding="utf-8"))
 task=json.load(open(sys.argv[2],encoding="utf-8"))
+run=json.load(open(sys.argv[3],encoding="utf-8"))
 assert carry["schema"]=="ops.actrunCarryReceipt/1" and carry["status"]=="PASS"
 assert carry["restore"]["sha256"]==carry["binary"]["sha256"]==carry["carrier"]["payloadSha256"]
 assert task=={
   "schema":"ops.taskGraphReceipt/1","status":"PASS","target":"verify",
-  "graph":"verification/actrun-jsonl-task-graph/tasks.jsonl",
-  "order":["produce","verify"],
+  "graph":"tasks.jsonl","order":["produce","verify"],
   "results":[{"id":"produce","exitCode":0},{"id":"verify","exitCode":0}],
 }
+assert run["state"]=="completed" and run["ok"] is True
+assert run["workspace_root"]=="verification/actrun-jsonl-task-graph"
+assert run["order"]==["task-graph/step_1","task-graph/step_2","task-graph/__finish"]
 PY
 test "$(cat "$value_file")" = 42
 test "$(cat "$status_file")" = PASS
+cp "$task_receipt" "$proof/task-graph.receipt.json"
+cp "$value_file" "$proof/value.txt"
+cp "$status_file" "$proof/status.txt"
 
 python3 - "$proof/proof.receipt.json" "$proof/carry.receipt.json" "$task_receipt" <<'PY'
 import json,pathlib,sys
