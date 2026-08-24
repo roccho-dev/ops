@@ -1,0 +1,53 @@
+name: proof-care-night-insurance-pr
+
+on:
+  pull_request:
+    branches:
+      - proof/care-night-insurance-base-20260824
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser runtime
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Generate URL and prove in real Chromium
+        shell: bash
+        run: |
+          cd verification/mobile-agent-business-model-presentation
+          node scripts/generate-url.mjs .work/care-night-insurance.jsonl https://stg-mobile-agent.pages.dev/business-model/ /tmp/url-receipt.json | tee /tmp/generate.stdout.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(Path('/tmp/url-receipt.json').read_text())
+          assert receipt['status'] == 'PASS'
+          assert receipt['pattern'] == 'business-model/1'
+          assert receipt['actorCount'] == 3
+          assert receipt['urlChars'] <= receipt['limitChars']
+          Path('/tmp/urls.json').write_text(json.dumps({
+              'schema': 'mobile-agent.business-model-public-url-test/1',
+              'results': [{'actorCount': 3, 'url': receipt['url']}],
+          }, ensure_ascii=False), encoding='utf-8')
+          PY
+          python3 tests/e2e/public_host_projection.py /tmp/urls.json /tmp/browser-receipt.json
+          echo '--- URL RECEIPT ---'
+          cat /tmp/url-receipt.json
+          echo '--- BROWSER RECEIPT ---'
+          cat /tmp/browser-receipt.json
+      - name: Upload receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: care-night-insurance-presentation-proof
+          path: |
+            /tmp/url-receipt.json
+            /tmp/browser-receipt.json
+            /tmp/urls.json
