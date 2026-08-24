@@ -4,11 +4,16 @@ set -euo pipefail
 package_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="${OPS_TASK_RUNTIME_REPO_ROOT:-$(git rev-parse --show-toplevel)}"
 out="${OPS_TASK_RUNTIME_OUT:-${RUNNER_TEMP:-/tmp}/ops-task-runtime}"
-work="$out/work"
+scratch="$repo_root/.ops-task-runtime-build"
+scratch_rel=".ops-task-runtime-build"
+work="$scratch/work"
 assets="$out/assets"
 pack="$work/pack"
 source_manifest="$package_dir/source.json"
-rm -rf "$out"
+
+cleanup() { rm -rf "$scratch"; }
+trap cleanup EXIT
+rm -rf "$out" "$scratch"
 mkdir -p "$work" "$assets"
 
 node "$package_dir/tests/e2e.mjs"
@@ -75,6 +80,16 @@ with tarfile.open(sys.argv[1],'r:gz') as tf:
 PY
 }
 
+if test -n "$(git -C "$repo_root" status --porcelain --untracked-files=all -- packages/gosh)"; then
+  echo 'packages/gosh must be clean before Carrier creation' >&2
+  exit 1
+fi
+repo_head="$(git -C "$repo_root" rev-parse HEAD)"
+gosh_commit="${OPS_TASK_RUNTIME_GOSH_COMMIT:-$(git -C "$repo_root" log -1 --format=%H -- packages/gosh)}"
+gosh_tree="${OPS_TASK_RUNTIME_GOSH_TREE:-$(git -C "$repo_root" rev-parse HEAD:packages/gosh)}"
+test -n "$gosh_commit"
+test -n "$gosh_tree"
+
 input_dir="${OPS_TASK_RUNTIME_INPUT_DIR:-}"
 bin_dir="$work/input/bin"
 license_dir="$work/input/licenses"
@@ -84,11 +99,9 @@ if test -n "$input_dir"; then
   cp "$input_dir/actrun" "$bin_dir/actrun"
   cp "$input_dir/task" "$bin_dir/task"
   cp "$input_dir/gosh" "$bin_dir/gosh"
-  cp "${input_dir}/task_checksums.txt" "$work/task_checksums.txt"
-  printf 'Apache-2.0\n' > "$license_dir/actrun.LICENSE.txt"
-  cp "${input_dir}/sources/task-archive/LICENSE" "$license_dir/go-task.LICENSE.txt"
-  gosh_commit="${OPS_TASK_RUNTIME_GOSH_COMMIT:-local-proof}"
-  gosh_tree="${OPS_TASK_RUNTIME_GOSH_TREE:-local-proof}"
+  cp "$input_dir/task_checksums.txt" "$work/task_checksums.txt"
+  cp "$input_dir/actrun.LICENSE.txt" "$license_dir/actrun.LICENSE.txt"
+  cp "$input_dir/go-task.LICENSE.txt" "$license_dir/go-task.LICENSE.txt"
 else
   test "$(resolve_tag_commit "$actrun_repo" "$actrun_tag")" = "$actrun_commit"
   test "$(resolve_tag_commit "$task_repo" "$task_tag")" = "$task_commit"
@@ -108,10 +121,10 @@ else
   cp "$work/task-extract/task" "$bin_dir/task"
   cp "$task_checksums" "$work/task_checksums.txt"
   cp "$work/task-extract/LICENSE" "$license_dir/go-task.LICENSE.txt"
-  curl --fail --location --retry 5 --retry-all-errors --silent --show-error "https://raw.githubusercontent.com/$actrun_repo/$actrun_commit/LICENSE" -o "$license_dir/actrun.LICENSE.txt"
+  curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+    "https://raw.githubusercontent.com/$actrun_repo/$actrun_commit/LICENSE" \
+    -o "$license_dir/actrun.LICENSE.txt"
 
-  gosh_commit="$(git -C "$repo_root" rev-parse HEAD)"
-  gosh_tree="$(git -C "$repo_root" rev-parse HEAD^{tree})"
   mkdir -p "$work/gosh-a" "$work/gosh-b"
   (
     cd "$repo_root/packages/gosh"
@@ -128,23 +141,32 @@ test "$(sha "$work/task_checksums.txt")" = "$task_checksums_sha"
 "$bin_dir/actrun" --help >/dev/null
 "$bin_dir/task" --version | grep -F "${task_tag#v}"
 "$bin_dir/gosh" version >/dev/null
-
 gosh_binary_sha="$(sha "$bin_dir/gosh")"
 
-python3 - "$work/tool-spec.json" "$bin_dir" "$license_dir" <<'PY'
+bin_rel="$scratch_rel/work/input/bin"
+license_rel="$scratch_rel/work/input/licenses"
+tool_spec="$work/tool-spec.json"
+python3 - "$tool_spec" "$bin_rel" "$license_rel" <<'PY'
 import json,pathlib,sys
-out,bin_dir,licenses=map(pathlib.Path,sys.argv[1:])
+out=pathlib.Path(sys.argv[1]); bin_dir=sys.argv[2]; licenses=sys.argv[3]
 value={'tools':[
- {'name':'actrun','source':str(bin_dir/'actrun'),'smoke':['--help'],'files':[{'source':str(licenses/'actrun.LICENSE.txt'),'path':'share/licenses/actrun.LICENSE.txt'}]},
- {'name':'task','source':str(bin_dir/'task'),'smoke':['--version'],'files':[{'source':str(licenses/'go-task.LICENSE.txt'),'path':'share/licenses/go-task.LICENSE.txt'}]},
- {'name':'gosh','source':str(bin_dir/'gosh'),'smoke':['version']},
+ {'name':'actrun','source':f'{bin_dir}/actrun','smoke':['--help'],'files':[{'source':f'{licenses}/actrun.LICENSE.txt','path':'share/licenses/actrun.LICENSE.txt'}]},
+ {'name':'task','source':f'{bin_dir}/task','smoke':['--version'],'files':[{'source':f'{licenses}/go-task.LICENSE.txt','path':'share/licenses/go-task.LICENSE.txt'}]},
+ {'name':'gosh','source':f'{bin_dir}/gosh','smoke':['version']},
 ]}
 out.write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
 PY
-python3 "$repo_root/packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py" create --target-system x86_64-linux --tool-spec "$work/tool-spec.json" --out-dir "$pack" >/dev/null
-mkdir -p "$pack/fixtures"
+(
+  cd "$repo_root"
+  python3 packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py create \
+    --target-system x86_64-linux \
+    --tool-spec "$scratch_rel/work/tool-spec.json" \
+    --out-dir "$scratch_rel/work/pack" >/dev/null
+)
+mkdir -p "$pack/fixtures" "$pack/metadata"
 cp "$package_dir/Taskfile.yml" "$package_dir/probe.py" "$package_dir/workflow.yml" "$package_dir/source.json" "$pack/fixtures/"
-chmod 0644 "$pack/fixtures/Taskfile.yml" "$pack/fixtures/probe.py" "$pack/fixtures/workflow.yml" "$pack/fixtures/source.json"
+cp "$tool_spec" "$pack/metadata/tool-spec.json"
+chmod 0644 "$pack/fixtures/"* "$pack/metadata/tool-spec.json"
 
 python3 - "$pack" "$source_manifest" "$gosh_commit" "$gosh_tree" "$gosh_binary_sha" <<'PY'
 import hashlib,json,pathlib,sys
@@ -153,23 +175,34 @@ source=json.loads(source_path.read_text(encoding='utf-8'))
 manifest=json.loads((pack/'MANIFEST.json').read_text(encoding='utf-8'))
 manifest['createdAt']='1970-01-01T00:00:00Z'
 manifest['authority']=source['authority']
-manifest['toolSpec']={'path':'fixtures/source.json','sha256':hashlib.sha256((pack/'fixtures/source.json').read_bytes()).hexdigest()}
+actual_spec=pack/'metadata/tool-spec.json'
+manifest['toolSpec']={'path':'metadata/tool-spec.json','sha256':hashlib.sha256(actual_spec.read_bytes()).hexdigest()}
 logical={
  'actrun':f"github-release://{source['actrun']['repository']}/{source['actrun']['tag']}/{source['actrun']['asset']}",
  'task':f"github-release://{source['goTask']['repository']}/{source['goTask']['tag']}/{source['goTask']['asset']}",
- 'gosh':f"git://{source['gosh']['repository']}@{commit}#{source['gosh']['source']}",
+ 'gosh':f"git://{source['gosh']['repository']}@{commit}#{source['gosh']['source']}?tree={tree}",
 }
 for tool in manifest['tools']:
     tool['source']=logical[tool['name']]
 for row in manifest['files']:
     row['sourcePath']=None
 known={row['path'] for row in manifest['files']}
-for p in sorted((pack/'fixtures').iterdir()):
-    rel=p.relative_to(pack).as_posix()
-    if rel not in known:
-        manifest['files'].append({'path':rel,'sourcePath':None,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size,'executable':False})
+for directory in (pack/'fixtures', pack/'metadata'):
+    for p in sorted(directory.rglob('*')):
+        if not p.is_file(): continue
+        rel=p.relative_to(pack).as_posix()
+        if rel not in known:
+            manifest['files'].append({'path':rel,'sourcePath':None,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size,'executable':False})
 manifest['files']=sorted(manifest['files'],key=lambda x:x['path'])
-manifest['runtime']={'schema':'ops.taskRuntime/1','target':'linux-amd64','goshSourceCommit':commit,'goshSourceTree':tree,'goshBinarySha256':gosh_sha,'dagAuthority':'Taskfile.yml','entryAuthority':'.gosh/events.jsonl'}
+manifest['runtime']={
+ 'schema':'ops.taskRuntime/1',
+ 'target':'linux-amd64',
+ 'goshSourceCommit':commit,
+ 'goshSourceTree':tree,
+ 'goshBinarySha256':gosh_sha,
+ 'dagAuthority':'Taskfile.yml',
+ 'entryAuthority':'.gosh/events.jsonl generated at materialization',
+}
 (pack/'MANIFEST.json').write_text(json.dumps(manifest,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
 PY
 (
@@ -177,16 +210,28 @@ PY
   find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #' > SHA256SUMS
 )
 python3 "$repo_root/packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py" validate --pack-dir "$pack" >/dev/null
+if test "$repo_head" != "$gosh_commit"; then
+  ! grep -R -F "$repo_head" "$pack"
+fi
 
-archive_tmp="$work/runtime.tar.gz"
-(
-  cd "$pack"
-  tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' -cf - . | gzip -n -9 > "$archive_tmp"
-)
-archive_sha="$(sha "$archive_tmp")"
+deterministic_archive() {
+  local destination="$1"
+  (
+    cd "$pack"
+    tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+      --mode='u+rwX,go+rX,go-w' -cf - . | gzip -n -9 > "$destination"
+  )
+}
+archive_a="$work/runtime-a.tar.gz"
+archive_b="$work/runtime-b.tar.gz"
+deterministic_archive "$archive_a"
+deterministic_archive "$archive_b"
+cmp "$archive_a" "$archive_b"
+archive_sha="$(sha "$archive_a")"
 archive_name="ops-task-runtime.linux-amd64.$archive_sha.tar.gz"
 archive="$assets/$archive_name"
-mv "$archive_tmp" "$archive"
+mv "$archive_a" "$archive"
+rm "$archive_b"
 carrier_name="$archive_name.b64.txt"
 carrier="$assets/$carrier_name"
 base64 -w0 "$archive" > "$carrier"
@@ -237,7 +282,20 @@ source=json.load(open(source_path)); direct=json.load(open(direct_path)); via=js
 assert direct['status']==via['status']=='PASS'
 assert direct['semanticSha256']==via['semanticSha256']
 assert actrun['ok'] is True and actrun['state']=='completed'
-value={'schema':'ops.taskRuntimeCarrierReceipt/1','status':'PASS','authority':source['authority'],'target':source['target'],'sources':source,'gosh':{'sourceCommit':commit,'sourceTree':tree,'binarySha256':gosh_sha,'reproducibleBuild':True},'closure':{'archive':{'name':pathlib.Path(archive_path).name,'bytes':pathlib.Path(archive_path).stat().st_size,'sha256':hashlib.sha256(pathlib.Path(archive_path).read_bytes()).hexdigest()},'carrier':{'name':pathlib.Path(carrier_path).name,'bytes':pathlib.Path(carrier_path).stat().st_size,'sha256':hashlib.sha256(pathlib.Path(carrier_path).read_bytes()).hexdigest(),'codec':'standard-base64'}},'behavior':{'direct':direct,'actrun':via,'semanticSha256':direct['semanticSha256'],'failureExit':int(failure_exit),'dependentStarted':False},'manifestSha256':hashlib.sha256(pathlib.Path(manifest_path).read_bytes()).hexdigest()}
+value={
+ 'schema':'ops.taskRuntimeCarrierReceipt/1',
+ 'status':'PASS',
+ 'authority':source['authority'],
+ 'target':source['target'],
+ 'sources':source,
+ 'gosh':{'sourceCommit':commit,'sourceTree':tree,'binarySha256':gosh_sha,'reproducibleBuild':True},
+ 'closure':{
+   'archive':{'name':pathlib.Path(archive_path).name,'bytes':pathlib.Path(archive_path).stat().st_size,'sha256':hashlib.sha256(pathlib.Path(archive_path).read_bytes()).hexdigest()},
+   'carrier':{'name':pathlib.Path(carrier_path).name,'bytes':pathlib.Path(carrier_path).stat().st_size,'sha256':hashlib.sha256(pathlib.Path(carrier_path).read_bytes()).hexdigest(),'codec':'standard-base64'},
+ },
+ 'behavior':{'direct':direct,'actrun':via,'semanticSha256':direct['semanticSha256'],'failureExit':int(failure_exit),'dependentStarted':False},
+ 'manifestSha256':hashlib.sha256(pathlib.Path(manifest_path).read_bytes()).hexdigest(),
+}
 pathlib.Path(out).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
 PY
 printf '%s\n' "$archive_sha" > "$assets/payload.sha256"
