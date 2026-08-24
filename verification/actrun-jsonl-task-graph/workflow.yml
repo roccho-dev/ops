@@ -9,14 +9,6 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Execute JSONL target
-        run: >-
-          node verification/actrun-jsonl-task-graph/run-task-graph.mjs
-          --graph verification/actrun-jsonl-task-graph/tasks.jsonl
-          --target verify
-          --receipt verification/actrun-jsonl-task-graph/out/receipt.json
+        run: node run-task-graph.mjs --graph tasks.jsonl --target verify --receipt out/receipt.json
       - name: Verify materialized result
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(cat verification/actrun-jsonl-task-graph/out/value.txt)" = "42"
-          test "$(cat verification/actrun-jsonl-task-graph/out/status.txt)" = "PASS"
+        run: test "$(cat out/value.txt)" = "42" && test "$(cat out/status.txt)" = "PASS"
