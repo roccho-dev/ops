@@ -12,7 +12,7 @@ jobs:
   probe:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: cloudflare-production
     steps:
       - name: Find the exact App in immutable Pages history
@@ -28,10 +28,10 @@ jobs:
           root="$RUNNER_TEMP/probe"
           mkdir -p "$root/api" "$root/candidates" "$root/exact"
           : > "$root/bases.txt"
-          for page in $(seq 1 20); do
+          for page in $(seq 1 100); do
             code="$(curl --silent --show-error --output "$root/api/$page.json" --write-out '%{http_code}' \
               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT/deployments?per_page=100&page=$page")"
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT/deployments?per_page=25&page=$page")"
             test "$code" = 200
             count="$(python3 - "$root/api/$page.json" "$root/bases.txt" <<'PY'
           import json,sys
