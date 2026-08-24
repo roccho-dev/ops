@@ -21,7 +21,7 @@ PARTS = (
         "a0904cf208a3a9ac87afa37b8b6dfc4fe13c368f",
     ),
 )
-CARRIER_BYTES = 30_024
+CARRIER_RAW_BYTES = 30_024
 APP_BYTES = 2_412_388
 APP_SHA256 = "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
 APP_GIT_BLOB = "ebdb39084fa3cc57b0295818f6f339f62f0fca90"
@@ -36,8 +36,6 @@ def git_blob_sha(data: bytes) -> str:
 
 
 def fetch_part(repository: str, path: str, expected_blob: str) -> bytes:
-    # Deliberately mirror the already-written projection proof workflow:
-    # gh api --jq .content | tr -d '\n' | base64 --decode
     api_base64 = subprocess.check_output(
         [
             "gh",
@@ -62,11 +60,14 @@ def fetch_part(repository: str, path: str, expected_blob: str) -> bytes:
 
 
 def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
-    carrier = b"".join(fetch_part(repository, path, blob) for path, blob in PARTS)
-    if len(carrier) != CARRIER_BYTES:
+    carrier_raw = b"".join(fetch_part(repository, path, blob) for path, blob in PARTS)
+    if len(carrier_raw) != CARRIER_RAW_BYTES:
         raise RuntimeError(
-            f"projection Carrier length mismatch: {len(carrier)} != {CARRIER_BYTES}"
+            f"projection Carrier length mismatch: {len(carrier_raw)} != {CARRIER_RAW_BYTES}"
         )
+    carrier = b"".join(carrier_raw.split())
+    if not carrier or len(carrier) % 4:
+        raise RuntimeError(f"normalized Carrier length is invalid: {len(carrier)}")
     packed = base64.b64decode(carrier, validate=True)
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -107,6 +108,8 @@ def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
             "parts": [
                 {"path": path, "gitBlob": blob} for path, blob in PARTS
             ],
+            "carrierRawBytes": len(carrier_raw),
+            "carrierRawSha256": sha256(carrier_raw),
             "carrierBytes": len(carrier),
             "carrierSha256": sha256(carrier),
             "packedBytes": len(packed),
