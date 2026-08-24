@@ -1,0 +1,46 @@
+version: '3'
+
+silent: true
+
+tasks:
+  parallel-a:
+    cmds:
+      - /usr/bin/python3 probe.py run parallel-a 2.0 out/parallel/a.json
+
+  parallel-b:
+    cmds:
+      - /usr/bin/python3 probe.py run parallel-b 2.0 out/parallel/b.json
+
+  parallel:
+    deps: [parallel-a, parallel-b]
+    cmds:
+      - /usr/bin/python3 probe.py join parallel out/parallel/a.json out/parallel/b.json out/parallel/join.json
+
+  serial-a:
+    cmds:
+      - /usr/bin/python3 probe.py run serial-a 2.0 out/serial/a.json
+
+  serial-b:
+    cmds:
+      - /usr/bin/python3 probe.py run serial-b 2.0 out/serial/b.json
+
+  serial:
+    cmds:
+      - task: serial-a
+      - task: serial-b
+      - /usr/bin/python3 probe.py join serial out/serial/a.json out/serial/b.json out/serial/join.json
+
+  ci:
+    deps: [parallel]
+    cmds:
+      - task: serial
+      - /usr/bin/python3 probe.py verify out/parallel/a.json out/parallel/b.json out/parallel/join.json out/serial/a.json out/serial/b.json out/serial/join.json out/proof.json
+
+  fail-root:
+    cmds:
+      - /usr/bin/python3 probe.py fail out/failure/root.json
+
+  must-block:
+    deps: [fail-root]
+    cmds:
+      - /usr/bin/python3 probe.py forbidden out/failure/unexpected.txt

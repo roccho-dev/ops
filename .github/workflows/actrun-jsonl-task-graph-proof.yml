@@ -1,11 +1,11 @@
-name: actrun carry and JSONL task graph proof
+name: gosh go-task actrun carry proof
 
 on:
   pull_request:
     branches: [proposals]
     paths:
       - ".github/workflows/actrun-jsonl-task-graph-proof.yml"
-      - "verification/actrun-jsonl-task-graph/**"
+      - "verification/gosh-go-task-actrun/**"
   workflow_dispatch:
 
 permissions:
@@ -14,22 +14,22 @@ permissions:
 jobs:
   proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - name: Carry actrun and execute JSONL graph
+      - name: Carry and prove actrun -> gosh -> go-task
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: bash verification/actrun-jsonl-task-graph/proof.sh
+        run: bash verification/gosh-go-task-actrun/proof.sh
 
-      - name: Upload exact carry and execution evidence
+      - name: Upload exact binaries and evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
-          name: actrun-jsonl-task-graph-proof-${{ github.run_id }}
-          path: ${{ runner.temp }}/actrun-jsonl-proof/
+          name: gosh-go-task-actrun-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/gosh-go-task-actrun-proof/
           if-no-files-found: error
           retention-days: 30

@@ -1,0 +1,9 @@
+name: gosh go-task actrun proof
+on: push
+permissions: {}
+jobs:
+  local-chain:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Execute JSONL-bound Task DAG
+        run: ./bin/gosh --root . run ci
