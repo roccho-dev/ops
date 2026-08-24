@@ -1,0 +1,100 @@
+name: proof-care-night-insurance-presentation
+
+on:
+  push:
+    branches:
+      - proof/care-night-insurance-presentation-20260824
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser runtime
+        run: |
+          python -m pip install playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Generate URL and prove in real Chromium
+        shell: bash
+        run: |
+          cat > /tmp/care-night-insurance.jsonl <<'JSONL'
+          {"type":"meta","schema":"business-model-semantic-jsonl/2","id":"care-night-insurance-chain-3","title":"夜勤を、欠員リスクではなく補償付き供給へ変える","kicker":"介護施設 × 夜勤代行 × 保険会社｜BUSINESS MODEL","start":"t0"}
+          {"type":"stage","id":"t0","order":0,"short":"t0","caption":"能力","name":"t0｜能力の核","goal":"保険付き夜勤代行を構成","change":"人員供給・記録・補償を一体化","evidence":"夜勤人員の供給、勤務記録、事故時の補償条件を同じ案件単位で扱える。","gate":"能力の核","focusRef":"cni-t0-operator"}
+          {"type":"stage","id":"t1","order":1,"short":"t1","caption":"入力","name":"t1｜三者の入力","goal":"夜勤需要と引受条件を受領","change":"施設要件・人員条件・補償条件","evidence":"介護施設の夜勤要件と、保険会社の引受条件を夜勤代行会社が同じ案件へ結び付けられる。","gate":"入力成立","focusRef":"cni-t1-facility"}
+          {"type":"stage","id":"t2","order":2,"short":"t2","caption":"商品","name":"t2｜補償付き夜勤提供","goal":"人手と安心を一つの商品へ変換","change":"夜勤代行・勤務証跡・補償設計","evidence":"施設には夜勤人員を、保険会社には勤務と事故予防の証跡を返せる。","gate":"提供成立","focusRef":"cni-t2-operator"}
+          {"type":"stage","id":"t3","order":3,"short":"t3","caption":"取引","name":"t3｜継続取引","goal":"利用料と保険料を成立","change":"委託料・保険料・補償責任","evidence":"施設が夜勤代行料を支払い、夜勤代行会社が保険料を支払い、事故時の補償責任を契約で固定できる。","gate":"取引成立","focusRef":"cni-t3-operator"}
+          {"type":"stage","id":"tN","order":4,"short":"tN","caption":"反復","name":"tN｜モデル確立","goal":"勤務実績で三者の条件を改善","change":"欠員率・事故率・引受精度の改善","evidence":"勤務・欠員・事故の履歴から配置条件、価格、補償条件を更新し、同じ交換を反復できる。","gate":"モデル確立","focusRef":"cni-tn-operator"}
+          {"type":"actor","id":"facility","role":"facility","label":"介護施設","detail":"夜勤欠員を埋めつつ事故時の損失も読みやすくしたい","born":"t1"}
+          {"type":"actor","id":"operator","role":"operator","label":"夜勤代行会社","detail":"人員供給と勤務証跡と補償を一つの契約へ束ねる","born":"t0"}
+          {"type":"actor","id":"insurer","role":"insurer","label":"保険会社","detail":"観測可能な勤務データを使って夜勤リスクを引き受けたい","born":"t1"}
+          {"type":"node","id":"operator-core","owner":"operator","kind":"capability","role":"能力層","label":"夜勤供給オペレーション","detail":"人員確保・配置・勤務記録・補償連携","born":"t0"}
+          {"type":"node","id":"operator-judgment","owner":"operator","parent":"operator-core","kind":"person","role":"判断主体","label":"配置・事故判断","detail":"受託可否、配置、事故報告を管理","born":"t0"}
+          {"type":"node","id":"facility-input","owner":"facility","kind":"input","role":"保有する入力","label":"夜勤要件","items":["必要人数","資格","時間帯","ケア条件"],"born":"t1"}
+          {"type":"node","id":"insurer-input","owner":"insurer","kind":"input","role":"保有する入力","label":"引受条件","items":["補償範囲","免責","保険料条件","事故報告条件"],"born":"t1"}
+          {"type":"node","id":"facility-service","owner":"facility","kind":"benefit","role":"施設成果","label":"補償付き夜勤を確保","detail":"欠員対応と事故時の損失上限を同時に得る","born":"t2"}
+          {"type":"node","id":"insurer-evidence","owner":"insurer","kind":"benefit","role":"保険成果","label":"勤務証跡が見える","detail":"配置、資格、勤務、事故予防の情報を受け取る","born":"t2"}
+          {"type":"node","id":"operator-data","owner":"operator","kind":"benefit","role":"運営成果","label":"運用とリスクが同じ台帳に載る","detail":"配置品質と補償条件を同じ案件で改善できる","born":"t2"}
+          {"type":"node","id":"facility-outcome","owner":"facility","kind":"outcome","role":"施設成果","label":"夜勤欠員と事故損失を抑える","detail":"夜勤体制を維持しながら突発損失を限定","born":"t3"}
+          {"type":"node","id":"operator-fee","owner":"operator","kind":"outcome","role":"運営成果","label":"高単価の継続売上","detail":"夜勤代行料から人件費と保険料を引いた粗利を得る","born":"t3"}
+          {"type":"node","id":"insurer-premium","owner":"insurer","kind":"outcome","role":"保険成果","label":"観測可能な保険料収入","detail":"勤務証跡付きの引受で継続保険料を得る","born":"t3"}
+          {"type":"node","id":"facility-repeat","owner":"facility","kind":"repeat","role":"継続","label":"欠員時の調達を標準化","detail":"毎回の採用や緊急手配を減らす","born":"tN"}
+          {"type":"node","id":"operator-repeat","owner":"operator","kind":"proof","role":"成立条件","label":"供給品質と粗利を反復","items":["充足率向上","事故率低下","継続契約"],"born":"tN"}
+          {"type":"node","id":"insurer-repeat","owner":"insurer","kind":"repeat","role":"継続","label":"引受条件を改善","detail":"実績データで保険料と免責を調整","born":"tN"}
+          {"type":"exchange","id":"facility-requirements","from":"facility","to":"operator","kind":"input","label":"夜勤要件","detail":"必要人数、資格、時間帯、ケア条件","born":"t1"}
+          {"type":"exchange","id":"insurer-terms","from":"insurer","to":"operator","kind":"input","label":"引受・補償条件","detail":"補償範囲、免責、保険料、報告要件","born":"t1"}
+          {"type":"exchange","id":"operator-night-service","from":"operator","to":"facility","kind":"offer","label":"補償付き夜勤代行","detail":"人員配置、勤務、事故時補償を束ねた提供","born":"t2"}
+          {"type":"exchange","id":"operator-risk-evidence","from":"operator","to":"insurer","kind":"signal","label":"勤務・事故予防証跡","detail":"配置、資格、勤務実績、インシデント記録","born":"t2"}
+          {"type":"exchange","id":"facility-fee","from":"facility","to":"operator","kind":"payment","label":"夜勤代行料","detail":"補償を含む継続利用料","born":"t3"}
+          {"type":"exchange","id":"operator-premium","from":"operator","to":"insurer","kind":"payment","label":"保険料","detail":"夜勤案件に対応する保険料","born":"t3"}
+          {"type":"exchange","id":"insurer-coverage","from":"insurer","to":"operator","kind":"coverage","label":"事故時の補償","detail":"契約条件に沿った保険金または補償責任","born":"t3"}
+          {"type":"activity","id":"cni-t0-operator","stage":"t0","actor":"operator","label":"補償付き夜勤能力を構成","summary":"人員供給、勤務記録、保険連携を一つの運用へまとめる","primary":true}
+          {"type":"activity","id":"cni-t1-facility","stage":"t1","actor":"facility","label":"夜勤要件を提示","summary":"人数、資格、時間帯、ケア条件を渡す","primary":true}
+          {"type":"activity","id":"cni-t1-operator","stage":"t1","actor":"operator","label":"三者条件を受領","summary":"施設要件と引受条件を同じ案件へ整理する","primary":false}
+          {"type":"activity","id":"cni-t1-insurer","stage":"t1","actor":"insurer","label":"引受条件を提示","summary":"補償範囲、免責、保険料条件を渡す","primary":false}
+          {"type":"activity","id":"cni-t2-facility","stage":"t2","actor":"facility","label":"補償付き夜勤を受領","summary":"必要な夜勤人員と事故時の補償条件を確認する","primary":false}
+          {"type":"activity","id":"cni-t2-operator","stage":"t2","actor":"operator","label":"夜勤を配置し証跡を作る","summary":"勤務を履行し施設と保険会社へ必要情報を返す","primary":true}
+          {"type":"activity","id":"cni-t2-insurer","stage":"t2","actor":"insurer","label":"勤務証跡を確認","summary":"引受条件と実際の勤務リスクを照合する","primary":false}
+          {"type":"activity","id":"cni-t3-facility","stage":"t3","actor":"facility","label":"夜勤代行料を支払う","summary":"欠員対応と補償を継続契約として購入する","primary":false}
+          {"type":"activity","id":"cni-t3-operator","stage":"t3","actor":"operator","label":"委託料と保険料を成立","summary":"施設から利用料を受け、保険会社へ保険料を支払う","primary":true}
+          {"type":"activity","id":"cni-t3-insurer","stage":"t3","actor":"insurer","label":"補償責任を引き受ける","summary":"契約条件に沿って事故時の補償責任を持つ","primary":false}
+          {"type":"activity","id":"cni-tn-facility","stage":"tN","actor":"facility","label":"欠員調達を標準化","summary":"夜勤条件を再利用し手配時間を短縮する","primary":false}
+          {"type":"activity","id":"cni-tn-operator","stage":"tN","actor":"operator","label":"配置と価格を改善","summary":"充足、事故、粗利の履歴から運用を更新する","primary":true}
+          {"type":"activity","id":"cni-tn-insurer","stage":"tN","actor":"insurer","label":"引受条件を更新","summary":"事故率と勤務証跡から保険料と免責を調整する","primary":false}
+          {"type":"transition","id":"cni-tr-01","from":"cni-t0-operator","to":"cni-t1-facility","kind":"next","label":"能力から三者入力へ"}
+          {"type":"transition","id":"cni-tr-12","from":"cni-t1-facility","to":"cni-t2-operator","kind":"next","label":"入力から提供へ"}
+          {"type":"transition","id":"cni-tr-23","from":"cni-t2-operator","to":"cni-t3-operator","kind":"next","label":"提供から取引へ"}
+          {"type":"transition","id":"cni-tr-3n","from":"cni-t3-operator","to":"cni-tn-operator","kind":"next","label":"取引から反復へ"}
+          JSONL
+
+          cd verification/mobile-agent-business-model-presentation
+          node scripts/generate-url.mjs /tmp/care-night-insurance.jsonl https://stg-mobile-agent.pages.dev/business-model/ /tmp/url-receipt.json | tee /tmp/generate.stdout.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          receipt = json.loads(Path('/tmp/url-receipt.json').read_text())
+          assert receipt['status'] == 'PASS'
+          assert receipt['pattern'] == 'business-model/1'
+          assert receipt['actorCount'] == 3
+          assert receipt['urlChars'] <= receipt['limitChars']
+          Path('/tmp/urls.json').write_text(json.dumps({
+              'schema': 'mobile-agent.business-model-public-url-test/1',
+              'results': [{'actorCount': 3, 'url': receipt['url']}],
+          }, ensure_ascii=False), encoding='utf-8')
+          PY
+          python3 tests/e2e/public_host_projection.py /tmp/urls.json /tmp/browser-receipt.json
+          cat /tmp/url-receipt.json
+          cat /tmp/browser-receipt.json
+      - name: Upload receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: care-night-insurance-presentation-proof
+          path: |
+            /tmp/url-receipt.json
+            /tmp/browser-receipt.json
+            /tmp/urls.json
