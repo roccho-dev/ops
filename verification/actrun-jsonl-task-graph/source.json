@@ -1,0 +1,7 @@
+{
+  "schema": "ops.actrunCarrySource/1",
+  "repository": "mizchi/actrun",
+  "tag": "v0.29.0",
+  "commit": "b2fc1c9d88c921b670fc2c2651728967b414a8c7",
+  "asset": "actrun-linux-x64.tar.gz"
+}
