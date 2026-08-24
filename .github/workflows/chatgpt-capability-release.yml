@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "packages/chatgpt-capability/**"
+      - "packages/ops-task-runtime/**"
       - ".github/workflows/chatgpt-capability-release.yml"
   workflow_dispatch:
 
@@ -181,3 +182,115 @@ jobs:
             curl --fail --location --retry 5 --retry-all-errors --silent --show-error "${x[1]}" -o "$RUNNER_TEMP/readback/${x[0]}"
             cmp "$ASSETS/${x[0]}" "$RUNNER_TEMP/readback/${x[0]}"
           done < "$RUNNER_TEMP/uploaded.jsonl"
+
+
+  task-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: packages/gosh/go.mod
+
+      - name: Build and verify portable task runtime Carrier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPS_TASK_RUNTIME_OUT: ${{ runner.temp }}/ops-task-runtime
+        shell: bash
+        run: packages/ops-task-runtime/ci.sh
+
+      - name: Preserve portable task runtime assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-task-runtime-${{ github.sha }}
+          path: ${{ runner.temp }}/ops-task-runtime/assets/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish or verify immutable portable task runtime Release
+        if: github.ref == 'refs/heads/proposals'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/ops-task-runtime/assets"
+          payload_sha="$(cat "$assets/payload.sha256")"
+          tag="ops-task-runtime-linux-amd64-$payload_sha"
+          readback="$RUNNER_TEMP/ops-task-runtime-release-readback"
+          rm -rf "$readback"
+          mkdir -p "$readback"
+
+          created=false
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            :
+          else
+            gh release create "$tag" "$assets"/* \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft \
+              --title "$tag" --notes 'roccho-dev/adrs#317'
+            created=true
+          fi
+
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$readback"
+          python3 - "$assets" "$readback" <<'PY'
+          import pathlib,sys
+          expected=pathlib.Path(sys.argv[1]); observed=pathlib.Path(sys.argv[2])
+          left=sorted(p.name for p in expected.iterdir())
+          right=sorted(p.name for p in observed.iterdir())
+          assert left==right,(left,right)
+          for name in left:
+              assert (expected/name).read_bytes()==(observed/name).read_bytes(),name
+          PY
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft | grep -qx true; then
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          fi
+
+          public="$RUNNER_TEMP/ops-task-runtime-public-readback"
+          rm -rf "$public"
+          mkdir -p "$public"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          for file in "$assets"/*; do
+            name="$(basename "$file")"
+            curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 \
+              --silent --show-error "$base/$name" -o "$public/$name"
+            cmp "$file" "$public/$name"
+          done
+
+          carrier="$(find "$public" -maxdepth 1 -type f -name '*.tar.gz.b64.txt' -printf '%f\n')"
+          manifest="$(find "$public" -maxdepth 1 -type f -name '*.manifest.json' -printf '%f\n')"
+          source="$(find "$public" -maxdepth 1 -type f -name '*.source.json' -printf '%f\n')"
+          test -n "$carrier"
+          test -n "$manifest"
+          test -n "$source"
+          python3 - "$RUNNER_TEMP/ops-task-runtime-public-request.json" "$base" "$public" "$carrier" "$manifest" "$source" "$payload_sha" <<'PY'
+          import hashlib,json,pathlib,sys
+          out,base,root,carrier,manifest,source,payload=sys.argv[1:]
+          root=pathlib.Path(root)
+          names=[carrier,manifest,source]
+          value={
+              'schema':'carrier-job/1',
+              'request_id':'ops-task-runtime-public',
+              'sources':[{'name':name,'url':base+'/'+name,'sha256':hashlib.sha256((root/name).read_bytes()).hexdigest()} for name in names],
+              'carrier_name':carrier,
+              'payload_sha256':payload,
+          }
+          pathlib.Path(out).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize \
+            --request "$RUNNER_TEMP/ops-task-runtime-public-request.json" \
+            --out "$RUNNER_TEMP/ops-task-runtime-public-materialized"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify \
+            --input "$RUNNER_TEMP/ops-task-runtime-public-materialized" \
+            --receipt "$RUNNER_TEMP/ops-task-runtime-public-receipt.json"
+          mkdir -p "$RUNNER_TEMP/ops-task-runtime-public-runtime"
+          tar -xzf "$RUNNER_TEMP/ops-task-runtime-public-materialized/payload.bin" \
+            -C "$RUNNER_TEMP/ops-task-runtime-public-runtime"
+          "$RUNNER_TEMP/ops-task-runtime-public-runtime/bin/gosh" version
+          "$RUNNER_TEMP/ops-task-runtime-public-runtime/bin/task" --version
+          "$RUNNER_TEMP/ops-task-runtime-public-runtime/bin/actrun" --help >/dev/null
+          printf '{"schema":"ops.taskRuntimeRelease/1","status":"PASS","tag":"%s","createdThisRun":%s}\n' "$tag" "$created"

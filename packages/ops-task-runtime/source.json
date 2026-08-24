@@ -1,0 +1,28 @@
+{
+  "schema": "ops.taskRuntimeSources/1",
+  "authority": "roccho-dev/adrs#317",
+  "target": "linux-amd64",
+  "actrun": {
+    "repository": "mizchi/actrun",
+    "tag": "v0.29.0",
+    "commit": "b2fc1c9d88c921b670fc2c2651728967b414a8c7",
+    "asset": "actrun-linux-x64.tar.gz",
+    "archiveSha256": "07c58facb2b1849fbbcab51fcaf99d2c0f8d32af56f368db9792a8af1d8738a6",
+    "binarySha256": "40108290d0c95c5d20de3c3d8eeff1bf312628b7d811dc19db77479f91b1223b"
+  },
+  "goTask": {
+    "repository": "go-task/task",
+    "tag": "v3.53.1",
+    "commit": "ff3372fc50a47348610d722616f1a073aace0513",
+    "asset": "task_linux_amd64.tar.gz",
+    "checksumsAsset": "task_checksums.txt",
+    "archiveSha256": "a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7",
+    "checksumsSha256": "acd6542d33465e22216e47e10997d1c5a68f54a2af0c900083eeaaad5ce85337",
+    "binarySha256": "48fc3727244d39e0fe04f99c512d0a6eaabf12be376828d96ad1545054523aeb"
+  },
+  "gosh": {
+    "repository": "roccho-dev/ops",
+    "source": "packages/gosh",
+    "build": ["CGO_ENABLED=0", "-buildvcs=false", "-trimpath"]
+  }
+}
