@@ -56,6 +56,11 @@ function orderFor(tasks, target) {
   return ordered;
 }
 
+function writeReceipt(target, value) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${JSON.stringify(value)}\n`, "utf8");
+}
+
 function run() {
   const opts = options(process.argv.slice(2));
   const root = process.cwd();
@@ -89,8 +94,10 @@ function run() {
     order: Object.freeze(ordered.map(task => task.id)),
     results: Object.freeze(results),
   });
-  fs.mkdirSync(path.dirname(receipt), { recursive: true });
-  fs.writeFileSync(receipt, `${JSON.stringify(value)}\n`, "utf8");
+  writeReceipt(receipt, value);
+  if (process.env.TASK_GRAPH_PROOF_DIR) {
+    writeReceipt(path.join(path.resolve(process.env.TASK_GRAPH_PROOF_DIR), "task-graph.receipt.json"), value);
+  }
   console.log(JSON.stringify(value));
 }
 
