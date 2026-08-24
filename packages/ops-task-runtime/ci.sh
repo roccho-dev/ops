@@ -119,7 +119,6 @@ else
   tar -xzf "$task_archive" -C "$work/task-extract" task LICENSE
   cp "$work/actrun-extract/actrun" "$bin_dir/actrun"
   cp "$work/task-extract/task" "$bin_dir/task"
-  cp "$task_checksums" "$work/task_checksums.txt"
   cp "$work/task-extract/LICENSE" "$license_dir/go-task.LICENSE.txt"
   curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
     "https://raw.githubusercontent.com/$actrun_repo/$actrun_commit/LICENSE" \
