@@ -1,4 +1,4 @@
-name: tmp probe Mobile Agent Pages history
+name: tmp probe exact Mobile Agent Artifact
 
 on:
   pull_request:
@@ -6,6 +6,7 @@ on:
       - '.github/workflows/tmp-probe-mobile-agent-pages.yml'
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -13,131 +14,136 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 40
-    environment: cloudflare-production
     steps:
-      - name: Find the exact App in all immutable Pages histories
+      - name: Find exact App in unexpired GitHub Actions artifacts
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           APP_BYTES: '2412388'
           APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
         shell: bash
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/probe"
-          mkdir -p "$root/api/projects" "$root/api/deployments" "$root/candidates" "$root/exact"
-          : > "$root/projects.txt"
-          : > "$root/bases.txt"
+          mkdir -p "$root/zips" "$root/exact"
+          python3 - "$root" <<'PY'
+          import bz2, gzip, hashlib, io, json, lzma, os, pathlib, re, tarfile, urllib.request, zipfile
 
-          response="$root/api/projects/all.json"
-          code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects")"
-          test "$code" = 200
-          python3 - "$response" "$root/projects.txt" "$root/bases.txt" <<'PY'
-          import json,sys
-          value=json.load(open(sys.argv[1],encoding='utf-8'))
-          assert value.get('success') is True,value
-          rows=value.get('result') or []
-          with open(sys.argv[2],'w',encoding='utf-8') as projects, open(sys.argv[3],'w',encoding='utf-8') as bases:
-              for row in rows:
-                  name=str(row['name'])
-                  projects.write(name+'\n')
-                  subdomain=row.get('subdomain')
-                  if subdomain:
-                      text=str(subdomain).rstrip('/')
-                      if not text.startswith('http'): text='https://'+text
-                      bases.write(text+'\n')
-                  for domain in row.get('domains') or []:
-                      text=str(domain).rstrip('/')
-                      if not text.startswith('http'): text='https://'+text
-                      bases.write(text+'\n')
-          PY
-          sort -u "$root/projects.txt" -o "$root/projects.txt"
+          root=pathlib.Path(__import__('sys').argv[1])
+          repo=os.environ['GITHUB_REPOSITORY']
+          token=os.environ['GH_TOKEN']
+          expected_bytes=int(os.environ['APP_BYTES'])
+          expected_sha=os.environ['APP_SHA256']
+          max_expanded=128*1024*1024
+          name_filter=re.compile(r'(mobile.?agent|preset|seq|carrier|semantic.?map|smap)',re.I)
 
-          while IFS= read -r project; do
-            test -n "$project" || continue
-            encoded="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$project")"
-            safe="$(printf '%s' "$project" | sha256sum | cut -d' ' -f1)"
-            mkdir -p "$root/api/deployments/$safe"
-            for page in $(seq 1 100); do
-              response="$root/api/deployments/$safe/$page.json"
-              code="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$encoded/deployments?per_page=25&page=$page")"
-              test "$code" = 200
-              count="$(python3 - "$response" "$root/bases.txt" <<'PY'
-          import json,sys
-          value=json.load(open(sys.argv[1],encoding='utf-8'))
-          assert value.get('success') is True,value
-          rows=value.get('result') or []
-          with open(sys.argv[2],'a',encoding='utf-8') as out:
-              for row in rows:
-                  values=[row.get('url'),*(row.get('aliases') or [])]
-                  for item in values:
-                      if not item: continue
-                      text=str(item).rstrip('/')
-                      if not text.startswith('http'): text='https://'+text
-                      out.write(text+'\n')
-          print(len(rows))
-          PY
-              )"
-              test "$count" -gt 0 || break
-            done
-          done < "$root/projects.txt"
+          def api(path):
+              request=urllib.request.Request(
+                  'https://api.github.com/'+path,
+                  headers={
+                      'Accept':'application/vnd.github+json',
+                      'Authorization':'Bearer '+token,
+                      'X-GitHub-Api-Version':'2022-11-28',
+                      'User-Agent':'ops-mobile-agent-artifact-probe/1',
+                  },
+              )
+              with urllib.request.urlopen(request,timeout=120) as response:
+                  return response.read()
 
-          printf '%s\n' \
-            'https://stg-mobile-agent.pages.dev' \
-            'https://stg-mobile-agent.roccho.workers.dev' \
-            'https://mobile-agent.roccho.workers.dev' \
-            'https://stg-mobile.pages.dev' \
-            'https://stg-mobile.roccho.workers.dev' >> "$root/bases.txt"
-          sort -u "$root/bases.txt" -o "$root/bases.txt"
-          : > "$root/report.jsonl"
-          found=0
-          while IFS= read -r base; do
-            test -n "$base" || continue
-            for path in app/index.html app/ index.html; do
-              url="$base/$path"
-              key="$(printf '%s' "$url" | sha256sum | cut -d' ' -f1)"
-              out="$root/candidates/$key.bin"
-              code="$(curl --location --max-time 45 --retry 2 --retry-all-errors --silent --show-error \
-                --header 'Cache-Control: no-cache' --output "$out" --write-out '%{http_code}' "$url" || true)"
-              if [ "$code" = 200 ]; then
-                bytes="$(wc -c < "$out")"
-                sha="$(sha256sum "$out" | cut -d' ' -f1)"
-              else
-                bytes=0
-                sha=unavailable
-                rm -f "$out"
-              fi
-              python3 - "$root/report.jsonl" "$url" "$code" "$bytes" "$sha" <<'PY'
-          import json,sys
-          with open(sys.argv[1],'a',encoding='utf-8') as out:
-              out.write(json.dumps({'url':sys.argv[2],'http':sys.argv[3],'bytes':int(sys.argv[4]),'sha256':sys.argv[5]},sort_keys=True)+'\n')
+          artifacts=[]
+          for page in range(1,101):
+              value=json.loads(api(f'repos/{repo}/actions/artifacts?per_page=100&page={page}'))
+              rows=value.get('artifacts') or []
+              artifacts.extend(rows)
+              if len(rows)<100: break
+
+          active=[row for row in artifacts if not row.get('expired')]
+          candidates=[row for row in active if name_filter.search(str(row.get('name','')))]
+          (root/'inventory.json').write_text(json.dumps({
+              'schema':'ops.mobileAgentArtifactInventory/1',
+              'total':len(artifacts),'active':len(active),'candidates':len(candidates),
+              'rows':[{
+                  'id':row['id'],'name':row['name'],'size':row['size_in_bytes'],
+                  'createdAt':row.get('created_at'),'expiresAt':row.get('expires_at'),
+                  'runId':(row.get('workflow_run') or {}).get('id'),
+                  'headSha':(row.get('workflow_run') or {}).get('head_sha'),
+              } for row in candidates],
+          },indent=2,sort_keys=True)+'\n')
+
+          def exact(data):
+              return len(data)==expected_bytes and hashlib.sha256(data).hexdigest()==expected_sha
+
+          def inspect(data,label,depth=0):
+              if exact(data): return data,label
+              if depth>=5 or len(data)>max_expanded: return None
+              # ZIP, including Actions artifact and nested dist ZIPs.
+              try:
+                  with zipfile.ZipFile(io.BytesIO(data)) as source:
+                      for info in source.infolist():
+                          if info.is_dir() or info.file_size>max_expanded: continue
+                          value=source.read(info)
+                          found=inspect(value,label+'!/'+info.filename,depth+1)
+                          if found: return found
+              except (zipfile.BadZipFile,RuntimeError,ValueError): pass
+              # Tar archives, with any compression supported by tarfile.
+              try:
+                  with tarfile.open(fileobj=io.BytesIO(data),mode='r:*') as source:
+                      for member in source.getmembers():
+                          if not member.isfile() or member.size>max_expanded: continue
+                          handle=source.extractfile(member)
+                          if handle is None: continue
+                          value=handle.read(max_expanded+1)
+                          if len(value)>max_expanded: continue
+                          found=inspect(value,label+'!/'+member.name,depth+1)
+                          if found: return found
+              except (tarfile.TarError,EOFError,OSError): pass
+              # Single-stream compressed payloads.
+              for decoder,suffix in ((gzip.decompress,'!gzip'),(bz2.decompress,'!bz2'),(lzma.decompress,'!xz')):
+                  try:
+                      value=decoder(data)
+                  except Exception:
+                      continue
+                  if len(value)<=max_expanded:
+                      found=inspect(value,label+suffix,depth+1)
+                      if found: return found
+              return None
+
+          report=[]
+          for index,row in enumerate(candidates):
+              artifact_id=row['id']
+              label=f"artifact:{artifact_id}:{row['name']}"
+              try:
+                  data=api(f'repos/{repo}/actions/artifacts/{artifact_id}/zip')
+                  (root/'zips'/f'{artifact_id}.zip').write_bytes(data)
+                  found=inspect(data,label)
+                  report.append({'id':artifact_id,'name':row['name'],'zipBytes':len(data),'found':bool(found)})
+                  if found:
+                      payload,source=found
+                      (root/'exact'/'app.index.html').write_bytes(payload)
+                      (root/'exact'/'source.json').write_text(json.dumps({
+                          'schema':'ops.mobileAgentExactArtifactSource/1',
+                          'artifactId':artifact_id,'artifactName':row['name'],
+                          'workflowRunId':(row.get('workflow_run') or {}).get('id'),
+                          'headSha':(row.get('workflow_run') or {}).get('head_sha'),
+                          'sourcePath':source,'appBytes':len(payload),'appSha256':expected_sha,
+                      },indent=2,sort_keys=True)+'\n')
+                      break
+              except Exception as error:
+                  report.append({'id':artifact_id,'name':row['name'],'error':repr(error),'found':False})
+          (root/'report.json').write_text(json.dumps({'schema':'ops.mobileAgentArtifactProbe/1','rows':report},indent=2,sort_keys=True)+'\n')
+          target=root/'exact'/'app.index.html'
+          if not target.is_file():
+              raise SystemExit('BLOCKED_EXACT_APP_NOT_FOUND_IN_ACTIVE_ARTIFACTS')
+          payload=target.read_bytes()
+          assert exact(payload)
+          print((root/'exact'/'source.json').read_text())
+          print('PASS_EXACT_APP_FOUND_IN_GITHUB_ARTIFACT')
           PY
-              if [ "$bytes" = "$APP_BYTES" ] && [ "$sha" = "$APP_SHA256" ]; then
-                cp "$out" "$root/exact/app.index.html"
-                printf '%s\n' "$url" > "$root/exact/source-url.txt"
-                found=1
-                break 2
-              fi
-            done
-          done < "$root/bases.txt"
-          echo "projects=$(wc -l < "$root/projects.txt") bases=$(wc -l < "$root/bases.txt")"
-          if [ "$found" -ne 1 ]; then
-            echo 'BLOCKED_EXACT_APP_NOT_FOUND_IN_PAGES_HISTORY' >&2
-            exit 1
-          fi
-          test "$(wc -c < "$root/exact/app.index.html")" -eq "$APP_BYTES"
-          test "$(sha256sum "$root/exact/app.index.html" | cut -d' ' -f1)" = "$APP_SHA256"
-          echo "PASS_EXACT_APP_FOUND=$(cat "$root/exact/source-url.txt")"
 
       - name: Preserve probe evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-agent-pages-history-probe-${{ github.run_id }}
+          name: mobile-agent-exact-artifact-probe-${{ github.run_id }}
           path: ${{ runner.temp }}/probe/
           if-no-files-found: error
           retention-days: 7
