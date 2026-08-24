@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: mobile-agent-direct-gms-${{ github.event.pull_request.number || github.ref }}
@@ -17,9 +18,15 @@ concurrency:
 env:
   ROOT: verification/mobile-agent-preset-app
   PROJECT: stg-mobile-agent
-  BOOTSTRAP_BASE: https://mobile-agent.roccho.workers.dev/
+  PAGES_BRANCH: direct-gms-proof
   APP_BYTES: '2412388'
   APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+  APP_GIT_BLOB: ebdb39084fa3cc57b0295818f6f339f62f0fca90
+  BR_PREFIX: SEQ-APP-BR/1
+  BR_BASE64_BYTES: '509996'
+  BR_BASE64_SHA256: 43aac693952f79951747ae0961fc27ceca724ef4debe2e88b8c14f5aaa849020
+  BR_BYTES: '382497'
+  BR_SHA256: 4bf862b530246cbc423344a317f0121ccd42e1908e6c88652f6f2a909962f32c
 
 jobs:
   prove-deploy:
@@ -36,21 +43,63 @@ jobs:
         with:
           node-version: '22.16.0'
 
-      - name: Materialize exact final App projection
+      - name: Materialize exact final App from audited one-shot ingress
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           site="$RUNNER_TEMP/site"
-          python3 "$ROOT/bootstrap.py" "$ROOT/expected.json" "$BOOTSTRAP_BASE" "$site" "$RUNNER_TEMP/bootstrap-receipt.json"
-          test "$(wc -c < "$site/app/index.html")" -eq "$APP_BYTES"
-          test "$(sha256sum "$site/app/index.html" | cut -d' ' -f1)" = "$APP_SHA256"
-          test -f "$site/protocol/v3/codec.mjs"
-          grep -F 'graph/1' "$site/app/index.html" >/dev/null
-          grep -F 'map/1' "$site/app/index.html" >/dev/null
-          grep -F 'seq/1' "$site/app/index.html" >/dev/null
-          grep -Fi 'maxgraph' "$site/app/index.html" >/dev/null
+          mkdir -p "$site/app" "$RUNNER_TEMP/proof"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/issues/286/comments" -f per_page=100 --paginate --slurp > "$RUNNER_TEMP/proof/comments.json"
+          python3 - "$RUNNER_TEMP/proof/comments.json" "$RUNNER_TEMP/proof/app.br" <<'PY'
+          import base64,hashlib,json,os,pathlib,re,sys
+          pages=json.load(open(sys.argv[1],encoding='utf-8'))
+          comments=[c for page in pages for c in page]
+          prefix=os.environ['BR_PREFIX']; total=11
+          header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/11$')
+          chunks={}
+          for comment in comments:
+              body=str(comment.get('body','')).replace('\r\n','\n').strip()
+              first,sep,rest=body.partition('\n')
+              if not sep: continue
+              match=header.fullmatch(first.strip())
+              if not match: continue
+              index=int(match.group(1))
+              assert 0 <= index < total,index
+              payload=''.join(rest.split())
+              assert payload and re.fullmatch(r'[A-Za-z0-9+/=]+',payload),index
+              if index in chunks: assert chunks[index]==payload,f'conflicting chunk {index}'
+              chunks[index]=payload
+          assert sorted(chunks)==list(range(total)),{'observed':sorted(chunks)}
+          encoded=''.join(chunks[i] for i in range(total)).encode('ascii')
+          assert len(encoded)==int(os.environ['BR_BASE64_BYTES']),len(encoded)
+          assert hashlib.sha256(encoded).hexdigest()==os.environ['BR_BASE64_SHA256']
+          packed=base64.b64decode(encoded,validate=True)
+          assert len(packed)==int(os.environ['BR_BYTES']),len(packed)
+          assert hashlib.sha256(packed).hexdigest()==os.environ['BR_SHA256']
+          pathlib.Path(sys.argv[2]).write_bytes(packed)
+          print(json.dumps({'status':'PASS_AUDITED_INGRESS','chunks':total,'base64Bytes':len(encoded),'brotliBytes':len(packed)}))
+          PY
+          node - "$RUNNER_TEMP/proof/app.br" "$site/app/index.html" <<'NODE'
+          const fs=require('fs'); const zlib=require('zlib');
+          fs.writeFileSync(process.argv[3], zlib.brotliDecompressSync(fs.readFileSync(process.argv[2])));
+          NODE
+          python3 - "$site/app/index.html" "$RUNNER_TEMP/proof/app.json" <<'PY'
+          import hashlib,json,os,pathlib,sys
+          app=pathlib.Path(sys.argv[1]).read_bytes()
+          sha=hashlib.sha256(app).hexdigest(); blob=hashlib.sha1(f'blob {len(app)}\0'.encode()+app).hexdigest()
+          assert len(app)==int(os.environ['APP_BYTES']),len(app)
+          assert sha==os.environ['APP_SHA256'],sha
+          assert blob==os.environ['APP_GIT_BLOB'],blob
+          text=app.decode('utf-8')
+          for token in ('graph/1','map/1','seq/1','maxgraph'): assert token.lower() in text.lower(),token
+          out={'status':'PASS_EXACT_APP','bytes':len(app),'sha256':sha,'gitBlob':blob}
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(out,sort_keys=True)+'\n')
+          print(json.dumps(out,sort_keys=True))
+          PY
 
-      - name: Prove exact App locally in Chrome
+      - name: Prove exact App locally in real Chrome
         shell: bash
         run: |
           set -euo pipefail
@@ -59,15 +108,13 @@ jobs:
           python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/site" >/dev/null 2>&1 & server=$!
           trap 'kill "$server" 2>/dev/null || true' EXIT
           for _ in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
-          node "$ROOT/generate-urls.mjs" "$RUNNER_TEMP/site" "$ROOT/manifest.json" http://127.0.0.1:4173/ "$RUNNER_TEMP/local-urls.json"
-          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/local-urls.json" "$RUNNER_TEMP/local-browser.json" "$RUNNER_TEMP/local-shots"
-          python3 - "$RUNNER_TEMP/local-browser.json" <<'PY'
-          import json,sys
+          python3 - "$ROOT/preset-render-cases.json" "$RUNNER_TEMP/proof/local-urls.json" <<'PY'
+          import json,pathlib,sys
           x=json.load(open(sys.argv[1]))
-          assert x['status']=='PASS'
-          assert [c['pattern'] for c in x['cases']]==['graph/1','map/1','seq/1']
-          assert all(c['status']=='PASS' for c in x['cases'])
+          for row in x['cases']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','http://127.0.0.1:4173/')
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
           PY
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/proof/local-urls.json" "$RUNNER_TEMP/proof/local-browser.json" "$RUNNER_TEMP/proof/local-shots"
 
       - name: Verify Pages project
         env:
@@ -76,12 +123,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$CLOUDFLARE_API_TOKEN"
-          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT")"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
+          code="$(curl -sS -o "$RUNNER_TEMP/proof/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT")"
           test "$code" = 200
 
-      - name: Deploy exact tested App
+      - name: Deploy exact tested App to isolated Pages branch
         id: deploy
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -89,11 +135,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/site" --project-name "$PROJECT" --branch proposals --commit-hash "${{ github.event.pull_request.head.sha || github.sha }}" --commit-message 'Direct Graph Map Seq proof' 2>&1)"
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/site" --project-name "$PROJECT" --branch "$PAGES_BRANCH" --commit-hash "${{ github.event.pull_request.head.sha || github.sha }}" --commit-message 'Direct Graph Map Seq proof' 2>&1)"
           printf '%s\n' "$output"
-          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | grep -v '^https://stg-mobile-agent\.pages\.dev$' | head -n1)"
+          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | head -n1)"
           test -n "$deployment"
-          echo "stable_base=https://stg-mobile-agent.pages.dev/" >> "$GITHUB_OUTPUT"
           echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
 
       - name: Read back and Chrome-prove three public URLs
@@ -102,37 +147,32 @@ jobs:
           set -euo pipefail
           python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
           chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
-          mkdir -p "$RUNNER_TEMP/public-proof"
-          for pair in "stable:${{ steps.deploy.outputs.stable_base }}" "immutable:${{ steps.deploy.outputs.deployment_base }}"; do
-            name="${pair%%:*}"; base="${pair#*:}"
-            curl -fsSL --retry 20 --retry-delay 2 -H 'Cache-Control: no-cache' "${base}app/" -o "$RUNNER_TEMP/public-proof/app-$name.html"
-            test "$(wc -c < "$RUNNER_TEMP/public-proof/app-$name.html")" -eq "$APP_BYTES"
-            test "$(sha256sum "$RUNNER_TEMP/public-proof/app-$name.html" | cut -d' ' -f1)" = "$APP_SHA256"
-            node "$ROOT/generate-urls.mjs" "$RUNNER_TEMP/site" "$ROOT/manifest.json" "$base" "$RUNNER_TEMP/public-proof/$name-urls.json"
-            CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/public-proof/$name-urls.json" "$RUNNER_TEMP/public-proof/$name-browser.json" "$RUNNER_TEMP/public-proof/$name-shots"
-          done
-          python3 - "$RUNNER_TEMP/public-proof" "${{ github.event.pull_request.head.sha || github.sha }}" "${{ steps.deploy.outputs.stable_base }}" "${{ steps.deploy.outputs.deployment_base }}" <<'PY'
+          base="${{ steps.deploy.outputs.deployment_base }}"
+          curl -fsSL --retry 20 --retry-delay 2 -H 'Cache-Control: no-cache' "${base}app/" -o "$RUNNER_TEMP/proof/app-public.html"
+          test "$(wc -c < "$RUNNER_TEMP/proof/app-public.html")" -eq "$APP_BYTES"
+          test "$(sha256sum "$RUNNER_TEMP/proof/app-public.html" | cut -d' ' -f1)" = "$APP_SHA256"
+          python3 - "$ROOT/preset-render-cases.json" "$RUNNER_TEMP/proof/public-urls.json" "$base" <<'PY'
           import json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); head=sys.argv[2]; stable=sys.argv[3]; immutable=sys.argv[4]
-          s=json.load(open(root/'stable-browser.json')); i=json.load(open(root/'immutable-browser.json'))
-          assert s['status']==i['status']=='PASS'
-          sm={c['id']:c for c in s['cases']}; im={c['id']:c for c in i['cases']}
-          models={}
-          for key in ('graph','map','seq'):
-              a,b=sm[key],im[key]
-              assert a['status']==b['status']=='PASS'
-              models[a['pattern']]={'stableUrl':a['url'],'deploymentUrl':b['url'],'stableChrome':'PASS','deploymentChrome':'PASS'}
-          out={'schema':'ops.mobileAgentDirectGraphMapSeqProof/1','status':'PASS','head':head,'app':{'bytes':2412388,'sha256':'sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'},'hosts':{'stable':stable,'deployment':immutable},'models':models}
-          (root/'receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True)+'\n')
+          x=json.load(open(sys.argv[1])); base=sys.argv[3]
+          for row in x['cases']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/',base)
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False,indent=2)+'\n')
+          PY
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/proof/public-urls.json" "$RUNNER_TEMP/proof/public-browser.json" "$RUNNER_TEMP/proof/public-shots"
+          python3 - "$RUNNER_TEMP/proof/public-browser.json" "$RUNNER_TEMP/proof/receipt.json" "${{ github.event.pull_request.head.sha || github.sha }}" "$base" <<'PY'
+          import json,pathlib,sys
+          browser=json.load(open(sys.argv[1])); assert browser['status']=='PASS'
+          cases=browser['cases']; assert [x['pattern'] for x in cases]==['graph/1','map/1','seq/1']
+          assert all(x['status']=='PASS' and x['browserErrors']==0 and x['failedResponses']==0 for x in cases)
+          seq=next(x for x in cases if x['id']=='seq')
+          assert seq['interaction']['changed']!=seq['interaction']['before'] and seq['interaction']['restored']==seq['interaction']['before']
+          out={'schema':'ops.mobileAgentDirectGraphMapSeqProof/2','status':'PASS','head':sys.argv[3],'deployment':sys.argv[4],'app':{'bytes':2412388,'sha256':'sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'},'models':{x['pattern']:{'url':x['url'],'chrome':'PASS','browserErrors':x['browserErrors'],'failedResponses':x['failedResponses']} for x in cases},'seqInteraction':'PASS'}
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True)+'\n')
           print(json.dumps(out,ensure_ascii=False,sort_keys=True))
           PY
 
       - uses: actions/upload-artifact@v4
         with:
           name: mobile-agent-direct-graph-map-seq-proof-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/bootstrap-receipt.json
-            ${{ runner.temp }}/local-browser.json
-            ${{ runner.temp }}/public-proof/
+          path: ${{ runner.temp }}/proof/
           if-no-files-found: error
           retention-days: 30
