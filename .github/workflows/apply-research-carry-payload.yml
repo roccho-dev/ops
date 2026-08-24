@@ -22,7 +22,7 @@ jobs:
       - name: Checkout exact payload commit
         uses: actions/checkout@v4
         with:
-          ref: proposal/research-decision-stack-carry-260824
+          ref: ${{ github.sha }}
           fetch-depth: 2
 
       - name: Verify, apply, test, self-delete, and push final tree
@@ -31,6 +31,34 @@ jobs:
           PAYLOAD_SHA256: 2ade67fa23415b1b183f95a948ddf4cfc8c7a50260d9a10e31214a6d0cf7161d
         run: |
           set -euo pipefail
+          git config user.email "40359643+roccho-dev@users.noreply.github.com"
+          git config user.name "roccho"
+          record_failure() {
+            rc="$1"; line="$2"; command="$3"
+            trap - ERR
+            git reset --hard HEAD
+            mkdir -p docs/wip
+            python3 - "docs/wip/research-carry-apply-failure.json" "$rc" "$line" "$command" <<'PY'
+          import json,os,pathlib,sys
+          out,rc,line,command=sys.argv[1:]
+          record={
+              "kind":"ops.researchDecisionStackCarryApplyFailure.v1",
+              "status":"FAIL",
+              "runId":os.environ.get("GITHUB_RUN_ID"),
+              "runAttempt":os.environ.get("GITHUB_RUN_ATTEMPT"),
+              "headSha":os.environ.get("GITHUB_SHA"),
+              "exitCode":int(rc),
+              "line":int(line),
+              "command":command,
+          }
+          pathlib.Path(out).write_text(json.dumps(record,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          PY
+            git add docs/wip/research-carry-apply-failure.json
+            git -c commit.gpgsign=false commit -m "proof: record research carry apply failure"
+            git push origin HEAD:proposal/research-decision-stack-carry-260824 || true
+            exit "$rc"
+          }
+          trap 'record_failure "$?" "$LINENO" "$BASH_COMMAND"' ERR
           test "$(git rev-parse HEAD^{commit})" = "$GITHUB_SHA"
           cat "$GITHUB_WORKSPACE"/.github/research-carry-xz/part-*.b64 > "$RUNNER_TEMP/research-carry-payload.b64"
           base64 --decode "$RUNNER_TEMP/research-carry-payload.b64" > "$RUNNER_TEMP/research-carry-payload.tar.xz"
@@ -90,8 +118,7 @@ jobs:
           assert not pathlib.Path("packages/ops-src-runtime-pack/lib/cli.py").exists()
           assert not pathlib.Path(".github/research-carry-payload/part-00.b64").exists()
           PY
-          git config user.email "40359643+roccho-dev@users.noreply.github.com"
-          git config user.name "roccho"
+          trap - ERR
           git add -A
           test -n "$(git status --porcelain=v1)"
           git -c commit.gpgsign=false commit -m "feat: close research decision stack carry loop"
