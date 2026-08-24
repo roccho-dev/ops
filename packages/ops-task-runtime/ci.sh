@@ -160,7 +160,7 @@ PY
   python3 packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py create \
     --target-system x86_64-linux \
     --tool-spec "$scratch_rel/work/tool-spec.json" \
-    --out-dir "$scratch_rel/work/pack" >/dev/null
+    --out-dir "$pack" >/dev/null
 )
 mkdir -p "$pack/fixtures" "$pack/metadata"
 cp "$package_dir/Taskfile.yml" "$package_dir/probe.py" "$package_dir/workflow.yml" "$package_dir/source.json" "$pack/fixtures/"
