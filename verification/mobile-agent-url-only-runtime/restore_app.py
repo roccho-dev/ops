@@ -14,10 +14,11 @@ PART_BLOBS = (
     "f65a8c180f0b65317ff0455712c2ecd5934a7031",
     "a0904cf208a3a9ac87afa37b8b6dfc4fe13c368f",
 )
-CARRIER_BYTES = 30_024
+CARRIER_RAW_BYTES = 30_024
 APP_BYTES = 2_412_388
 APP_SHA256 = "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
 APP_GIT_BLOB = "ebdb39084fa3cc57b0295818f6f339f62f0fca90"
+BASE64_BYTES = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
 
 
 def sha256(data: bytes) -> str:
@@ -47,13 +48,17 @@ def read_git_blob(repository: str, blob_sha: str) -> bytes:
 
 def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
     parts = [read_git_blob(repository, blob_sha) for blob_sha in PART_BLOBS]
-    carrier = b"".join(parts)
-    if len(carrier) != CARRIER_BYTES:
+    carrier_raw = b"".join(parts)
+    if len(carrier_raw) != CARRIER_RAW_BYTES:
         raise RuntimeError(
-            f"Carrier length mismatch: expected {CARRIER_BYTES}, observed {len(carrier)}"
+            f"Carrier length mismatch: expected {CARRIER_RAW_BYTES}, observed {len(carrier_raw)}"
         )
-    if any(byte > 0x7F for byte in carrier) or any(chr(byte).isspace() for byte in carrier):
-        raise RuntimeError("Carrier must be canonical ASCII Base64 without whitespace")
+    for byte in carrier_raw:
+        if byte not in BASE64_BYTES and not chr(byte).isspace():
+            raise RuntimeError(f"Carrier contains non-Base64 byte: {byte}")
+    carrier = b"".join(carrier_raw.split())
+    if not carrier or len(carrier) % 4:
+        raise RuntimeError("normalized Carrier is not canonical Base64 length")
     packed = base64.b64decode(carrier, validate=True)
 
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -93,6 +98,8 @@ def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
         "source": {
             "repository": repository,
             "partBlobs": list(PART_BLOBS),
+            "carrierRawBytes": len(carrier_raw),
+            "carrierRawSha256": sha256(carrier_raw),
             "carrierBytes": len(carrier),
             "carrierSha256": sha256(carrier),
             "packedBytes": len(packed),
