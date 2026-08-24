@@ -1,0 +1,211 @@
+name: Mobile Agent persistent GitHub Carry bootstrap
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-persistent-carry-bootstrap.yml'
+      - 'verification/mobile-agent-url-only-runtime/restore_app.py'
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  bootstrap:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Restore exact App through the temporary audited ingress
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/carry"
+          python3 verification/mobile-agent-url-only-runtime/restore_app.py "$RUNNER_TEMP/carry/app.index.html"
+
+      - name: Create or verify the content-addressed GitHub Carry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/carry/app.index.html" "$RUNNER_TEMP/carry/receipt.json" <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import urllib.error
+          import urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GH_TOKEN']
+          candidate = os.environ['CANDIDATE_SHA']
+          app_path = pathlib.Path(__import__('sys').argv[1])
+          receipt_path = pathlib.Path(__import__('sys').argv[2])
+
+          app_bytes = 2_412_388
+          app_sha256 = '3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'
+          app_git_blob = 'ebdb39084fa3cc57b0295818f6f339f62f0fca90'
+          carry_ref = 'refs/tags/mobile-agent-app-sha256-' + app_sha256
+          ref_api = 'repos/' + repo + '/git/ref/' + carry_ref.removeprefix('refs/')
+
+          def api(method, path, value=None):
+              data = None if value is None else json.dumps(value, separators=(',', ':')).encode()
+              request = urllib.request.Request(
+                  'https://api.github.com/' + path,
+                  method=method,
+                  data=data,
+                  headers={
+                      'Accept': 'application/vnd.github+json',
+                      'Authorization': 'Bearer ' + token,
+                      'Content-Type': 'application/json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                      'User-Agent': 'ops-mobile-agent-persistent-carry/1',
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=90) as response:
+                      return json.loads(response.read())
+              except urllib.error.HTTPError as error:
+                  body = error.read().decode(errors='replace')
+                  raise RuntimeError(f'{method} {path}: HTTP {error.code}: {body}') from error
+
+          def maybe_ref():
+              try:
+                  return api('GET', ref_api)
+              except RuntimeError as error:
+                  if 'HTTP 404:' in str(error):
+                      return None
+                  raise
+
+          app = app_path.read_bytes()
+          assert len(app) == app_bytes
+          assert hashlib.sha256(app).hexdigest() == app_sha256
+          assert hashlib.sha1(f'blob {len(app)}\0'.encode() + app).hexdigest() == app_git_blob
+
+          existing = maybe_ref()
+          if existing is None:
+              app_blob = api('POST', 'repos/' + repo + '/git/blobs', {
+                  'content': base64.b64encode(app).decode(),
+                  'encoding': 'base64',
+              })['sha']
+              assert app_blob == app_git_blob
+
+              manifest = {
+                  'schema': 'ops.mobileAgentPersistentGitHubCarry/1',
+                  'status': 'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY',
+                  'authority': 'roccho-dev/adrs#316',
+                  'app': {
+                      'path': 'mobile-agent/app.index.html',
+                      'bytes': app_bytes,
+                      'sha256': 'sha256:' + app_sha256,
+                      'gitBlob': app_git_blob,
+                      'presets': ['graph/1', 'map/1', 'seq/1'],
+                      'renderer': 'existing-maxGraph',
+                      'codec': 'existing-#smap',
+                  },
+                  'source': {
+                      'bundleCommit': '1daa001bf780053f4319e3fb20b4ea9a6e0d0442',
+                      'bundleTree': '59ff130fc7e20a4b5762c21fe97b417fc7a454ad',
+                      'bundleSha256': 'sha256:208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6',
+                  },
+                  'carry': {
+                      'kind': 'content-addressed-git-object',
+                      'ref': carry_ref,
+                  },
+              }
+              terminal = {
+                  'schema': 'ops.terminal/1',
+                  'terminal': 'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY',
+                  'authority': 'roccho-dev/adrs#316',
+                  'appSha256': 'sha256:' + app_sha256,
+                  'appGitBlob': app_git_blob,
+              }
+
+              def text_blob(value):
+                  body = (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')) + '\n').encode()
+                  return api('POST', 'repos/' + repo + '/git/blobs', {
+                      'content': base64.b64encode(body).decode(),
+                      'encoding': 'base64',
+                  })['sha']
+
+              manifest_blob = text_blob(manifest)
+              terminal_blob = text_blob(terminal)
+              tree = api('POST', 'repos/' + repo + '/git/trees', {
+                  'tree': [
+                      {'path': 'mobile-agent/app.index.html', 'mode': '100644', 'type': 'blob', 'sha': app_blob},
+                      {'path': 'mobile-agent/manifest.json', 'mode': '100644', 'type': 'blob', 'sha': manifest_blob},
+                      {'path': 'mobile-agent/TERMINAL.jsonl', 'mode': '100644', 'type': 'blob', 'sha': terminal_blob},
+                  ],
+              })['sha']
+              commit = api('POST', 'repos/' + repo + '/git/commits', {
+                  'message': 'carry: exact Mobile Agent App 3a8db870',
+                  'tree': tree,
+                  'parents': [candidate],
+              })['sha']
+              api('POST', 'repos/' + repo + '/git/refs', {'ref': carry_ref, 'sha': commit})
+              existing = maybe_ref()
+
+          assert existing is not None
+          assert existing['object']['type'] == 'commit'
+          carry_commit = existing['object']['sha']
+          commit = api('GET', 'repos/' + repo + '/git/commits/' + carry_commit)
+          tree_sha = commit['tree']['sha']
+          tree = api('GET', 'repos/' + repo + '/git/trees/' + tree_sha + '?recursive=1')
+          entries = {row['path']: row for row in tree['tree'] if row['type'] == 'blob'}
+          assert set(entries) == {
+              'mobile-agent/app.index.html',
+              'mobile-agent/manifest.json',
+              'mobile-agent/TERMINAL.jsonl',
+          }
+          assert entries['mobile-agent/app.index.html']['sha'] == app_git_blob
+
+          def read_blob(path):
+              record = api('GET', 'repos/' + repo + '/git/blobs/' + entries[path]['sha'])
+              return base64.b64decode(''.join(record['content'].split()), validate=True)
+
+          readback = read_blob('mobile-agent/app.index.html')
+          assert len(readback) == app_bytes
+          assert hashlib.sha256(readback).hexdigest() == app_sha256
+          assert readback == app
+          manifest = json.loads(read_blob('mobile-agent/manifest.json'))
+          terminal = json.loads(read_blob('mobile-agent/TERMINAL.jsonl'))
+          assert manifest['status'] == terminal['terminal'] == 'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY'
+          assert manifest['app']['gitBlob'] == terminal['appGitBlob'] == app_git_blob
+          assert manifest['app']['sha256'] == terminal['appSha256'] == 'sha256:' + app_sha256
+
+          receipt = {
+              'schema': 'ops.mobileAgentPersistentGitHubCarryReceipt/1',
+              'status': 'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY',
+              'authority': 'roccho-dev/adrs#316',
+              'repository': repo,
+              'ref': carry_ref,
+              'commit': carry_commit,
+              'tree': tree_sha,
+              'appBlob': app_git_blob,
+              'appBytes': app_bytes,
+              'appSha256': 'sha256:' + app_sha256,
+              'githubByteReadback': 'PASS',
+              'sourceCloneRequired': False,
+              'consumerBuildRequired': False,
+          }
+          receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+          print(json.dumps(receipt, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-persistent-github-carry-${{ github.run_id }}
+          path: ${{ runner.temp }}/carry/receipt.json
+          if-no-files-found: error
+          retention-days: 90
