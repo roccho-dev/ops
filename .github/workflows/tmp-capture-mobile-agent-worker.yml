@@ -12,25 +12,46 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Prove Graph Map Seq against current Worker
+      - name: Locate exact public App bytes
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
-          python3 - verification/mobile-agent-url-only-runtime/preset-render-cases.json "$RUNNER_TEMP/urls.json" <<'PY'
-          import json,pathlib,sys
-          x=json.load(open(sys.argv[1]))
-          for row in x['cases']:
-              row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','https://mobile-agent.roccho.workers.dev/')
-          pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
+          python3 - "$RUNNER_TEMP/public-app.json" <<'PY'
+          import hashlib,json,pathlib,urllib.error,urllib.request,sys
+          expected_bytes=2_412_388
+          expected_sha='3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'
+          bases=[
+            'https://mobile-agent.roccho.workers.dev/',
+            'https://stg-mobile-agent.pages.dev/',
+          ]
+          rows=[]
+          matched=None
+          for base in bases:
+            for path in ('app/index.html','app/'):
+              url=base+path
+              try:
+                request=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ops-mobile-agent-public-byte-probe/1'})
+                with urllib.request.urlopen(request,timeout=60) as response:
+                  data=response.read()
+                  row={'url':url,'status':response.status,'finalUrl':response.geturl(),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+              except Exception as error:
+                row={'url':url,'error':str(error)}
+                data=b''
+              row['exact']=len(data)==expected_bytes and hashlib.sha256(data).hexdigest()==expected_sha
+              rows.append(row)
+              if row['exact']:
+                matched=(url,data)
+          receipt={'schema':'ops.mobileAgentPublicAppProbe/1','status':'PASS' if matched else 'NOT_FOUND','expectedBytes':expected_bytes,'expectedSha256':expected_sha,'probes':rows}
+          pathlib.Path(sys.argv[1]).write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(receipt,sort_keys=True))
+          if matched:
+            pathlib.Path(sys.argv[1]).with_name('app.index.html').write_bytes(matched[1])
           PY
-          CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/receipt.json" "$RUNNER_TEMP/shots"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: current-worker-behavior-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/receipt.json
-            ${{ runner.temp }}/shots/
-          if-no-files-found: ignore
+            ${{ runner.temp }}/public-app.json
+            ${{ runner.temp }}/app.index.html
+          if-no-files-found: error
           retention-days: 1
