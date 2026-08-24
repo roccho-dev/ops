@@ -27,7 +27,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          verification/mobile-agent-persistent-carry-bootstrap/verify.sh "$RUNNER_TEMP/closure" \
+          mkdir -p "$RUNNER_TEMP/closure"
+          bash verification/mobile-agent-persistent-carry-bootstrap/verify.sh "$RUNNER_TEMP/closure" \
             | tee "$RUNNER_TEMP/closure/terminal.json"
 
       - uses: actions/upload-artifact@v4
