@@ -1,0 +1,108 @@
+name: tmp probe Mobile Agent Pages history
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tmp-probe-mobile-agent-pages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: cloudflare-production
+    steps:
+      - name: Find the exact App in immutable Pages history
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PROJECT: stg-mobile-agent
+          APP_BYTES: '2412388'
+          APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/probe"
+          mkdir -p "$root/api" "$root/candidates" "$root/exact"
+          : > "$root/bases.txt"
+          for page in $(seq 1 20); do
+            code="$(curl --silent --show-error --output "$root/api/$page.json" --write-out '%{http_code}' \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT/deployments?per_page=100&page=$page")"
+            test "$code" = 200
+            count="$(python3 - "$root/api/$page.json" "$root/bases.txt" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value.get('success') is True,value
+          rows=value.get('result') or []
+          with open(sys.argv[2],'a',encoding='utf-8') as out:
+              for row in rows:
+                  values=[row.get('url'),*(row.get('aliases') or [])]
+                  for item in values:
+                      if not item: continue
+                      text=str(item).rstrip('/')
+                      if not text.startswith('http'): text='https://'+text
+                      out.write(text+'\n')
+          print(len(rows))
+          PY
+          )"
+            test "$count" -gt 0 || break
+          done
+          printf '%s\n' \
+            'https://stg-mobile-agent.pages.dev' \
+            'https://stg-mobile-agent.roccho.workers.dev' \
+            'https://mobile-agent.roccho.workers.dev' \
+            'https://stg-mobile.pages.dev' \
+            'https://stg-mobile.roccho.workers.dev' >> "$root/bases.txt"
+          sort -u "$root/bases.txt" -o "$root/bases.txt"
+          : > "$root/report.jsonl"
+          found=0
+          while IFS= read -r base; do
+            test -n "$base" || continue
+            for path in app/index.html app/ index.html; do
+              url="$base/$path"
+              key="$(printf '%s' "$url" | sha256sum | cut -d' ' -f1)"
+              out="$root/candidates/$key.bin"
+              code="$(curl --location --max-time 45 --retry 2 --retry-all-errors --silent --show-error \
+                --header 'Cache-Control: no-cache' --output "$out" --write-out '%{http_code}' "$url" || true)"
+              if [ "$code" = 200 ]; then
+                bytes="$(wc -c < "$out")"
+                sha="$(sha256sum "$out" | cut -d' ' -f1)"
+              else
+                bytes=0
+                sha=unavailable
+                rm -f "$out"
+              fi
+              python3 - "$root/report.jsonl" "$url" "$code" "$bytes" "$sha" <<'PY'
+          import json,sys
+          with open(sys.argv[1],'a',encoding='utf-8') as out:
+              out.write(json.dumps({'url':sys.argv[2],'http':sys.argv[3],'bytes':int(sys.argv[4]),'sha256':sys.argv[5]},sort_keys=True)+'\n')
+          PY
+              if [ "$bytes" = "$APP_BYTES" ] && [ "$sha" = "$APP_SHA256" ]; then
+                cp "$out" "$root/exact/app.index.html"
+                printf '%s\n' "$url" > "$root/exact/source-url.txt"
+                found=1
+                break 2
+              fi
+            done
+          done < "$root/bases.txt"
+          cat "$root/report.jsonl"
+          if [ "$found" -ne 1 ]; then
+            echo 'BLOCKED_EXACT_APP_NOT_FOUND_IN_PAGES_HISTORY' >&2
+            exit 1
+          fi
+          test "$(wc -c < "$root/exact/app.index.html")" -eq "$APP_BYTES"
+          test "$(sha256sum "$root/exact/app.index.html" | cut -d' ' -f1)" = "$APP_SHA256"
+          echo "PASS_EXACT_APP_FOUND=$(cat "$root/exact/source-url.txt")"
+
+      - name: Preserve probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-pages-history-probe-${{ github.run_id }}
+          path: ${{ runner.temp }}/probe/
+          if-no-files-found: error
+          retention-days: 7
