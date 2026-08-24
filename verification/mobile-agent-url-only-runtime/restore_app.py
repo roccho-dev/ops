@@ -65,10 +65,16 @@ def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
         raise RuntimeError(
             f"projection Carrier length mismatch: {len(carrier_raw)} != {CARRIER_RAW_BYTES}"
         )
+
+    # The accepted projection stores standard Base64 with line breaks and
+    # omitted terminal padding. Remove transport whitespace and restore only
+    # the mathematically required padding before strict decoding.
     carrier = b"".join(carrier_raw.split())
-    if not carrier or len(carrier) % 4:
-        raise RuntimeError(f"normalized Carrier length is invalid: {len(carrier)}")
-    packed = base64.b64decode(carrier, validate=True)
+    padding = (-len(carrier)) % 4
+    if padding not in (0, 1, 2):
+        raise RuntimeError(f"invalid Base64 padding requirement: {padding}")
+    carrier_padded = carrier + (b"=" * padding)
+    packed = base64.b64decode(carrier_padded, validate=True)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="mobile-agent-projection-") as temp:
@@ -112,6 +118,7 @@ def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
             "carrierRawSha256": sha256(carrier_raw),
             "carrierBytes": len(carrier),
             "carrierSha256": sha256(carrier),
+            "paddingRestored": padding,
             "packedBytes": len(packed),
             "packedSha256": sha256(packed),
         },
