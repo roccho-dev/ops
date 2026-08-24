@@ -25,6 +25,10 @@ CARRIER_RAW_BYTES = 30_024
 APP_BYTES = 2_412_388
 APP_SHA256 = "3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
 APP_GIT_BLOB = "ebdb39084fa3cc57b0295818f6f339f62f0fca90"
+STANDARD_BASE64 = frozenset(
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
+)
+URLSAFE_BASE64 = frozenset(b"-_")
 
 
 def sha256(data: bytes) -> str:
@@ -66,10 +70,18 @@ def restore_app(repository: str, output: pathlib.Path) -> dict[str, object]:
             f"projection Carrier length mismatch: {len(carrier_raw)} != {CARRIER_RAW_BYTES}"
         )
 
-    # The accepted projection stores standard Base64 with line breaks and
-    # omitted terminal padding. Remove transport whitespace and restore only
-    # the mathematically required padding before strict decoding.
     carrier = b"".join(carrier_raw.split())
+    bad = sorted(set(carrier) - STANDARD_BASE64)
+    if bad:
+        if set(bad) <= URLSAFE_BASE64:
+            carrier = carrier.translate(bytes.maketrans(b"-_", b"+/"))
+        else:
+            counts = {str(byte): carrier.count(byte) for byte in bad}
+            raise RuntimeError(
+                "projection Carrier contains unsupported bytes: "
+                + json.dumps(counts, sort_keys=True)
+            )
+
     padding = (-len(carrier)) % 4
     if padding not in (0, 1, 2):
         raise RuntimeError(f"invalid Base64 padding requirement: {padding}")
