@@ -34,3 +34,4 @@
 {"bin":"policyctl","deps":["ast-grep","git","go","node","python"],"entry":"packages/shiftleft-admission/cmd/policyctl","env":[],"kind":"package","name":"shiftleft-admission","runtime":"go"}
 {"bin":"structured-diagnostic","deps":["node"],"entry":"packages/structured-diagnostic/bin/structured-diagnostic.mjs","env":[],"kind":"package","name":"structured-diagnostic","runtime":"node"}
 {"bin":"ops-decision-closure","deps":["python"],"entry":"packages/ops-decision-closure/bin/query.py","env":[],"kind":"package","name":"ops-decision-closure","runtime":"python"}
+{"bin":"ops-task-runtime","deps":["node"],"entry":"packages/ops-task-runtime/bin/ops-task-runtime.mjs","env":[],"kind":"package","name":"ops-task-runtime","runtime":"node"}
