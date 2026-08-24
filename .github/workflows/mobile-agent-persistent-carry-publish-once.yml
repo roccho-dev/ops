@@ -5,6 +5,7 @@ on:
     types: [created]
 
 permissions:
+  actions: read
   contents: write
   issues: write
 
@@ -12,23 +13,24 @@ jobs:
   publish:
     if: >-
       github.event.issue.pull_request == null &&
-      github.event.issue.number == 286 &&
+      github.event.issue.number == 279 &&
       github.event.comment.user.login == github.repository_owner &&
       github.event.comment.body == '/publish-mobile-agent-persistent-carry'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
 
-      - name: Restore exact App and close Carrier locally
+      - name: Recover exact App and close Carrier locally
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          verification/mobile-agent-persistent-carry-bootstrap/verify.sh "$RUNNER_TEMP/closure" \
+          mkdir -p "$RUNNER_TEMP/closure"
+          bash verification/mobile-agent-persistent-carry-bootstrap/verify.sh "$RUNNER_TEMP/closure" \
             | tee "$RUNNER_TEMP/closure/terminal.json"
 
       - name: Create or verify immutable GitHub Release
@@ -42,34 +44,37 @@ jobs:
           readback="$RUNNER_TEMP/release-readback"
           mkdir -p "$release_dir" "$readback"
 
-          app_sha="3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+          app_sha="$(jq -er '.payload.sha256' "$root/prepare-receipt.json")"
           tag="mobile-agent-app-sha256-$app_sha"
           asset="mobile-agent-app.$app_sha.b64.txt"
           receipt_asset="mobile-agent-app.$app_sha.receipt.json"
           cp "$root/source/$asset" "$release_dir/$asset"
 
-          python3 - "$root/prepare-receipt.json" "$release_dir/$receipt_asset" \
-            "$GITHUB_REPOSITORY" "$tag" "$asset" <<'PY'
+          python3 - "$root/recovery-receipt.json" "$root/prepare-receipt.json" \
+            "$release_dir/$receipt_asset" "$GITHUB_REPOSITORY" "$tag" "$asset" <<'PY'
           import json,pathlib,sys
-          prepared=json.load(open(sys.argv[1],encoding='utf-8'))
+          recovery=json.load(open(sys.argv[1],encoding='utf-8'))
+          prepared=json.load(open(sys.argv[2],encoding='utf-8'))
           receipt={
             'schema':'ops.mobileAgentPersistentCarrier/1',
             'status':'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY',
             'authority':'roccho-dev/adrs#316',
-            'repository':sys.argv[3],
-            'tag':sys.argv[4],
-            'asset':sys.argv[5],
+            'repository':sys.argv[4],
+            'tag':sys.argv[5],
+            'asset':sys.argv[6],
             'codec':prepared['codec'],
             'payload':prepared['payload'],
             'carrier':prepared['carrier'],
             'source':{
-              'kind':'audited-temporary-ingress',
-              'issue':'roccho-dev/ops#286',
+              'kind':'retained-github-actions-artifact',
+              'artifact':recovery['artifact'],
+              'artifactSourcePath':recovery['sourcePath'],
               'appBundleCommit':'1daa001bf780053f4319e3fb20b4ea9a6e0d0442',
               'appBundleTree':'59ff130fc7e20a4b5762c21fe97b417fc7a454ad',
+              'appBundleSha256':'208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6',
             },
           }
-          pathlib.Path(sys.argv[2]).write_text(
+          pathlib.Path(sys.argv[3]).write_text(
             json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n',
             encoding='utf-8',
           )
@@ -95,17 +100,18 @@ jobs:
           value=json.load(open(sys.argv[1],encoding='utf-8'))
           names={item['name'] for item in value.get('assets',[])}
           print('true' if value.get('isDraft') else 'false')
-          print('\n'.join(name for name in sys.argv[2:] if name not in names))
+          print(','.join(name for name in sys.argv[2:] if name not in names))
           PY
           )
           is_draft="${release_state[0]}"
-          missing="${release_state[1]-}"
-          if test -n "$missing"; then
+          missing_csv="${release_state[1]-}"
+          if test -n "$missing_csv"; then
             test "$is_draft" = true
-            while IFS= read -r name; do
+            IFS=',' read -r -a missing <<< "$missing_csv"
+            for name in "${missing[@]}"; do
               test -n "$name"
               gh release upload "$tag" "$release_dir/$name" --repo "$GITHUB_REPOSITORY"
-            done <<< "$missing"
+            done
           fi
 
           rm -rf "$readback"
@@ -130,7 +136,6 @@ jobs:
 
       - name: Prove public GitHub readback and shared materialization
         env:
-          TAG: ${{ steps.release.outputs.tag }}
           ASSET: ${{ steps.release.outputs.asset }}
           ASSET_URL: ${{ steps.release.outputs.asset_url }}
         run: |
@@ -176,12 +181,13 @@ jobs:
           CREATED: ${{ steps.release.outputs.created }}
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/closure/prepare-receipt.json" \
+          python3 - "$RUNNER_TEMP/closure/recovery-receipt.json" \
+            "$RUNNER_TEMP/closure/prepare-receipt.json" \
             "$RUNNER_TEMP/public-readback/verified-receipt.json" \
             "$RUNNER_TEMP/publication-proof.json" <<'PY'
           import json,os,pathlib,sys
-          prepared=json.load(open(sys.argv[1])); consumed=json.load(open(sys.argv[2]))
-          assert prepared['payload']['sha256']==consumed['payload']['sha256']
+          recovery=json.load(open(sys.argv[1])); prepared=json.load(open(sys.argv[2])); consumed=json.load(open(sys.argv[3]))
+          assert recovery['app']['sha256']==prepared['payload']['sha256']==consumed['payload']['sha256']
           assert prepared['carrier']['sha256']==consumed['carrier']['sha256']
           proof={
             'schema':'ops.mobileAgentPersistentCarrierProof/1',
@@ -193,6 +199,7 @@ jobs:
             'receiptAsset':os.environ['RECEIPT_ASSET'],
             'releaseUrl':os.environ['RELEASE_URL'],
             'createdThisRun':os.environ['CREATED']=='true',
+            'sourceArtifact':recovery['artifact'],
             'payload':prepared['payload'],
             'carrier':prepared['carrier'],
             'githubPublicReadback':'PASS',
@@ -200,7 +207,7 @@ jobs:
             'workflowRun':f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
             'sourceCommit':os.environ['GITHUB_SHA'],
           }
-          pathlib.Path(sys.argv[3]).write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
+          pathlib.Path(sys.argv[4]).write_text(json.dumps(proof,indent=2,sort_keys=True)+'\n')
           print(json.dumps(proof,sort_keys=True))
           PY
 
@@ -209,6 +216,7 @@ jobs:
           name: mobile-agent-persistent-carrier-proof-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/publication-proof.json
+            ${{ runner.temp }}/closure/recovery-receipt.json
             ${{ runner.temp }}/closure/prepare-receipt.json
             ${{ runner.temp }}/public-readback/request.json
             ${{ runner.temp }}/public-readback/verified-receipt.json
@@ -238,4 +246,4 @@ jobs:
 - release: ${RELEASE_URL:-not-created}
 - created-this-run: \`${CREATED:-unknown}\`
 - App: \`2,412,388 bytes\` / \`sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6\`
-- normal consumers must use the immutable Carrier; this temporary ingress is not authority."
+- normal consumers must use the immutable Carrier; retained artifacts and temporary ingress are not authority."
