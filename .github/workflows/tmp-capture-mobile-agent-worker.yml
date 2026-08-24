@@ -12,11 +12,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Locate exact public App bytes
+      - name: Capture current public App bytes
         run: |
           set -euo pipefail
-          python3 - "$RUNNER_TEMP/public-app.json" <<'PY'
-          import hashlib,json,pathlib,urllib.error,urllib.request,sys
+          python3 - "$RUNNER_TEMP/public-app.json" "$RUNNER_TEMP/app.index.html" <<'PY'
+          import hashlib,json,pathlib,urllib.request,sys
           expected_bytes=2_412_388
           expected_sha='3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'
           bases=[
@@ -24,27 +24,41 @@ jobs:
             'https://stg-mobile-agent.pages.dev/',
           ]
           rows=[]
-          matched=None
+          captured=None
+          exact=None
           for base in bases:
             for path in ('app/index.html','app/'):
               url=base+path
               try:
-                request=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ops-mobile-agent-public-byte-probe/1'})
+                request=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ops-mobile-agent-public-byte-probe/2'})
                 with urllib.request.urlopen(request,timeout=60) as response:
                   data=response.read()
                   row={'url':url,'status':response.status,'finalUrl':response.geturl(),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+                  if captured is None and response.status==200:
+                    captured=(url,data)
               except Exception as error:
                 row={'url':url,'error':str(error)}
                 data=b''
               row['exact']=len(data)==expected_bytes and hashlib.sha256(data).hexdigest()==expected_sha
               rows.append(row)
               if row['exact']:
-                matched=(url,data)
-          receipt={'schema':'ops.mobileAgentPublicAppProbe/1','status':'PASS' if matched else 'NOT_FOUND','expectedBytes':expected_bytes,'expectedSha256':expected_sha,'probes':rows}
+                exact=(url,data)
+          selected=exact or captured
+          if selected is None:
+            raise RuntimeError('no public App bytes were retrievable')
+          pathlib.Path(sys.argv[2]).write_bytes(selected[1])
+          receipt={
+            'schema':'ops.mobileAgentPublicAppProbe/2',
+            'status':'EXACT' if exact else 'CAPTURED_NON_EXACT',
+            'expectedBytes':expected_bytes,
+            'expectedSha256':expected_sha,
+            'selectedUrl':selected[0],
+            'selectedBytes':len(selected[1]),
+            'selectedSha256':hashlib.sha256(selected[1]).hexdigest(),
+            'probes':rows,
+          }
           pathlib.Path(sys.argv[1]).write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
           print(json.dumps(receipt,sort_keys=True))
-          if matched:
-            pathlib.Path(sys.argv[1]).with_name('app.index.html').write_bytes(matched[1])
           PY
       - uses: actions/upload-artifact@v4
         if: always()
