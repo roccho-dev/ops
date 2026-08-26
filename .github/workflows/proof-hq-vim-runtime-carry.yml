@@ -1,4 +1,4 @@
-name: mobile-merge10 base export one-shot
+name: mobile-merge10 transport export one-shot
 
 on:
   pull_request:
@@ -15,26 +15,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Export exact base bundle
+      - name: Export current transport bytes
         shell: bash
-        env:
-          BASE_SHA: 6aac086d72e53264fb3e220260824acbb2fac897
         run: |
           set -euo pipefail
-          test "$(git rev-parse "$BASE_SHA")" = "$BASE_SHA"
-          git branch -f mobile-merge10-export-base "$BASE_SHA"
-          git bundle create "$RUNNER_TEMP/mobile-merge10-base.git.bundle" refs/heads/mobile-merge10-export-base
-          git bundle verify "$RUNNER_TEMP/mobile-merge10-base.git.bundle"
-          sha256sum "$RUNNER_TEMP/mobile-merge10-base.git.bundle" > "$RUNNER_TEMP/SHA256SUMS"
-          git bundle list-heads "$RUNNER_TEMP/mobile-merge10-base.git.bundle" > "$RUNNER_TEMP/HEADS"
+          mkdir -p "$RUNNER_TEMP/mobile-merge10-transport"
+          cp -a .github/mobile-merge10-transport/. "$RUNNER_TEMP/mobile-merge10-transport/"
+          find "$RUNNER_TEMP/mobile-merge10-transport" -type f -printf '%P\t%s\n' | sort > "$RUNNER_TEMP/FILES.tsv"
+          (cd "$RUNNER_TEMP/mobile-merge10-transport" && sha256sum * > "$RUNNER_TEMP/SHA256SUMS")
       - uses: actions/upload-artifact@v4
         with:
-          name: mobile-merge10-base-export-${{ github.sha }}
+          name: mobile-merge10-transport-export-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/mobile-merge10-base.git.bundle
+            ${{ runner.temp }}/mobile-merge10-transport/
+            ${{ runner.temp }}/FILES.tsv
             ${{ runner.temp }}/SHA256SUMS
-            ${{ runner.temp }}/HEADS
           if-no-files-found: error
           retention-days: 1
