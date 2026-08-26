@@ -1,168 +1,40 @@
-name: Proof HQ Vim runtime Carry
+name: mobile-merge10 base export one-shot
 
 on:
   push:
     branches:
-      - proof/hq-vim-runtime-carry-20260821
+      - transport/mobile-merge10-carry-260826
     paths:
       - .github/workflows/proof-hq-vim-runtime-carry.yml
-      - verification/hq-vim-runtime-carry/request.json
-  pull_request:
-    branches:
-      - proposals
-    paths:
-      - .github/workflows/proof-hq-vim-runtime-carry.yml
-      - verification/hq-vim-runtime-carry/request.json
 
 permissions:
   contents: read
 
-concurrency:
-  group: proof-hq-vim-runtime-carry
-  cancel-in-progress: false
-
 jobs:
-  materialize:
+  export:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      HQ_REPOSITORY: roccho-dev/hq
-      HQ_COMMIT: 3118886f34ac5615e8a7732a6297bd41900e21e1
-      HQ_TAG: hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1
-      LSP_REPOSITORY: yegappan/lsp
-      LSP_COMMIT: 989016ae2ae4cbf304a9ca29478f47fec794493f
-      LSP_TREE: 899cd0db6af40e3b1e0039b679541cd062cfa9e7
-      OUT: ${{ runner.temp }}/hq-vim-runtime-carry
-
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-
-      - name: Materialize exact official HQ release
+          fetch-depth: 0
+      - name: Export exact base bundle
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: 6aac086d72e53264fb3e220260824acbb2fac897
         run: |
           set -euo pipefail
-          mkdir -p "$OUT"/{official-release,runtime/bin,runtime/lsp,logs}
-          gh release download "$HQ_TAG" --repo "$HQ_REPOSITORY" --dir "$OUT/official-release"
-
-          find "$OUT/official-release" -maxdepth 1 -type f -printf '%f\n' | sort > "$OUT/logs/hq-assets.actual.txt"
-          cat > "$OUT/logs/hq-assets.expected.txt" <<'EOF'
-          SHA256SUMS
-          hq-linux-amd64
-          hq-product-manifest.json
-          hq-windows-amd64.exe
-          hq-worker-linux-amd64
-          hq-worker-windows-amd64.exe
-          manifest-linux-amd64.json
-          manifest-windows-amd64.json
-          EOF
-          sort -o "$OUT/logs/hq-assets.expected.txt" "$OUT/logs/hq-assets.expected.txt"
-          cmp "$OUT/logs/hq-assets.expected.txt" "$OUT/logs/hq-assets.actual.txt"
-          (cd "$OUT/official-release" && sha256sum --check SHA256SUMS)
-
-          test "$(jq -r .source_sha "$OUT/official-release/manifest-linux-amd64.json")" = "$HQ_COMMIT"
-          test "$(jq -r .go_version "$OUT/official-release/manifest-linux-amd64.json")" = go1.23.12
-          test "$(jq -r .source_sha "$OUT/official-release/hq-product-manifest.json")" = "$HQ_COMMIT"
-          test "$(jq -r '.artifacts | length' "$OUT/official-release/hq-product-manifest.json")" = 4
-
-          cp "$OUT/official-release/hq-linux-amd64" "$OUT/runtime/bin/hq"
-          cp "$OUT/official-release/hq-worker-linux-amd64" "$OUT/runtime/bin/hq-worker"
-          chmod 0555 "$OUT/runtime/bin/hq" "$OUT/runtime/bin/hq-worker"
-
-          for binary in "$OUT/runtime/bin/hq" "$OUT/runtime/bin/hq-worker"; do
-            go version -m "$binary" | tee "$OUT/logs/$(basename "$binary").buildinfo.txt"
-            go version -m "$binary" | grep -F "vcs.revision=$HQ_COMMIT"
-            go version -m "$binary" | grep -F 'vcs.modified=false'
-            if go version -m "$binary" | grep -F 'vcs.modified=true'; then
-              echo "dirty official binary: $binary" >&2
-              exit 1
-            fi
-          done
-          "$OUT/runtime/bin/hq" --help > "$OUT/logs/hq.help.txt"
-          "$OUT/runtime/bin/hq-worker" --help > "$OUT/logs/hq-worker.help.txt"
-          "$OUT/runtime/bin/hq-worker" serve --help > "$OUT/logs/hq-worker-serve.help.txt"
-          "$OUT/runtime/bin/hq-worker" health --help > "$OUT/logs/hq-worker-health.help.txt"
-          "$OUT/runtime/bin/hq-worker" stop --help > "$OUT/logs/hq-worker-stop.help.txt"
-
-      - name: Materialize exact pinned yegappan lsp source
-        shell: bash
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/yegappan-lsp"
-          git init --quiet "$work"
-          git -C "$work" remote add origin "https://github.com/$LSP_REPOSITORY.git"
-          git -C "$work" fetch --quiet --depth=1 origin "$LSP_COMMIT"
-          test "$(git -C "$work" rev-parse FETCH_HEAD^{commit})" = "$LSP_COMMIT"
-          test "$(git -C "$work" rev-parse FETCH_HEAD^{tree})" = "$LSP_TREE"
-          git -C "$work" archive "$LSP_COMMIT" | tar -x -C "$OUT/runtime/lsp"
-          test -f "$OUT/runtime/lsp/plugin/lsp.vim"
-          test -f "$OUT/runtime/lsp/autoload/lsp/lsp.vim"
-          test -f "$OUT/runtime/lsp/README.md"
-          git -C "$work" archive --format=tar.gz --prefix=yegappan-lsp/ "$LSP_COMMIT" > "$OUT/yegappan-lsp.$LSP_COMMIT.source.tar.gz"
-          printf '%s\n' "$LSP_COMMIT" > "$OUT/runtime/lsp/.pinned-commit"
-          printf '%s\n' "$LSP_TREE" > "$OUT/runtime/lsp/.pinned-tree"
-          find "$OUT/runtime/lsp" -type f -printf '%P\n' | sort > "$OUT/logs/lsp-files.txt"
-
-      - name: Seal receipt and checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - "$OUT" <<'PY'
-          import hashlib, json, pathlib, sys
-          root = pathlib.Path(sys.argv[1])
-          def sha(path):
-              return hashlib.sha256(path.read_bytes()).hexdigest()
-          hq = root/'runtime/bin/hq'
-          worker = root/'runtime/bin/hq-worker'
-          lsp_archive = root/'yegappan-lsp.989016ae2ae4cbf304a9ca29478f47fec794493f.source.tar.gz'
-          receipt = {
-              'schema': 'ops.hqVimRuntimeCarry/1',
-              'status': 'PASS',
-              'target': 'linux-amd64',
-              'hq': {
-                  'repository': 'roccho-dev/hq',
-                  'sourceCommit': '3118886f34ac5615e8a7732a6297bd41900e21e1',
-                  'releaseTag': 'hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1',
-                  'verifiedMarkerTag': 'hq-artifact-verified-3118886f34ac5615e8a7732a6297bd41900e21e1',
-                  'hqSha256': sha(hq),
-                  'workerSha256': sha(worker),
-                  'goVersion': 'go1.23.12',
-                  'vcsModified': False,
-              },
-              'lsp': {
-                  'repository': 'yegappan/lsp',
-                  'commit': '989016ae2ae4cbf304a9ca29478f47fec794493f',
-                  'tree': '899cd0db6af40e3b1e0039b679541cd062cfa9e7',
-                  'archiveSha256': sha(lsp_archive),
-                  'fileCount': len([p for p in (root/'runtime/lsp').rglob('*') if p.is_file()]),
-              },
-              'runtime': {
-                  'entrypoints': ['runtime/bin/hq', 'runtime/bin/hq-worker'],
-                  'lspRuntimePath': 'runtime/lsp',
-                  'workerLifecycleCommandsObserved': ['serve', 'health', 'stop'],
-                  'sourceBuildRequiredByConsumer': False,
-                  'runtimeNetworkRequiredAfterExtraction': False,
-              },
-              'authorityBoundary': {
-                  'hqOwnsProductAndWorkerSemantics': True,
-                  'editsOwnsVimClientUX': True,
-                  'envsOwnsInstalledPlacementAndSupervision': True,
-                  'thisArtifactIsTransportProjection': True,
-              },
-          }
-          (root/'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
-          PY
-          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
-          (cd "$OUT" && sha256sum --check SHA256SUMS)
-
-      - name: Upload exact runtime Carry input
-        uses: actions/upload-artifact@v4
+          test "$(git rev-parse "$BASE_SHA")" = "$BASE_SHA"
+          git branch -f mobile-merge10-export-base "$BASE_SHA"
+          git bundle create "$RUNNER_TEMP/mobile-merge10-base.git.bundle" refs/heads/mobile-merge10-export-base
+          git bundle verify "$RUNNER_TEMP/mobile-merge10-base.git.bundle"
+          sha256sum "$RUNNER_TEMP/mobile-merge10-base.git.bundle" > "$RUNNER_TEMP/SHA256SUMS"
+          git bundle list-heads "$RUNNER_TEMP/mobile-merge10-base.git.bundle" > "$RUNNER_TEMP/HEADS"
+      - uses: actions/upload-artifact@v4
         with:
-          name: hq-vim-runtime-carry-3118886f-989016ae
-          path: ${{ runner.temp }}/hq-vim-runtime-carry/
+          name: mobile-merge10-base-export-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/mobile-merge10-base.git.bundle
+            ${{ runner.temp }}/SHA256SUMS
+            ${{ runner.temp }}/HEADS
           if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
+          retention-days: 1
