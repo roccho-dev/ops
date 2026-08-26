@@ -1,0 +1,136 @@
+name: mobile-merge10 materialize
+
+on:
+  push:
+    branches:
+      - transport/mobile-merge10-carry-260826
+    paths:
+      - .github/mobile-merge10-transport/ready.json
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BASE_SHA: 6aac086d72e53264fb3e220260824acbb2fac897
+      EXPECTED_TREE: 424ab520e895b8bd3ad7437027381a68996f4d59
+      PATCH_SHA256: c9e84c3c0b1ba1691a19c36e4a32682c440576bc2133c286d7d98b24900fd7c2
+      PATCH_XZ_SHA256: a0ed526e3c2c0ccd5f8db49b867c954d37758c3a1ae97573902ea044977783b3
+      SOURCE_CARRY_BUNDLE_SHA256: 35350ea83a0d489add4fa51afdb1c0fc03f718ce9ea45b21667d1c67c61a69ed
+      SOURCE_CARRY_HEAD: 0abd15b49d80af093f161850b8434649f204ae7f
+      TARGET_BRANCH: proposal/mobile-merge10-materialized-260826
+      TRANSPORT_DIR: .github/mobile-merge10-transport
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail closed on moved base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin proposals
+          current="$(git rev-parse origin/proposals)"
+          test "$current" = "$BASE_SHA"
+
+      - name: Reconstruct and verify patch carrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          mkdir -p "$work"
+          cat "$TRANSPORT_DIR"/part-*.b64 > "$work/target.patch.xz.b64"
+          base64 -d "$work/target.patch.xz.b64" > "$work/target.patch.xz"
+          echo "$PATCH_XZ_SHA256  $work/target.patch.xz" | sha256sum -c -
+          xz -d -c "$work/target.patch.xz" > "$work/target.patch"
+          echo "$PATCH_SHA256  $work/target.patch" | sha256sum -c -
+
+      - name: Materialize exact target tree and commit
+        id: materialize
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          repo="$work/repo"
+          git worktree add --detach "$repo" "$BASE_SHA"
+          git -C "$repo" apply --index --binary "$work/target.patch"
+          tree="$(git -C "$repo" write-tree)"
+          test "$tree" = "$EXPECTED_TREE"
+          git -C "$repo" diff --check
+          git -C "$repo" config user.name github-actions[bot]
+          git -C "$repo" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$repo" commit -m "feat: carry mobile-merge(10) ops state"
+          candidate="$(git -C "$repo" rev-parse HEAD)"
+          test "$(git -C "$repo" rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize real Git bundle and replay it in a fresh clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          repo="${{ steps.materialize.outputs.repo }}"
+          candidate="${{ steps.materialize.outputs.candidate }}"
+          bundle="$work/mobile-merge10-materialized.git.bundle"
+          replay="$work/replay"
+          git -C "$repo" branch -f materialized "$candidate"
+          git -C "$repo" bundle create "$bundle" refs/heads/materialized ^"$BASE_SHA"
+          git -C "$repo" bundle verify "$bundle"
+          git -C "$repo" bundle list-heads "$bundle" > "$work/bundle-heads.txt"
+          git clone --no-checkout "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$replay"
+          git -C "$replay" checkout --detach "$BASE_SHA"
+          git -C "$replay" fetch "$bundle" refs/heads/materialized:refs/heads/materialized
+          replay_sha="$(git -C "$replay" rev-parse refs/heads/materialized)"
+          test "$replay_sha" = "$candidate"
+          test "$(git -C "$replay" rev-parse "$replay_sha^{tree}")" = "$EXPECTED_TREE"
+          git -C "$replay" push origin "$replay_sha:refs/heads/$TARGET_BRANCH"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Emit receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          bundle="$work/mobile-merge10-materialized.git.bundle"
+          candidate="${{ steps.materialize.outputs.candidate }}"
+          python3 - "$work/receipt.json" "$bundle" "$candidate" "$BASE_SHA" "$EXPECTED_TREE" "$SOURCE_CARRY_HEAD" "$SOURCE_CARRY_BUNDLE_SHA256" <<'PY'
+          import hashlib,json,pathlib,sys
+          out,bundle,candidate,base,tree,source_head,source_bundle_sha=sys.argv[1:]
+          p=pathlib.Path(bundle)
+          receipt={
+            'schema':'mobile-merge10-materialize/1',
+            'status':'PASS',
+            'source':{
+              'attachedCarryBundleHead':source_head,
+              'attachedCarryBundleSha256':source_bundle_sha,
+              'historyPreserved':False,
+              'semanticTargetTreePreserved':True,
+            },
+            'baseSha':base,
+            'candidateSha':candidate,
+            'candidateTree':tree,
+            'materializedBundle':{
+              'name':p.name,
+              'bytes':p.stat().st_size,
+              'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+            },
+            'targetBranch':'proposal/mobile-merge10-materialized-260826',
+          }
+          pathlib.Path(out).write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-merge10-materialized-${{ steps.materialize.outputs.candidate }}
+          path: |
+            ${{ runner.temp }}/mobile-merge10/mobile-merge10-materialized.git.bundle
+            ${{ runner.temp }}/mobile-merge10/bundle-heads.txt
+            ${{ runner.temp }}/mobile-merge10/receipt.json
+          if-no-files-found: error
+          retention-days: 7
