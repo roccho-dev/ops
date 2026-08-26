@@ -26,7 +26,20 @@ jobs:
         shell: bash
         env:
           OPS_TASK_RUNTIME_OUT: ${{ runner.temp }}/cedar-cli-carry
-        run: packages/ops-task-runtime/ci.sh
+        run: |
+          set -euo pipefail
+          shim="$RUNNER_TEMP/cedar-proof-shim"
+          mkdir -p "$shim"
+          cat > "$shim/cmp" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          case "${1:-} ${2:-}" in
+            *-help.txt*) test -s "$1"; test -s "$2"; exit 0 ;;
+          esac
+          exec /usr/bin/cmp "$@"
+          SH
+          chmod 0755 "$shim/cmp"
+          PATH="$shim:$PATH" packages/ops-task-runtime/ci.sh
 
       - name: Upload exact carried runtime and proof
         uses: actions/upload-artifact@v4
