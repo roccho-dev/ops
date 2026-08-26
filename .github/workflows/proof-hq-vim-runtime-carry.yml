@@ -1,9 +1,9 @@
 name: mobile-merge10 base export one-shot
 
 on:
-  push:
+  pull_request:
     branches:
-      - transport/mobile-merge10-carry-260826
+      - proposals
     paths:
       - .github/workflows/proof-hq-vim-runtime-carry.yml
 
