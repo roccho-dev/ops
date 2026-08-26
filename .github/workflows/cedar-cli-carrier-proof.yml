@@ -1,0 +1,203 @@
+name: Cedar CLI carrier proof
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cedar-cli-carrier-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  carry-and-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Fetch, verify, carry, materialize, and execute Cedar CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/cedar-cli-carry"
+          download="$root/download"
+          upstream="$root/upstream"
+          pack="$root/pack"
+          sources="$root/sources"
+          result="$root/result"
+          runtime="$result/runtime"
+          rm -rf "$root"
+          mkdir -p "$download" "$upstream" "$sources" "$result"
+
+          version='4.12.0'
+          tag="cedar-policy-cli-v$version"
+          asset='cedar-policy-cli-x86_64-unknown-linux-gnu.tar.xz'
+          asset_sha='fc29b830bca41763c7cbb6ce66d1a14040fc2d077318479512c6a83052b70851'
+          checksum_asset="$asset.sha256"
+          checksum_asset_sha='9b8737441cebde53acd9d7f3cf1557905ede3f2a39c7678d97de3f66cef939cd'
+          base="https://github.com/cedar-policy/cedar/releases/download/$tag"
+
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 \
+            --silent --show-error "$base/$asset" -o "$download/$asset"
+          test "$(sha256sum "$download/$asset" | cut -d' ' -f1)" = "$asset_sha"
+
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 \
+            --silent --show-error "$base/$checksum_asset" -o "$download/$checksum_asset"
+          test "$(sha256sum "$download/$checksum_asset" | cut -d' ' -f1)" = "$checksum_asset_sha"
+          grep -F "$asset_sha" "$download/$checksum_asset" >/dev/null
+          grep -F "$asset" "$download/$checksum_asset" >/dev/null
+
+          python3 - "$download/$asset" "$upstream" <<'PY'
+          import pathlib, sys, tarfile
+          archive, dest = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          with tarfile.open(archive, 'r:xz') as tf:
+              members = tf.getmembers()
+              assert members
+              for member in members:
+                  p = pathlib.PurePosixPath(member.name)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert not member.issym() and not member.islnk()
+                  assert member.isdir() or member.isfile()
+              tf.extractall(dest)
+          PY
+
+          mapfile -t cedar_bins < <(find "$upstream" -type f -name cedar -print)
+          test "${#cedar_bins[@]}" -eq 1
+          cedar_bin="${cedar_bins[0]}"
+          chmod 0755 "$cedar_bin"
+          file "$cedar_bin" | grep -F 'ELF 64-bit' >/dev/null
+          "$cedar_bin" --help > "$result/upstream-help.txt"
+          (ldd "$cedar_bin" || true) > "$result/ldd.txt" 2>&1
+
+          python3 - "$root/tool.json" "$cedar_bin" <<'PY'
+          import json, pathlib, sys
+          pathlib.Path(sys.argv[1]).write_text(json.dumps({
+              'tools': [{
+                  'name': 'cedar',
+                  'source': sys.argv[2],
+                  'smoke': ['--help'],
+              }]
+          }, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+          PY
+
+          python3 packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py create \
+            --target-system x86_64-linux --tool-spec "$root/tool.json" --out-dir "$pack"
+          python3 packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py validate \
+            --pack-dir "$pack"
+          "$pack/bin/cedar" --help > "$result/packed-help.txt"
+
+          payload="$root/cedar-policy-cli-v$version-linux-amd64.runtime.tar.gz"
+          (cd "$pack" && tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) \
+            | gzip -n > "$payload"
+          payload_sha="$(sha256sum "$payload" | cut -d' ' -f1)"
+          carrier="carrier.native.linux-amd64.$payload_sha.b64.txt"
+          base64 -w0 "$payload" > "$sources/$carrier"
+
+          python3 - "$sources/cedar.source.json" "$version" "$tag" "$asset" "$asset_sha" \
+            "$checksum_asset" "$checksum_asset_sha" "$GITHUB_SHA" <<'PY'
+          import json, pathlib, sys
+          out, version, tag, asset, asset_sha, checksum, checksum_sha, ops_commit = sys.argv[1:]
+          value = {
+              'schema': 'cedar-cli-source/1',
+              'repository': 'cedar-policy/cedar',
+              'releaseTag': tag,
+              'version': version,
+              'target': 'x86_64-unknown-linux-gnu',
+              'asset': {
+                  'name': asset,
+                  'sha256': asset_sha,
+                  'url': f'https://github.com/cedar-policy/cedar/releases/download/{tag}/{asset}',
+              },
+              'checksumAsset': {
+                  'name': checksum,
+                  'sha256': checksum_sha,
+                  'url': f'https://github.com/cedar-policy/cedar/releases/download/{tag}/{checksum}',
+              },
+              'carrierImplementation': {
+                  'repository': 'roccho-dev/ops',
+                  'commit': ops_commit,
+                  'pack': 'packages/ops-portable-runtime-pack',
+                  'materializer': 'packages/chatgpt-capability/ingress/carrier-job.mjs',
+              },
+          }
+          pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+          PY
+
+          carrier_sha="$(sha256sum "$sources/$carrier" | cut -d' ' -f1)"
+          source_sha="$(sha256sum "$sources/cedar.source.json" | cut -d' ' -f1)"
+          python3 - "$root/request.json" "$sources/$carrier" "$carrier_sha" \
+            "$sources/cedar.source.json" "$source_sha" "$carrier" "$payload_sha" <<'PY'
+          import json, pathlib, sys
+          out, carrier_path, carrier_sha, source_path, source_sha, carrier_name, payload_sha = sys.argv[1:]
+          value = {
+              'schema': 'carrier-job/1',
+              'request_id': 'cedar-policy-cli-v4.12.0-linux-amd64',
+              'sources': [
+                  {'name': carrier_name, 'url': pathlib.Path(carrier_path).resolve().as_uri(), 'sha256': carrier_sha},
+                  {'name': 'cedar.source.json', 'url': pathlib.Path(source_path).resolve().as_uri(), 'sha256': source_sha},
+              ],
+              'carrier_name': carrier_name,
+              'payload_sha256': payload_sha,
+          }
+          pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+          PY
+
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize \
+            --request "$root/request.json" --out "$result/carrier-job" --source-dir "$sources"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify \
+            --input "$result/carrier-job" --receipt "$result/verified.receipt.json"
+          cmp "$result/carrier-job/receipt.json" "$result/verified.receipt.json"
+
+          mkdir -p "$runtime"
+          python3 - "$result/carrier-job/payload.bin" "$runtime" <<'PY'
+          import pathlib, sys, tarfile
+          archive, dest = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          with tarfile.open(archive, 'r:gz') as tf:
+              members = tf.getmembers()
+              assert members
+              for member in members:
+                  p = pathlib.PurePosixPath(member.name)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert not member.issym() and not member.islnk()
+                  assert member.isdir() or member.isfile()
+              tf.extractall(dest)
+          PY
+          python3 packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py validate \
+            --pack-dir "$runtime"
+          "$runtime/bin/cedar" --help > "$result/materialized-help.txt"
+          cmp "$result/packed-help.txt" "$result/materialized-help.txt"
+
+          binary_sha="$(sha256sum "$runtime/bin/cedar.real" | cut -d' ' -f1)"
+          binary_bytes="$(wc -c < "$runtime/bin/cedar.real")"
+          python3 - "$result/proof.json" "$version" "$asset_sha" "$payload_sha" \
+            "$carrier" "$carrier_sha" "$binary_sha" "$binary_bytes" "$GITHUB_SHA" <<'PY'
+          import json, pathlib, sys
+          out, version, asset_sha, payload_sha, carrier, carrier_sha, binary_sha, binary_bytes, ops_commit = sys.argv[1:]
+          value = {
+              'schema': 'cedar-cli-carry-proof/1',
+              'status': 'PASS',
+              'version': version,
+              'target': 'x86_64-linux',
+              'upstreamArchiveSha256': asset_sha,
+              'payloadSha256': payload_sha,
+              'carrier': {'name': carrier, 'sha256': carrier_sha},
+              'binary': {'path': 'runtime/bin/cedar.real', 'sha256': binary_sha, 'bytes': int(binary_bytes)},
+              'execution': {'upstreamHelp': 'PASS', 'packedHelp': 'PASS', 'materializedHelp': 'PASS'},
+              'opsCommit': ops_commit,
+          }
+          pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+          PY
+
+      - name: Upload exact Cedar carrier result
+        uses: actions/upload-artifact@v4
+        with:
+          name: cedar-cli-carrier-${{ github.sha }}
+          path: ${{ runner.temp }}/cedar-cli-carry/result/
+          if-no-files-found: error
+          retention-days: 30
