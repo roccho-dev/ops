@@ -1,0 +1,42 @@
+name: mobile-merge10 base export
+
+on:
+  push:
+    branches:
+      - transport/mobile-merge10-carry-260826
+    paths:
+      - .github/workflows/mobile-merge10-base-export.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Export exact proposals base as Git bundle
+        shell: bash
+        env:
+          BASE_SHA: 6aac086d72e53264fb3e220260824acbb2fac897
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse "$BASE_SHA")" = "$BASE_SHA"
+          git branch -f mobile-merge10-export-base "$BASE_SHA"
+          git bundle create "$RUNNER_TEMP/mobile-merge10-base.git.bundle" refs/heads/mobile-merge10-export-base
+          git bundle verify "$RUNNER_TEMP/mobile-merge10-base.git.bundle"
+          sha256sum "$RUNNER_TEMP/mobile-merge10-base.git.bundle" > "$RUNNER_TEMP/SHA256SUMS"
+          git bundle list-heads "$RUNNER_TEMP/mobile-merge10-base.git.bundle" > "$RUNNER_TEMP/HEADS"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-merge10-base-export-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/mobile-merge10-base.git.bundle
+            ${{ runner.temp }}/SHA256SUMS
+            ${{ runner.temp }}/HEADS
+          if-no-files-found: error
+          retention-days: 1
