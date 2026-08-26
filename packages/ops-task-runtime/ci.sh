@@ -1,310 +1,246 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-package_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="${OPS_TASK_RUNTIME_REPO_ROOT:-$(git rev-parse --show-toplevel)}"
 out="${OPS_TASK_RUNTIME_OUT:-${RUNNER_TEMP:-/tmp}/ops-task-runtime}"
-scratch="$repo_root/.ops-task-runtime-build"
-scratch_rel=".ops-task-runtime-build"
-work="$scratch/work"
+work="$out/work"
 assets="$out/assets"
+download="$work/download"
+upstream="$work/upstream"
 pack="$work/pack"
-source_manifest="$package_dir/source.json"
+sources="$work/sources"
+materialized="$work/materialized"
+runtime="$assets/runtime"
+proof="$assets/proof"
 
-cleanup() { rm -rf "$scratch"; }
-trap cleanup EXIT
-rm -rf "$out" "$scratch"
-mkdir -p "$work" "$assets"
-
-node "$package_dir/tests/e2e.mjs"
-
-readarray -t source_values < <(python3 - "$source_manifest" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1],encoding='utf-8'))
-print(x['authority']); print(x['target'])
-for key in ('actrun','goTask'):
-    y=x[key]
-    for field in ('repository','tag','commit','asset','archiveSha256','binarySha256'):
-        print(y[field])
-    if key=='goTask':
-        print(y['checksumsAsset']); print(y['checksumsSha256'])
-PY
-)
-authority="${source_values[0]}"
-target="${source_values[1]}"
-actrun_repo="${source_values[2]}"; actrun_tag="${source_values[3]}"; actrun_commit="${source_values[4]}"; actrun_asset="${source_values[5]}"; actrun_archive_sha="${source_values[6]}"; actrun_binary_sha="${source_values[7]}"
-task_repo="${source_values[8]}"; task_tag="${source_values[9]}"; task_commit="${source_values[10]}"; task_asset="${source_values[11]}"; task_archive_sha="${source_values[12]}"; task_binary_sha="${source_values[13]}"; task_checksums_asset="${source_values[14]}"; task_checksums_sha="${source_values[15]}"
-
-test "$authority" = roccho-dev/adrs#317
-test "$target" = linux-amd64
+rm -rf "$out"
+mkdir -p "$download" "$upstream" "$sources" "$assets" "$proof"
 
 sha() { sha256sum "$1" | awk '{print $1}'; }
 bytes() { stat -c %s "$1"; }
 
-resolve_tag_commit() {
-  local repository="$1" tag="$2"
-  git ls-remote --tags "https://github.com/$repository.git" "refs/tags/$tag" "refs/tags/$tag^{}" |
-    awk -v tag="$tag" '$2=="refs/tags/"tag {base=$1} $2=="refs/tags/"tag"^{}" {peeled=$1} END {print peeled ? peeled : base}'
-}
+version='4.12.0'
+tag="cedar-policy-cli-v$version"
+asset='cedar-policy-cli-x86_64-unknown-linux-gnu.tar.xz'
+asset_sha='fc29b830bca41763c7cbb6ce66d1a14040fc2d077318479512c6a83052b70851'
+checksum_asset="$asset.sha256"
+checksum_asset_sha='9b8737441cebde53acd9d7f3cf1557905ede3f2a39c7678d97de3f66cef939cd'
+base="https://github.com/cedar-policy/cedar/releases/download/$tag"
 
-fetch_asset() {
-  local repository="$1" tag="$2" name="$3" expected="$4" dest="$5"
-  local release="$work/$(echo "$repository-$name" | tr '/ ' '__').release.json"
-  gh api "repos/$repository/releases/tags/$tag" > "$release"
-  local url digest size
-  readarray -t fields < <(python3 - "$release" "$name" <<'PY'
-import json,sys
-r=json.load(open(sys.argv[1],encoding='utf-8'))
-assert not r['draft'] and not r['prerelease']
-rows=[x for x in r.get('assets',[]) if x.get('name')==sys.argv[2]]
-assert len(rows)==1
-x=rows[0]
-print(x['browser_download_url']); print(x.get('digest') or ''); print(x['size'])
-PY
-  )
-  url="${fields[0]}"; digest="${fields[1]}"; size="${fields[2]}"
-  curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 --silent --show-error "$url" -o "$dest"
-  test "$(bytes "$dest")" = "$size"
-  test "$(sha "$dest")" = "$expected"
-  if test -n "$digest"; then test "$digest" = "sha256:$expected"; fi
-}
+curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 \
+  --silent --show-error "$base/$asset" -o "$download/$asset"
+test "$(sha "$download/$asset")" = "$asset_sha"
 
-safe_tar() {
-  python3 - "$1" <<'PY'
-import pathlib,sys,tarfile
-with tarfile.open(sys.argv[1],'r:gz') as tf:
-    names=tf.getnames(); assert names
-    for name in names:
-        p=pathlib.PurePosixPath(name)
+curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 \
+  --silent --show-error "$base/$checksum_asset" -o "$download/$checksum_asset"
+test "$(sha "$download/$checksum_asset")" = "$checksum_asset_sha"
+grep -F "$asset_sha" "$download/$checksum_asset" >/dev/null
+grep -F "$asset" "$download/$checksum_asset" >/dev/null
+
+python3 - "$download/$asset" "$upstream" <<'PY'
+import pathlib, sys, tarfile
+archive, dest = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+with tarfile.open(archive, 'r:xz') as tf:
+    members = tf.getmembers()
+    assert members
+    for member in members:
+        p = pathlib.PurePosixPath(member.name)
         assert not p.is_absolute() and '..' not in p.parts
+        assert not member.issym() and not member.islnk()
+        assert member.isdir() or member.isfile()
+    tf.extractall(dest)
 PY
-}
 
-if test -n "$(git -C "$repo_root" status --porcelain --untracked-files=all -- packages/gosh)"; then
-  echo 'packages/gosh must be clean before Carrier creation' >&2
-  exit 1
-fi
-repo_head="$(git -C "$repo_root" rev-parse HEAD)"
-gosh_commit="${OPS_TASK_RUNTIME_GOSH_COMMIT:-$(git -C "$repo_root" log -1 --format=%H -- packages/gosh)}"
-gosh_tree="${OPS_TASK_RUNTIME_GOSH_TREE:-$(git -C "$repo_root" rev-parse HEAD:packages/gosh)}"
-test -n "$gosh_commit"
-test -n "$gosh_tree"
+mapfile -t cedar_bins < <(find "$upstream" -type f -name cedar -print)
+test "${#cedar_bins[@]}" -eq 1
+cedar_bin="${cedar_bins[0]}"
+chmod 0755 "$cedar_bin"
+file "$cedar_bin" | grep -F 'ELF 64-bit' >/dev/null
+"$cedar_bin" --help > "$proof/upstream-help.txt"
 
-input_dir="${OPS_TASK_RUNTIME_INPUT_DIR:-}"
-bin_dir="$work/input/bin"
-license_dir="$work/input/licenses"
-mkdir -p "$bin_dir" "$license_dir"
+mapfile -t license_files < <(find "$upstream" -type f \( -name LICENSE -o -name NOTICE \) -print | sort)
+test "${#license_files[@]}" -ge 1
 
-if test -n "$input_dir"; then
-  cp "$input_dir/actrun" "$bin_dir/actrun"
-  cp "$input_dir/task" "$bin_dir/task"
-  cp "$input_dir/gosh" "$bin_dir/gosh"
-  cp "$input_dir/task_checksums.txt" "$work/task_checksums.txt"
-  cp "$input_dir/actrun.LICENSE.txt" "$license_dir/actrun.LICENSE.txt"
-  cp "$input_dir/go-task.LICENSE.txt" "$license_dir/go-task.LICENSE.txt"
-else
-  test "$(resolve_tag_commit "$actrun_repo" "$actrun_tag")" = "$actrun_commit"
-  test "$(resolve_tag_commit "$task_repo" "$task_tag")" = "$task_commit"
-
-  actrun_archive="$work/$actrun_asset"
-  task_archive="$work/$task_asset"
-  task_checksums="$work/$task_checksums_asset"
-  fetch_asset "$actrun_repo" "$actrun_tag" "$actrun_asset" "$actrun_archive_sha" "$actrun_archive"
-  fetch_asset "$task_repo" "$task_tag" "$task_asset" "$task_archive_sha" "$task_archive"
-  fetch_asset "$task_repo" "$task_tag" "$task_checksums_asset" "$task_checksums_sha" "$task_checksums"
-  safe_tar "$actrun_archive"; safe_tar "$task_archive"
-  test "$(awk -v name="$task_asset" '$2==name || $2=="*"name {print $1}' "$task_checksums")" = "$task_archive_sha"
-  mkdir -p "$work/actrun-extract" "$work/task-extract"
-  tar -xzf "$actrun_archive" -C "$work/actrun-extract" actrun
-  tar -xzf "$task_archive" -C "$work/task-extract" task LICENSE
-  cp "$work/actrun-extract/actrun" "$bin_dir/actrun"
-  cp "$work/task-extract/task" "$bin_dir/task"
-  cp "$work/task-extract/LICENSE" "$license_dir/go-task.LICENSE.txt"
-  curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
-    "https://raw.githubusercontent.com/$actrun_repo/$actrun_commit/LICENSE" \
-    -o "$license_dir/actrun.LICENSE.txt"
-
-  mkdir -p "$work/gosh-a" "$work/gosh-b"
-  (
-    cd "$repo_root/packages/gosh"
-    CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$work/gosh-a/gosh" ./cmd/gosh
-    CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$work/gosh-b/gosh" ./cmd/gosh
-  )
-  cmp "$work/gosh-a/gosh" "$work/gosh-b/gosh"
-  cp "$work/gosh-a/gosh" "$bin_dir/gosh"
-fi
-chmod 0755 "$bin_dir/actrun" "$bin_dir/task" "$bin_dir/gosh"
-test "$(sha "$bin_dir/actrun")" = "$actrun_binary_sha"
-test "$(sha "$bin_dir/task")" = "$task_binary_sha"
-test "$(sha "$work/task_checksums.txt")" = "$task_checksums_sha"
-"$bin_dir/actrun" --help >/dev/null
-"$bin_dir/task" --version | grep -F "${task_tag#v}"
-"$bin_dir/gosh" version >/dev/null
-gosh_binary_sha="$(sha "$bin_dir/gosh")"
-
-bin_rel="$scratch_rel/work/input/bin"
-license_rel="$scratch_rel/work/input/licenses"
-tool_spec="$work/tool-spec.json"
-python3 - "$tool_spec" "$bin_rel" "$license_rel" <<'PY'
-import json,pathlib,sys
-out=pathlib.Path(sys.argv[1]); bin_dir=sys.argv[2]; licenses=sys.argv[3]
-value={'tools':[
- {'name':'actrun','source':f'{bin_dir}/actrun','smoke':['--help'],'files':[{'source':f'{licenses}/actrun.LICENSE.txt','path':'share/licenses/actrun.LICENSE.txt'}]},
- {'name':'task','source':f'{bin_dir}/task','smoke':['--version'],'files':[{'source':f'{licenses}/go-task.LICENSE.txt','path':'share/licenses/go-task.LICENSE.txt'}]},
- {'name':'gosh','source':f'{bin_dir}/gosh','smoke':['version']},
-]}
-out.write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+python3 - "$work/tool.json" "$cedar_bin" "${license_files[@]}" <<'PY'
+import json, pathlib, sys
+out, binary, *licenses = sys.argv[1:]
+files = []
+seen = set()
+for source in licenses:
+    name = pathlib.Path(source).name
+    if name in seen:
+        continue
+    seen.add(name)
+    files.append({'source': source, 'path': f'share/licenses/cedar/{name}'})
+value = {'tools': [{'name': 'cedar', 'source': binary, 'smoke': ['--help'], 'files': files}]}
+pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
 PY
-(
-  cd "$repo_root"
-  python3 packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py create \
-    --target-system x86_64-linux \
-    --tool-spec "$scratch_rel/work/tool-spec.json" \
-    --out-dir "$pack" >/dev/null
-)
-mkdir -p "$pack/fixtures" "$pack/metadata"
-cp "$package_dir/Taskfile.yml" "$package_dir/probe.py" "$package_dir/workflow.yml" "$package_dir/source.json" "$pack/fixtures/"
-cp "$tool_spec" "$pack/metadata/tool-spec.json"
-chmod 0644 "$pack/fixtures/"* "$pack/metadata/tool-spec.json"
 
-python3 - "$pack" "$source_manifest" "$gosh_commit" "$gosh_tree" "$gosh_binary_sha" <<'PY'
-import hashlib,json,pathlib,sys
-pack=pathlib.Path(sys.argv[1]); source_path=pathlib.Path(sys.argv[2]); commit,tree,gosh_sha=sys.argv[3:]
-source=json.loads(source_path.read_text(encoding='utf-8'))
-manifest=json.loads((pack/'MANIFEST.json').read_text(encoding='utf-8'))
-manifest['createdAt']='1970-01-01T00:00:00Z'
-manifest['authority']=source['authority']
-actual_spec=pack/'metadata/tool-spec.json'
-manifest['toolSpec']={'path':'metadata/tool-spec.json','sha256':hashlib.sha256(actual_spec.read_bytes()).hexdigest()}
-logical={
- 'actrun':f"github-release://{source['actrun']['repository']}/{source['actrun']['tag']}/{source['actrun']['asset']}",
- 'task':f"github-release://{source['goTask']['repository']}/{source['goTask']['tag']}/{source['goTask']['asset']}",
- 'gosh':f"git://{source['gosh']['repository']}@{commit}#{source['gosh']['source']}?tree={tree}",
+python3 "$repo_root/packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py" create \
+  --target-system x86_64-linux --tool-spec "$work/tool.json" --out-dir "$pack" >/dev/null
+python3 - "$pack/MANIFEST.json" "$version" "$tag" "$asset" "$asset_sha" <<'PY'
+import json, pathlib, sys
+path, version, tag, asset, asset_sha = sys.argv[1:]
+p = pathlib.Path(path)
+x = json.loads(p.read_text(encoding='utf-8'))
+x['createdAt'] = '1970-01-01T00:00:00Z'
+x['toolSpec'] = {'path': 'embedded', 'sha256': x['toolSpec']['sha256']}
+for tool in x['tools']:
+    tool['source'] = f'github-release://cedar-policy/cedar/{tag}/{asset}#sha256={asset_sha}'
+for row in x['files']:
+    row['sourcePath'] = None
+x['source'] = {
+    'repository': 'cedar-policy/cedar',
+    'releaseTag': tag,
+    'version': version,
+    'target': 'x86_64-unknown-linux-gnu',
+    'archive': {'name': asset, 'sha256': asset_sha},
 }
-for tool in manifest['tools']:
-    tool['source']=logical[tool['name']]
-for row in manifest['files']:
-    row['sourcePath']=None
-known={row['path'] for row in manifest['files']}
-for directory in (pack/'fixtures', pack/'metadata'):
-    for p in sorted(directory.rglob('*')):
-        if not p.is_file(): continue
-        rel=p.relative_to(pack).as_posix()
-        if rel not in known:
-            manifest['files'].append({'path':rel,'sourcePath':None,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size,'executable':False})
-manifest['files']=sorted(manifest['files'],key=lambda x:x['path'])
-manifest['runtime']={
- 'schema':'ops.taskRuntime/1',
- 'target':'linux-amd64',
- 'goshSourceCommit':commit,
- 'goshSourceTree':tree,
- 'goshBinarySha256':gosh_sha,
- 'dagAuthority':'Taskfile.yml',
- 'entryAuthority':'.gosh/events.jsonl generated at materialization',
-}
-(pack/'MANIFEST.json').write_text(json.dumps(manifest,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+p.write_text(json.dumps(x, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
 PY
+python3 "$repo_root/packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py" validate \
+  --pack-dir "$pack" >/dev/null
+"$pack/bin/cedar" --help > "$proof/packed-help.txt"
+cmp "$proof/upstream-help.txt" "$proof/packed-help.txt"
+
+payload="$work/cedar-policy-cli-v$version-linux-amd64.runtime.tar.gz"
 (
   cd "$pack"
-  find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum | sed 's#  \./#  #' > SHA256SUMS
+  tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+    --mode='u=rwX,go=rX,go-s' -cf - . | gzip -n -9 > "$payload"
 )
-python3 "$repo_root/packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py" validate --pack-dir "$pack" >/dev/null
-if test "$repo_head" != "$gosh_commit"; then
-  ! grep -R -F "$repo_head" "$pack"
-fi
+payload_sha="$(sha "$payload")"
+carrier="carrier.native.linux-amd64.$payload_sha.b64.txt"
+base64 -w0 "$payload" > "$sources/$carrier"
+carrier_sha="$(sha "$sources/$carrier")"
+base64 --decode "$sources/$carrier" | cmp - "$payload"
 
-deterministic_archive() {
-  local destination="$1"
-  (
-    cd "$pack"
-    tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-      --mode='u+rwX,go+rX,go-w' -cf - . | gzip -n -9 > "$destination"
-  )
+python3 - "$sources/cedar.source.json" "$version" "$tag" "$asset" "$asset_sha" \
+  "$checksum_asset" "$checksum_asset_sha" "$(git -C "$repo_root" rev-parse HEAD)" <<'PY'
+import json, pathlib, sys
+out, version, tag, asset, asset_sha, checksum, checksum_sha, ops_commit = sys.argv[1:]
+value = {
+    'schema': 'cedar-cli-source/1',
+    'repository': 'cedar-policy/cedar',
+    'releaseTag': tag,
+    'version': version,
+    'target': 'x86_64-unknown-linux-gnu',
+    'asset': {
+        'name': asset,
+        'sha256': asset_sha,
+        'url': f'https://github.com/cedar-policy/cedar/releases/download/{tag}/{asset}',
+    },
+    'checksumAsset': {
+        'name': checksum,
+        'sha256': checksum_sha,
+        'url': f'https://github.com/cedar-policy/cedar/releases/download/{tag}/{checksum}',
+    },
+    'carrierImplementation': {
+        'repository': 'roccho-dev/ops',
+        'commit': ops_commit,
+        'pack': 'packages/ops-portable-runtime-pack',
+        'materializer': 'packages/chatgpt-capability/ingress/carrier-job.mjs',
+    },
 }
-archive_a="$work/runtime-a.tar.gz"
-archive_b="$work/runtime-b.tar.gz"
-deterministic_archive "$archive_a"
-deterministic_archive "$archive_b"
-cmp "$archive_a" "$archive_b"
-archive_sha="$(sha "$archive_a")"
-archive_name="ops-task-runtime.linux-amd64.$archive_sha.tar.gz"
-archive="$assets/$archive_name"
-mv "$archive_a" "$archive"
-rm "$archive_b"
-carrier_name="$archive_name.b64.txt"
-carrier="$assets/$carrier_name"
-base64 -w0 "$archive" > "$carrier"
-test "$(base64 --decode "$carrier" | sha256sum | awk '{print $1}')" = "$archive_sha"
-carrier_sha="$(sha "$carrier")"
-cp "$pack/MANIFEST.json" "$assets/ops-task-runtime.$archive_sha.manifest.json"
-cp "$package_dir/source.json" "$assets/ops-task-runtime.$archive_sha.source.json"
-
-python3 - "$work/carrier-request.json" "$carrier" "$assets/ops-task-runtime.$archive_sha.manifest.json" "$assets/ops-task-runtime.$archive_sha.source.json" "$archive_sha" <<'PY'
-import hashlib,json,pathlib,sys
-out=pathlib.Path(sys.argv[1]); files=[pathlib.Path(x).resolve() for x in sys.argv[2:5]]; payload=sys.argv[5]
-value={'schema':'carrier-job/1','request_id':'ops-task-runtime','sources':[{'name':p.name,'url':p.as_uri(),'sha256':hashlib.sha256(p.read_bytes()).hexdigest()} for p in files],'carrier_name':files[0].name,'payload_sha256':payload}
-out.write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
 PY
-node "$repo_root/packages/chatgpt-capability/ingress/carrier-job.mjs" materialize --request "$work/carrier-request.json" --out "$work/materialized" >/dev/null
-node "$repo_root/packages/chatgpt-capability/ingress/carrier-job.mjs" verify --input "$work/materialized" --receipt "$work/carrier-job.receipt.json" >/dev/null
 
-replay="$work/replay"
-mkdir -p "$replay"
-tar -xzf "$work/materialized/payload.bin" -C "$replay"
-fixture="$replay/fixtures"
-fixture_abs="$(realpath "$fixture")"
-mkdir -p "$fixture/.gosh"
-cat > "$fixture/.gosh/events.jsonl" <<JSONL
-{"kind":"gosh.tool.require.v1","id":"go-task","resolver":"absolute","programAbs":"$(realpath "$replay/bin/task")"}
-{"kind":"gosh.target.upsert.v1","id":"ci","targetKind":"exec","tool":"go-task","args":["--taskfile","Taskfile.yml","ci"]}
-{"kind":"gosh.target.upsert.v1","id":"failure-propagation","targetKind":"exec","tool":"go-task","args":["--taskfile","Taskfile.yml","must-block"]}
-JSONL
-"$replay/bin/gosh" --root "$fixture_abs" run ci > "$work/direct.json"
-cp "$fixture/out/proof.json" "$work/direct-proof.json"
-rm -rf "$fixture/out"; rm -f "$fixture/.gosh/result.jsonl"
-"$replay/bin/actrun" workflow run "$fixture/workflow.yml" --workspace-mode local --no-nix --run-root "$work/actrun-runs" >/dev/null
-"$replay/bin/actrun" run view run-1 --run-root "$work/actrun-runs" --json > "$work/actrun.json"
-cp "$fixture/out/proof.json" "$work/actrun-proof.json"
-set +e
-"$replay/bin/gosh" --root "$fixture_abs" run failure-propagation > "$work/failure.json" 2> "$work/failure.stderr"
-failure_exit=$?
-set -e
-test "$failure_exit" -ne 0
-test -f "$fixture/out/failure/root.json"
-test ! -e "$fixture/out/failure/unexpected.txt"
-
-receipt="$assets/ops-task-runtime.$archive_sha.receipt.json"
-python3 - "$receipt" "$source_manifest" "$pack/MANIFEST.json" "$work/direct-proof.json" "$work/actrun-proof.json" "$work/actrun.json" "$archive" "$carrier" "$gosh_commit" "$gosh_tree" "$gosh_binary_sha" "$failure_exit" <<'PY'
-import hashlib,json,pathlib,sys
-out,source_path,manifest_path,direct_path,via_path,actrun_path,archive_path,carrier_path,commit,tree,gosh_sha,failure_exit=sys.argv[1:]
-source=json.load(open(source_path)); direct=json.load(open(direct_path)); via=json.load(open(via_path)); actrun=json.load(open(actrun_path))
-assert direct['status']==via['status']=='PASS'
-assert direct['semanticSha256']==via['semanticSha256']
-assert actrun['ok'] is True and actrun['state']=='completed'
-value={
- 'schema':'ops.taskRuntimeCarrierReceipt/1',
- 'status':'PASS',
- 'authority':source['authority'],
- 'target':source['target'],
- 'sources':source,
- 'gosh':{'sourceCommit':commit,'sourceTree':tree,'binarySha256':gosh_sha,'reproducibleBuild':True},
- 'closure':{
-   'archive':{'name':pathlib.Path(archive_path).name,'bytes':pathlib.Path(archive_path).stat().st_size,'sha256':hashlib.sha256(pathlib.Path(archive_path).read_bytes()).hexdigest()},
-   'carrier':{'name':pathlib.Path(carrier_path).name,'bytes':pathlib.Path(carrier_path).stat().st_size,'sha256':hashlib.sha256(pathlib.Path(carrier_path).read_bytes()).hexdigest(),'codec':'standard-base64'},
- },
- 'behavior':{'direct':direct,'actrun':via,'semanticSha256':direct['semanticSha256'],'failureExit':int(failure_exit),'dependentStarted':False},
- 'manifestSha256':hashlib.sha256(pathlib.Path(manifest_path).read_bytes()).hexdigest(),
+source_sha="$(sha "$sources/cedar.source.json")"
+python3 - "$work/request.json" "$sources/$carrier" "$carrier_sha" \
+  "$sources/cedar.source.json" "$source_sha" "$carrier" "$payload_sha" <<'PY'
+import json, pathlib, sys
+out, carrier_path, carrier_sha, source_path, source_sha, carrier_name, payload_sha = sys.argv[1:]
+value = {
+    'schema': 'carrier-job/1',
+    'request_id': 'cedar-policy-cli-v4.12.0-linux-amd64',
+    'sources': [
+        {'name': carrier_name, 'url': pathlib.Path(carrier_path).resolve().as_uri(), 'sha256': carrier_sha},
+        {'name': 'cedar.source.json', 'url': pathlib.Path(source_path).resolve().as_uri(), 'sha256': source_sha},
+    ],
+    'carrier_name': carrier_name,
+    'payload_sha256': payload_sha,
 }
-pathlib.Path(out).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
 PY
-printf '%s\n' "$archive_sha" > "$assets/payload.sha256"
-printf '%s\n' "$carrier_sha" > "$assets/carrier.sha256"
-python3 - "$assets" <<'PY'
-import hashlib,json,pathlib,sys
-root=pathlib.Path(sys.argv[1]); rows=[]
-for p in sorted(root.iterdir()):
-    if p.name=='assets.receipt.json': continue
-    rows.append({'name':p.name,'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
-(root/'assets.receipt.json').write_text(json.dumps({'schema':'ops.taskRuntimeAssets/1','status':'PASS','assets':rows},sort_keys=True,separators=(',',':'))+'\n')
+
+node "$repo_root/packages/chatgpt-capability/ingress/carrier-job.mjs" materialize \
+  --request "$work/request.json" --out "$materialized" --source-dir "$sources" >/dev/null
+node "$repo_root/packages/chatgpt-capability/ingress/carrier-job.mjs" verify \
+  --input "$materialized" --receipt "$proof/carrier-job.receipt.json" >/dev/null
+cmp "$materialized/receipt.json" "$proof/carrier-job.receipt.json"
+
+mkdir -p "$runtime"
+python3 - "$materialized/payload.bin" "$runtime" <<'PY'
+import pathlib, sys, tarfile
+archive, dest = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+with tarfile.open(archive, 'r:gz') as tf:
+    members = tf.getmembers()
+    assert members
+    for member in members:
+        p = pathlib.PurePosixPath(member.name)
+        assert not p.is_absolute() and '..' not in p.parts
+        assert not member.issym() and not member.islnk()
+        assert member.isdir() or member.isfile()
+    tf.extractall(dest)
 PY
-printf '%s\n' "$archive_sha"
+python3 "$repo_root/packages/ops-portable-runtime-pack/bin/ops-portable-runtime-pack.py" validate \
+  --pack-dir "$runtime" >/dev/null
+"$runtime/bin/cedar" --help > "$proof/materialized-help.txt"
+cmp "$proof/packed-help.txt" "$proof/materialized-help.txt"
+
+cat > "$proof/policy.cedar" <<'CEDAR'
+permit (
+    principal == User::"alice",
+    action == Action::"view",
+    resource == File::"93"
+);
+CEDAR
+printf '[]\n' > "$proof/entities.json"
+"$runtime/bin/cedar" authorize \
+  --policies "$proof/policy.cedar" --entities "$proof/entities.json" \
+  --principal 'User::"alice"' --action 'Action::"view"' --resource 'File::"93"' \
+  > "$proof/allow.txt"
+grep -Fx 'ALLOW' "$proof/allow.txt" >/dev/null
+"$runtime/bin/cedar" authorize \
+  --policies "$proof/policy.cedar" --entities "$proof/entities.json" \
+  --principal 'User::"bob"' --action 'Action::"view"' --resource 'File::"93"' \
+  > "$proof/deny.txt"
+grep -Fx 'DENY' "$proof/deny.txt" >/dev/null
+
+binary_sha="$(sha "$runtime/bin/cedar.real")"
+binary_bytes="$(bytes "$runtime/bin/cedar.real")"
+cp "$sources/$carrier" "$assets/$carrier"
+cp "$sources/cedar.source.json" "$assets/cedar.source.json"
+cp "$work/request.json" "$assets/carrier.request.json"
+cp "$materialized/receipt.json" "$assets/carrier.receipt.json"
+
+python3 - "$proof/proof.json" "$version" "$asset_sha" "$payload_sha" "$carrier" \
+  "$carrier_sha" "$binary_sha" "$binary_bytes" "$(git -C "$repo_root" rev-parse HEAD)" <<'PY'
+import hashlib, json, pathlib, sys
+out, version, asset_sha, payload_sha, carrier, carrier_sha, binary_sha, binary_bytes, ops_commit = sys.argv[1:]
+root = pathlib.Path(out).parent
+sha = lambda name: hashlib.sha256((root/name).read_bytes()).hexdigest()
+value = {
+    'schema': 'cedar-cli-carry-proof/1',
+    'status': 'PASS',
+    'version': version,
+    'target': 'x86_64-linux',
+    'upstreamArchiveSha256': asset_sha,
+    'payloadSha256': payload_sha,
+    'carrier': {'name': carrier, 'sha256': carrier_sha},
+    'binary': {'path': 'runtime/bin/cedar.real', 'sha256': binary_sha, 'bytes': int(binary_bytes)},
+    'execution': {
+        'upstreamHelp': 'PASS',
+        'packedHelp': 'PASS',
+        'materializedHelp': 'PASS',
+        'authorizeAllow': 'ALLOW',
+        'authorizeDeny': 'DENY',
+        'allowOutputSha256': sha('allow.txt'),
+        'denyOutputSha256': sha('deny.txt'),
+    },
+    'opsCommit': ops_commit,
+}
+pathlib.Path(out).write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+PY
+
+rm -rf "$work"
