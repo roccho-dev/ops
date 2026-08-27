@@ -1,0 +1,89 @@
+name: Mobile Agent source release verify one shot
+
+on:
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-source-release-verify-one-shot.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      ROOT: verification/mobile-agent-preset-app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposals
+          fetch-depth: 0
+
+      - name: Verify final repository state and source build
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$ROOT/manifest.json" "$ROOT/source-release-receipt.json" <<'PY'
+          import json,pathlib,sys
+          m=json.loads(pathlib.Path(sys.argv[1]).read_text()); r=json.loads(pathlib.Path(sys.argv[2]).read_text())
+          assert m['status']=='complete'; assert m['sourceReleaseClosure']['status']=='PASS'; assert r['status']=='PASS'; assert r['sourceBuild']['files']==54
+          assert m['source']['sourceAuthorityCandidate']['status']=='promoted'; assert m['bootstrap']['allowedUntilSourceAuthorityPromotion'] is False
+          PY
+          test -x "$ROOT/source-build.sh"
+          grep -F 'bash "$root/source-build.sh"' .github/workflows/mobile-agent-preset-static-host.yml
+          ! grep -F 'python3 "$root/bootstrap.py" "$root/expected.json" "$BOOTSTRAP_BASE" "$dist"' .github/workflows/mobile-agent-preset-static-host.yml
+          for f in mobile-agent-source-release-close.yml mobile-agent-source-release-merge-gate.yml mobile-agent-source-release-accepted.yml mobile-agent-source-release-finalize.yml mobile-agent-source-release-orchestrator-one-shot.yml mobile-agent-source-release-orchestrator-retry.yml; do test ! -e ".github/workflows/$f"; done
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/source/mobile-agent-presets-v1" --jq .object.sha)" = 608229b5a0b6fe370b07cef7c11a062e7add5ae1
+          accepted="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/accepted/mobile-agent-source-release" --jq .object.sha)"; test -n "$accepted"
+          GH_TOKEN="$GH_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" bash "$ROOT/source-build.sh" "$RUNNER_TEMP/dist" "$ROOT/expected.json" "$RUNNER_TEMP/verified-source-build.json"
+          echo "accepted=$accepted" >> "$GITHUB_OUTPUT"
+
+      - name: Verify immutable Release authenticated and public bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$(python3 -c 'import json; print(json.load(open("verification/mobile-agent-preset-app/source-release-receipt.json"))["release"]["tag"])')"
+          archive_name="$(python3 -c 'import json; print(json.load(open("verification/mobile-agent-preset-app/manifest.json"))["publication"]["archive"]["name"])')"
+          carrier_name="$(python3 -c 'import json; print(json.load(open("verification/mobile-agent-preset-app/manifest.json"))["publication"]["carrier"]["name"])')"
+          dist="$RUNNER_TEMP/dist"; archive="$RUNNER_TEMP/$archive_name"; carrier="$RUNNER_TEMP/$carrier_name"
+          (cd "$dist" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"; base64 -w0 "$archive" > "$carrier"
+          auth="$RUNNER_TEMP/auth"; public="$RUNNER_TEMP/public"; mkdir -p "$auth" "$public"
+          for path in "$archive" "$carrier" "$ROOT/manifest.json" "$ROOT/expected.json" "$ROOT/source-release-receipt.json"; do
+            name="$(basename "$path")"; gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$auth"; cmp "$path" "$auth/$name"; curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name" -o "$public/$name"; cmp "$path" "$public/$name"
+          done
+          echo "$tag" > "$RUNNER_TEMP/release-tag.txt"
+
+      - name: Verify stable Pages readback and real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          stable="$(python3 -c 'import json; print(json.load(open("verification/mobile-agent-preset-app/source-release-receipt.json"))["deployment"]["stableBase"])')"
+          ops_sha="$(git rev-parse HEAD)"
+          READBACK_RECEIPT="$RUNNER_TEMP/final-stable-readback.json" python3 "$ROOT/readback.py" "$RUNNER_TEMP/dist" "$stable" "$ROOT/expected.json" "$ROOT/manifest.json" "$ops_sha"
+          node "$ROOT/generate-urls.mjs" "$RUNNER_TEMP/dist" "$ROOT/manifest.json" "$stable" "$RUNNER_TEMP/final-stable-urls.json"
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/final-stable-urls.json" "$RUNNER_TEMP/final-browser-receipt.json" "$RUNNER_TEMP/final-shots"
+
+      - name: Commit verified receipt and remove one-shot gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$ROOT/source-release-verified.json" "$RUNNER_TEMP/release-tag.txt" "${{ steps.state.outputs.accepted }}" <<'PY'
+          import json,pathlib,sys
+          pathlib.Path(sys.argv[1]).write_text(json.dumps({'schema':'ops.mobileAgentSourceReleaseVerified/1','status':'PASS','sourceRef':'source/mobile-agent-presets-v1','sourceCommit':'608229b5a0b6fe370b07cef7c11a062e7add5ae1','sourceTree':'2abfe78594e92831009236df6d34902990be020d','sourceBuild':'54/54 PASS','releaseTag':pathlib.Path(sys.argv[2]).read_text().strip(),'releaseReadback':'authenticated+public PASS','pagesStableReadback':'PASS','browser':'Graph/Map/Seq PASS','acceptedSourceReleaseCommit':sys.argv[3]},indent=2,sort_keys=True)+'\n')
+          PY
+          rm -f .github/workflows/mobile-agent-source-release-verify-one-shot.yml
+          git config user.name github-actions[bot]; git config user.email 41898282+github-actions[bot]@users.noreply.github.com; git add -A; git commit -m 'test: verify Mobile Agent source release closure'; git push origin HEAD:proposals
+          sha="$(git rev-parse HEAD)"; ref=refs/heads/accepted/mobile-agent-source-release-verified; if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/accepted/mobile-agent-source-release-verified" >/dev/null 2>&1; then gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/$ref" -f sha="$sha" -F force=true >/dev/null; else gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="$ref" -f sha="$sha" >/dev/null; fi
+          gh issue comment 242 --repo "$GITHUB_REPOSITORY" --body "## Mobile Agent source-release independently verified\n\nstatus: \`PASS\`\nsource build: \`54/54\`\nRelease authenticated/public readback: \`PASS\`\nPages stable readback: \`PASS\`\nGraph/Map/Seq Chrome: \`PASS\`\nverified ref: \`accepted/mobile-agent-source-release-verified@$sha\`\nreceipt: \`verification/mobile-agent-preset-app/source-release-verified.json\`"
