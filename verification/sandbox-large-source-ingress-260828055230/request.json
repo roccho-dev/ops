@@ -1,0 +1,33 @@
+{
+  "baseRef": "proposals",
+  "baseSha": "0d639abef299536e0800175d4c6e1d34f763d1c7",
+  "ingressBranch": "ingress/sandbox-large-source-pr-260828055230",
+  "payload": {
+    "archiveBytes": 14218,
+    "archiveSha256": "0dc4d0014c29b7b696324fe7aaba51923d98933f994ffd058add0757cb0e3219",
+    "carrierBytes": 18960,
+    "carrierSha256": "c7a7f26a4e30e8f42261b45b2435542e787693dbdaa0687e3d541184c7b872fc",
+    "codec": "tar+gzip+standard-base64",
+    "parts": [
+      {"bytes":16000,"name":"part-000.b64","sha256":"4ba9f32d568ab0d03b4da612ca2822455a377a3764be009232ae6363441934e3"},
+      {"bytes":2960,"name":"part-001.b64","sha256":"feffd77c37c67fa3e63680ff8f5e54f95466a5f84988c6a3b1fc0934ac0b7c2f"}
+    ],
+    "root": "verification/sandbox-large-source-pr",
+    "unpackedBytes": 2100453,
+    "unpackedFiles": 38
+  },
+  "repository": "roccho-dev/ops",
+  "requestId": "sandbox-large-source-pr-260828055230",
+  "schema": "ops.sandboxLargeSourceMaterializationRequest/1",
+  "source": {
+    "expectedTree": "8cebc3bebf19e70dd1663f857458eaee4b7b0c29",
+    "records": 32,
+    "root": "verification/sandbox-large-source-pr/src",
+    "semanticSha256": "2d54cdff831dcd8833f64b00ff4f4d796c94519c85290b51b312015132ec3f14",
+    "shardBytes": 2097152,
+    "shardFiles": 32
+  },
+  "targetBranch": "proof/sandbox-large-source-pr-260828055230",
+  "tests": {"command":"node test.mjs","queryCommand":"node bin/query.mjs source"},
+  "transportBoundary": {"fullSourceWrittenThroughConnector":false,"modelRepairAllowed":false,"sourceRegenerationFromSeedAllowed":false,"temporaryIngressExcludedFromTarget":true}
+}
