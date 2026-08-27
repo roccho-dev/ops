@@ -1,0 +1,5 @@
+schema: ops.exactBaseSmallDeltaSource/1
+base: 0d639abef299536e0800175d4c6e1d34f763d1c7
+purpose: prove exact-base plus small-text-delta materialization
+value: 42
+transport: delta-only
