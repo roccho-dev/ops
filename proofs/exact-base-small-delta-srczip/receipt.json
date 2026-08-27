@@ -1,77 +1,58 @@
 {
-  "base": {
-    "commit": "0d639abef299536e0800175d4c6e1d34f763d1c7",
-    "ref": "proposals",
-    "sourceTree": "69ce4609beaa12f97681ad833e15ac921dd27d53",
-    "tree": "7f96aa2bffe7cd28d253c2cc257e2dee859b7c9f"
-  },
-  "comparison": {
-    "baseArchiveBytes": 1997052,
-    "baseArchiveSha256": "5e71c52f40896df451fdc6382c0b31f630bc69d6466c5ab1f25274eb61b8b6de",
-    "byteIdenticalBaseEntries": true,
-    "commonPrefixBytes": 1990660,
-    "onlyAddedEntry": "packages/chatgpt-capability/zz-exact-delta-proof.txt"
-  },
-  "delta": {
-    "bytes": 419,
-    "changedBytes": 183,
-    "changedPath": "packages/chatgpt-capability/zz-exact-delta-proof.txt",
-    "changedSha256": "0cfaa7859ee1a25d27ab8a03da4f5f14f4ceab3c0a499f189f1074c7c421d7cb",
-    "path": "proofs/exact-base-small-delta-srczip/delta.patch",
-    "sha256": "5909110a799699a89c179ffcb032cde0bb805517639ab22bb3df507a75446939"
-  },
-  "materializedCommit": "3b1857fc72b81e6f0fd4ba3422bb7b84d6e8273d",
-  "materializedTree": "6e8991774231de8a01cb735cc3605d76702bf9b5",
-  "materializer": {
-    "coreEffectStatus": "PASS",
-    "failureBoundary": "post-push fresh-readback adapter",
-    "ingressCommit": "7d5a6c174c92321e86266fa0656c61771a69b06b",
-    "runConclusion": "failure",
-    "runId": 33109904579
-  },
-  "materializerRunId": 33109904579,
-  "pullRequest": 335,
-  "readback": {
-    "archive": {
-      "bytes": 1997397,
-      "gitBlobOid": "fa1889d86b1554d75c2294504d8aa3e70aa19d19",
-      "sha256": "132d8f40e494a0a201fc6737a9c7cd69440b37163cb6fb8f02fa11e2927179e0",
-      "zipCrc": "PASS"
-    },
-    "artifact": {
-      "digest": "sha256:173ccf6bccef2a17ecb316e34fd4c62d1781ac32ae8917334929117ed46e558f",
-      "expiresAt": "2026-09-26T19:49:33Z",
-      "id": 9662219671,
-      "name": "exact-base-small-delta-srczip-readback-33110229421",
-      "zipBytes": 661532
-    },
-    "conclusion": "success",
-    "remoteGitBlobApiReadback": "PASS",
-    "runAttempt": 2,
-    "runId": 33110229421,
-    "sourceTreeExpected": "b7c336dfb6f4cffea41a6d66e381129257834a82",
-    "sourceTreeObserved": "b7c336dfb6f4cffea41a6d66e381129257834a82"
-  },
-  "remoteReadback": "PASS",
-  "requestId": "exact-base-small-delta-srczip-260828043844",
-  "schema": "ops.exactBaseSmallDeltaSrcZipReceipt/1",
-  "sourceIngressCommit": "7d5a6c174c92321e86266fa0656c61771a69b06b",
+  "schema": "ops.exactBaseSmallDeltaGitTreeReceipt/1",
   "status": "PASS",
-  "target": {
-    "archive": {
-      "bytes": 1997397,
-      "format": "zip-store-canonical-v1",
-      "gitBlobOid": "fa1889d86b1554d75c2294504d8aa3e70aa19d19",
-      "path": "proofs/exact-base-small-delta-srczip/src.zip",
-      "sha256": "132d8f40e494a0a201fc6737a9c7cd69440b37163cb6fb8f02fa11e2927179e0"
-    },
-    "fullTree": "534695ea95337a6272fceacb896e445b9c11772d",
-    "sourceTree": "b7c336dfb6f4cffea41a6d66e381129257834a82"
+  "requestId": "exact-base-small-delta-srczip-260828043844",
+  "pullRequest": 335,
+  "base": {
+    "ref": "proposals",
+    "commit": "0d639abef299536e0800175d4c6e1d34f763d1c7",
+    "packagePath": "packages/chatgpt-capability",
+    "packageTree": "69ce4609beaa12f97681ad833e15ac921dd27d53"
   },
   "transport": {
-    "deltaOnlyText": true,
-    "fullTargetArchiveCarried": false,
-    "modelRepairAllowed": false,
-    "sourceRegenerationFromSeedAllowed": false
+    "kind": "text-delta",
+    "bytes": 419,
+    "sha256": "5909110a799699a89c179ffcb032cde0bb805517639ab22bb3df507a75446939",
+    "fullTargetSourceCarried": false,
+    "sourceRegenerationFromSeedAllowed": false,
+    "modelRepairAllowed": false
+  },
+  "materializedSource": {
+    "path": "packages/chatgpt-capability/zz-exact-delta-proof.txt",
+    "mode": "100644",
+    "bytes": 183,
+    "sha256": "0cfaa7859ee1a25d27ab8a03da4f5f14f4ceab3c0a499f189f1074c7c421d7cb",
+    "gitBlobOid": "9f8ca8df1b869104e7f92bf8ec9f3e630262a615",
+    "writeCommit": "a5cbb8449b1ccb564df597c02b3bef041309dd72",
+    "remoteBlobReadback": "PASS"
+  },
+  "target": {
+    "packagePath": "packages/chatgpt-capability",
+    "packageTreeExpected": "b7c336dfb6f4cffea41a6d66e381129257834a82",
+    "packageTreeObserved": "b7c336dfb6f4cffea41a6d66e381129257834a82",
+    "treeMatch": true,
+    "mergeForm": "native-git-blobs-and-trees"
+  },
+  "archiveProjection": {
+    "purpose": "historical reconstruction evidence only",
+    "removedFromPullRequest": true,
+    "removalCommit": "69eea92c7e04196c27a1b5869dcf805b08274342",
+    "formerPath": "proofs/exact-base-small-delta-srczip/src.zip",
+    "bytes": 1997397,
+    "sha256": "132d8f40e494a0a201fc6737a9c7cd69440b37163cb6fb8f02fa11e2927179e0",
+    "gitBlobOid": "fa1889d86b1554d75c2294504d8aa3e70aa19d19"
+  },
+  "evidence": {
+    "materializerRunId": 33109904579,
+    "independentReadbackRunId": 33110229421,
+    "independentReadbackRunAttempt": 2,
+    "independentReadbackConclusion": "success",
+    "artifactId": 9662219671,
+    "artifactDigest": "sha256:173ccf6bccef2a17ecb316e34fd4c62d1781ac32ae8917334929117ed46e558f"
+  },
+  "finalBoundary": {
+    "archiveMerged": false,
+    "sourceBlobMerged": true,
+    "targetPackageTreeMaterialized": true
   }
 }
