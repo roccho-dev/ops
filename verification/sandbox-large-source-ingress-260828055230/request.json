@@ -9,8 +9,11 @@
     "carrierSha256": "c7a7f26a4e30e8f42261b45b2435542e787693dbdaa0687e3d541184c7b872fc",
     "codec": "tar+gzip+standard-base64",
     "parts": [
-      {"bytes":16000,"name":"part-000.b64","sha256":"4ba9f32d568ab0d03b4da612ca2822455a377a3764be009232ae6363441934e3"},
-      {"bytes":2960,"name":"part-001.b64","sha256":"feffd77c37c67fa3e63680ff8f5e54f95466a5f84988c6a3b1fc0934ac0b7c2f"}
+      {"bytes":4000,"name":"part-000.b64","sha256":"61b4fa542b0c3cc422dfa071c9d196f12f9058a077add4d003a9f211ffaee5e0"},
+      {"bytes":4000,"name":"part-001.b64","sha256":"b1bfe149aebf845cb50c77be8fb17b58db83ed45259e66f2d63b28bda5ca05f0"},
+      {"bytes":4000,"name":"part-002.b64","sha256":"aed44cd68f500e61b6f9366c306a2a8dcfdb3f17e73f21d0c4a30050c1776e69"},
+      {"bytes":4000,"name":"part-003.b64","sha256":"ebbd0e6eb469dedacff071c07b53435257f86784dc95e8015d865ef9e911f550"},
+      {"bytes":2960,"name":"part-004.b64","sha256":"feffd77c37c67fa3e63680ff8f5e54f95466a5f84988c6a3b1fc0934ac0b7c2f"}
     ],
     "root": "verification/sandbox-large-source-pr",
     "unpackedBytes": 2100453,
