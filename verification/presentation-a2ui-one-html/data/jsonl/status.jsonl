@@ -1,0 +1,46 @@
+{"id":"A2U-001","note":"PASS: 3 messages","status":"PASS"}
+{"id":"A2U-002","note":"PASS: 3 component-root pages; no Slide catalog entry","status":"PASS"}
+{"id":"ACT-001","note":"PASS: generic presentation action opened the module target","status":"PASS"}
+{"id":"AGC-001","note":"PASS: owner and customer host URLs carry an identical presentation fragment; appRedeployRequired=false","status":"PASS"}
+{"id":"AGC-002","note":"PASS: EBITDA=4080000 JPY; risk-adjusted contribution=19584000 JPY; signed URL accepted by the actual one-HTML runtime","status":"PASS"}
+{"id":"ARC-001","note":"PASS: presentation core has no iframe,sandbox,allow-scripts,or src behavior","status":"PASS"}
+{"id":"AUT-001","note":"PASS: UI browser/build and OPS assembly receipts authority=false","status":"PASS"}
+{"id":"AUT-002","note":"PASS: renderer construction without authorizeTarget is rejected","status":"PASS"}
+{"id":"BND-001","note":"PASS: receipt explicitly keeps DNS TLS custom-hostname onboarding outside the static artifact","status":"PASS"}
+{"id":"DEP-001","note":"PASS: 7 artifact-bound customer URLs; browser noRedeploy=true","status":"PASS"}
+{"id":"DET-001","note":"PASS: sha256=77cfb07e8bdca3c6d3fd49cdb1af163fc2b40a947a9a56fd735b95a4d4a880ad","status":"PASS"}
+{"id":"DET-002","note":"PASS: --check detects stale generated HTML, build receipt, publication fixtures, or browser receipt before overwrite","status":"PASS"}
+{"id":"DIG-001","note":"PASS: UI 9c19be103c and artifact digest locked","status":"PASS"}
+{"id":"ERR-001","note":"PASS: errors=[]","status":"PASS"}
+{"id":"HTML-001","note":"PASS: index.html only; 134793 bytes","status":"PASS"}
+{"id":"HTML-002","note":"PASS: 29 local ESM modules, signed policy keys, lifecycle contract, and 1 versioned module manifest embedded","status":"PASS"}
+{"id":"LIF-001","note":"PASS: manifest v2 fixes artifact-module-lifecycle/1 and 3000ms timeout","status":"PASS"}
+{"id":"LIF-002","note":"PASS: exact MessageChannel ready receipt observed before PASS in Chromium","status":"PASS"}
+{"id":"LIF-003","note":"PASS: timeout false identity and disallowed source tests fail closed with fallback","status":"PASS"}
+{"id":"LIF-004","note":"PASS: readiness lifecycle requires exactly the script capability before mount","status":"PASS"}
+{"id":"MOB-001","note":"PASS: chromium 144.0.7559.96 at customer B mobile viewport","status":"PASS"}
+{"id":"MOD-000","note":"PASS: page target contains appId,contractVersion,href; rendererKind absent","status":"PASS"}
+{"id":"MOD-001","note":"PASS: manifest resolved conforming-document/1 through trusted iframe-document@2","status":"PASS"}
+{"id":"MOD-002","note":"PASS: sandbox=allow-scripts; allowSameOrigin=false","status":"PASS"}
+{"id":"MOD-003","note":"PASS: inline and external module code executed independently","status":"PASS"}
+{"id":"MOD-004","note":"PASS: selected adapter output is disposed when target changes","status":"PASS"}
+{"id":"MOD-005","note":"PASS: manifest-versioned-iframe-adapter verified as iframe-document@2","status":"PASS"}
+{"id":"MOD-006","note":"PASS: artifact-module-lifecycle/1 init/ready identity and deterministic timeout verified","status":"PASS"}
+{"id":"MOD-007","note":"PASS: disallowed-module-origin-blocked-before-network","status":"PASS"}
+{"id":"NET-001","note":"PASS: requestCount=12; forbiddenNetworkRequests=[]","status":"PASS"}
+{"id":"OPS-001","note":"PASS: generic file assembly receipt generated","status":"PASS"}
+{"id":"PAG-001","note":"PASS: component,url-module","status":"PASS"}
+{"id":"PUB-001","note":"PASS: RS256 signed portable and exact-audience artifact-bound policies verified","status":"PASS"}
+{"id":"PUB-002","note":"PASS: signed-exact-domain-audience and tenant-binding browser assertions","status":"PASS"}
+{"id":"PUB-003","note":"PASS: exact origin policy and derived source kind package tests","status":"PASS"}
+{"id":"PUB-004","note":"PASS: artifact-publication-policy/2 binds transport and SHA-256; signed-artifact-digest-binding verified","status":"PASS"}
+{"id":"PUB-005","note":"PASS: mutated-reference-binding-blocked-before-network and tampered-inline-binding-blocked-before-runtime","status":"PASS"}
+{"id":"PUB-006","note":"PASS: signed enterprise-value URL contains policy and presentation and passes deployed-shell Chromium replay","status":"PASS"}
+{"id":"REF-001","note":"PASS: reference-plus-sha256 browser assertion","status":"PASS"}
+{"id":"REF-002","note":"PASS: bad-digest-blocked-before-module","status":"PASS"}
+{"id":"SEC-001","note":"PASS: strict publication/reference/fragment validators reject ambiguous inputs","status":"PASS"}
+{"id":"SRC-001","note":"PASS: sourcePolicyKinds=https,inline-html,relative; http,blob,urn,hash and mismatches rejected","status":"PASS"}
+{"id":"SRC-002","note":"PASS: normalized authorization.href is the sole iframe src and external-link fallback target","status":"PASS"}
+{"id":"TEN-001","note":"PASS: one locked HTML served at owner, customer A, and customer B origins","status":"PASS"}
+{"id":"TEN-002","note":"PASS: wrong-audience-blocked-before-artifact-or-module-network","status":"PASS"}
+{"id":"URL-001","note":"PASS: default fragment 5472 chars; canonical multi-field fragment and duplicate rejection retained","status":"PASS"}

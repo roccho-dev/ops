@@ -1,0 +1,13 @@
+{
+  "schema": "roccho.release-intent-summary/2",
+  "status": "PASS",
+  "historicalHeadIntents": 62,
+  "atomicIntents": 67,
+  "currentAtomicHeads": 31,
+  "internalCommits": 8,
+  "missingFinalOwner": 0,
+  "openAtomicIntents": 0,
+  "knownFunctionalIntentLoss": 0,
+  "compatibilityIntent": "M-COMPAT-001:CLOSED",
+  "sourceReceiptSha256": "1bec3c4ba693ff6ff9fb37e1e284721b5212258977c73c98e2bacb4b5d4f0ebf"
+}

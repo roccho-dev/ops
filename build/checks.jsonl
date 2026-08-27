@@ -27,3 +27,11 @@
 {"deps":["nodejs","python3","duckdb","git","ops-decision-closure"],"kind":"check","name":"ops-decision-closure","script":"packages/ops-decision-closure/tests/final-e2e.mjs"}
 {"deps":["nodejs","python3","ops-decision-closure"],"kind":"check","name":"ops-decision-closure-world-core","script":"packages/ops-decision-closure/tests/world-core.mjs"}
 {"deps":["nodejs","ops-task-runtime"],"kind":"check","name":"ops-task-runtime","script":"packages/ops-task-runtime/tests/e2e.mjs"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"artifact-assembly-lock","script":"packages/artifact-assembly/tests/run.mjs lock"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"artifact-assembly-assembly","script":"packages/artifact-assembly/tests/run.mjs assembly"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"artifact-assembly-purity","script":"packages/artifact-assembly/tests/run.mjs purity"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"semantic-map-a2ui-completion","script":"verification/semantic-map-a2ui/render.mjs check"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"presentation-a2ui-one-html-completion","script":"verification/presentation-a2ui-one-html/verify.mjs check"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"accounting-a2ui-lock","script":"verification/accounting-a2ui/check.mjs"}
+{"deps":["nodejs","artifact-assembly"],"kind":"check","name":"all-head-merge-closure","script":"verification/head-merge/check.mjs"}
+{"deps":["nodejs"],"kind":"check","name":"presentation-shared-visual-closure","script":"verification/presentation-shared-visual/verify.mjs"}
