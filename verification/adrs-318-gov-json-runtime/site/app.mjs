@@ -1,6 +1,5 @@
 const CURRENT_SCHEMA = 'ops.govJsonRuntimeCurrent/1';
 const VIEW_CONTRACT = 'ui.govReleaseRuntimeView/1';
-const encoder = new TextEncoder();
 
 function hex(bytes) {
   return [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, '0')).join('');
@@ -99,6 +98,11 @@ function addCheck(title, detail, digest) {
   document.getElementById('checks').append(fragment);
 }
 
+function publishRuntimeState(state) {
+  window.__govJsonRuntime = state;
+  document.getElementById('runtime-state').textContent = JSON.stringify(state);
+}
+
 async function main() {
   const { current, digest: currentDigest } = await fetchCurrent();
   const assets = [];
@@ -131,14 +135,14 @@ async function main() {
     authorityChanged: false,
     cutover: false,
   };
-  window.__govJsonRuntime = state;
+  publishRuntimeState(state);
   document.getElementById('status').textContent = 'PASS';
   document.body.dataset.status = 'ready';
 }
 
 main().catch((error) => {
   console.error(error);
-  window.__govJsonRuntime = { status: 'FAIL', error: String(error) };
+  publishRuntimeState({ status: 'FAIL', error: String(error) });
   document.getElementById('status').textContent = 'FAIL';
   document.body.dataset.status = 'error';
   const box = document.createElement('pre');
