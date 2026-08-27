@@ -1,0 +1,9 @@
+{
+  "schema": "mobile-merge10-finalize/1",
+  "method": "WASM_STYLE_TEXT_CHUNKS_TO_ACTIONS_MATERIALIZATION",
+  "baseSha": "6aac086d72e53264fb3e220260824acbb2fac897",
+  "expectedTree": "424ab520e895b8bd3ad7437027381a68996f4d59",
+  "carrierSha256": "17024b5487a48298386220728f3d8ae489252356c737f17602dc13af9b5c2f91",
+  "patchXzSha256": "a0ed526e3c2c0ccd5f8db49b867c954d37758c3a1ae97573902ea044977783b3",
+  "patchSha256": "c9e84c3c0b1ba1691a19c36e4a32682c440576bc2133c286d7d98b24900fd7c2"
+}
