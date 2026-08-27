@@ -31,11 +31,18 @@ jobs:
           test -s "$out/current.json"
           test -s "$out/materialize-receipt.json"
 
-  environment-smoke:
+  credential-smoke:
     needs: materialize-proof
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment: cloudflare-production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - name: Confirm environment job can start
-        run: printf '%s\n' 'cloudflare-production environment available'
+      - name: Confirm Cloudflare credential bindings without disclosure
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          printf '%s\n' 'Cloudflare account and token bindings are available'
