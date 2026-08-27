@@ -1,4 +1,4 @@
-name: Sandbox large multi-file source materializer v2
+name: Sandbox large multi-file source materializer v3
 
 on:
   push:
@@ -36,10 +36,10 @@ jobs:
           import base64,hashlib,lzma,pathlib
           root=pathlib.Path('verification/sandbox-large-source-ingress-2608280625/materializer')
           rows=[
-            ('part-000.b64',1000,'67df4b790ef9e9453abad05162aa762286a49064574ee407bb9b8fcbc935ee21'),
-            ('part-001.b64',1000,'5dd6bc2d0a7368971e8ed2d3506c01339d40760292bb4d4eb57ee43161cdc4b6'),
-            ('part-002.b64',1000,'40a1ce02b660a4cd1531c27fedbe678d882b61b805d1d025a5241989d7716199'),
-            ('part-003.b64',752,'f05e27f1a94859c63795a9aa11f0b71a623747ab3f8d960daede6f3601316d94'),
+            ('part-000.b64',1000,'d45e6646631050b2fb5dd879259eb0c805bda7bc027588446be756aecb6690b4'),
+            ('part-001.b64',1000,'ac3f911671723989e719d55ca9f7950657634a3019d394182b4713db35302cc6'),
+            ('part-002.b64',1000,'71f51bf97a787e293ddaf2bf677ec73b2d1ca74683e60c0cba138047d12bd57b'),
+            ('part-003.b64',760,'bec3dbec0136fb63e18dcca547c5888c13055d02273e863057aefcb3f38744a8'),
           ]
           chunks=[]
           for name,size,digest in rows:
@@ -47,11 +47,11 @@ jobs:
               assert len(data)==size and hashlib.sha256(data).hexdigest()==digest
               chunks.append(data)
           carrier=b''.join(chunks)
-          assert len(carrier)==3752 and hashlib.sha256(carrier).hexdigest()=='0f03cde68de61341455bd5c987a1a2ba63640fe8633cc8626d20f078639244d8'
+          assert len(carrier)==3760 and hashlib.sha256(carrier).hexdigest()=='f78b011973402245ffb070a5b7fc39026eee5a171bd59060e3a9dac4be91ba44'
           packed=base64.b64decode(carrier,validate=True)
-          assert len(packed)==2812 and hashlib.sha256(packed).hexdigest()=='ebe522badef685e2810078295b641e0ec0c0a5def4e21ed5f0b645b340e58b89'
+          assert len(packed)==2820 and hashlib.sha256(packed).hexdigest()=='42bd185a82329201e52779b4a595801d4e95e42054005e8eb2f7a90facd1ab7f'
           script=lzma.decompress(packed)
-          assert len(script)==8091 and hashlib.sha256(script).hexdigest()=='9970e28c973b36b6530e1eaaa5e9b1b0f5c75e20d178b7aa6e8e5d29431d0e14'
+          assert len(script)==8096 and hashlib.sha256(script).hexdigest()=='3e0865462b0182bffa85e98423eca57ae31ca8251dc8e7b8f7fbb3f6076b512a'
           pathlib.Path('/tmp/materializer.py').write_bytes(script)
           PY
           python3 /tmp/materializer.py
