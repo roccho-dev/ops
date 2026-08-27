@@ -35,3 +35,4 @@
 {"bin":"structured-diagnostic","deps":["node"],"entry":"packages/structured-diagnostic/bin/structured-diagnostic.mjs","env":[],"kind":"package","name":"structured-diagnostic","runtime":"node"}
 {"bin":"ops-decision-closure","deps":["python"],"entry":"packages/ops-decision-closure/bin/query.py","env":[],"kind":"package","name":"ops-decision-closure","runtime":"python"}
 {"bin":"ops-task-runtime","deps":["node"],"entry":"packages/ops-task-runtime/bin/ops-task-runtime.mjs","env":[],"kind":"package","name":"ops-task-runtime","runtime":"node"}
+{"bin":"artifact-assembly","deps":["node"],"entry":"packages/artifact-assembly/bin/artifact-assembly.mjs","env":[],"kind":"package","name":"artifact-assembly","runtime":"node"}

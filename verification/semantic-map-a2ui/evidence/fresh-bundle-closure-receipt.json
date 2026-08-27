@@ -1,0 +1,70 @@
+{
+  "schema": "roccho.fresh-bundle-closure-receipt/1",
+  "authority": false,
+  "status": "PASS",
+  "criteria": [
+    "TRN-012",
+    "URLX-007"
+  ],
+  "bundles": {
+    "mobile-agent": {
+      "head": "1daa001bf780053f4319e3fb20b4ea9a6e0d0442",
+      "sha256": "208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6",
+      "bundleVerify": "PASS",
+      "directClone": "PASS",
+      "strictFsck": "PASS",
+      "fullVerification": {
+        "schema": "semantic-map-verification/3",
+        "status": "PASS",
+        "gates": 48,
+        "negativeControls": 67,
+        "chartNegativeControls": 12,
+        "mutationSurvivors": 0
+      }
+    },
+    "ui": {
+      "head": "9bdec04db79ca50aee8c387232aeb98fb3a13f6d",
+      "sha256": "6295eb2aa14134a25c087255a979d163308a6a57f10903be1f38b3919bfeb0ae",
+      "bundleVerify": "PASS",
+      "directClone": "PASS",
+      "strictFsck": "PASS",
+      "repositoryCheck": "PASS",
+      "presentationBrowserAssertions": 67,
+      "generatedBuilds": 2,
+      "businessModelDifferential": {
+        "stages": 5,
+        "pixelExact": true,
+        "mobilePixelExact": true
+      },
+      "ownerNullMutationGate": "PASS"
+    },
+    "ops-proof-parent": {
+      "head": "a0d597801c3d6199687aedd1e36e5e6085e907c3",
+      "sha256": "fb2e30186935b04b375f352be9425e8f5075404c2cff11d67471176614883b1b",
+      "bundleVerify": "PASS",
+      "directClone": "PASS",
+      "strictFsck": "PASS",
+      "registeredChecks": {
+        "total": 44,
+        "pass": 44,
+        "fail": 0,
+        "timeout": 0
+      },
+      "atomicIntents": {
+        "total": 67,
+        "satisfied": 67,
+        "missingFinalOwner": 0,
+        "open": 0
+      }
+    }
+  },
+  "crossFeature": {
+    "mobileUiContract": "PASS",
+    "urlSourceRoundtrip": "PASS",
+    "publisherContinuation": "PASS",
+    "legacyDiagramRetirement": "PASS",
+    "finalUiArtifactLocks": "PASS",
+    "presentationSharedVisual": "PASS"
+  },
+  "scope": "The proof-parent bundles bind exact mobile/UI source, deterministic shared visual carrier, 67-assertion fresh browser proof, 44 registered checks by prior full-matrix inheritance plus rerun changed checks, and 67 atomic intents. The descendant commit updates only receipts and completion projections."
+}

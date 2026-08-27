@@ -1,0 +1,40 @@
+{
+  "schema": "roccho.release-intent-source-receipt/2",
+  "status": "PASS",
+  "sources": [
+    {
+      "repo": "mobile-agent",
+      "revision": "1daa001bf780053f4319e3fb20b4ea9a6e0d0442",
+      "revisionBinding": "exact",
+      "path": "audit/head-merge-closure.jsonl",
+      "rows": 19,
+      "sha256": "6f067f8872753712f9427cf3d3aed14b382e4ece96c05f42b45e0ad5c2eb5cf7"
+    },
+    {
+      "repo": "ui",
+      "revision": "9bdec04db79ca50aee8c387232aeb98fb3a13f6d",
+      "revisionBinding": "exact",
+      "path": "evidence/head-merge/closure.jsonl",
+      "rows": 28,
+      "sha256": "d81ad51e8d3e0a4065b3276e3811156aa91ec75b3e1586583dab1b1490afe30a"
+    },
+    {
+      "repo": "ops",
+      "revision": null,
+      "revisionBinding": "containing-commit",
+      "path": "verification/head-merge/closure.jsonl",
+      "rows": 15,
+      "sha256": "690f5f4163511298da276b5fbbc272e37cf6b4e13b0c11f219f5a3c971eada4f"
+    }
+  ],
+  "atomicIntentLedger": {
+    "path": "verification/head-merge/atomic-intent-ledger.jsonl",
+    "rows": 67,
+    "sha256": "60c19a2625caa6b50533260ca9858834aa81274e249fd79986d65786141bb5cb"
+  },
+  "internalCommitCoverage": {
+    "path": "verification/head-merge/internal-commit-coverage.jsonl",
+    "rows": 8,
+    "sha256": "efce32884f9b60380b2f88b1c0352e54d8b916e79f1a9a9bc57621ffa919d7c5"
+  }
+}

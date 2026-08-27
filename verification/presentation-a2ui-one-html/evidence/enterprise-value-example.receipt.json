@@ -1,0 +1,39 @@
+{
+  "authority": false,
+  "customerHost": "slides.customer-a.test",
+  "customerUrlChars": 3245,
+  "inputSha256": "07063d8cf7cda8b6377c58a0c3f1c51e8aa47b868c4f5937039e845648886f09",
+  "policyId": "customer-a:enterprise-value-example",
+  "presentationSha256": "37bb66f2e3f0a30e2a868fd27942f60cd192a1f2ab7110605b593c101bb82233",
+  "presentationTokenSha256": "64192ef4ee6cdc3531c074d597b4c4718f1cda02d7fb4fdefc2a66dbc8fa7c85",
+  "results": {
+    "annualEbitdaDeltaJpy": 4080000,
+    "enterpriseValueContributionJpy": 32640000,
+    "grossLaborCapacityJpy": 5760000,
+    "incrementalGrossProfitJpy": 3600000,
+    "paybackMonths": 8.823529411764707,
+    "realizedLaborEffectJpy": 2880000,
+    "riskAdjustedContributionJpy": 19584000,
+    "sensitivity": [
+      {
+        "contributionJpy": 20400000,
+        "multiple": 5,
+        "riskAdjustedJpy": 12240000
+      },
+      {
+        "contributionJpy": 32640000,
+        "multiple": 8,
+        "riskAdjustedJpy": 19584000
+      },
+      {
+        "contributionJpy": 48960000,
+        "multiple": 12,
+        "riskAdjustedJpy": 29376000
+      }
+    ]
+  },
+  "runtimeConsumable": true,
+  "schema": "enterprise-value-presentation-example-receipt/2",
+  "signedPublication": true,
+  "status": "pass"
+}
