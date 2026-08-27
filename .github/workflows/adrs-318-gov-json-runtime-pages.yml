@@ -1,0 +1,197 @@
+name: ADRS 318 gov JSON runtime reduce Pages proof
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
+      - 'verification/adrs-318-gov-json-runtime/**'
+
+permissions:
+  contents: read
+
+jobs:
+  provider-proof:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor == github.repository_owner &&
+      github.head_ref == 'feat/adrs-318-gov-json-runtime-pages'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-production
+    env:
+      ROOT: verification/adrs-318-gov-json-runtime
+      PROJECT: stg-gov-json-reduce
+      DIST: ${{ runner.temp }}/gov-json-runtime-site
+      EVIDENCE: ${{ runner.temp }}/gov-json-runtime-evidence
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Materialize exact governance Release JSON
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE"
+          node "$ROOT/materialize.mjs" "$ROOT/source.json" "$DIST" | tee "$EVIDENCE/materialize.stdout.json"
+          python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['DIST'])
+          receipt=json.loads((root/'materialize-receipt.json').read_text())
+          assert receipt['status']=='PASS'
+          assert receipt['claim_ceiling']=='PR_CANDIDATE_GREEN'
+          assert len(receipt['mirrored_assets'])==3
+          assert receipt['boundary']['semantic_reduce'] is False
+          assert receipt['boundary']['html_generated_per_update'] is False
+          PY
+
+      - name: Install browser proof dependency
+        run: python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+
+      - name: Prove runtime fetch and display reduce locally
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$DIST" > "$EVIDENCE/local-http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep .2; done
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
+            http://127.0.0.1:4173/ \
+            "$EVIDENCE/local-browser.json" \
+            "$EVIDENCE/local-browser.png"
+          kill "$server" 2>/dev/null || true
+          trap - EXIT
+
+      - name: Create or verify dedicated Cloudflare Pages project
+        id: project
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT"
+          code="$(curl -sS -o "$EVIDENCE/cloudflare-project.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create "$PROJECT" --production-branch proposals
+            echo 'created=true' >> "$GITHUB_OUTPUT"
+          elif [ "$code" = 200 ]; then
+            python3 - "$EVIDENCE/cloudflare-project.json" "$PROJECT" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['success'] is True
+          assert value['result']['name']==sys.argv[2]
+          assert value['result']['production_branch']=='proposals'
+          PY
+            echo 'created=false' >> "$GITHUB_OUTPUT"
+          else
+            cat "$EVIDENCE/cloudflare-project.json" >&2
+            exit 1
+          fi
+
+      - name: Deploy exact static runtime to preview branch
+        id: deploy
+        run: |
+          set -euo pipefail
+          branch="adrs-318-pr-${{ github.event.number }}"
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$DIST" \
+            --project-name "$PROJECT" \
+            --branch "$branch" \
+            --commit-hash '${{ github.event.pull_request.head.sha }}' \
+            --commit-message 'ADRS 318 gov JSON runtime reduce proof' 2>&1)"
+          printf '%s\n' "$output" | tee "$EVIDENCE/wrangler-deploy.log"
+          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | head -n1 || true)"
+          test -n "$deployment"
+          echo "deployment_url=${deployment%/}/" >> "$GITHUB_OUTPUT"
+          echo "preview_branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Read back every served byte from Cloudflare Pages
+        run: |
+          set -euo pipefail
+          python3 "$ROOT/readback.py" \
+            "$DIST" \
+            '${{ steps.deploy.outputs.deployment_url }}' \
+            "$EVIDENCE/remote-readback.json"
+
+      - name: Re-open deployed runtime in real Chrome
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
+            '${{ steps.deploy.outputs.deployment_url }}' \
+            "$EVIDENCE/remote-browser.json" \
+            "$EVIDENCE/remote-browser.png"
+          "$chrome" --version > "$EVIDENCE/chrome-version.txt"
+
+      - name: Write bounded provider receipt
+        env:
+          PROJECT_CREATED: ${{ steps.project.outputs.created }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+          PREVIEW_BRANCH: ${{ steps.deploy.outputs.preview_branch }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,pathlib
+          evidence=pathlib.Path(os.environ['EVIDENCE'])
+          dist=pathlib.Path(os.environ['DIST'])
+          materialize=json.loads((dist/'materialize-receipt.json').read_text())
+          local=json.loads((evidence/'local-browser.json').read_text())
+          readback=json.loads((evidence/'remote-readback.json').read_text())
+          remote=json.loads((evidence/'remote-browser.json').read_text())
+          assert materialize['status']==local['status']==readback['status']==remote['status']=='PASS'
+          receipt={
+            'schema':'ops.govJsonRuntimePagesProof/1',
+            'status':'PASS',
+            'claim_ceiling':'PR_CANDIDATE_GREEN',
+            'authority':False,
+            'repository':os.environ['GITHUB_REPOSITORY'],
+            'candidate_sha':os.environ['GITHUB_SHA'],
+            'source_release':materialize['source_release'],
+            'source_assets':materialize['mirrored_assets'],
+            'cloudflare':{
+              'project':os.environ['PROJECT'],
+              'project_created_this_run':os.environ['PROJECT_CREATED']=='true',
+              'preview_branch':os.environ['PREVIEW_BRANCH'],
+              'deployment_url':os.environ['DEPLOYMENT_URL'],
+            },
+            'local_browser':'PASS',
+            'remote_byte_readback':'PASS',
+            'remote_browser':'PASS',
+            'runtime_fetch':True,
+            'display_reduce_only':True,
+            'semantic_reduce':False,
+            'html_generated_per_data_update':False,
+            'provider_effects':True,
+            'production_package_contract':False,
+            'authenticated_ui':False,
+            'provider_e2e':False,
+            'authority_changed':False,
+            'cutover':False,
+          }
+          (evidence/'provider-proof.json').write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          print(json.dumps(receipt,sort_keys=True))
+          PY
+
+      - name: Upload exact evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-318-gov-json-runtime-pages-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/gov-json-runtime-site/
+            ${{ runner.temp }}/gov-json-runtime-evidence/
+          if-no-files-found: error
+          retention-days: 30
