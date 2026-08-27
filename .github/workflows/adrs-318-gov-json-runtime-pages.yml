@@ -11,9 +11,19 @@ permissions:
   contents: read
 
 jobs:
-  materialize-proof:
+  provider-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
+    environment: cloudflare-production
+    env:
+      ROOT: verification/adrs-318-gov-json-runtime
+      PROJECT: stg-gov-json-reduce
+      DIST: ${{ runner.temp }}/gov-json-runtime-site
+      EVIDENCE: ${{ runner.temp }}/gov-json-runtime-evidence
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.number }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,27 +32,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-      - name: Fetch and verify exact governance Release JSON
-        run: |
-          set -euo pipefail
-          root=verification/adrs-318-gov-json-runtime
-          out="$RUNNER_TEMP/gov-json-runtime-site"
-          node "$root/materialize.mjs" "$root/source.json" "$out"
-          test -s "$out/current.json"
-          test -s "$out/materialize-receipt.json"
-
-  credential-smoke:
-    needs: materialize-proof
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    environment: cloudflare-production
-    env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-    steps:
-      - name: Confirm Cloudflare credential bindings without disclosure
-        run: |
-          set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$CLOUDFLARE_API_TOKEN"
-          printf '%s\n' 'Cloudflare account and token bindings are available'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prove exact gov JSON runtime on Cloudflare Pages
+        run: bash "$ROOT/provider-proof.sh"
+      - name: Upload exact evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-318-gov-json-runtime-pages-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/gov-json-runtime-site/
+            ${{ runner.temp }}/gov-json-runtime-evidence/
+          if-no-files-found: error
+          retention-days: 30
