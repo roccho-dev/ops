@@ -1,0 +1,131 @@
+name: Governance Release proxy proof
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gov-release-proxy-proof.yml'
+      - 'packages/gov-release-proxy/**'
+      - 'ci.intent.v1.jsonl'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Unit, destructive and contract checks
+        working-directory: packages/gov-release-proxy
+        run: npm run check
+      - name: Wrangler dry-run
+        working-directory: packages/gov-release-proxy
+        run: npm run check:dry-run
+      - name: Prove pinned public GitHub Release assets directly
+        working-directory: packages/gov-release-proxy
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { ASSETS } from './src/assets.mjs';
+          import { upstreamUrl } from './src/worker.mjs';
+          for (const [route, asset] of Object.entries(ASSETS)) {
+            const response = await fetch(upstreamUrl(asset), {
+              headers: { accept: 'application/octet-stream', 'user-agent': 'roccho-dev-ops-gov-release-proxy-proof/1', 'x-github-api-version': '2022-11-28' },
+              redirect: 'follow',
+            });
+            assert.equal(response.status, 200, `${route}: ${response.status}`);
+            const bytes = Buffer.from(await response.arrayBuffer());
+            assert.equal(bytes.length, asset.bytes);
+            assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, asset.digest);
+          }
+          console.log(JSON.stringify({schema:'ops.govReleaseUpstreamReceipt/1',status:'PASS',routes:Object.keys(ASSETS)}));
+          NODE
+
+  deploy-public-proof:
+    needs: candidate
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: cloudflare-production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCESS_ALLOWED_EMAILS_JSON: ${{ vars.CF_ACCESS_ALLOWED_EMAILS_JSON }}
+      CF_ACCESS_OTP_IDP_ID: ${{ vars.CF_ACCESS_OTP_IDP_ID }}
+      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Require existing Cloudflare wiring
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+      - name: Deploy staging Worker
+        id: deploy
+        working-directory: packages/gov-release-proxy
+        run: |
+          set -euo pipefail
+          output="$(npx --yes wrangler@4.112.0 deploy 2>&1)"
+          printf '%s\n' "$output"
+          url="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -n1)"
+          test -n "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Verify deployed public proxy before optional Access bootstrap
+        working-directory: packages/gov-release-proxy
+        run: node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/public-proxy-receipt.json"
+      - name: Bootstrap exact-email OTP Access when configured
+        id: access
+        if: env.CF_ACCESS_ALLOWED_EMAILS_JSON != '' && env.CF_ACCESS_OTP_IDP_ID != ''
+        working-directory: packages/gov-release-proxy
+        env:
+          WORKER_URL: ${{ steps.deploy.outputs.url }}
+        run: node scripts/bootstrap-access.mjs | tee "$RUNNER_TEMP/access-bootstrap-receipt.json"
+      - name: Verify Access boundary and optional authenticated readback
+        if: steps.access.outcome == 'success'
+        working-directory: packages/gov-release-proxy
+        run: |
+          set -euo pipefail
+          sleep 5
+          node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/access-readback-receipt.json"
+      - name: Stage proof receipt
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          def read(name):
+            p=root/name
+            if not p.exists(): return None
+            rows=[x for x in p.read_text().splitlines() if x.strip()]
+            return json.loads(rows[-1]) if rows else None
+          receipt={
+            'schema':'ops.govReleaseProxyWorkflowReceipt/1',
+            'workerUrl':'${{ steps.deploy.outputs.url }}',
+            'publicProxy':read('public-proxy-receipt.json'),
+            'accessBootstrap':read('access-bootstrap-receipt.json'),
+            'accessReadback':read('access-readback-receipt.json'),
+            'authority':False,
+            'cutover':False,
+            'privateUpstream':False,
+          }
+          (root/'gov-release-proxy-workflow-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gov-release-proxy-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/gov-release-proxy-workflow-receipt.json
+          if-no-files-found: error
+          retention-days: 14
