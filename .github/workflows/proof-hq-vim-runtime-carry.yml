@@ -1,4 +1,4 @@
-name: mobile-merge10 transport export one-shot
+name: mobile-merge10 full transport export one-shot
 
 on:
   pull_request:
@@ -15,20 +15,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Export current transport bytes
+      - name: Export all mobile-merge10 transport bytes
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/mobile-merge10-transport"
-          cp -a .github/mobile-merge10-transport/. "$RUNNER_TEMP/mobile-merge10-transport/"
-          find "$RUNNER_TEMP/mobile-merge10-transport" -type f -printf '%P\t%s\n' | sort > "$RUNNER_TEMP/FILES.tsv"
-          (cd "$RUNNER_TEMP/mobile-merge10-transport" && sha256sum * > "$RUNNER_TEMP/SHA256SUMS")
+          out="$RUNNER_TEMP/mobile-merge10-all"
+          mkdir -p "$out/github"
+          find .github -maxdepth 1 -type d -name 'mobile-merge10-*' -print0 \
+            | while IFS= read -r -d '' d; do cp -a "$d" "$out/github/"; done
+          find "$out" -type f -printf '%P\t%s\n' | sort > "$out/FILES.tsv"
+          (cd "$out" && find github -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
-          name: mobile-merge10-transport-export-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/mobile-merge10-transport/
-            ${{ runner.temp }}/FILES.tsv
-            ${{ runner.temp }}/SHA256SUMS
+          name: mobile-merge10-full-transport-${{ github.sha }}
+          path: ${{ runner.temp }}/mobile-merge10-all/
           if-no-files-found: error
           retention-days: 1
