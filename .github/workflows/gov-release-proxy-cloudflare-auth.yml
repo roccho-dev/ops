@@ -1,0 +1,36 @@
+name: Governance Release proxy Cloudflare auth preflight
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gov-release-proxy-cloudflare-auth.yml'
+      - 'packages/gov-release-proxy/scripts/verify-cloudflare-token.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: cloudflare-production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_PREFLIGHT_RECEIPT: ${{ runner.temp }}/cloudflare-token-preflight.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Verify active token and effective Workers account scope
+        working-directory: packages/gov-release-proxy
+        run: node scripts/verify-cloudflare-token.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gov-release-proxy-cloudflare-auth-${{ github.run_id }}
+          path: ${{ runner.temp }}/cloudflare-token-preflight.json
+          if-no-files-found: error
+          retention-days: 14
