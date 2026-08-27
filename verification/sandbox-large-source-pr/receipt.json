@@ -8,8 +8,10 @@
     "commit": "83054f730de66c57589561241aab969b116c0895"
   },
   "materialization": {
-    "remoteReadback": "PENDING",
-    "sourceCommit": "PENDING",
+    "remoteBlobSamples": 3,
+    "remoteReadback": "PASS",
+    "sourceCommit": "5b7767bb4e2f0eb98c027529ecfe8ebac7cdc261",
+    "sourceCommitTree": "0c25951be95e6034c077ca261424fc078a6e925a",
     "targetBranch": "proof/sandbox-large-source-pr-2608280625"
   },
   "requestId": "sandbox-large-source-pr-2608280625",
