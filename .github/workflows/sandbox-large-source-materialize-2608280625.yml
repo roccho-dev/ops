@@ -1,0 +1,63 @@
+name: Sandbox large multi-file source materializer v2
+
+on:
+  push:
+    branches: ['ingress/sandbox-large-source-pr-2608280625']
+    paths:
+      - '.github/workflows/sandbox-large-source-materialize-2608280625.yml'
+      - 'verification/sandbox-large-source-ingress-2608280625/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sandbox-large-source-materialize-2608280625
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Verify and run exact materializer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,lzma,pathlib
+          root=pathlib.Path('verification/sandbox-large-source-ingress-2608280625/materializer')
+          rows=[
+            ('part-000.b64',1000,'67df4b790ef9e9453abad05162aa762286a49064574ee407bb9b8fcbc935ee21'),
+            ('part-001.b64',1000,'5dd6bc2d0a7368971e8ed2d3506c01339d40760292bb4d4eb57ee43161cdc4b6'),
+            ('part-002.b64',1000,'40a1ce02b660a4cd1531c27fedbe678d882b61b805d1d025a5241989d7716199'),
+            ('part-003.b64',752,'f05e27f1a94859c63795a9aa11f0b71a623747ab3f8d960daede6f3601316d94'),
+          ]
+          chunks=[]
+          for name,size,digest in rows:
+              data=(root/name).read_bytes()
+              assert len(data)==size and hashlib.sha256(data).hexdigest()==digest
+              chunks.append(data)
+          carrier=b''.join(chunks)
+          assert len(carrier)==3752 and hashlib.sha256(carrier).hexdigest()=='0f03cde68de61341455bd5c987a1a2ba63640fe8633cc8626d20f078639244d8'
+          packed=base64.b64decode(carrier,validate=True)
+          assert len(packed)==2812 and hashlib.sha256(packed).hexdigest()=='ebe522badef685e2810078295b641e0ec0c0a5def4e21ed5f0b645b340e58b89'
+          script=lzma.decompress(packed)
+          assert len(script)==8091 and hashlib.sha256(script).hexdigest()=='9970e28c973b36b6530e1eaaa5e9b1b0f5c75e20d178b7aa6e8e5d29431d0e14'
+          pathlib.Path('/tmp/materializer.py').write_bytes(script)
+          PY
+          python3 /tmp/materializer.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-large-source-pr-${{ github.run_id }}
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+          retention-days: 30

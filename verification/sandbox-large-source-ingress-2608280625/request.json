@@ -1,0 +1,59 @@
+{
+  "baseRef": "proposals",
+  "baseSha": "3b501296b5e81d85ab44a88099783c3af05a6f2a",
+  "ingressBranch": "ingress/sandbox-large-source-pr-2608280625",
+  "payload": {
+    "archiveBytes": 2256,
+    "archiveSha256": "95a5ce9c7343ea4787adfdcd03e32736289514df1039f550664cd0a8a029e4a5",
+    "carrierBytes": 3008,
+    "carrierSha256": "9ca9c2ffd39a8d28d51d1024bfeb62c051228b533f8a4963baae0a4eb20a42e7",
+    "codec": "tar+xz+standard-base64",
+    "parts": [
+      {
+        "bytes": 1000,
+        "name": "part-000.b64",
+        "sha256": "93fc7c682d6395089ef8ee2b1d6e165d9a01ab7b7d36662eae80e6481ad18392"
+      },
+      {
+        "bytes": 1000,
+        "name": "part-001.b64",
+        "sha256": "4a7af94d7adaa3a93dec7b7962137e025acbeca944757d630b4cce196d6783b3"
+      },
+      {
+        "bytes": 1000,
+        "name": "part-002.b64",
+        "sha256": "f5478664794a2392f116d2c20dd427d511077b7b043dcc7c69181b187215eb79"
+      },
+      {
+        "bytes": 8,
+        "name": "part-003.b64",
+        "sha256": "b326ad5f712eb82eeb20021abe18f708e7a452d3d05ed266f4a47225b0d7396a"
+      }
+    ],
+    "root": "verification/sandbox-large-source-pr",
+    "unpackedBytes": 2100453,
+    "unpackedFiles": 38
+  },
+  "repository": "roccho-dev/ops",
+  "requestId": "sandbox-large-source-pr-2608280625",
+  "schema": "ops.sandboxLargeSourceMaterializationRequest/1",
+  "source": {
+    "expectedTree": "8cebc3bebf19e70dd1663f857458eaee4b7b0c29",
+    "records": 32,
+    "root": "verification/sandbox-large-source-pr/src",
+    "semanticSha256": "2d54cdff831dcd8833f64b00ff4f4d796c94519c85290b51b312015132ec3f14",
+    "shardBytes": 2097152,
+    "shardFiles": 32
+  },
+  "targetBranch": "proof/sandbox-large-source-pr-2608280625",
+  "tests": {
+    "command": "node test.mjs",
+    "queryCommand": "node bin/query.mjs source"
+  },
+  "transportBoundary": {
+    "fullSourceWrittenThroughConnector": false,
+    "modelRepairAllowed": false,
+    "sourceRegenerationFromSeedAllowed": false,
+    "temporaryIngressExcludedFromTarget": true
+  }
+}
