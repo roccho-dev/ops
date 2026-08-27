@@ -1,0 +1,47 @@
+{
+  "base": {
+    "commit": "0d639abef299536e0800175d4c6e1d34f763d1c7",
+    "ref": "proposals",
+    "sourceTree": "69ce4609beaa12f97681ad833e15ac921dd27d53",
+    "tree": "7f96aa2bffe7cd28d253c2cc257e2dee859b7c9f"
+  },
+  "comparison": {
+    "baseArchiveBytes": 1997052,
+    "baseArchiveSha256": "5e71c52f40896df451fdc6382c0b31f630bc69d6466c5ab1f25274eb61b8b6de",
+    "byteIdenticalBaseEntries": true,
+    "commonPrefixBytes": 1990660,
+    "onlyAddedEntry": "packages/chatgpt-capability/zz-exact-delta-proof.txt"
+  },
+  "delta": {
+    "bytes": 419,
+    "changedBytes": 183,
+    "changedPath": "packages/chatgpt-capability/zz-exact-delta-proof.txt",
+    "changedSha256": "0cfaa7859ee1a25d27ab8a03da4f5f14f4ceab3c0a499f189f1074c7c421d7cb",
+    "path": "proofs/exact-base-small-delta-srczip/delta.patch",
+    "sha256": "5909110a799699a89c179ffcb032cde0bb805517639ab22bb3df507a75446939"
+  },
+  "materializerRunId": 33109904579,
+  "pullRequest": "PENDING",
+  "remoteReadback": "PENDING",
+  "requestId": "exact-base-small-delta-srczip-260828043844",
+  "schema": "ops.exactBaseSmallDeltaSrcZipReceipt/1",
+  "sourceIngressCommit": "7d5a6c174c92321e86266fa0656c61771a69b06b",
+  "status": "PASS",
+  "target": {
+    "archive": {
+      "bytes": 1997397,
+      "format": "zip-store-canonical-v1",
+      "gitBlobOid": "fa1889d86b1554d75c2294504d8aa3e70aa19d19",
+      "path": "proofs/exact-base-small-delta-srczip/src.zip",
+      "sha256": "132d8f40e494a0a201fc6737a9c7cd69440b37163cb6fb8f02fa11e2927179e0"
+    },
+    "fullTree": "534695ea95337a6272fceacb896e445b9c11772d",
+    "sourceTree": "b7c336dfb6f4cffea41a6d66e381129257834a82"
+  },
+  "transport": {
+    "deltaOnlyText": true,
+    "fullTargetArchiveCarried": false,
+    "modelRepairAllowed": false,
+    "sourceRegenerationFromSeedAllowed": false
+  }
+}
