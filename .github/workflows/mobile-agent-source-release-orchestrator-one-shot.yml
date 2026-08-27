@@ -1,0 +1,331 @@
+name: Mobile Agent source release orchestrator one shot
+
+on:
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-source-release-orchestrator-one-shot.yml'
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: mobile-agent-source-release-orchestrator-one-shot
+  cancel-in-progress: false
+
+jobs:
+  close:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: cloudflare-production
+    env:
+      ROOT: verification/mobile-agent-preset-app
+      SOURCE_REF: source/mobile-agent-presets-v1
+      SOURCE_COMMIT: 608229b5a0b6fe370b07cef7c11a062e7add5ae1
+      SOURCE_TREE: 2abfe78594e92831009236df6d34902990be020d
+      EXTERNAL_SOURCE_COMMIT: 1daa001bf780053f4319e3fb20b4ea9a6e0d0442
+      EXTERNAL_SOURCE_TREE: 59ff130fc7e20a4b5762c21fe97b417fc7a454ad
+      EXTERNAL_BUNDLE_SHA: 208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6
+      PR_BRANCH: proposal/mobile-agent-source-release-close-260827
+      PROJECT: stg-mobile-agent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposals
+          fetch-depth: 0
+
+      - name: Ensure accepted source authority ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$SOURCE_REF" --jq .object.sha 2>/dev/null)"; then
+            test "$current" = "$SOURCE_COMMIT"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$SOURCE_REF" -f sha="$SOURCE_COMMIT" >/dev/null
+          fi
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$SOURCE_REF" --jq .object.sha)" = "$SOURCE_COMMIT"
+
+      - name: Checkout and build accepted source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/source"
+          git init --quiet "$src"
+          git -C "$src" remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C "$src" fetch --quiet --no-tags --depth=1 origin "refs/heads/$SOURCE_REF"
+          git -C "$src" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$src" rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test "$(git -C "$src" rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          git -C "$src" fsck --no-dangling
+          build="$(find "$src" -path "$src/.git" -prune -o -type f -name build.sh -print | sort | head -n1)"
+          test -n "$build"
+          chmod +x "$build"
+          (cd "$(dirname "$build")" && bash "./$(basename "$build")")
+          printf '%s\n' "$src" > "$RUNNER_TEMP/source-root.txt"
+
+      - name: Resolve exact source-built dist and verify 54 of 54
+        id: dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$(cat "$RUNNER_TEMP/source-root.txt")"
+          python3 - "$src" "$ROOT/expected.json" "$RUNNER_TEMP/dist" "$RUNNER_TEMP/source-build-receipt.json" <<'PY'
+          import hashlib,json,pathlib,shutil,sys
+          src=pathlib.Path(sys.argv[1]); expected=json.loads(pathlib.Path(sys.argv[2]).read_text(encoding='utf-8'))
+          out=pathlib.Path(sys.argv[3]); receipt_path=pathlib.Path(sys.argv[4]); files=expected['files']
+          assert len(files)==54
+          candidates={src}
+          for anchor in sorted(files)[:12]:
+              parts=pathlib.PurePosixPath(anchor).parts
+              for found in src.rglob(parts[-1]):
+                  if not found.is_file(): continue
+                  posix=found.as_posix()
+                  if not posix.endswith('/'+anchor): continue
+                  root=found
+                  for _ in parts: root=root.parent
+                  candidates.add(root)
+          matches=[]
+          for root in sorted(candidates,key=lambda p:p.as_posix()):
+              if not root.exists(): continue
+              actual=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() and '.git/' not in p.as_posix())
+              if actual!=sorted(files): continue
+              for rel,spec in files.items():
+                  data=(root/rel).read_bytes()
+                  if len(data)!=spec['bytes'] or hashlib.sha256(data).hexdigest()!=spec['sha256']: break
+              else: matches.append(root)
+          assert len(matches)==1,[p.as_posix() for p in matches]
+          root=matches[0]
+          if out.exists(): shutil.rmtree(out)
+          shutil.copytree(root,out)
+          rows=[{'path':p,'bytes':v['bytes'],'sha256':v['sha256']} for p,v in sorted(files.items())]
+          canonical=json.dumps(rows,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+          receipt={
+            'schema':'ops.mobileAgentSourceBuild/1','status':'PASS',
+            'sourceAuthority':{'ref':'source/mobile-agent-presets-v1','commit':'608229b5a0b6fe370b07cef7c11a062e7add5ae1','tree':'2abfe78594e92831009236df6d34902990be020d'},
+            'externalProvenance':{'commit':'1daa001bf780053f4319e3fb20b4ea9a6e0d0442','tree':'59ff130fc7e20a4b5762c21fe97b417fc7a454ad','bundleSha256':'208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6'},
+            'dist':{'files':54,'treeDigest':'sha256:'+hashlib.sha256(canonical).hexdigest(),'root':root.relative_to(src).as_posix()},
+          }
+          receipt_path.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+          echo "path=$RUNNER_TEMP/dist" >> "$GITHUB_OUTPUT"
+
+      - name: Reproduce exact locked archive and Carrier
+        id: contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$ROOT/manifest.json" "$RUNNER_TEMP/contract.env" <<'PY'
+          import json,pathlib,sys
+          m=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+          v={
+            'ARCHIVE_NAME':m['publication']['archive']['name'],'ARCHIVE_BYTES':m['publication']['archive']['bytes'],'ARCHIVE_SHA':m['publication']['archive']['sha256'][7:],
+            'CARRIER_NAME':m['publication']['carrier']['name'],'CARRIER_BYTES':m['publication']['carrier']['bytes'],'CARRIER_SHA':m['publication']['carrier']['sha256'][7:],
+            'TAG':m['publication']['tag'],'DIST_DIGEST':m['publication']['distTreeDigest'],
+          }
+          pathlib.Path(sys.argv[2]).write_text('\n'.join(f'{k}={x}' for k,x in v.items())+'\n')
+          PY
+          source "$RUNNER_TEMP/contract.env"
+          dist="${{ steps.dist.outputs.path }}"; archive="$RUNNER_TEMP/$ARCHIVE_NAME"; carrier="$RUNNER_TEMP/$CARRIER_NAME"
+          (cd "$dist" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
+          base64 -w0 "$archive" > "$carrier"
+          test "$(wc -c < "$carrier")" -eq "$CARRIER_BYTES"
+          test "$(sha256sum "$carrier" | cut -d' ' -f1)" = "$CARRIER_SHA"
+          base64 --decode "$carrier" | cmp - "$archive"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+          echo "carrier=$carrier" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Prove source-built Graph Map Seq locally in Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          dist="${{ steps.dist.outputs.path }}"; port=8765
+          python3 -m http.server "$port" --directory "$dist" > "$RUNNER_TEMP/http.log" 2>&1 & server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do curl -fsS "http://127.0.0.1:$port/" >/dev/null && break; sleep 1; done
+          node "$ROOT/generate-urls.mjs" "$dist" "$ROOT/manifest.json" "http://127.0.0.1:$port/" "$RUNNER_TEMP/source-built-urls.json"
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/source-built-urls.json" "$RUNNER_TEMP/source-built-browser-receipt.json" "$RUNNER_TEMP/source-built-shots"
+          "$chrome" --version > "$RUNNER_TEMP/chrome-version.txt"
+
+      - name: Merge source-release CI PR after source proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base proposals --head "$PR_BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$pr" ]; then
+            head="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq .headRefOid)"
+            gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$head"
+          fi
+          for _ in $(seq 1 60); do
+            git fetch --quiet origin proposals
+            if git show "origin/proposals:.github/workflows/mobile-agent-source-release-close.yml" >/dev/null 2>&1; then break; fi
+            sleep 5
+          done
+          git checkout -B proposals origin/proposals
+
+      - name: Publish or verify immutable source-built Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${{ steps.contract.outputs.archive }}"; carrier="${{ steps.contract.outputs.carrier }}"; tag="${{ steps.contract.outputs.tag }}"
+          cp "$ROOT/manifest.json" "$RUNNER_TEMP/mobile-agent-preset.manifest.json"
+          cp "$ROOT/expected.json" "$RUNNER_TEMP/mobile-agent-preset.expected.json"
+          assets=("$archive" "$carrier" "$RUNNER_TEMP/mobile-agent-preset.manifest.json" "$RUNNER_TEMP/mobile-agent-preset.expected.json" "$RUNNER_TEMP/source-build-receipt.json" "$RUNNER_TEMP/source-built-browser-receipt.json" "$RUNNER_TEMP/source-built-urls.json")
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse origin/proposals)" --title 'Mobile Agent source-built preset App' --notes 'Immutable projection built from accepted source/mobile-agent-presets-v1.' "${assets[@]}"
+          else
+            check="$RUNNER_TEMP/release-check"; mkdir -p "$check"
+            for asset in "${assets[@]}"; do
+              name="$(basename "$asset")"
+              gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$check"
+              cmp "$asset" "$check/$name"
+            done
+          fi
+
+      - name: Create or verify Cloudflare Pages project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT"
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create "$PROJECT" --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1])); assert x['success'] is True; assert x['result']['name']=='stg-mobile-agent'; assert x['result']['production_branch']=='proposals'
+          PY
+          else cat "$RUNNER_TEMP/project.json" >&2; exit 1; fi
+
+      - name: Deploy exact source-built App
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dist="${{ steps.dist.outputs.path }}"; source_sha="$(git rev-parse origin/proposals)"
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$dist" --project-name "$PROJECT" --branch proposals --commit-hash "$source_sha" --commit-message 'Mobile Agent accepted source build' 2>&1)"
+          printf '%s\n' "$output"
+          urls="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | awk '!seen[$0]++')"
+          deployment="$(printf '%s\n' "$urls" | grep -v -F "https://$PROJECT.pages.dev" | head -n1 || true)"; test -n "$deployment"
+          echo "immutable=$deployment/" >> "$GITHUB_OUTPUT"
+          echo "stable=https://$PROJECT.pages.dev/" >> "$GITHUB_OUTPUT"
+          echo "$source_sha" > "$RUNNER_TEMP/ops-source-sha.txt"
+
+      - name: Verify stable and immutable public bytes and Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          dist="${{ steps.dist.outputs.path }}"; ops_sha="$(cat "$RUNNER_TEMP/ops-source-sha.txt")"
+          READBACK_RECEIPT="$RUNNER_TEMP/readback-immutable.json" python3 "$ROOT/readback.py" "$dist" "${{ steps.deploy.outputs.immutable }}" "$ROOT/expected.json" "$ROOT/manifest.json" "$ops_sha"
+          READBACK_RECEIPT="$RUNNER_TEMP/readback-stable.json" python3 "$ROOT/readback.py" "$dist" "${{ steps.deploy.outputs.stable }}" "$ROOT/expected.json" "$ROOT/manifest.json" "$ops_sha"
+          node "$ROOT/generate-urls.mjs" "$dist" "$ROOT/manifest.json" "${{ steps.deploy.outputs.stable }}" "$RUNNER_TEMP/stable-urls.json"
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" "$RUNNER_TEMP/stable-urls.json" "$RUNNER_TEMP/public-browser-receipt.json" "$RUNNER_TEMP/public-shots"
+
+      - name: Seal final receipt and repository state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin proposals
+          git checkout -B proposals origin/proposals
+          python3 - "$ROOT/manifest.json" "$ROOT/source-release-receipt.json" "$RUNNER_TEMP" "${{ steps.deploy.outputs.stable }}" "${{ steps.deploy.outputs.immutable }}" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest_path=pathlib.Path(sys.argv[1]); receipt_path=pathlib.Path(sys.argv[2]); tmp=pathlib.Path(sys.argv[3]); stable=sys.argv[4]; immutable=sys.argv[5]
+          files=['source-build-receipt.json','source-built-browser-receipt.json','readback-stable.json','readback-immutable.json','public-browser-receipt.json','chrome-version.txt']
+          proof={}
+          for name in files:
+              p=tmp/name; assert p.is_file(),name; proof[name]={'bytes':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()}
+          receipt={
+            'schema':'ops.mobileAgentSourceReleaseClosure/1','status':'PASS',
+            'sourceAuthority':{'repository':'roccho-dev/ops','ref':'source/mobile-agent-presets-v1','commit':'608229b5a0b6fe370b07cef7c11a062e7add5ae1','tree':'2abfe78594e92831009236df6d34902990be020d'},
+            'externalProvenance':{'commit':'1daa001bf780053f4319e3fb20b4ea9a6e0d0442','tree':'59ff130fc7e20a4b5762c21fe97b417fc7a454ad','bundleSha256':'208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6'},
+            'sourceBuild':{'files':54,'status':'PASS'},
+            'deployment':{'stableBase':stable,'immutableBase':immutable,'stableReadback':'PASS','immutableReadback':'PASS','browser':'PASS'},
+            'proof':proof,
+          }
+          receipt_path.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          m=json.loads(manifest_path.read_text(encoding='utf-8'))
+          m['bootstrap']['allowedUntilSourceAuthorityPromotion']=False
+          c=m['source']['sourceAuthorityCandidate']; c['status']='promoted'; c['verifiedRef']='source/mobile-agent-presets-v1'; c['verifiedCommit']='608229b5a0b6fe370b07cef7c11a062e7add5ae1'; c['verifiedTree']='2abfe78594e92831009236df6d34902990be020d'; c['sourceBuildFiles']=54; c['sourceBuildTreeDigest']=m['publication']['distTreeDigest']
+          m['sourceReleaseClosure']={'status':'PASS','receipt':'source-release-receipt.json','sourceBuild':'54/54','stableReadback':'PASS','immutableReadback':'PASS','browser':'PASS','stableBase':stable,'immutableBase':immutable}
+          m['status']='complete'
+          manifest_path.write_text(json.dumps(m,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+          PY
+          if [ -f .github/workflows/mobile-agent-source-release-close.yml ]; then
+            python3 - .github/workflows/mobile-agent-source-release-close.yml <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); text=p.read_text(encoding='utf-8')
+          text=text.replace("m['status']='source-release-ready'","if m.get('status') != 'complete':\n              m['status']='source-release-ready'")
+          p.write_text(text,encoding='utf-8')
+          PY
+          fi
+          rm -f .github/workflows/mobile-agent-source-release-merge-gate.yml
+          rm -f .github/workflows/mobile-agent-source-release-accepted.yml
+          rm -f .github/workflows/mobile-agent-source-release-finalize.yml
+          rm -f .github/workflows/mobile-agent-source-release-orchestrator-one-shot.yml
+          rm -f "$ROOT/source-release-request.json"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'chore: finalize Mobile Agent source release closure'
+          git push origin HEAD:proposals
+          final_sha="$(git rev-parse HEAD)"
+          ref=refs/heads/accepted/mobile-agent-source-release
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/accepted/mobile-agent-source-release" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/$ref" -f sha="$final_sha" -F force=true >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="$ref" -f sha="$final_sha" >/dev/null
+          fi
+          echo "$final_sha" > "$RUNNER_TEMP/final-sha.txt"
+
+      - name: Cleanup temporary refs PRs and report PASS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ref in proposal/mobile-agent-source-release-close-260827 proposal/mobile-agent-source-release-close-260827-v2 transport/mobile-merge10-carry-260826 proposal/mobile-merge10-wasm-style-260827; do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$ref" >/dev/null 2>&1 || true
+          done
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --json number,headRefName --jq '.[] | select(.headRefName=="proposal/mobile-agent-source-release-close-260827" or .headRefName=="proposal/mobile-agent-source-release-close-260827-v2" or .headRefName=="transport/mobile-merge10-carry-260826") | .number' | while read -r pr; do [ -z "$pr" ] || gh pr close "$pr" --repo "$GITHUB_REPOSITORY"; done
+          final_sha="$(cat "$RUNNER_TEMP/final-sha.txt")"
+          gh issue comment 242 --repo "$GITHUB_REPOSITORY" --body "## Mobile Agent source-release closure PASS\n\nsource authority: \`source/mobile-agent-presets-v1@608229b5a0b6fe370b07cef7c11a062e7add5ae1\`\nsource build: \`54/54 PASS\`\nRelease: \`${{ steps.contract.outputs.tag }}\`\nPages stable: \`${{ steps.deploy.outputs.stable }}\`\nPages immutable: \`${{ steps.deploy.outputs.immutable }}\`\npublic Chrome: \`PASS\`\naccepted ref: \`accepted/mobile-agent-source-release@$final_sha\`\nreceipt: \`verification/mobile-agent-preset-app/source-release-receipt.json\`"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-source-release-final-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/source-build-receipt.json
+            ${{ runner.temp }}/source-built-browser-receipt.json
+            ${{ runner.temp }}/readback-stable.json
+            ${{ runner.temp }}/readback-immutable.json
+            ${{ runner.temp }}/public-browser-receipt.json
+            ${{ runner.temp }}/stable-urls.json
+            ${{ runner.temp }}/public-shots/
+          if-no-files-found: error
+          retention-days: 30
