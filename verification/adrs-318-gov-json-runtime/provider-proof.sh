@@ -63,34 +63,92 @@ else
 fi
 
 preview_branch="adrs-318-pr-$PR_NUMBER"
-output="$(npx --yes wrangler@4.112.0 pages deploy "$DIST" \
+preview_output="$(npx --yes wrangler@4.112.0 pages deploy "$DIST" \
   --project-name "$PROJECT" \
   --branch "$preview_branch" \
   --commit-hash "$CANDIDATE_SHA" \
-  --commit-message 'ADRS 318 gov JSON runtime reduce proof' 2>&1)"
-printf '%s\n' "$output" | tee "$EVIDENCE/wrangler-deploy.log"
-deployment_url="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | head -n1 || true)"
-test -n "$deployment_url"
-deployment_url="${deployment_url%/}/"
-printf '%s\n' "$deployment_url" > "$EVIDENCE/deployment-url.txt"
+  --commit-message 'ADRS 318 gov JSON runtime preview proof' 2>&1)"
+printf '%s\n' "$preview_output" | tee "$EVIDENCE/wrangler-preview-deploy.log"
+preview_url="$(printf '%s\n' "$preview_output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | head -n1 || true)"
+test -n "$preview_url"
+preview_url="${preview_url%/}/"
+printf '%s\n' "$preview_url" > "$EVIDENCE/preview-url.txt"
 
-python3 "$ROOT/readback.py" "$DIST" "$deployment_url" "$EVIDENCE/remote-readback.json"
+python3 "$ROOT/readback.py" "$DIST" "$preview_url" "$EVIDENCE/preview-readback.json"
 CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
-  "$deployment_url" \
-  "$EVIDENCE/remote-browser.json" \
-  "$EVIDENCE/remote-browser.png"
+  "$preview_url" \
+  "$EVIDENCE/preview-browser.json" \
+  "$EVIDENCE/preview-browser.png"
+
+production_branch=proposals
+stable_base="https://$PROJECT.pages.dev/"
+production_output="$(npx --yes wrangler@4.112.0 pages deploy "$DIST" \
+  --project-name "$PROJECT" \
+  --branch "$production_branch" \
+  --commit-hash "$CANDIDATE_SHA" \
+  --commit-message 'ADRS 318 gov JSON runtime stable deployment' 2>&1)"
+printf '%s\n' "$production_output" | tee "$EVIDENCE/wrangler-production-deploy.log"
+production_deployment_url="$(printf '%s\n' "$production_output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | head -n1 || true)"
+test -n "$production_deployment_url"
+production_deployment_url="${production_deployment_url%/}/"
+printf '%s\n' "$production_deployment_url" > "$EVIDENCE/production-deployment-url.txt"
+printf '%s\n' "$stable_base" > "$EVIDENCE/stable-url.txt"
+
+python3 "$ROOT/readback.py" "$DIST" "$production_deployment_url" "$EVIDENCE/production-deployment-readback.json"
+CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
+  "$production_deployment_url" \
+  "$EVIDENCE/production-deployment-browser.json" \
+  "$EVIDENCE/production-deployment-browser.png"
+
+python3 "$ROOT/readback.py" "$DIST" "$stable_base" "$EVIDENCE/stable-readback.json"
+CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
+  "$stable_base" \
+  "$EVIDENCE/stable-browser.json" \
+  "$EVIDENCE/stable-browser.png"
 "$chrome" --version > "$EVIDENCE/chrome-version.txt"
 
-PROJECT_CREATED="$project_created" DEPLOYMENT_URL="$deployment_url" PREVIEW_BRANCH="$preview_branch" \
-python3 - "$DIST/materialize-receipt.json" "$EVIDENCE/local-browser.json" "$EVIDENCE/remote-readback.json" "$EVIDENCE/remote-browser.json" "$EVIDENCE/provider-proof.json" <<'PY'
+PROJECT_CREATED="$project_created" \
+PREVIEW_URL="$preview_url" \
+PREVIEW_BRANCH="$preview_branch" \
+PRODUCTION_BRANCH="$production_branch" \
+PRODUCTION_DEPLOYMENT_URL="$production_deployment_url" \
+STABLE_BASE="$stable_base" \
+python3 - \
+  "$DIST/materialize-receipt.json" \
+  "$EVIDENCE/local-browser.json" \
+  "$EVIDENCE/preview-readback.json" \
+  "$EVIDENCE/preview-browser.json" \
+  "$EVIDENCE/production-deployment-readback.json" \
+  "$EVIDENCE/production-deployment-browser.json" \
+  "$EVIDENCE/stable-readback.json" \
+  "$EVIDENCE/stable-browser.json" \
+  "$EVIDENCE/provider-proof.json" <<'PY'
 import json,os,sys
-materialize=json.load(open(sys.argv[1],encoding='utf-8'))
-local=json.load(open(sys.argv[2],encoding='utf-8'))
-readback=json.load(open(sys.argv[3],encoding='utf-8'))
-remote=json.load(open(sys.argv[4],encoding='utf-8'))
-assert materialize['status']==local['status']==readback['status']==remote['status']=='PASS'
+(
+  materialize_path,
+  local_path,
+  preview_readback_path,
+  preview_browser_path,
+  production_readback_path,
+  production_browser_path,
+  stable_readback_path,
+  stable_browser_path,
+  output_path,
+)=sys.argv[1:]
+materialize=json.load(open(materialize_path,encoding='utf-8'))
+local=json.load(open(local_path,encoding='utf-8'))
+preview_readback=json.load(open(preview_readback_path,encoding='utf-8'))
+preview_browser=json.load(open(preview_browser_path,encoding='utf-8'))
+production_readback=json.load(open(production_readback_path,encoding='utf-8'))
+production_browser=json.load(open(production_browser_path,encoding='utf-8'))
+stable_readback=json.load(open(stable_readback_path,encoding='utf-8'))
+stable_browser=json.load(open(stable_browser_path,encoding='utf-8'))
+assert all(value['status']=='PASS' for value in (
+  materialize,local,preview_readback,preview_browser,
+  production_readback,production_browser,stable_readback,stable_browser,
+))
 receipt={
-  'schema':'ops.govJsonRuntimePagesProof/1',
+  'schema':'ops.govJsonRuntimePagesProof/2',
   'status':'PASS',
   'claim_ceiling':'PR_CANDIDATE_GREEN',
   'authority':False,
@@ -102,11 +160,18 @@ receipt={
     'project':os.environ['PROJECT'],
     'project_created_this_run':os.environ['PROJECT_CREATED']=='true',
     'preview_branch':os.environ['PREVIEW_BRANCH'],
-    'deployment_url':os.environ['DEPLOYMENT_URL'],
+    'preview_url':os.environ['PREVIEW_URL'],
+    'production_branch':os.environ['PRODUCTION_BRANCH'],
+    'production_deployment_url':os.environ['PRODUCTION_DEPLOYMENT_URL'],
+    'stable_base':os.environ['STABLE_BASE'],
   },
   'local_browser':'PASS',
-  'remote_byte_readback':'PASS',
-  'remote_browser':'PASS',
+  'preview_byte_readback':'PASS',
+  'preview_browser':'PASS',
+  'production_deployment_byte_readback':'PASS',
+  'production_deployment_browser':'PASS',
+  'stable_byte_readback':'PASS',
+  'stable_browser':'PASS',
   'runtime_fetch':True,
   'display_reduce_only':True,
   'semantic_reduce':False,
@@ -118,6 +183,6 @@ receipt={
   'authority_changed':False,
   'cutover':False,
 }
-open(sys.argv[5],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+open(output_path,'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
 print(json.dumps(receipt,sort_keys=True))
 PY
