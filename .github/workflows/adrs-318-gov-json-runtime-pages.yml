@@ -1,0 +1,49 @@
+name: ADRS 318 gov JSON runtime reduce Pages proof
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
+      - 'verification/adrs-318-gov-json-runtime/**'
+
+permissions:
+  contents: read
+
+jobs:
+  provider-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-production
+    env:
+      ROOT: verification/adrs-318-gov-json-runtime
+      PROJECT: stg-gov-json-reduce
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.number }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prove exact gov JSON runtime on Cloudflare Pages
+        run: |
+          export DIST="$RUNNER_TEMP/gov-json-runtime-site"
+          export EVIDENCE="$RUNNER_TEMP/gov-json-runtime-evidence"
+          bash "$ROOT/provider-proof.sh"
+      - name: Upload exact evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-318-gov-json-runtime-pages-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/gov-json-runtime-site/
+            ${{ runner.temp }}/gov-json-runtime-evidence/
+          if-no-files-found: error
+          retention-days: 30
