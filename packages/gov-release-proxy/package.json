@@ -1,0 +1,11 @@
+{
+  "name": "@roccho/gov-release-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --test tests/*.test.mjs && node scripts/verify-config.mjs",
+    "check:dry-run": "npx --yes wrangler@4.112.0 deploy --dry-run --outdir ../../build/gov-release-proxy",
+    "deploy": "npx --yes wrangler@4.112.0 deploy"
+  }
+}
