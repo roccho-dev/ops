@@ -20,9 +20,39 @@
     "path": "proofs/exact-base-small-delta-srczip/delta.patch",
     "sha256": "5909110a799699a89c179ffcb032cde0bb805517639ab22bb3df507a75446939"
   },
+  "materializedCommit": "3b1857fc72b81e6f0fd4ba3422bb7b84d6e8273d",
+  "materializedTree": "6e8991774231de8a01cb735cc3605d76702bf9b5",
+  "materializer": {
+    "coreEffectStatus": "PASS",
+    "failureBoundary": "post-push fresh-readback adapter",
+    "ingressCommit": "7d5a6c174c92321e86266fa0656c61771a69b06b",
+    "runConclusion": "failure",
+    "runId": 33109904579
+  },
   "materializerRunId": 33109904579,
-  "pullRequest": "PENDING",
-  "remoteReadback": "PENDING",
+  "pullRequest": 335,
+  "readback": {
+    "archive": {
+      "bytes": 1997397,
+      "gitBlobOid": "fa1889d86b1554d75c2294504d8aa3e70aa19d19",
+      "sha256": "132d8f40e494a0a201fc6737a9c7cd69440b37163cb6fb8f02fa11e2927179e0",
+      "zipCrc": "PASS"
+    },
+    "artifact": {
+      "digest": "sha256:173ccf6bccef2a17ecb316e34fd4c62d1781ac32ae8917334929117ed46e558f",
+      "expiresAt": "2026-09-26T19:49:33Z",
+      "id": 9662219671,
+      "name": "exact-base-small-delta-srczip-readback-33110229421",
+      "zipBytes": 661532
+    },
+    "conclusion": "success",
+    "remoteGitBlobApiReadback": "PASS",
+    "runAttempt": 2,
+    "runId": 33110229421,
+    "sourceTreeExpected": "b7c336dfb6f4cffea41a6d66e381129257834a82",
+    "sourceTreeObserved": "b7c336dfb6f4cffea41a6d66e381129257834a82"
+  },
+  "remoteReadback": "PASS",
   "requestId": "exact-base-small-delta-srczip-260828043844",
   "schema": "ops.exactBaseSmallDeltaSrcZipReceipt/1",
   "sourceIngressCommit": "7d5a6c174c92321e86266fa0656c61771a69b06b",
