@@ -1,0 +1,140 @@
+name: mobile-merge10 wasm-style materialize
+
+on:
+  push:
+    branches:
+      - transport/mobile-merge10-carry-260826
+    paths:
+      - .github/mobile-merge10-wasm-style/ready.json
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      BASE_SHA: 6aac086d72e53264fb3e220260824acbb2fac897
+      EXPECTED_TREE: 424ab520e895b8bd3ad7437027381a68996f4d59
+      BASE64_SHA256: 17024b5487a48298386220728f3d8ae489252356c737f17602dc13af9b5c2f91
+      PATCH_XZ_SHA256: a0ed526e3c2c0ccd5f8db49b867c954d37758c3a1ae97573902ea044977783b3
+      PATCH_SHA256: c9e84c3c0b1ba1691a19c36e4a32682c440576bc2133c286d7d98b24900fd7c2
+      TARGET_BRANCH: proposal/mobile-merge10-wasm-style-260827
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail closed on moved base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin proposals
+          test "$(git rev-parse origin/proposals)" = "$BASE_SHA"
+
+      - name: Reconstruct and verify exact carrier
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          mkdir -p "$work"
+
+          cp .github/mobile-merge10-wasm-style/part-08.b64 "$work/part-08.b64"
+          python3 - "$work/part-08.b64" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          b=bytearray(p.read_bytes())
+          assert len(b)==20000
+          assert b[9696]==ord('a')
+          assert b[16683]==ord('7')
+          b[9696]=ord('e')
+          b[16683]=ord('9')
+          p.write_bytes(b)
+          PY
+
+          cat \
+            .github/mobile-merge10-transport/part-00.b64 \
+            .github/mobile-merge10-transport/part-01.b64 \
+            .github/mobile-merge10-transport/part-02.b64 \
+            .github/mobile-merge10-transport/part-03.b64 \
+            .github/mobile-merge10-transport/part-04.b64 \
+            .github/mobile-merge10-v2/gap.b64 \
+            .github/mobile-merge10-transport/part-05.b64 \
+            .github/mobile-merge10-transport/part-06.b64 \
+            .github/mobile-merge10-transport/part-07.b64 \
+            "$work/part-08.b64" \
+            .github/mobile-merge10-wasm-style/part-09.b64 \
+            .github/mobile-merge10-wasm-style/part-10.b64 \
+            .github/mobile-merge10-wasm-style/part-11.b64 \
+            .github/mobile-merge10-wasm-style/part-12.b64 \
+            .github/mobile-merge10-wasm-style/part-13.b64 \
+            .github/mobile-merge10-wasm-style/part-14.b64 \
+            > "$work/target.patch.xz.b64"
+
+          test "$(wc -c < "$work/target.patch.xz.b64")" = 289584
+          echo "$BASE64_SHA256  $work/target.patch.xz.b64" | sha256sum -c -
+          base64 -d "$work/target.patch.xz.b64" > "$work/target.patch.xz"
+          echo "$PATCH_XZ_SHA256  $work/target.patch.xz" | sha256sum -c -
+          xz -dc "$work/target.patch.xz" > "$work/target.patch"
+          echo "$PATCH_SHA256  $work/target.patch" | sha256sum -c -
+
+      - name: Materialize exact target tree and push candidate
+        id: materialize
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          repo="$work/repo"
+          git worktree add --detach "$repo" "$BASE_SHA"
+          git -C "$repo" apply --index --binary "$work/target.patch"
+          tree="$(git -C "$repo" write-tree)"
+          test "$tree" = "$EXPECTED_TREE"
+          git -C "$repo" diff --check
+          git -C "$repo" config user.name github-actions[bot]
+          git -C "$repo" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$repo" commit -m "feat: carry mobile-merge(10) ops state"
+          candidate="$(git -C "$repo" rev-parse HEAD)"
+          test "$(git -C "$repo" rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          git -C "$repo" push origin "$candidate:refs/heads/$TARGET_BRANCH" --force
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: Emit receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/mobile-merge10"
+          candidate="${{ steps.materialize.outputs.candidate }}"
+          python3 - "$work/receipt.json" "$candidate" <<'PY'
+          import json,pathlib,sys
+          out,candidate=sys.argv[1:]
+          receipt={
+            'schema':'mobile-merge10-wasm-style/1',
+            'status':'PASS',
+            'baseSha':'6aac086d72e53264fb3e220260824acbb2fac897',
+            'candidateSha':candidate,
+            'candidateTree':'424ab520e895b8bd3ad7437027381a68996f4d59',
+            'carrier':{
+              'bytes':289584,
+              'sha256':'17024b5487a48298386220728f3d8ae489252356c737f17602dc13af9b5c2f91',
+              'patchXzSha256':'a0ed526e3c2c0ccd5f8db49b867c954d37758c3a1ae97573902ea044977783b3',
+              'patchSha256':'c9e84c3c0b1ba1691a19c36e4a32682c440576bc2133c286d7d98b24900fd7c2'
+            },
+            'source':{
+              'attachedCarryBundleHead':'0abd15b49d80af093f161850b8434649f204ae7f',
+              'attachedCarryBundleSha256':'35350ea83a0d489add4fa51afdb1c0fc03f718ce9ea45b21667d1c67c61a69ed',
+              'historyPreserved':False,
+              'semanticTargetTreePreserved':True
+            },
+            'targetBranch':'proposal/mobile-merge10-wasm-style-260827'
+          }
+          pathlib.Path(out).write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-merge10-wasm-style-${{ steps.materialize.outputs.candidate }}
+          path: ${{ runner.temp }}/mobile-merge10/receipt.json
+          if-no-files-found: error
+          retention-days: 7
