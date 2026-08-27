@@ -75,9 +75,13 @@ jobs:
         id: deploy
         working-directory: packages/gov-release-proxy
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          set +e
           output="$(npx --yes wrangler@4.112.0 deploy 2>&1)"
+          status=$?
+          set -e
           printf '%s\n' "$output"
+          test "$status" -eq 0
           url="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -n1)"
           test -n "$url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
