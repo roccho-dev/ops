@@ -14,7 +14,6 @@ jobs:
   provider-proof:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor == github.repository_owner &&
       github.head_ref == 'feat/adrs-318-gov-json-runtime-pages'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
