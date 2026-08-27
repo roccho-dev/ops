@@ -9,11 +9,16 @@
     "carrierSha256": "c7a7f26a4e30e8f42261b45b2435542e787693dbdaa0687e3d541184c7b872fc",
     "codec": "tar+gzip+standard-base64",
     "parts": [
-      {"bytes":4000,"name":"part-000.b64","sha256":"61b4fa542b0c3cc422dfa071c9d196f12f9058a077add4d003a9f211ffaee5e0"},
-      {"bytes":4000,"name":"part-001.b64","sha256":"b1bfe149aebf845cb50c77be8fb17b58db83ed45259e66f2d63b28bda5ca05f0"},
-      {"bytes":4000,"name":"part-002.b64","sha256":"aed44cd68f500e61b6f9366c306a2a8dcfdb3f17e73f21d0c4a30050c1776e69"},
-      {"bytes":4000,"name":"part-003.b64","sha256":"ebbd0e6eb469dedacff071c07b53435257f86784dc95e8015d865ef9e911f550"},
-      {"bytes":2960,"name":"part-004.b64","sha256":"feffd77c37c67fa3e63680ff8f5e54f95466a5f84988c6a3b1fc0934ac0b7c2f"}
+      {"bytes":2000,"name":"part-000.b64","sha256":"e744112696fb6fd3e0e8dda4d652b3f91bfa04b3ccfac1b1bfab63e95c2b0317"},
+      {"bytes":2000,"name":"part-001.b64","sha256":"7e47812885062ca6fd15f2b3b0adf0581850c1b9a68c452941645233f938f78b"},
+      {"bytes":2000,"name":"part-002.b64","sha256":"594e60420f70f17677cfd33b6d4cace216c6e8074cffbbbb9b8580be3ebb40d2"},
+      {"bytes":2000,"name":"part-003.b64","sha256":"34e318f9e0e1213add3d69de3ef57f1895ac9e6c52c503c9ff176b8e30170cde"},
+      {"bytes":2000,"name":"part-004.b64","sha256":"6fe2000b8acd2d827157fc35e4f2815e9f73bf5ce21ad70a64d26f4b27cd128c"},
+      {"bytes":2000,"name":"part-005.b64","sha256":"8a639ca58a6eaa7ef06ff8c14ce47d20ec36cd3b05fb2a5914e709f88d1d28f6"},
+      {"bytes":2000,"name":"part-006.b64","sha256":"a05b8b5ced9a32b35db9fe13a2a1c7ee542cf15eb4c63dffbace99cca195da3f"},
+      {"bytes":2000,"name":"part-007.b64","sha256":"03ff1493860966ad179bb9dad8c8864700a528caf7c78da09691092e2536e2ed"},
+      {"bytes":2000,"name":"part-008.b64","sha256":"bc0d314755a5f0f208b5835a519852cf0684a20ff3cbea5ce9397b2a8f835c51"},
+      {"bytes":960,"name":"part-009.b64","sha256":"2da804c5f3c11bdf81107fdd99d0e08ed251acf882c02b3928e4ae87a33268dd"}
     ],
     "root": "verification/sandbox-large-source-pr",
     "unpackedBytes": 2100453,
