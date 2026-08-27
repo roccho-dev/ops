@@ -41,8 +41,11 @@ def main() -> int:
             else None,
         )
         page.goto(args.url, wait_until="domcontentloaded", timeout=120_000)
-        page.wait_for_function("document.body.dataset.status === 'ready'", timeout=120_000)
-        state = page.evaluate("window.__govJsonRuntime")
+        page.locator("body[data-status='ready']").wait_for(state="attached", timeout=120_000)
+        state_text = page.locator("#runtime-state").text_content()
+        if not state_text:
+            raise AssertionError("runtime state DOM receipt missing")
+        state = json.loads(state_text)
         text = page.locator("body").inner_text()
         page.screenshot(path=str(args.screenshot), full_page=True)
         browser.close()
