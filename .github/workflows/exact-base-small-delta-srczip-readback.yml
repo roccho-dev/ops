@@ -1,0 +1,240 @@
+name: Exact-base small-delta source ZIP remote readback
+
+on:
+  push:
+    branches:
+      - 'proof/exact-base-small-delta-srczip-readback-260828043844'
+    paths:
+      - '.github/workflows/exact-base-small-delta-srczip-readback.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET_BRANCH: proof/exact-base-small-delta-srczip-260828043844
+      TARGET_COMMIT: 3b1857fc72b81e6f0fd4ba3422bb7b84d6e8273d
+      BASE_COMMIT: 0d639abef299536e0800175d4c6e1d34f763d1c7
+      TARGET_TREE: 6e8991774231de8a01cb735cc3605d76702bf9b5
+      SOURCE_TREE: b7c336dfb6f4cffea41a6d66e381129257834a82
+      ZIP_PATH: proofs/exact-base-small-delta-srczip/src.zip
+      ZIP_OID: fa1889d86b1554d75c2294504d8aa3e70aa19d19
+      ZIP_BYTES: '1997397'
+      ZIP_SHA256: 132d8f40e494a0a201fc6737a9c7cd69440b37163cb6fb8f02fa11e2927179e0
+      RECEIPT_PATH: proofs/exact-base-small-delta-srczip/receipt.json
+      README_PATH: proofs/exact-base-small-delta-srczip/README.md
+      PROOF_ENTRY: chatgpt-capability/zz-exact-delta-proof.txt
+      PROOF_ENTRY_BYTES: '183'
+      PROOF_ENTRY_SHA256: 0cfaa7859ee1a25d27ab8a03da4f5f14f4ceab3c0a499f189f1074c7c421d7cb
+      DELTA_BYTES: '419'
+      DELTA_SHA256: 5909110a799699a89c179ffcb032cde0bb805517639ab22bb3df507a75446939
+
+    steps:
+      - name: Read exact remote Git objects and reconstruct source tree
+        id: verify
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/readback"
+          mkdir -p "$out/unpacked" "$out/evidence"
+
+          ref_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$TARGET_BRANCH" --jq .object.sha)"
+          test "$ref_sha" = "$TARGET_COMMIT"
+
+          gh api "repos/$GITHUB_REPOSITORY/git/commits/$TARGET_COMMIT" > "$out/commit.json"
+          python3 - "$out/commit.json" <<'PY'
+          import json,os,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['sha']==os.environ['TARGET_COMMIT']
+          assert x['tree']['sha']==os.environ['TARGET_TREE']
+          assert [p['sha'] for p in x['parents']]==[os.environ['BASE_COMMIT']]
+          PY
+
+          gh api "repos/$GITHUB_REPOSITORY/git/trees/$TARGET_TREE?recursive=1" > "$out/tree.json"
+          python3 - "$out/tree.json" <<'PY'
+          import json,os,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['sha']==os.environ['TARGET_TREE'] and x.get('truncated') is False
+          rows={r['path']:r for r in x['tree']}
+          z=rows[os.environ['ZIP_PATH']]
+          assert z['mode']=='100644' and z['type']=='blob'
+          assert z['sha']==os.environ['ZIP_OID'] and z['size']==int(os.environ['ZIP_BYTES'])
+          for path in (
+              'proofs/exact-base-small-delta-srczip/request.json',
+              'proofs/exact-base-small-delta-srczip/delta.patch',
+              '.github/workflows/exact-base-small-delta-srczip.yml',
+          ):
+              assert path not in rows,path
+          assert os.environ['RECEIPT_PATH'] in rows
+          assert os.environ['README_PATH'] in rows
+          PY
+
+          gh api "repos/$GITHUB_REPOSITORY/git/blobs/$ZIP_OID" > "$out/blob.json"
+          python3 - "$out/blob.json" "$out/src.zip" <<'PY'
+          import base64,hashlib,json,os,pathlib,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x['sha']==os.environ['ZIP_OID']
+          assert x['size']==int(os.environ['ZIP_BYTES'])
+          assert x['encoding']=='base64'
+          b=base64.b64decode(x['content'],validate=False)
+          assert len(b)==int(os.environ['ZIP_BYTES'])
+          assert hashlib.sha256(b).hexdigest()==os.environ['ZIP_SHA256']
+          pathlib.Path(sys.argv[2]).write_bytes(b)
+          PY
+
+          gh api "repos/$GITHUB_REPOSITORY/contents/$RECEIPT_PATH?ref=$TARGET_COMMIT" > "$out/receipt-api.json"
+          python3 - "$out/receipt-api.json" "$out/receipt.json" <<'PY'
+          import base64,json,os,pathlib,sys
+          api=json.load(open(sys.argv[1],encoding='utf-8'))
+          b=base64.b64decode(api['content'])
+          pathlib.Path(sys.argv[2]).write_bytes(b)
+          x=json.loads(b)
+          assert x['schema']=='ops.exactBaseSmallDeltaSrcZipReceipt/1'
+          assert x['status']=='PASS'
+          assert x['base']['commit']==os.environ['BASE_COMMIT']
+          assert x['target']['sourceTree']==os.environ['SOURCE_TREE']
+          assert x['target']['archive']=={
+            'bytes':int(os.environ['ZIP_BYTES']),
+            'format':'zip-store-canonical-v1',
+            'gitBlobOid':os.environ['ZIP_OID'],
+            'path':os.environ['ZIP_PATH'],
+            'sha256':os.environ['ZIP_SHA256'],
+          }
+          assert x['delta']['bytes']==int(os.environ['DELTA_BYTES'])
+          assert x['delta']['sha256']==os.environ['DELTA_SHA256']
+          assert x['transport']=={
+            'deltaOnlyText':True,
+            'fullTargetArchiveCarried':False,
+            'modelRepairAllowed':False,
+            'sourceRegenerationFromSeedAllowed':False,
+          }
+          PY
+
+          python3 - "$out/src.zip" "$out/unpacked" <<'PY'
+          import hashlib,os,pathlib,stat,sys,zipfile
+          archive=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
+          seen=set()
+          with zipfile.ZipFile(archive) as z:
+              assert z.testzip() is None
+              infos=z.infolist()
+              assert infos
+              for info in infos:
+                  name=info.filename
+                  p=pathlib.PurePosixPath(name)
+                  assert not p.is_absolute() and '..' not in p.parts
+                  assert name not in seen
+                  seen.add(name)
+                  assert p.parts[0]=='chatgpt-capability'
+                  assert not info.is_dir()
+                  target=root.joinpath(*p.parts)
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  data=z.read(info)
+                  target.write_bytes(data)
+                  mode=(info.external_attr >> 16) & 0o777
+                  target.chmod(mode or 0o644)
+              proof=os.environ['PROOF_ENTRY']
+              data=z.read(proof)
+              assert len(data)==int(os.environ['PROOF_ENTRY_BYTES'])
+              assert hashlib.sha256(data).hexdigest()==os.environ['PROOF_ENTRY_SHA256']
+          PY
+
+          source="$out/unpacked/chatgpt-capability"
+          git -C "$source" init --quiet
+          git -C "$source" add -A
+          observed_source_tree="$(git -C "$source" write-tree)"
+          test "$observed_source_tree" = "$SOURCE_TREE"
+
+          cp "$out/src.zip" "$out/evidence/src.zip"
+          cp "$out/receipt.json" "$out/evidence/materializer-receipt.json"
+          cp "$out/commit.json" "$out/evidence/remote-commit.json"
+          cp "$out/tree.json" "$out/evidence/remote-tree.json"
+
+          python3 - "$out/evidence/readback-receipt.json" "$observed_source_tree" <<'PY'
+          import json,os,pathlib,sys
+          value={
+            'schema':'ops.exactBaseSmallDeltaSrcZipReadback/1',
+            'status':'PASS',
+            'repository':os.environ['GITHUB_REPOSITORY'],
+            'runId':int(os.environ['GITHUB_RUN_ID']),
+            'targetBranch':os.environ['TARGET_BRANCH'],
+            'targetCommit':os.environ['TARGET_COMMIT'],
+            'parentCommit':os.environ['BASE_COMMIT'],
+            'targetTree':os.environ['TARGET_TREE'],
+            'sourceTreeExpected':os.environ['SOURCE_TREE'],
+            'sourceTreeObserved':sys.argv[2],
+            'archive':{
+              'path':os.environ['ZIP_PATH'],'bytes':int(os.environ['ZIP_BYTES']),
+              'sha256':os.environ['ZIP_SHA256'],'gitBlobOid':os.environ['ZIP_OID'],
+              'remoteGitBlobApiReadback':'PASS','zipCrc':'PASS',
+            },
+            'transport':{
+              'textDeltaBytes':int(os.environ['DELTA_BYTES']),
+              'textDeltaSha256':os.environ['DELTA_SHA256'],
+              'fullTargetArchiveCarried':False,
+              'ingressRemovedFromTargetTree':True,
+            },
+          }
+          pathlib.Path(sys.argv[1]).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          PY
+
+          existing="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open -f head="$GITHUB_REPOSITORY_OWNER:$TARGET_BRANCH" -f base=proposals \
+            --jq '.[0].number // empty')"
+          if [ -z "$existing" ]; then
+            body="$out/pr.md"
+            cat > "$body" <<EOF
+          ## Live proof — PASS
+
+          \`exact base + 419-byte text delta -> GitHub Actions -> deterministic source ZIP + exact source tree -> Git commit/push -> Git Blob API byte readback\`
+
+          - exact base: \`$BASE_COMMIT\`
+          - text delta: $DELTA_BYTES bytes / \`$DELTA_SHA256\`
+          - materialized commit: \`$TARGET_COMMIT\` (only parent = exact base)
+          - source ZIP: $ZIP_BYTES bytes / \`$ZIP_SHA256\`
+          - Git blob OID: \`$ZIP_OID\`
+          - extracted source tree: \`$SOURCE_TREE\` (recomputed from remote ZIP)
+          - complete target ZIP carried by ingress: no
+          - request, delta, and materializer workflow in target tree: absent
+          - remote byte readback, ZIP CRC, and source-tree reconstruction: PASS
+          - materializer run: https://github.com/$GITHUB_REPOSITORY/actions/runs/33109904579
+          - independent readback run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          EOF
+            existing="$(gh api --method POST "repos/$GITHUB_REPOSITORY/pulls" \
+              -f title='Proof: exact base + small text delta materializes source ZIP' \
+              -f head="$TARGET_BRANCH" -f base=proposals -f body="$(cat "$body")" --jq .number)"
+          fi
+          test -n "$existing"
+          echo "$existing" > "$out/evidence/pr-number.txt"
+          echo "pr_number=$existing" >> "$GITHUB_OUTPUT"
+          echo "observed_source_tree=$observed_source_tree" >> "$GITHUB_OUTPUT"
+
+      - name: Upload independent remote-readback evidence
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-base-small-delta-srczip-readback-${{ github.run_id }}
+          path: ${{ runner.temp }}/readback/evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summary
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Exact-base small-delta source ZIP remote readback — PASS
+
+          - PR: #${{ steps.verify.outputs.pr_number }}
+          - base: \`$BASE_COMMIT\`
+          - materialized commit: \`$TARGET_COMMIT\`
+          - source ZIP: $ZIP_BYTES bytes
+          - ZIP SHA-256: \`$ZIP_SHA256\`
+          - ZIP Git blob OID: \`$ZIP_OID\`
+          - recomputed source tree: \`${{ steps.verify.outputs.observed_source_tree }}\`
+          - artifact digest: \`${{ steps.artifact.outputs.artifact-digest }}\`
+          EOF
