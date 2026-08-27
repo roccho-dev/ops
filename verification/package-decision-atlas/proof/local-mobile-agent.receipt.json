@@ -1,0 +1,32 @@
+{
+  "schema": "ops.packageDecisionAtlasLocalProof/1",
+  "status": "PASS",
+  "scope": "historical-local-proof-only",
+  "authority": false,
+  "sample": true,
+  "recordedUnder": "roccho-dev/adrs#318",
+  "sourceMobileAgent": {
+    "commit": "1daa001bf780053f4319e3fb20b4ea9a6e0d0442",
+    "tree": "59ff130fc7e20a4b5762c21fe97b417fc7a454ad",
+    "baseAppSha256": "sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+  },
+  "composite": {
+    "bytes": 2289306,
+    "sha256": "sha256:3922ec81729971516024e1efbc547e09516a94db565ed20cf0eb6ab55f2ad933",
+    "canvases": ["map/1", "graph/1", "seq/1"],
+    "oneHtml": true,
+    "vertical": true
+  },
+  "browser": {
+    "realChromium": "PASS",
+    "threeCanvasesReady": true,
+    "svg": true,
+    "pageErrors": 0,
+    "consoleErrors": 0,
+    "failedRequests": 0,
+    "externalNetworkRequests": 0
+  },
+  "repositoryReproduction": "OPEN",
+  "providerEndToEnd": "NOT_PROVEN",
+  "cutover": false
+}
