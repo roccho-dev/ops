@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
+      RECOVERY_REV: "2"
       ISSUE_NUMBER: "286"
       PR_NUMBER: "333"
       TARGET_REF: source/mobile-agent-presets-v1
