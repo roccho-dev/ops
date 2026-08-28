@@ -1,0 +1,42 @@
+{
+  "action": {
+    "action_id": "continue",
+    "meaning": "Record one anonymous non-PII interaction only",
+    "profile_id": "external",
+    "request_id": "week1-adrs322-20260828-continue",
+    "subject_id": "proof-external-week1-adrs322-20260828"
+  },
+  "classification": {
+    "independent_external_action": "eligible only when owner, developer, AI, CI, and controlled browsers did not execute the exact week-1 request",
+    "page_view_observed": false,
+    "qualified_market_observation_cap": 1,
+    "technical_smoke_excluded": true
+  },
+  "effect_bounds": {
+    "duration_hours": 168,
+    "mail": false,
+    "maximum_cost_jpy": 0,
+    "maximum_placement_count": 1,
+    "maximum_semantic_observation_count": 1,
+    "payment": false,
+    "pii": "prohibited",
+    "production_cutover": false
+  },
+  "parent": {
+    "accepted_architecture": "roccho-dev/adrs#322",
+    "experiment_issue": "roccho-dev/ops#345",
+    "first_public_effect": "roccho-dev/ops#341/#342",
+    "product_semantic_progress": "roccho-dev/ops#343/#344",
+    "shared_kernel": "roccho-dev/ops#339/#340"
+  },
+  "placement": {
+    "audience_ref": "public technical readers of roccho-dev/web#1",
+    "effect": "one public GitHub Issue comment",
+    "target": "roccho-dev/web#1"
+  },
+  "purpose": "Observe at most one independently originated explicit use of the accepted ADRS #322 public surface and return that fact to the next-effect decision loop",
+  "schema": "ops.logProjectedApplicationWeek1/1",
+  "start_rule": "The 168-hour window begins only after exact provider proof, merge/readback, and placement-comment readback",
+  "status": "CANDIDATE__PLACEMENT_NOT_STARTED",
+  "stop_rule": "Stop at the first exact week-1 observation or at 168 hours, whichever occurs first"
+}
