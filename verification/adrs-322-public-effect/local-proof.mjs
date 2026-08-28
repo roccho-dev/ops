@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname);
 const expectedProjectionSha = '8c992e2d47abe3d4ee3b920d2941ccfc6f4d9e611a01bc7d09215068b9c47225';
+const expectedBundleSha = '809751060f07133f08293624b358ec672a6b00cc24458089f1f3802350aa33ab';
 const expectedAcceptance = 'https://github.com/roccho-dev/adrs/issues/322#issuecomment-5448293184';
 const expectedAcceptanceCommentId = 5448293184;
 
@@ -48,6 +49,8 @@ const assets = {
   'projection.json': sha(projectionText),
 };
 const bundleDigest = sha(canonical(assets));
+if (bundleDigest !== expectedBundleSha) throw new Error('public bundle digest mismatch');
+
 const receipt = {
   schema: 'ops.publicDecisionLocalProof/1',
   status: 'PASS',
