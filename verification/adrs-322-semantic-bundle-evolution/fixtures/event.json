@@ -1,0 +1,1 @@
+{"event_id":"base-semantic-evolution","kind":"surface.public.available","observed_at":"2026-08-28T00:00:00.000Z","payload":{"public_safe":true,"value_surface":"semantic-bundle-evolution"},"profile_id":"external","schema":"adrs322.proofEvent/1","source":"adrs-322-semantic-evolution-fixture","subject_id":"proof-semantic-evolution"}
