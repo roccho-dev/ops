@@ -10,11 +10,13 @@ import pathlib
 import re
 import shutil
 import tarfile
+from collections.abc import Iterator
 from typing import Any
 
-HEADER = re.compile(r"^SEQ-CARRIER-CHUNK/2\s+(\d+)/(\d+)\s*$")
-BASE64_LINE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
-MIN_PAYLOAD_CHARS = 4096
+HEADER = re.compile(r"(?m)^[ \t]*SEQ-CARRIER-CHUNK/2[ \t]+(\d+)/(\d+)[ \t]*$")
+BASE64_CHARS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+IGNORABLE_PAYLOAD_CHARS = frozenset(" \t\r\n`")
+MIN_PAYLOAD_CHARS = 100
 
 
 def sha256(data: bytes) -> str:
@@ -22,39 +24,39 @@ def sha256(data: bytes) -> str:
 
 
 def parse_chunk(body: str) -> tuple[int, int, str] | None:
-    normalized = body.replace("\r\n", "\n").replace("\r", "\n").strip()
-    if not normalized:
-        return None
-    lines = normalized.split("\n")
-    header_index = next(
-        (index for index, line in enumerate(lines) if line.strip().startswith("SEQ-CARRIER-CHUNK/2")),
-        None,
-    )
-    if header_index is None:
-        return None
-    match = HEADER.fullmatch(lines[header_index].strip())
-    if match is None:
-        return None
-
-    groups: list[str] = []
-    current: list[str] = []
-    for raw_line in lines[header_index + 1 :]:
-        line = raw_line.strip().strip("`").strip()
-        if line and BASE64_LINE.fullmatch(line):
-            current.append(line)
+    normalized = body.replace("\r\n", "\n").replace("\r", "\n")
+    for match in HEADER.finditer(normalized):
+        payload_chars: list[str] = []
+        started = False
+        for character in normalized[match.end() :]:
+            if character in BASE64_CHARS:
+                payload_chars.append(character)
+                started = True
+                continue
+            if character in IGNORABLE_PAYLOAD_CHARS:
+                continue
+            if started:
+                break
+        payload = "".join(payload_chars)
+        if len(payload) < MIN_PAYLOAD_CHARS:
             continue
-        if current:
-            groups.append("".join(current))
-            current = []
-    if current:
-        groups.append("".join(current))
+        if any(character not in BASE64_CHARS for character in payload):
+            continue
+        return int(match.group(1)), int(match.group(2)), payload
+    return None
 
-    groups = [group for group in groups if len(group) >= MIN_PAYLOAD_CHARS]
-    if not groups:
-        return None
-    payload = max(groups, key=len)
-    assert groups.count(payload) == 1, f"ambiguous carrier payload: {lines[header_index]!r}"
-    return int(match.group(1)), int(match.group(2)), payload
+
+def iter_strings(value: Any, path: str = "$") -> Iterator[tuple[str, str]]:
+    if isinstance(value, str):
+        yield path, value
+        return
+    if isinstance(value, dict):
+        for key, child in value.items():
+            yield from iter_strings(child, f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from iter_strings(child, f"{path}[{index}]")
 
 
 def safe_extract(archive_path: pathlib.Path, destination: pathlib.Path) -> None:
@@ -104,11 +106,17 @@ def absorb(
         return False
     index, total, payload = parsed
     assert total == 10, (index, total)
+    assert 1 <= index <= total, (index, total)
     previous = parts.get(index)
     if previous is not None:
         assert previous == payload, f"carrier conflict at part {index}"
     parts[index] = payload
-    row = {**evidence_row, "part": index, "payloadBytes": len(payload.encode("ascii"))}
+    row = {
+        **evidence_row,
+        "part": index,
+        "payloadBytes": len(payload.encode("ascii")),
+        "payloadSha256": sha256(payload.encode("ascii")),
+    }
     if row not in evidence.setdefault(index, []):
         evidence[index].append(row)
     return True
@@ -157,17 +165,42 @@ def verify_source(
     }
 
 
+def scan_json_value(
+    value: Any,
+    *,
+    source: str,
+    metadata: dict[str, Any],
+    parts: dict[int, str],
+    evidence: dict[int, list[dict[str, Any]]],
+) -> set[int]:
+    matched: set[int] = set()
+    for path, text in iter_strings(value):
+        parsed = parse_chunk(text)
+        if parsed is None:
+            continue
+        index, _, _ = parsed
+        absorb(
+            body=text,
+            evidence_row={**metadata, "source": source, "field": path},
+            parts=parts,
+            evidence=evidence,
+        )
+        matched.add(index)
+    return matched
+
+
 def recover(args: argparse.Namespace) -> None:
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     parts: dict[int, str] = {}
     evidence: dict[int, list[dict[str, Any]]] = {}
-    archive_summary: dict[str, dict[str, Any]] = {}
+    source_summary: dict[str, dict[str, Any]] = {}
 
     current = json.loads(args.comments.read_text(encoding="utf-8"))
     assert isinstance(current, list)
+    current_parts: set[int] = set()
     for comment in current:
-        absorb(
+        if absorb(
             body=comment.get("body") or "",
             evidence_row={
                 "source": "github-current",
@@ -177,58 +210,68 @@ def recover(args: argparse.Namespace) -> None:
             },
             parts=parts,
             evidence=evidence,
+        ):
+            parsed = parse_chunk(comment.get("body") or "")
+            assert parsed is not None
+            current_parts.add(parsed[0])
+    source_summary[args.comments.name] = {
+        "kind": "github-current-comments",
+        "records": len(current),
+        "matchedParts": sorted(current_parts),
+    }
+
+    for json_path in sorted(args.json_sources or []):
+        value = json.loads(json_path.read_text(encoding="utf-8"))
+        matched = scan_json_value(
+            value,
+            source="github-json-history",
+            metadata={"file": json_path.name},
+            parts=parts,
+            evidence=evidence,
         )
+        source_summary[json_path.name] = {
+            "kind": "github-json-history",
+            "matchedParts": sorted(matched),
+        }
 
     for archive_path in sorted(args.archives):
-        action_counts: dict[str, int] = {}
         matched_parts: set[int] = set()
-        matching_issue_events = 0
+        records = 0
+        records_with_marker = 0
         with gzip.open(archive_path, "rt", encoding="utf-8") as stream:
-            for line in stream:
+            for line_number, line in enumerate(stream, start=1):
+                records += 1
+                if "SEQ-CARRIER-CHUNK/2" not in line:
+                    continue
+                records_with_marker += 1
                 event = json.loads(line)
-                if event.get("type") != "IssueCommentEvent":
-                    continue
-                if (event.get("repo") or {}).get("name") != "roccho-dev/ops":
-                    continue
-                payload = event.get("payload") or {}
-                if int((payload.get("issue") or {}).get("number") or 0) != 286:
-                    continue
-                matching_issue_events += 1
-                action = str(payload.get("action") or "unknown")
-                action_counts[action] = action_counts.get(action, 0) + 1
-                comment = payload.get("comment") or {}
-                body = comment.get("body") or ""
-                parsed = parse_chunk(body)
-                if parsed is None:
-                    continue
-                index, _, _ = parsed
-                matched_parts.add(index)
-                absorb(
-                    body=body,
-                    evidence_row={
-                        "source": "gharchive",
-                        "archive": archive_path.name,
-                        "eventId": event.get("id"),
-                        "eventCreatedAt": event.get("created_at"),
-                        "action": action,
-                        "commentId": comment.get("id"),
-                        "commentCreatedAt": comment.get("created_at"),
-                        "commentUpdatedAt": comment.get("updated_at"),
-                    },
-                    parts=parts,
-                    evidence=evidence,
+                matched_parts.update(
+                    scan_json_value(
+                        event,
+                        source="gharchive",
+                        metadata={
+                            "archive": archive_path.name,
+                            "line": line_number,
+                            "eventId": event.get("id") if isinstance(event, dict) else None,
+                            "eventType": event.get("type") if isinstance(event, dict) else None,
+                            "eventCreatedAt": event.get("created_at") if isinstance(event, dict) else None,
+                        },
+                        parts=parts,
+                        evidence=evidence,
+                    )
                 )
-        archive_summary[archive_path.name] = {
-            "matchingIssueEvents": matching_issue_events,
-            "actions": action_counts,
+        source_summary[archive_path.name] = {
+            "kind": "gharchive",
+            "records": records,
+            "recordsWithMarker": records_with_marker,
             "matchedParts": sorted(matched_parts),
         }
 
     diagnostic = {
-        "schema": "ops.mobileAgentSourceCarrierRecoveryDiagnostic/1",
+        "schema": "ops.mobileAgentSourceCarrierRecoveryDiagnostic/2",
         "discoveredParts": sorted(parts),
         "missingParts": sorted(set(range(1, 11)) - set(parts)),
-        "archives": archive_summary,
+        "sources": source_summary,
         "evidence": {str(index): evidence[index] for index in sorted(evidence)},
     }
     (out / "recovery-diagnostic.json").write_text(
@@ -238,8 +281,8 @@ def recover(args: argparse.Namespace) -> None:
     print(json.dumps(diagnostic, ensure_ascii=False, sort_keys=True))
 
     assert sorted(parts) == list(range(1, 11)), sorted(parts)
-    for missing_historical_part in (4, 5):
-        assert any(row["source"] == "gharchive" for row in evidence[missing_historical_part])
+    for historical_part in (4, 5):
+        assert any(row["source"] != "github-current" for row in evidence[historical_part])
 
     carrier = "".join(parts[index] for index in range(1, 11))
     compressed = base64.b64decode(carrier, validate=True)
@@ -326,6 +369,7 @@ def parser() -> argparse.ArgumentParser:
     recover_parser = commands.add_parser("recover")
     recover_parser.add_argument("--comments", required=True, type=pathlib.Path)
     recover_parser.add_argument("--archives", required=True, type=pathlib.Path, nargs="+")
+    recover_parser.add_argument("--json-sources", type=pathlib.Path, nargs="*")
     recover_parser.add_argument("--out", required=True, type=pathlib.Path)
     recover_parser.add_argument("--original-commit", required=True)
     recover_parser.add_argument("--original-tree", required=True)
