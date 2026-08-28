@@ -18,6 +18,16 @@ mkdir -p "$out"
 
 gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments?per_page=100" \
   > "$out/current-comments.json"
+
+gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/events?per_page=100" \
+  > "$out/repository-events.json" || printf '[]\n' > "$out/repository-events.json"
+gh api --paginate --slurp "users/roccho-dev/events?per_page=100" \
+  > "$out/actor-events.json" || printf '[]\n' > "$out/actor-events.json"
+gh api --paginate --slurp \
+  -H 'Accept: application/vnd.github+json' \
+  "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/timeline?per_page=100" \
+  > "$out/issue-timeline.json" || printf '[]\n' > "$out/issue-timeline.json"
+
 for hour in 8 9 10 11 12; do
   curl --fail --location --retry 3 --retry-delay 2 \
     "https://data.gharchive.org/2026-08-22-$hour.json.gz" \
@@ -26,6 +36,10 @@ done
 
 python3 verification/mobile-agent-exact-source-ingress.py recover \
   --comments "$out/current-comments.json" \
+  --json-sources \
+    "$out/repository-events.json" \
+    "$out/actor-events.json" \
+    "$out/issue-timeline.json" \
   --archives "$out"/gharchive-*.json.gz \
   --out "$out" \
   --original-commit "$ORIGINAL_COMMIT" \
@@ -98,7 +112,7 @@ cat > "$out/pr-comment.md" <<EOF
 - ref: \`$TARGET_REF\`
 - commit: \`$commit\`
 - tree: \`$tree\`
-- recovered historical parts: \`04/10\`, \`05/10\` from immutable GH Archive events
+- recovered historical parts: \`04/10\`, \`05/10\` from immutable event snapshots
 - source manifest: **657/657 exact hashes PASS**
 - existing tests / verify / exact build: **PASS**
 - generated projection: **54/54 exact files PASS**
