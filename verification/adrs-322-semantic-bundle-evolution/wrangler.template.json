@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stg-log-projected-semantic",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-08-28",
+  "workers_dev": true,
+  "send_metrics": false,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "OBSERVATIONS",
+      "bucket_name": "stg-log-projected-observations"
+    }
+  ],
+  "vars": {
+    "APP_VERSION": "GENERATED_CANDIDATE_SHA",
+    "WORKER_NAME": "GENERATED_WORKER_NAME",
+    "PROOF_ID": "GENERATED_PROOF_ID",
+    "EVENT_DIGEST": "GENERATED_EVENT_DIGEST",
+    "BUNDLE_V1_DIGEST": "GENERATED_BUNDLE_V1_DIGEST",
+    "BUNDLE_V2_DIGEST": "GENERATED_BUNDLE_V2_DIGEST"
+  }
+}
