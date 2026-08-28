@@ -78,7 +78,8 @@ curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
   > "$EVIDENCE/observation-readback.json"
 curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
   "$worker_url/api/evidence?subject_id=$encoded_subject" \
-  > "$EVIDENCE/observation-pool.json"\n
+  > "$EVIDENCE/observation-pool.json"
+
 curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/" > "$EVIDENCE/index.remote.html"
 curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/app.js" > "$EVIDENCE/app.remote.js"
 curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/projection.json" > "$EVIDENCE/projection.remote.json"
