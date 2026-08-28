@@ -10,11 +10,11 @@ import pathlib
 import re
 import shutil
 import tarfile
-from collections.abc import Iterable, Iterator
 from typing import Any
 
 HEADER = re.compile(r"^SEQ-CARRIER-CHUNK/2\s+(\d+)/(\d+)\s*$")
 BASE64_LINE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+MIN_PAYLOAD_CHARS = 4096
 
 
 def sha256(data: bytes) -> str:
@@ -48,21 +48,13 @@ def parse_chunk(body: str) -> tuple[int, int, str] | None:
             current = []
     if current:
         groups.append("".join(current))
-    assert groups, f"empty carrier payload: {lines[header_index]!r}"
+
+    groups = [group for group in groups if len(group) >= MIN_PAYLOAD_CHARS]
+    if not groups:
+        return None
     payload = max(groups, key=len)
     assert groups.count(payload) == 1, f"ambiguous carrier payload: {lines[header_index]!r}"
     return int(match.group(1)), int(match.group(2)), payload
-
-
-def iter_strings(value: Any, path: str = "payload") -> Iterator[tuple[str, str]]:
-    if isinstance(value, str):
-        yield path, value
-    elif isinstance(value, dict):
-        for key, child in value.items():
-            yield from iter_strings(child, f"{path}.{key}")
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from iter_strings(child, f"{path}[{index}]")
 
 
 def safe_extract(archive_path: pathlib.Path, destination: pathlib.Path) -> None:
@@ -205,28 +197,27 @@ def recover(args: argparse.Namespace) -> None:
                 action = str(payload.get("action") or "unknown")
                 action_counts[action] = action_counts.get(action, 0) + 1
                 comment = payload.get("comment") or {}
-                for field_path, body in iter_strings(payload):
-                    parsed = parse_chunk(body)
-                    if parsed is None:
-                        continue
-                    index, _, _ = parsed
-                    matched_parts.add(index)
-                    absorb(
-                        body=body,
-                        evidence_row={
-                            "source": "gharchive",
-                            "archive": archive_path.name,
-                            "eventId": event.get("id"),
-                            "eventCreatedAt": event.get("created_at"),
-                            "action": action,
-                            "field": field_path,
-                            "commentId": comment.get("id"),
-                            "commentCreatedAt": comment.get("created_at"),
-                            "commentUpdatedAt": comment.get("updated_at"),
-                        },
-                        parts=parts,
-                        evidence=evidence,
-                    )
+                body = comment.get("body") or ""
+                parsed = parse_chunk(body)
+                if parsed is None:
+                    continue
+                index, _, _ = parsed
+                matched_parts.add(index)
+                absorb(
+                    body=body,
+                    evidence_row={
+                        "source": "gharchive",
+                        "archive": archive_path.name,
+                        "eventId": event.get("id"),
+                        "eventCreatedAt": event.get("created_at"),
+                        "action": action,
+                        "commentId": comment.get("id"),
+                        "commentCreatedAt": comment.get("created_at"),
+                        "commentUpdatedAt": comment.get("updated_at"),
+                    },
+                    parts=parts,
+                    evidence=evidence,
+                )
         archive_summary[archive_path.name] = {
             "matchingIssueEvents": matching_issue_events,
             "actions": action_counts,
