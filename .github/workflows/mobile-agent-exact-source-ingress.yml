@@ -1,0 +1,413 @@
+name: Mobile Agent exact source ingress
+
+on:
+  push:
+    branches:
+      - proposal/mobile-agent-source-release-close-260827
+    paths:
+      - .github/workflows/mobile-agent-exact-source-ingress.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: mobile-agent-exact-source-ingress
+  cancel-in-progress: false
+
+jobs:
+  ingress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ISSUE_NUMBER: "286"
+      PR_NUMBER: "333"
+      ARCHIVE_HOUR: "2026-08-22-10"
+      TARGET_REF: source/mobile-agent-presets-v1
+      ORIGINAL_COMMIT: 1daa001bf780053f4319e3fb20b4ea9a6e0d0442
+      ORIGINAL_TREE: 59ff130fc7e20a4b5762c21fe97b417fc7a454ad
+      ORIGINAL_BUNDLE_SHA256: 208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6
+      EXPECTED_SOURCE_COMMIT: 608229b5a0b6fe370b07cef7c11a062e7add5ae1
+      EXPECTED_SOURCE_TREE: 2abfe78594e92831009236df6d34902990be020d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+
+      - name: Recover all ten immutable carrier chunks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/mobile-agent-source-ingress"
+          mkdir -p "$out"
+          gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments?per_page=100" > "$out/current-comments.json"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "https://data.gharchive.org/$ARCHIVE_HOUR.json.gz" \
+            --output "$out/gharchive.json.gz"
+          python3 - "$out" <<'PY'
+          from __future__ import annotations
+
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import sys
+          import tarfile
+
+          out = pathlib.Path(sys.argv[1]).resolve()
+          header = re.compile(r"^SEQ-CARRIER-CHUNK/2\s+(\d+)/(\d+)\s*$")
+          token = re.compile(r"[A-Za-z0-9+/]{100,}={0,2}")
+          parts: dict[int, str] = {}
+          evidence: dict[int, list[dict[str, object]]] = {}
+
+          def parse(body: str) -> tuple[int, int, str] | None:
+              normalized = body.replace("\r\n", "\n").replace("\r", "\n").strip()
+              if not normalized:
+                  return None
+              lines = normalized.split("\n")
+              position = next(
+                  (i for i, line in enumerate(lines) if line.strip().startswith("SEQ-CARRIER-CHUNK/2")),
+                  None,
+              )
+              if position is None:
+                  return None
+              match = header.fullmatch(lines[position].strip())
+              if match is None:
+                  return None
+              candidates = token.findall("\n".join(lines[position + 1 :]))
+              assert candidates, lines[position]
+              payload = max(candidates, key=len)
+              assert candidates.count(payload) == 1, lines[position]
+              return int(match.group(1)), int(match.group(2)), payload
+
+          def absorb(body: str, source: str, comment_id: int | None, created_at: str | None) -> None:
+              parsed = parse(body)
+              if parsed is None:
+                  return
+              index, total, payload = parsed
+              assert total == 10, (index, total)
+              previous = parts.get(index)
+              if previous is not None:
+                  assert previous == payload, f"carrier conflict at part {index}"
+              parts[index] = payload
+              evidence.setdefault(index, []).append(
+                  {"source": source, "commentId": comment_id, "createdAt": created_at}
+              )
+
+          current = json.loads((out / "current-comments.json").read_text(encoding="utf-8"))
+          assert isinstance(current, list)
+          for comment in current:
+              absorb(
+                  comment.get("body") or "",
+                  "github-current",
+                  int(comment["id"]),
+                  comment.get("created_at"),
+              )
+
+          archive_matches = 0
+          with gzip.open(out / "gharchive.json.gz", "rt", encoding="utf-8") as stream:
+              for line in stream:
+                  event = json.loads(line)
+                  if event.get("type") != "IssueCommentEvent":
+                      continue
+                  if (event.get("repo") or {}).get("name") != "roccho-dev/ops":
+                      continue
+                  payload = event.get("payload") or {}
+                  if payload.get("action") != "created":
+                      continue
+                  if int((payload.get("issue") or {}).get("number") or 0) != 286:
+                      continue
+                  comment = payload.get("comment") or {}
+                  before = len(parts)
+                  absorb(
+                      comment.get("body") or "",
+                      "gharchive-create-event",
+                      int(comment["id"]) if comment.get("id") is not None else None,
+                      comment.get("created_at") or event.get("created_at"),
+                  )
+                  if len(parts) > before or parse(comment.get("body") or "") is not None:
+                      archive_matches += 1
+
+          assert sorted(parts) == list(range(1, 11)), sorted(parts)
+          assert 4 in evidence and 5 in evidence
+          assert any(row["source"] == "gharchive-create-event" for row in evidence[4])
+          assert any(row["source"] == "gharchive-create-event" for row in evidence[5])
+
+          carrier = "".join(parts[index] for index in range(1, 11))
+          compressed = base64.b64decode(carrier, validate=True)
+          carrier_path = out / "source.tar.xz.b64"
+          archive_path = out / "source.tar.xz"
+          carrier_path.write_text(carrier, encoding="ascii")
+          archive_path.write_bytes(compressed)
+
+          with tarfile.open(archive_path, mode="r:xz") as archive:
+              names: set[str] = set()
+              for member in archive.getmembers():
+                  assert member.name not in names, member.name
+                  names.add(member.name)
+                  path = pathlib.PurePosixPath(member.name)
+                  assert not path.is_absolute(), member.name
+                  assert ".." not in path.parts, member.name
+                  assert member.isfile() or member.isdir(), member.name
+                  assert not member.issym() and not member.islnk(), member.name
+
+          receipt = {
+              "schema": "ops.mobileAgentSourceCarrierRecovery/1",
+              "status": "RECOVERED_NOT_YET_ACCEPTED",
+              "archiveHour": "2026-08-22-10",
+              "archiveMatches": archive_matches,
+              "parts": {str(index): evidence[index] for index in range(1, 11)},
+              "carrierBytes": len(carrier.encode("ascii")),
+              "carrierSha256": hashlib.sha256(carrier.encode("ascii")).hexdigest(),
+              "compressedBytes": len(compressed),
+              "compressedSha256": hashlib.sha256(compressed).hexdigest(),
+          }
+          (out / "recovery-receipt.json").write_text(
+              json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Extract safely and verify every source file
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/mobile-agent-source-ingress"
+          mkdir "$out/extracted"
+          tar -xJf "$out/source.tar.xz" -C "$out/extracted" --no-same-owner --no-same-permissions
+          python3 - "$out" "$ORIGINAL_COMMIT" "$ORIGINAL_TREE" "$ORIGINAL_BUNDLE_SHA256" <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          out = pathlib.Path(sys.argv[1]).resolve()
+          original_commit, original_tree, bundle_sha = sys.argv[2:]
+          extracted = out / "extracted"
+          candidates = []
+          for path in [extracted, *sorted(p for p in extracted.iterdir() if p.is_dir())]:
+              if (
+                  (path / "build.sh").is_file()
+                  and (path / "packages/pattern/view-types/registry.js").is_file()
+                  and (path / "packages/renderer-maxgraph/adapter.js").is_file()
+              ):
+                  candidates.append(path)
+          assert len(candidates) == 1, candidates
+          root = candidates[0]
+          authority = json.loads((root / ".source-authority.json").read_text(encoding="utf-8"))
+          manifest = json.loads((root / "source-manifest.json").read_text(encoding="utf-8"))
+          assert authority["schema"] == "imported-source-authority/1"
+          assert authority["provenance"]["sourceCommit"] == original_commit
+          assert authority["provenance"]["sourceTree"] == original_tree
+          assert authority["provenance"]["fullBundleSha256"] == "sha256:" + bundle_sha
+          assert authority["boundary"]["implementationRewritten"] is False
+          assert authority["boundary"]["generatedDistIncluded"] is False
+          assert manifest["schema"] == "mobile-agent-preset-source/1"
+          assert manifest["provenance"]["commit"] == original_commit
+          assert manifest["provenance"]["tree"] == original_tree
+
+          listed = {row["path"]: row for row in manifest["files"]}
+          excluded = {".source-authority.json", "source-manifest.json"}
+          actual = []
+          for path in sorted(p for p in root.rglob("*") if p.is_file()):
+              rel = path.relative_to(root).as_posix()
+              if rel in excluded:
+                  continue
+              assert rel in listed, rel
+              data = path.read_bytes()
+              row = listed[rel]
+              assert len(data) == row["bytes"], rel
+              assert hashlib.sha256(data).hexdigest() == str(row["sha256"]).removeprefix("sha256:"), rel
+              actual.append(rel)
+          assert actual == sorted(listed)
+          assert len(actual) == 657, len(actual)
+          (out / "source-root").write_text(str(root) + "\n", encoding="utf-8")
+          source_receipt = {
+              "schema": "ops.mobileAgentExactSourceVerification/1",
+              "status": "PASS",
+              "listedFiles": len(actual),
+              "sourceManifestSha256": hashlib.sha256((root / "source-manifest.json").read_bytes()).hexdigest(),
+              "externalSourceCommit": original_commit,
+              "externalSourceTree": original_tree,
+              "externalFullBundleSha256": bundle_sha,
+          }
+          (out / "source-verification-receipt.json").write_text(
+              json.dumps(source_receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Run the existing tests and prove the exact 54-file build
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/mobile-agent-source-ingress"
+          root="$(cat "$out/source-root")"
+          (cd "$root" && node tests/pattern_test.mjs)
+          (cd "$root" && node tests/protocol_test.mjs)
+          if [ -x "$root/verify.sh" ]; then (cd "$root" && ./verify.sh); fi
+          (cd "$root" && ./build.sh)
+          python3 - "$root" verification/mobile-agent-preset-app/expected.json "$out/build-receipt.json" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1]).resolve()
+          expected = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+          assert expected["schema"] == "semantic-map-build-artifact/1"
+          assert len(expected["files"]) == 54
+          dist = root / "dist"
+          actual = sorted(p.relative_to(dist).as_posix() for p in dist.rglob("*") if p.is_file())
+          assert actual == sorted(expected["files"])
+          for rel, spec in expected["files"].items():
+              data = (dist / rel).read_bytes()
+              assert len(data) == spec["bytes"], rel
+              assert hashlib.sha256(data).hexdigest() == spec["sha256"], rel
+          receipt = {
+              "schema": "ops.mobileAgentExactSourceBuild/1",
+              "status": "PASS",
+              "files": len(actual),
+              "appSha256": expected["files"]["app/index.html"]["sha256"],
+          }
+          pathlib.Path(sys.argv[3]).write_text(
+              json.dumps(receipt, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Create and publish the deterministic Git source ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/mobile-agent-source-ingress"
+          root="$(cat "$out/source-root")"
+          rm -rf "$root/dist" "$root/.git"
+          python3 - "$root" <<'PY'
+          import hashlib
+          import json
+          import pathlib
+          import sys
+
+          root = pathlib.Path(sys.argv[1]).resolve()
+          manifest = json.loads((root / "source-manifest.json").read_text(encoding="utf-8"))
+          listed = {row["path"]: row for row in manifest["files"]}
+          excluded = {".source-authority.json", "source-manifest.json"}
+          actual = []
+          for path in sorted(p for p in root.rglob("*") if p.is_file()):
+              rel = path.relative_to(root).as_posix()
+              if rel in excluded:
+                  continue
+              assert rel in listed, rel
+              data = path.read_bytes()
+              assert len(data) == listed[rel]["bytes"], rel
+              assert hashlib.sha256(data).hexdigest() == str(listed[rel]["sha256"]).removeprefix("sha256:"), rel
+              actual.append(rel)
+          assert actual == sorted(listed)
+          PY
+
+          git -C "$root" init --quiet
+          git -C "$root" config user.name 'roccho source authority'
+          git -C "$root" config user.email 'source-authority@roccho.invalid'
+          git -C "$root" add -A
+          export GIT_AUTHOR_NAME='roccho source authority'
+          export GIT_AUTHOR_EMAIL='source-authority@roccho.invalid'
+          export GIT_AUTHOR_DATE='2026-08-21T00:00:00Z'
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
+          git -C "$root" commit --quiet -m 'chore: promote exact Mobile Agent preset source'
+          commit="$(git -C "$root" rev-parse HEAD)"
+          tree="$(git -C "$root" rev-parse 'HEAD^{tree}')"
+          printf 'source commit: %s\nsource tree: %s\n' "$commit" "$tree"
+          test "$commit" = "$EXPECTED_SOURCE_COMMIT"
+          test "$tree" = "$EXPECTED_SOURCE_TREE"
+          test "$(git -C "$root" rev-list --count HEAD)" = 1
+          test -z "$(git -C "$root" status --porcelain)"
+
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          git -C "$root" remote add origin "$remote"
+          current="$(git ls-remote "$remote" "refs/heads/$TARGET_REF" | awk 'NR==1 {print $1}')"
+          if [ -n "$current" ]; then
+            git -C "$root" fetch --quiet --depth=1 origin "$TARGET_REF"
+            test "$(git -C "$root" rev-parse 'FETCH_HEAD^{tree}')" = "$tree"
+          else
+            git -C "$root" push --quiet origin "HEAD:refs/heads/$TARGET_REF"
+          fi
+
+          readback="$RUNNER_TEMP/mobile-agent-source-readback"
+          git init --quiet "$readback"
+          git -C "$readback" remote add origin "$remote"
+          git -C "$readback" fetch --quiet --depth=1 origin "$TARGET_REF"
+          git -C "$readback" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$readback" rev-parse HEAD)" = "$commit"
+          test "$(git -C "$readback" rev-parse 'HEAD^{tree}')" = "$tree"
+          test "$(git -C "$readback" rev-list --count HEAD)" = 1
+          test -z "$(git -C "$readback" status --porcelain)"
+          git -C "$readback" fsck --no-dangling
+
+          python3 - "$out" "$TARGET_REF" "$commit" "$tree" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          out = pathlib.Path(sys.argv[1])
+          recovery = json.loads((out / "recovery-receipt.json").read_text(encoding="utf-8"))
+          source = json.loads((out / "source-verification-receipt.json").read_text(encoding="utf-8"))
+          build = json.loads((out / "build-receipt.json").read_text(encoding="utf-8"))
+          final = {
+              "schema": "ops.mobileAgentExactSourceIngress/1",
+              "status": "PASS",
+              "ref": sys.argv[2],
+              "commit": sys.argv[3],
+              "tree": sys.argv[4],
+              "recovery": recovery,
+              "source": source,
+              "build": build,
+              "implementationRewritten": False,
+              "generatedDistCommitted": False,
+          }
+          (out / "ingress-receipt.json").write_text(
+              json.dumps(final, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          cat > "$out/pr-comment.md" <<EOF
+          ## Exact Mobile Agent source ingress — PASS
+
+          - ref: \`$TARGET_REF\`
+          - commit: \`$commit\`
+          - tree: \`$tree\`
+          - recovered missing carrier parts: \`04/10\`, \`05/10\` from the immutable GH Archive create events
+          - source manifest: **657/657 exact hashes PASS**
+          - existing tests / verify / exact build: **PASS**
+          - generated projection: **54/54 exact files PASS**
+          - implementation rewrite / generated dist committed: \`false / false\`
+          EOF
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$out/pr-comment.md"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-exact-source-ingress-receipts
+          path: |
+            ${{ runner.temp }}/mobile-agent-source-ingress/recovery-receipt.json
+            ${{ runner.temp }}/mobile-agent-source-ingress/source-verification-receipt.json
+            ${{ runner.temp }}/mobile-agent-source-ingress/build-receipt.json
+            ${{ runner.temp }}/mobile-agent-source-ingress/ingress-receipt.json
+          if-no-files-found: error
+          retention-days: 30
