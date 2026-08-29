@@ -58,7 +58,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_WORKER_NAME: stg-gov-release-proxy
-      ADRS_READER_CLIENT_ID: ${{ vars.ADRS_READER_CLIENT_ID }}
+      ADRS_READER_CLIENT_ID: ${{ vars.ADRS_READER_CLIENT_ID || secrets.ADRS_READER_CLIENT_ID }}
       ADRS_READER_PRIVATE_KEY: ${{ secrets.ADRS_READER_PRIVATE_KEY }}
       STATIC_GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
     steps:
@@ -91,10 +91,30 @@ jobs:
         run: |
           set -euo pipefail
           token="${APP_TOKEN:-$STATIC_GITHUB_RELEASE_TOKEN}"
-          test -n "$token"
+          source='none'
+          [ -n "$APP_TOKEN" ] && source='github-app'
+          [ -z "$APP_TOKEN" ] && [ -n "$STATIC_GITHUB_RELEASE_TOKEN" ] && source='static-token'
+          python3 - "$source" "${ADRS_READER_CLIENT_ID:+configured}" "${ADRS_READER_PRIVATE_KEY:+configured}" "${STATIC_GITHUB_RELEASE_TOKEN:+configured}" <<'PY'
+          import json,pathlib,sys
+          source,client_id,private_key,static_token=sys.argv[1:]
+          receipt={
+            'schema':'ops.govReleaseGitHubCredentialSelection/1',
+            'status':'PASS' if source!='none' else 'FAIL',
+            'source':source,
+            'githubAppClientIdConfigured':client_id=='configured',
+            'githubAppPrivateKeyConfigured':private_key=='configured',
+            'staticTokenConfigured':static_token=='configured',
+          }
+          (pathlib.Path(__import__('os').environ['RUNNER_TEMP'])/'github-credential-selection.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          PY
+          if [ -z "$token" ]; then
+            echo '::error::Missing bounded GitHub read credential. Configure ADRS_READER_CLIENT_ID + ADRS_READER_PRIVATE_KEY, or GITHUB_RELEASE_TOKEN, in the cloudflare-production Environment.'
+            exit 1
+          fi
           umask 077
           printf '%s' "$token" > "$RUNNER_TEMP/github-release-token"
           echo "available=true" >> "$GITHUB_OUTPUT"
+          echo "source=$source" >> "$GITHUB_OUTPUT"
 
       - name: Prove one credential reads public and private exact assets
         working-directory: packages/gov-release-proxy
@@ -144,7 +164,7 @@ jobs:
         run: node scripts/cleanup-worker-proof.mjs
 
       - name: Verify restored public-only Worker state
-        if: always()
+        if: always() && steps.deploy.outputs.url != ''
         working-directory: packages/gov-release-proxy
         run: |
           set -euo pipefail
@@ -175,12 +195,20 @@ jobs:
           def read(name):
             p=root/name
             if not p.exists(): return None
-            rows=[line for line in p.read_text().splitlines() if line.strip()]
-            return json.loads(rows[-1]) if rows else None
+            text=p.read_text()
+            try:
+              return json.loads(text)
+            except json.JSONDecodeError:
+              rows=[line for line in text.splitlines() if line.strip()]
+              for line in reversed(rows):
+                try: return json.loads(line)
+                except json.JSONDecodeError: pass
+              return {'status':'UNPARSEABLE','path':name}
           receipt={
             'schema':'ops.govReleaseAlwaysWorkerProviderReceipt/1',
             'workerUrl':'${{ steps.deploy.outputs.url }}',
             'cloudflarePreflight':read('cloudflare-token-preflight.json'),
+            'githubCredentialSelection':read('github-credential-selection.json'),
             'authenticatedUpstream':read('authenticated-upstream-receipt.json'),
             'credentialWorker':read('credential-worker-receipt.json'),
             'access':read('access-proof-receipt.json'),
@@ -198,6 +226,7 @@ jobs:
           name: gov-release-always-worker-proof-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/cloudflare-token-preflight.json
+            ${{ runner.temp }}/github-credential-selection.json
             ${{ runner.temp }}/authenticated-upstream-receipt.json
             ${{ runner.temp }}/credential-worker-receipt.json
             ${{ runner.temp }}/access-proof-receipt.json
