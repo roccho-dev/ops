@@ -2,16 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, webcrypto } from "node:crypto";
 import {
-  PRIVATE_FIXTURE_ASSETS,
-  PUBLIC_ASSETS,
+  PRIVATE_FIXTURE_ROOT_ASSET,
+  PUBLIC_ROOT_ASSET,
 } from "../src/assets.mjs";
 import worker, {
   ProxyError,
-  availableAssets,
   fetchAsset,
   handleRequest,
-  resolveAsset,
+  selectedRootAsset,
   upstreamUrl,
+  wantsData,
 } from "../src/worker.mjs";
 
 const bytes = Buffer.from('{"fixture":"ok"}\n');
@@ -36,57 +36,86 @@ const digestCrypto = digest => ({
     digest: async () => Uint8Array.from(Buffer.from(digest.slice("sha256:".length), "hex")).buffer,
   },
 });
+const uiAssets = {
+  fetch: async request => new Response("<!doctype html><title>UI</title>", {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", "x-request-method": request.method },
+  }),
+};
 
-test("fetchAsset pins repository and asset API and validates bytes and digest", async () => {
-  const calls = [];
-  const loaded = await fetchAsset({
-    asset,
-    cryptoScope: webcrypto,
-    fetchImpl: async (url, init) => { calls.push({ url, init }); return responseFor(); },
-  });
-  assert.equal(Buffer.from(loaded.bytes).toString(), bytes.toString());
-  assert.equal(loaded.observedDigest, asset.digest);
-  assert.equal(loaded.credentialUsed, false);
-  assert.equal(calls[0].url, "https://api.github.com/repos/roccho-dev/example/releases/assets/99");
-  assert.equal(calls[0].init.redirect, "follow");
-  assert.equal(calls[0].init.headers.get("authorization"), null);
+test("root content negotiation distinguishes HTML from JSON", () => {
+  assert.equal(wantsData(new Request("https://worker.invalid/", { headers: { accept: "text/html" } })), false);
+  assert.equal(wantsData(new Request("https://worker.invalid/", { headers: { accept: "application/json" } })), true);
+  assert.equal(wantsData(new Request("https://worker.invalid/", { headers: { accept: "application/x-ndjson" } })), true);
 });
 
-test("required public auth and private fixtures use server-side credential", async () => {
-  let publicHeaders;
-  const publicLoaded = await fetchAsset({
-    asset,
-    env: { GITHUB_RELEASE_TOKEN: "bounded-token", REQUIRE_GITHUB_AUTH: "true" },
-    cryptoScope: webcrypto,
-    fetchImpl: async (_url, init) => { publicHeaders = init.headers; return responseFor(); },
+test("HTML is served from the same root without touching GitHub", async () => {
+  const response = await handleRequest(new Request("https://worker.invalid/", { headers: { accept: "text/html" } }), { ASSETS: uiAssets }, {
+    fetchImpl: async () => { throw new Error("must not fetch upstream"); },
   });
-  assert.equal(publicHeaders.get("authorization"), "Bearer bounded-token");
-  assert.equal(publicLoaded.credentialUsed, true);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /^text\/html/u);
+  assert.match(await response.text(), /<title>UI<\/title>/u);
+});
 
-  const privateAsset = Object.values(PRIVATE_FIXTURE_ASSETS)[0];
-  let privateHeaders;
-  await fetchAsset({
-    asset: privateAsset,
-    env: { GITHUB_RELEASE_TOKEN: "bounded-token" },
-    cryptoScope: digestCrypto(privateAsset.digest),
-    fetchImpl: async (_url, init) => {
-      privateHeaders = init.headers;
-      return responseFor(Buffer.alloc(privateAsset.bytes));
+test("JSON is served from the same root with pinned bytes and digest", async () => {
+  const selected = PUBLIC_ROOT_ASSET;
+  const response = await handleRequest(
+    new Request("https://worker.invalid/", { headers: { accept: "application/json" } }),
+    {},
+    {
+      cryptoScope: digestCrypto(selected.digest),
+      fetchImpl: async (url, init) => {
+        assert.equal(url, upstreamUrl(selected));
+        assert.equal(init.headers.get("authorization"), null);
+        return responseFor(Buffer.alloc(selected.bytes));
+      },
     },
-  });
-  assert.equal(privateHeaders.get("authorization"), "Bearer bounded-token");
-  assert.equal(upstreamUrl(privateAsset), `https://api.github.com/repos/roccho-dev/adrs/releases/assets/${privateAsset.assetId}`);
+  );
+  assert.equal(response.status, 200);
+  assert.equal((await response.arrayBuffer()).byteLength, selected.bytes);
+  assert.equal(response.headers.get("x-gov-release-digest"), selected.digest);
+  assert.equal(response.headers.get("vary"), "Accept");
 });
 
-test("missing required credential fails before upstream", async () => {
+test("public root needs no credential; private root does", async () => {
+  assert.equal(selectedRootAsset({}), PUBLIC_ROOT_ASSET);
+  assert.equal(selectedRootAsset({ ENABLE_PRIVATE_FIXTURE: "true" }), PRIVATE_FIXTURE_ROOT_ASSET);
+  const publicLoaded = await fetchAsset({ asset, cryptoScope: webcrypto, fetchImpl: async () => responseFor() });
+  assert.equal(publicLoaded.credentialUsed, false);
   await assert.rejects(
-    fetchAsset({ asset, env: { REQUIRE_GITHUB_AUTH: "true" }, fetchImpl: async () => { throw new Error("must not fetch"); } }),
+    fetchAsset({ asset: PRIVATE_FIXTURE_ROOT_ASSET, fetchImpl: async () => { throw new Error("must not fetch"); } }),
     error => error instanceof ProxyError && error.code === "UPSTREAM_CREDENTIAL_REQUIRED",
   );
-  await assert.rejects(
-    fetchAsset({ asset: Object.values(PRIVATE_FIXTURE_ASSETS)[0], fetchImpl: async () => { throw new Error("must not fetch"); } }),
-    error => error instanceof ProxyError && error.code === "UPSTREAM_CREDENTIAL_REQUIRED",
+});
+
+test("private root uses the credential only upstream", async () => {
+  let upstreamHeaders;
+  const selected = PRIVATE_FIXTURE_ROOT_ASSET;
+  const response = await handleRequest(
+    new Request("https://worker.invalid/", { headers: { accept: "application/x-ndjson" } }),
+    { ENABLE_PRIVATE_FIXTURE: "true", GITHUB_RELEASE_TOKEN: "secret" },
+    {
+      cryptoScope: digestCrypto(selected.digest),
+      fetchImpl: async (_url, init) => {
+        upstreamHeaders = init.headers;
+        return responseFor(Buffer.alloc(selected.bytes));
+      },
+    },
   );
+  assert.equal(response.status, 200);
+  assert.equal(upstreamHeaders.get("authorization"), "Bearer secret");
+  assert.equal(response.headers.get("authorization"), null);
+  assert.equal(response.headers.get("x-gov-release-upstream-auth"), "credential");
+});
+
+test("upstream 401 and 403 remain explicit closed states", async () => {
+  for (const [status, code] of [[401, "AUTHENTICATION_REQUIRED"], [403, "ACCESS_DENIED"]]) {
+    await assert.rejects(
+      fetchAsset({ asset, fetchImpl: async () => responseFor("", status) }),
+      error => error instanceof ProxyError && error.code === code && error.status === status,
+    );
+  }
 });
 
 test("digest and byte mismatch fail closed", async () => {
@@ -102,67 +131,30 @@ test("digest and byte mismatch fail closed", async () => {
   );
 });
 
-test("private routes remain hidden until proof flag is set", () => {
-  assert.equal(Object.keys(availableAssets({})).length, 2);
-  assert.equal(resolveAsset("/proof/private/manifest", {}), null);
-  assert.equal(Object.keys(availableAssets({ ENABLE_PRIVATE_FIXTURE: "true" })).length, 4);
-  assert.equal(resolveAsset("/proof/private/manifest", { ENABLE_PRIVATE_FIXTURE: "true" }).repository, "roccho-dev/adrs");
-});
-
-test("enabled private route reads with credential and exposes no credential", async () => {
-  const privateAsset = PRIVATE_FIXTURE_ASSETS["/proof/private/manifest"];
-  let upstreamHeaders;
-  const response = await handleRequest(
-    new Request("https://worker.invalid/proof/private/manifest"),
-    { ENABLE_PRIVATE_FIXTURE: "true", GITHUB_RELEASE_TOKEN: "secret" },
-    {
-      cryptoScope: digestCrypto(privateAsset.digest),
-      fetchImpl: async (_url, init) => {
-        upstreamHeaders = init.headers;
-        return responseFor(Buffer.alloc(privateAsset.bytes));
-      },
-    },
-  );
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("x-gov-release-upstream-auth"), "credential");
-  assert.equal(response.headers.get("authorization"), null);
-  assert.equal(upstreamHeaders.get("authorization"), "Bearer secret");
-});
-
-test("health/config expose states but never secret values", async () => {
-  const env = { ENABLE_PRIVATE_FIXTURE: "true", REQUIRE_GITHUB_AUTH: "true", GITHUB_RELEASE_TOKEN: "secret" };
-  const health = await handleRequest(new Request("https://worker.invalid/health"), env);
-  const healthText = await health.text();
-  const healthValue = JSON.parse(healthText);
-  assert.equal(healthValue.githubCredentialConfigured, true);
-  assert.equal(healthValue.githubAuthRequired, true);
-  assert.equal(healthValue.privateFixtureEnabled, true);
-  assert.equal(healthText.includes("secret"), false);
-  const config = await handleRequest(new Request("https://worker.invalid/config"), env);
-  const configValue = await config.json();
-  assert.equal(configValue.routes.length, 4);
-});
-
-test("only fixed GET and HEAD routes are accepted", async () => {
-  const post = await worker.fetch(new Request("https://worker.invalid/data/manifest", { method: "POST" }), {}, {});
+test("only root GET and HEAD exist", async () => {
+  const post = await worker.fetch(new Request("https://worker.invalid/", { method: "POST" }), { ASSETS: uiAssets }, {});
   assert.equal(post.status, 405);
   assert.equal((await post.json()).code, "METHOD_NOT_ALLOWED");
-  const missing = await worker.fetch(new Request("https://worker.invalid/data/unknown"), {}, {});
+  const missing = await worker.fetch(new Request("https://worker.invalid/data/manifest"), { ASSETS: uiAssets }, {});
   assert.equal(missing.status, 404);
-  const query = await worker.fetch(new Request("https://worker.invalid/data/manifest?url=https://evil.invalid"), {}, {});
+  const query = await worker.fetch(new Request("https://worker.invalid/?repo=evil"), { ASSETS: uiAssets }, {});
   assert.equal(query.status, 400);
 });
 
-test("HEAD never calls GitHub and exposes pinned metadata", async () => {
-  const response = await handleRequest(new Request("https://worker.invalid/data/manifest", { method: "HEAD" }), {}, {
-    fetchImpl: async () => { throw new Error("must not fetch"); },
-  });
+test("root data HEAD exposes metadata without upstream fetch", async () => {
+  const response = await handleRequest(
+    new Request("https://worker.invalid/", { method: "HEAD", headers: { accept: "application/json" } }),
+    {},
+    { fetchImpl: async () => { throw new Error("must not fetch"); } },
+  );
   assert.equal(response.status, 200);
   assert.equal(response.body, null);
   assert.equal(response.headers.get("x-gov-release-repository"), "roccho-dev/governance");
-  assert.match(response.headers.get("x-gov-release-digest"), /^sha256:/u);
+  assert.equal(response.headers.get("x-gov-release-digest"), PUBLIC_ROOT_ASSET.digest);
 });
 
-test("public assets remain exactly two production routes", () => {
-  assert.deepEqual(Object.keys(PUBLIC_ASSETS), ["/data/manifest", "/data/accepted-decision"]);
+test("root HTML HEAD remains delegated to static assets", async () => {
+  const response = await handleRequest(new Request("https://worker.invalid/", { method: "HEAD", headers: { accept: "text/html" } }), { ASSETS: uiAssets });
+  assert.equal(response.status, 200);
+  assert.equal(response.body, null);
 });
