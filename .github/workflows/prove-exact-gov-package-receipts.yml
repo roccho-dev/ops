@@ -1,0 +1,47 @@
+name: prove-exact-gov-package-receipts
+
+on:
+  push:
+    branches:
+      - transport/exact-gov-package-receipts-260829
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused-nix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6fcecb96585570081a53c81aa94b955a09721046
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Build exact package response checks only
+        run: |
+          set -euo pipefail
+          mkdir -p focused-proof
+          nix build --no-write-lock-file --print-out-paths \
+            .#checks.x86_64-linux.ops-package-responses \
+            > focused-proof/ops-package-responses.out-path
+          nix build --no-write-lock-file --print-out-paths \
+            .#checks.x86_64-linux.ops-gov-package-output \
+            > focused-proof/ops-gov-package-output.out-path
+          nix path-info --json \
+            "$(cat focused-proof/ops-package-responses.out-path)" \
+            "$(cat focused-proof/ops-gov-package-output.out-path)" \
+            > focused-proof/nix-path-info.json
+          git diff --exit-code
+          printf '%s\n' 6fcecb96585570081a53c81aa94b955a09721046 \
+            > focused-proof/ops-commit.txt
+          printf '%s\n' 4b227c0c9d8bf3120142cf2ba3b777a928452654 \
+            > focused-proof/ops-tree.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-gov-package-receipts-focused-nix
+          path: focused-proof
+          if-no-files-found: error
