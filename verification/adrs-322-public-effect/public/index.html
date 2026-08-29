@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log-projected application kernel</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root { font-family: system-ui, sans-serif; color-scheme: light dark; }
+    body { margin: 0; }
+    main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+    header, section { margin-bottom: 28px; }
+    .eyebrow { font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; opacity: .7; }
+    .accepted { border: 1px solid currentColor; border-radius: 12px; padding: 20px; }
+    .accepted li { margin: .55rem 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 16px; }
+    .card { border: 1px solid currentColor; border-radius: 12px; padding: 18px; }
+    .kind { font-weight: 700; }
+    .digest, #pool-evidence { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .78rem; }
+    button, a { font: inherit; }
+    button { padding: .7rem 1rem; cursor: pointer; }
+    .source { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body data-status="loading">
+  <main>
+    <header>
+      <p class="eyebrow">Accepted ADRS #322 · bounded public effect</p>
+      <h1>Log-projected application kernel</h1>
+      <p>Reconstruct current meaning from admitted append-only history, project the next value surface, admit effects explicitly, and return observations to the same history.</p>
+      <p class="source">Source: <a href="https://github.com/roccho-dev/adrs/issues/322#issuecomment-5448293184">ADRS #322 owner acceptance</a></p>
+      <p>Public projection SHA-256: <code>8c992e2d47abe3d4ee3b920d2941ccfc6f4d9e611a01bc7d09215068b9c47225</code></p>
+      <dl id="runtime-meta"></dl>
+    </header>
+
+    <section class="accepted" aria-labelledby="accepted-heading">
+      <h2 id="accepted-heading">Accepted architecture meaning</h2>
+      <ol>
+        <li>Admitted append-only history is the semantic source; current state is reconstructed rather than independently hand-edited.</li>
+        <li>One deterministic kernel reduces current meaning and projects actor or subject-context surfaces.</li>
+        <li>A surface is accumulated current value plus permitted next actions.</li>
+        <li>A user receives a next value surface; use of that surface may become the next observation.</li>
+        <li>A gesture creates a typed candidate, not accepted meaning; admission precedes any effect.</li>
+        <li>Effect execution, provider response, readback, observation, and business outcome remain distinct.</li>
+        <li>Observations return to append-only history and cause deterministic re-projection.</li>
+        <li>UI, databases, manifests, receipts, funnels, scores, and provider responses are not independent accepted-meaning authority.</li>
+      </ol>
+      <p>This public page is a projection, not decision authority. Its one permitted write records a non-PII interaction only.</p>
+    </section>
+
+    <section class="grid">
+      <article id="internal-card" class="card" aria-labelledby="internal-heading">
+        <p class="kind">Internal evidence surface</p>
+        <h2 id="internal-heading">Loading…</h2>
+        <p class="summary"></p>
+        <pre class="digest"></pre>
+        <div class="actions"></div>
+      </article>
+      <article id="external-card" class="card" aria-labelledby="external-heading">
+        <p class="kind">Public interaction surface</p>
+        <h2 id="external-heading">Loading…</h2>
+        <p class="summary"></p>
+        <pre class="digest"></pre>
+        <div class="actions"></div>
+      </article>
+    </section>
+
+    <section id="next" class="next">
+      <h2>Observation pool</h2>
+      <p>The proof observation below is technical evidence only; it is not a qualified market observation.</p>
+      <pre id="pool-evidence">Loading…</pre>
+    </section>
+    <script id="runtime-state" type="application/json">{}</script>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

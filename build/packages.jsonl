@@ -21,7 +21,7 @@
 {"bin":"ui-raw-loop-runtime","deps":["node"],"entry":"packages/ui-raw-loop-runtime/bin/ui-raw-loop-runtime.mjs","env":[],"kind":"package","name":"ui-raw-loop-runtime","runtime":"node"}
 {"bin":"policy-semantic-compiler","deps":["duckdb","git","python"],"entry":"packages/policy-semantic-compiler/bin/policy-semantic-compiler.py","env":[],"kind":"package","name":"policy-semantic-compiler","pythonModule":"policy_semantic_compiler.cli","pythonPath":"src","runtime":"python"}
 {"bin":"codex-app-browser-chatgpt-ops","deps":["node"],"entry":"packages/codex-app-browser-chatgpt-ops/bin/codex-app-browser-chatgpt-ops.mjs","env":[],"kind":"package","name":"codex-app-browser-chatgpt-ops","runtime":"node"}
-{"bin":"ops-package-responses","deps":["node"],"entry":"packages/ops-package-responses/bin/ops-package-responses.mjs","env":[],"kind":"package","name":"ops-package-responses","runtime":"node"}
+{"bin":"ops-package-responses","deps":["git","nix","node"],"entry":"packages/ops-package-responses/bin/ops-package-responses.mjs","env":[],"kind":"package","name":"ops-package-responses","runtime":"node"}
 {"bin":"ops-gov-package-output","deps":["node","ops-package-responses"],"entry":"packages/ops-gov-package-output/bin/ops-gov-package-output.mjs","env":[],"kind":"package","name":"ops-gov-package-output","runtime":"node"}
 {"bin":"hq-modeling-runtime","deps":[],"entry":"packages/hq-modeling-runtime/cmd/hq-modeling-runtime","env":[],"kind":"package","name":"hq-modeling-runtime","runtime":"go"}
 {"bin":"hq-source-evidence-runtime","deps":["node"],"entry":"packages/hq-source-evidence-runtime/bin/hq-source-evidence-runtime.mjs","env":[],"kind":"package","name":"hq-source-evidence-runtime","runtime":"node"}

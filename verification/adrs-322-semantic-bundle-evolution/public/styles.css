@@ -1,0 +1,17 @@
+:root { font-family: ui-sans-serif, system-ui, sans-serif; color: #18202a; background: #f5f7fa; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: 48px 0 72px; }
+header { margin-bottom: 24px; }
+.eyebrow, .kind { text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; font-weight: 700; }
+h1 { font-size: clamp(2rem, 6vw, 4rem); line-height: 1.02; margin: 8px 0 18px; }
+header > p { max-width: 760px; line-height: 1.6; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: .84rem; }
+dt { font-weight: 700; }
+dd { margin: 0; overflow-wrap: anywhere; }
+.card, .anchor { background: white; border: 1px solid #dfe5eb; border-radius: 18px; padding: 24px; margin-top: 18px; box-shadow: 0 12px 30px rgb(23 32 42 / 7%); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+a, button { border: 0; border-radius: 999px; padding: 10px 16px; background: #18202a; color: white; font: inherit; text-decoration: none; cursor: pointer; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2f4f6; border-radius: 10px; padding: 12px; font-size: .74rem; }
+body[data-status='error']::before { content: 'Semantic bundle proof runtime error'; display: block; padding: 12px; color: white; background: #7c2020; text-align: center; }

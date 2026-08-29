@@ -1,0 +1,48 @@
+{
+  "schema": "ops.govJsonRuntimeSource/1",
+  "claim_ceiling": "PR_CANDIDATE_GREEN",
+  "authority": false,
+  "source": {
+    "repository": "roccho-dev/governance",
+    "release_id": 356287183,
+    "tag": "gov-release/company-operating-contract-v0.2.0/8f087d7babfbb04bce7e9e6a1bd21169dec5d37299c58bfcbb49c5756468c461",
+    "target_commit": "42d0bf9de25161fb5f6c2a1538fc61ec1f55650b",
+    "release_url": "https://github.com/roccho-dev/governance/releases/tag/gov-release/company-operating-contract-v0.2.0/8f087d7babfbb04bce7e9e6a1bd21169dec5d37299c58bfcbb49c5756468c461"
+  },
+  "assets": [
+    {
+      "role": "decision",
+      "asset_id": 482207652,
+      "name": "accepted-decision.json",
+      "bytes": 942,
+      "sha256": "sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6"
+    },
+    {
+      "role": "manifest",
+      "asset_id": 482207654,
+      "name": "gov-release-manifest.json",
+      "bytes": 456,
+      "sha256": "sha256:b7a141c2c37849bed8160de4eb4b397d623133373e6c5831c72500a151a2942f"
+    },
+    {
+      "role": "readback",
+      "asset_id": 482207680,
+      "name": "gov-release-readback-receipt.json",
+      "bytes": 647,
+      "sha256": "sha256:120010cda5aee7b5d44a748f69f150c2775fb8cd2c7ac3b95fe4063e8652e831"
+    }
+  ],
+  "view": {
+    "contract": "ui.govReleaseRuntimeView/1",
+    "reduce": "display-only",
+    "semantic_reduce": false
+  },
+  "assertions": {
+    "sample": false,
+    "production_package_contract": false,
+    "authenticated_ui": false,
+    "provider_e2e": false,
+    "authority_changed": false,
+    "cutover": false
+  }
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Semantic bundle evolution proof</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-status="loading" data-bundle-id="unknown">
+  <main>
+    <header>
+      <p class="eyebrow">ADRS #322 · OPS #343</p>
+      <h1>Same immutable log, evolving semantic bundle</h1>
+      <p>The relationship event remains byte-identical while a separately versioned semantic bundle changes the projected value surface.</p>
+      <dl id="runtime-meta"></dl>
+    </header>
+    <section class="card" id="surface-card">
+      <p class="kind">Current projected surface</p>
+      <h2 id="surface-title">Loading…</h2>
+      <p id="surface-summary"></p>
+      <p id="surface-value"></p>
+      <div id="surface-actions" class="actions"></div>
+      <pre id="surface-digests"></pre>
+    </section>
+    <section class="card" id="evidence-card">
+      <div class="row">
+        <h2>Immutable evidence and selection pointer</h2>
+        <button type="button" id="refresh">Refresh</button>
+      </div>
+      <pre id="evidence">Loading…</pre>
+    </section>
+    <section id="continue" class="anchor"><h2>Continue</h2><p>This is a read-only action in both bundle versions.</p></section>
+    <section id="provenance" class="anchor"><h2>Provenance</h2><p>This additional path exists only under semantic bundle v2.</p></section>
+    <script id="runtime-state" type="application/json">{}</script>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -24,3 +24,8 @@ Contributes to:
 ## Boundary
 
 This closes ops evidence production only. It does not perform local required-check cutover and does not claim final governance admission.
+
+## Supersession
+
+The selected five-package packet described above is historical. The current execution
+contract is [`ops-exact-gov-package-obligation-receipts.md`](ops-exact-gov-package-obligation-receipts.md): it consumes one exact gov release, covers the complete ops package universe, and binds actual Nix output receipts. This note changes no historical claim or authority.

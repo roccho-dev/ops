@@ -114,3 +114,8 @@ This PR is complete only when:
 - the packet remains a non-authority diagnostic and does not claim ADRS/governance authority.
 
 Later implementation PRs close individual `packageDrift.v1` rows by adding selected obligations, selected responses, receipts, or returned residuals.
+
+## Supersession
+
+The selected-rollout implementation described above is historical. The current
+execution contract is [`../ops-exact-gov-package-obligation-receipts.md`](../ops-exact-gov-package-obligation-receipts.md). This appended note preserves the original proposal and changes no accepted meaning.

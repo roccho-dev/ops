@@ -1,0 +1,120 @@
+name: ADRS 322 log-projected application kernel proof
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/adrs-322-log-projected-application.yml'
+      - 'ci.intent.v1.jsonl'
+      - 'verification/adrs-322-log-projected-application/**'
+      - 'verification/adrs-322-public-effect/**'
+      - 'verification/adrs-322-semantic-bundle-evolution/**'
+
+permissions:
+  contents: read
+
+jobs:
+  provider-proof:
+    if: ${{ github.head_ref != 'proof/adrs-322-semantic-bundle-evolution' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-production
+    env:
+      ROOT: verification/adrs-322-log-projected-application
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prove one log-projected kernel on Cloudflare Worker and R2
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/adrs-322-log-projected-application-evidence"
+          bash "$ROOT/provider-proof.sh"
+      - name: Upload exact evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-322-log-projected-application-${{ github.run_id }}
+          path: ${{ runner.temp }}/adrs-322-log-projected-application-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  public-effect-proof:
+    if: ${{ github.head_ref != 'proof/adrs-322-semantic-bundle-evolution' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-production
+    env:
+      ROOT: verification/adrs-322-public-effect
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Publish one accepted public decision and append one observation
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/adrs-322-public-effect-evidence"
+          bash "$ROOT/provider-proof.sh"
+      - name: Upload exact public-effect evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-322-public-effect-${{ github.run_id }}
+          path: ${{ runner.temp }}/adrs-322-public-effect-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  semantic-bundle-evolution-proof:
+    if: ${{ github.head_ref == 'proof/adrs-322-semantic-bundle-evolution' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-production
+    env:
+      ROOT: verification/adrs-322-semantic-bundle-evolution
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prove semantic bundle evolution on the same immutable log
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/adrs-322-semantic-bundle-evolution-evidence"
+          bash "$ROOT/provider-proof.sh"
+      - name: Upload exact semantic-evolution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-322-semantic-bundle-evolution-${{ github.run_id }}
+          path: ${{ runner.temp }}/adrs-322-semantic-bundle-evolution-evidence/
+          if-no-files-found: error
+          retention-days: 30
