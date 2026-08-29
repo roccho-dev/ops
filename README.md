@@ -1,59 +1,69 @@
 # ops
 
-Operational packages implemented against `repos/specs`.
+`ops` is the governance-first proofbed for the AI factory.
 
-This repo starts as an empty implementation target. Worker threads must add
-package outputs according to the `specs` package catalog and keep check outputs
-package-backed.
+Accepted meaning remains in ADRS. An exact `gov*` release projects that meaning into
+package obligations. `ops` is the first downstream repository that executes those
+obligations, records positive and destructive proof, and emits reusable package
+receipts before product repositories adopt the same contract.
 
 ## Purpose
 
-`ops` builds operational packages and checks that implement accepted governance
-contracts as package-backed, reproducible Nix outputs.
+- preserve intended operating behavior as executable evidence;
+- implement reusable operational packages;
+- keep package-owned examples as proven golden fixtures;
+- execute exact governance obligations before wider rollout;
+- expose every missing obligation, test, receipt, output, or residual as non-Green.
 
 ## Authority boundary
 
-README.md is a checked artifact. It may be handwritten, partially managed, or
-generated according to readme_mode. README.md is not an independent authority.
-
-`ops` performs effectful implementation work through package and check outputs.
-Governance inputs provide non-authority policy/check implementation; accepted
-decisions remain outside this README and outside GitHub provider workflows.
+- ADRS owns accepted decisions and package-obligation meaning.
+- `governance` owns deterministic projection and the final organization join.
+- `ops` executes package obligations and emits non-authority evidence.
+- package receipts, GitHub workflows, generated artifacts, and this README do not
+  mint accepted meaning or `organization-active` admission.
 
 ## Inputs
 
-- `governance`: non-authority governance source used by existing package checks.
-- `conventionGovernance`: repo convention check helper.
-- `nixpkgs`, package build declarations, and pinned source inputs.
+- one content-addressed gov release manifest and readback receipt;
+- the release-bound `gov-package-output` Nix tree;
+- `package-obligations.jsonl` from that exact tree;
+- the exact ops commit/tree, package sources, and Nix checks;
+- pinned build and runtime dependencies.
 
 ## Outputs / artifacts
 
-- operational package outputs.
-- check outputs from `nix flake check`.
-- provider CI adapter receipts from GitHub Actions.
+- operational package outputs;
+- check outputs from `nix flake check`;
+- one `ops.packageReceipt.v2` per package in the exact target universe;
+- blocking residuals for absent obligations, packages, entrypoints, tests, outputs,
+  receipts, or release identity;
+- a non-authority `govPackageOutput.v1` projection for the governance final join;
+- provider CI adapter receipts from GitHub Actions;
 - repo-head Release Carrier retrieval and verification runbook:
   [`runbooks/repo-head-carrier.md`](runbooks/repo-head-carrier.md).
-- package response packet emitted by `ops-package-responses`, including responses,
-  evidence, receipts, residuals, and a non-authority manifest.
 
 ## Checks
 
 The primary verification entrypoint is `nix flake check`.
 
-`.github/workflows/*.yml` files are checked-in provider adapter artifacts. They
-are executable by GitHub, but they are not authority. GitHub provider workflows
-are declared by `ci.intent.v1.jsonl`.
+`ops-package-responses` accepts only an exact locally materialized gov release. It
+executes every required Nix check and binds actual output NAR hashes into package
+receipts. There is no local fallback obligation list and no fixed package selection.
+Structural validation preserves blocked packets; strict validation fails when any
+package is blocked.
 
-`gov-package-validation.yml` additionally emits and validates the ops package
-response packet and runs the currently exported governance checker selftest. This
-keeps ops wired to governance diagnostics without making ops a shared meaning
-authority.
+`ops-gov-package-output` projects those exact receipts without claiming final
+admission. `.github/workflows/gov-package-validation.yml` runs contract selftests on
+ordinary changes and executes a real exact release only through an explicit
+content-addressed `workflow_dispatch` input.
+
+GitHub workflows are replaceable compute/effect adapters, not authority.
 
 ## Ownership / handoff
 
-`ops` owns operational package implementation and repo-local check wiring.
-`governance` owns reusable convention check implementation, not this repo's
-policy acceptance.
+`ops` owns operational implementation, package execution, destructive proof, and
+receipt emission. `governance` owns reusable projection and final join behavior.
 
 ## Locked browser artifacts
 

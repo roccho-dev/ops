@@ -5,15 +5,23 @@ on:
   push:
     branches: [proposals]
   workflow_dispatch:
+    inputs:
+      governance_release_tag:
+        description: Exact content-addressed gov release tag; empty runs contract selftests only
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
 
 jobs:
-  ops-package-response:
+  contract-selftest:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
@@ -34,29 +42,27 @@ jobs:
           name: gov-primary-flake-check-log
           path: nix-flake-check.log
           if-no-files-found: ignore
-      - name: Emit ops package response packet
+      - name: Prove exact-release package receipt contracts
         run: |
           set -euo pipefail
+          mkdir -p package-receipt-selftests
           nix shell --no-write-lock-file .#ops-package-responses -c \
-            ops-package-responses emit --out-dir ops-package-response-out --json
-      - name: Validate ops package response packet
-        run: |
-          set -euo pipefail
-          nix shell --no-write-lock-file .#ops-package-responses -c \
-            ops-package-responses validate --out-dir ops-package-response-out --json
-      - name: Check selected package closure pass
-        run: |
-          set -euo pipefail
-          node tools/check-ops-selected-package-closure.mjs --out-dir ops-package-response-out --json
-          test -s ops-package-response-out/selected-package-inventory.jsonl
-          test -s ops-package-response-out/selected-package-responses.jsonl
-          test -s ops-package-response-out/selected-package-receipts.jsonl
-          test -s ops-package-response-out/selected-package-closure.json
-      - name: Upload ops package response packet
+            ops-package-responses selftest --json \
+            > package-receipt-selftests/ops-package-responses.json
+          nix shell --no-write-lock-file .#ops-gov-package-output -c \
+            ops-gov-package-output selftest --json \
+            > package-receipt-selftests/ops-gov-package-output.json
+          grep -q '"positive_all_packages": "pass"' package-receipt-selftests/ops-package-responses.json
+          grep -q '"failing_required_check": "blocked"' package-receipt-selftests/ops-package-responses.json
+          grep -q '"exact_release_tamper": "rejected"' package-receipt-selftests/ops-package-responses.json
+          grep -q '"dirty_worktree": "rejected"' package-receipt-selftests/ops-package-responses.json
+          grep -q '"wrong_governance_source": "rejected"' package-receipt-selftests/ops-package-responses.json
+          grep -q '"organization_active_minted": false' package-receipt-selftests/ops-gov-package-output.json
+      - name: Upload package receipt contract proofs
         uses: actions/upload-artifact@v4
         with:
-          name: ops-package-response-packet
-          path: ops-package-response-out
+          name: package-receipt-selftests
+          path: package-receipt-selftests
           if-no-files-found: error
       - name: Emit README materialization residual
         run: |
@@ -80,7 +86,7 @@ jobs:
               reason = "A generated README artifact packet exists, but the committed root README is still independently checked and is not byte-materialized from that artifact.";
               nextAction = "Select the artifact as the root README producer, materialize committed README.md, and switch this residual to mkReadmeMaterializedCheck.";
               returnCondition = "The generated artifact is the declared root README source and its README.md is byte-identical to the committed root README under the governance common checker.";
-              expires = "2026-08-05";
+              expires = "2026-08-31";
             }
           ' -o readme-materialization-out
           mkdir -p readme-materialization-artifact
@@ -88,10 +94,97 @@ jobs:
           cp -L readme-materialization-out/pass readme-materialization-artifact/pass
           grep -q '"kind":"readmeMaterializationResidual.v1"' readme-materialization-artifact/residual.json
           grep -q '"status":"residual"' readme-materialization-artifact/residual.json
-          grep -q '"expires":"2026-08-05"' readme-materialization-artifact/residual.json
+          grep -q '"expires":"2026-08-31"' readme-materialization-artifact/residual.json
       - name: Upload README materialization residual
         uses: actions/upload-artifact@v4
         with:
           name: readme-materialization-residual
           path: readme-materialization-artifact
+          if-no-files-found: error
+
+  exact-release-package-receipts:
+    if: github.event_name == 'workflow_dispatch' && inputs.governance_release_tag != ''
+    needs: contract-selftest
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_DIR: ${{ runner.temp }}/exact-gov-release
+      RECEIPT_DIR: ${{ runner.temp }}/ops-gov-package-output
+      RESULT_JSON: ${{ runner.temp }}/ops-gov-package-output.result.json
+      VALIDATION_JSON: ${{ runner.temp }}/ops-gov-package-output.validation.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Download exact gov release inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.governance_release_tag }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_TAG"
+          python3 - <<'PY'
+          import os,re
+          tag=os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'gov-release/[^/]+/[0-9a-f]{64}', tag):
+              raise SystemExit('release tag must be exact gov-release/<id>/<64-lowercase-hex-digest>')
+          PY
+          mkdir -p "$RELEASE_DIR"
+          for asset in \
+            gov-release-manifest.json \
+            accepted-decision.json \
+            gov-engine-descriptor.json \
+            gov-nix-output-descriptor.json \
+            gov-release-readback-receipt.json \
+            gov-package-output.tar.gz \
+            gov-package-output.tar.gz.sha256
+          do
+            gh release download "$RELEASE_TAG" \
+              --repo roccho-dev/governance \
+              --pattern "$asset" \
+              --dir "$RELEASE_DIR"
+          done
+          (cd "$RELEASE_DIR" && sha256sum -c gov-package-output.tar.gz.sha256)
+          mkdir "$RELEASE_DIR/gov-package-output"
+          python3 - <<'PY'
+          import os
+          import tarfile
+          root=os.environ['RELEASE_DIR']
+          with tarfile.open(root+'/gov-package-output.tar.gz', 'r:gz') as archive:
+              archive.extractall(root+'/gov-package-output', filter='data')
+          PY
+          test -s "$RELEASE_DIR/gov-package-output/package-obligations.jsonl"
+          governance_commit=$(python3 -c "import json,os; print(json.load(open(os.environ['RELEASE_DIR']+'/gov-engine-descriptor.json'))['commitSha'])")
+          test -n "$governance_commit"
+          printf 'GOVERNANCE_SOURCE=github:roccho-dev/governance/%s\n' "$governance_commit" >> "$GITHUB_ENV"
+      - name: Execute every exact ops package obligation
+        run: |
+          set -euo pipefail
+          nix shell --no-write-lock-file .#ops-gov-package-output -c \
+            ops-gov-package-output execute \
+              --release-dir "$RELEASE_DIR" \
+              --repo-root . \
+              --governance-source "$GOVERNANCE_SOURCE" \
+              --out-dir "$RECEIPT_DIR" \
+              --system x86_64-linux \
+              --json \
+              > "$RESULT_JSON"
+          nix shell --no-write-lock-file .#ops-gov-package-output -c \
+            ops-gov-package-output validate \
+              --out-dir "$RECEIPT_DIR" \
+              --strict \
+              --json \
+              > "$VALIDATION_JSON"
+          grep -q '"status": "pass"' "$VALIDATION_JSON"
+      - name: Upload exact package receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-gov-release-package-receipts
+          path: |
+            ${{ runner.temp }}/ops-gov-package-output
+            ${{ runner.temp }}/ops-gov-package-output.result.json
+            ${{ runner.temp }}/ops-gov-package-output.validation.json
           if-no-files-found: error

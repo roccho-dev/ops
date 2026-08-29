@@ -7,9 +7,8 @@
 {"deps":["nodejs"],"kind":"check","name":"ops-real-claim-admission","script":"tools/check-ops-real-claim-admission.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"ops-real-claim-admission-governance-adapter-fixture","script":"tools/check-ops-real-claim-admission-governance-adapter-fixtures.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"ops-real-claim-closure-fixture","script":"tools/check-ops-real-claim-admission-selected-universe-fixture.mjs"}
-{"deps":["nodejs"],"kind":"check","name":"ops-selected-package-closure","script":"tools/check-ops-selected-package-closure.test.mjs"}
-{"deps":["nodejs","ops-package-responses"],"kind":"check","name":"ops-package-responses","script":"packages/ops-package-responses/tests/e2e.mjs"}
-{"deps":["nodejs","ops-gov-package-output","ops-package-responses"],"kind":"check","name":"ops-gov-package-output","script":"packages/ops-gov-package-output/tests/e2e.mjs"}
+{"deps":["git","nodejs","ops-package-responses"],"kind":"check","name":"ops-package-responses","script":"packages/ops-package-responses/tests/e2e.mjs"}
+{"deps":["git","nodejs","ops-gov-package-output","ops-package-responses"],"kind":"check","name":"ops-gov-package-output","script":"packages/ops-gov-package-output/tests/e2e.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"ops-editor-queue-ui-boundary","script":"tools/check-ops-editor-queue-ui-boundary.mjs"}
 {"deps":["nodejs","hq-source-evidence-runtime"],"kind":"check","name":"hq-source-evidence-runtime-validator","script":"packages/hq-source-evidence-runtime/tests/source-validator.mjs"}
 {"deps":["nodejs","hq-source-evidence-runtime"],"kind":"check","name":"hq-source-evidence-runtime-receipt-writer","script":"packages/hq-source-evidence-runtime/tests/source-receipt-writer.mjs"}
