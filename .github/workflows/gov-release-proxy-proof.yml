@@ -12,8 +12,7 @@ permissions:
   contents: read
 
 env:
-  UI_REPOSITORY: roccho-dev/ui
-  UI_COMMIT: 6fd40d961bd6d2ee9c19a44aeebb2206c3021362
+  UI_COMMIT: 4e75603dede194cc8a69afb1b8806b562a6d515a
   UI_PATH: apps/root-jsonl-map/index.html
 
 jobs:
@@ -24,28 +23,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: ${{ env.UI_REPOSITORY }}
+          repository: roccho-dev/ui
           ref: ${{ env.UI_COMMIT }}
           path: root-ui
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-      - name: Stage exact UI source
+      - name: Stage and verify exact UI
         run: |
           set -euo pipefail
           cp "$GITHUB_WORKSPACE/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
-          test -s packages/gov-release-proxy/public/index.html
           node "$GITHUB_WORKSPACE/root-ui/apps/root-jsonl-map/check.mjs"
-      - name: Unit, destructive and contract checks
-        working-directory: packages/gov-release-proxy
-        run: npm run check
-      - name: Wrangler dry-run with staged UI
-        working-directory: packages/gov-release-proxy
-        run: npm run check:dry-run
-      - name: Prove pinned public source bytes directly
+      - name: Verify Worker candidate
         working-directory: packages/gov-release-proxy
         run: |
-          set -euo pipefail
+          npm run check
+          npm run check:dry-run
+      - name: Verify exact public source oracle
+        working-directory: packages/gov-release-proxy
+        run: |
           node - <<'NODE'
           import assert from 'node:assert/strict';
           import { createHash } from 'node:crypto';
@@ -59,7 +55,6 @@ jobs:
           const bytes = Buffer.from(await response.arrayBuffer());
           assert.equal(bytes.length, PUBLIC_ROOT_ASSET.bytes);
           assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, PUBLIC_ROOT_ASSET.digest);
-          console.log(JSON.stringify({schema:'ops.rootPublicOracleReceipt/1',status:'PASS',bytes:bytes.length,digest:PUBLIC_ROOT_ASSET.digest}));
           NODE
 
   provider-proof:
@@ -76,75 +71,59 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
-          repository: ${{ env.UI_REPOSITORY }}
+          repository: roccho-dev/ui
           ref: ${{ env.UI_COMMIT }}
           path: root-ui
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-      - name: Stage exact UI source
+      - name: Stage exact UI
         run: |
           set -euo pipefail
           cp "$GITHUB_WORKSPACE/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
-          test -s packages/gov-release-proxy/public/index.html
           sha256sum packages/gov-release-proxy/public/index.html | tee "$RUNNER_TEMP/ui-sha256.txt"
-      - name: Ensure anonymous public source mode
+      - name: Ensure anonymous public mode
         working-directory: packages/gov-release-proxy
         env:
           WORKER_CLEANUP_RECEIPT: ${{ runner.temp }}/public-mode-cleanup-receipt.json
         run: node scripts/cleanup-worker-proof.mjs
-      - name: Deploy one-root Worker
+      - name: Deploy root Worker
         id: deploy
         working-directory: packages/gov-release-proxy
         run: |
           set -uo pipefail
           set +e
-          output="$(npx --yes wrangler@4.112.0 deploy 2>&1)"
-          status=$?
+          output="$(npx --yes wrangler@4.112.0 deploy 2>&1)"; status=$?
           set -e
           printf '%s\n' "$output"
           test "$status" -eq 0
           url="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -n1)"
           test -n "$url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
-      - name: Verify exact root JSON readback
-        working-directory: packages/gov-release-proxy
-        run: node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/root-json-receipt.json"
-      - name: Verify hosted UI in real Chromium
+      - name: Verify root JSON and browser UI
         working-directory: packages/gov-release-proxy
         run: |
           set -euo pipefail
+          node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/root-json-receipt.json"
           python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-          python3 scripts/verify-root-browser.py \
-            '${{ steps.deploy.outputs.url }}' \
-            "$RUNNER_TEMP/root-browser-receipt.json" \
-            "$RUNNER_TEMP/root-browser.png"
-      - name: Stage provider receipt
+          python3 scripts/verify-root-browser.py '${{ steps.deploy.outputs.url }}' "$RUNNER_TEMP/root-browser-receipt.json" "$RUNNER_TEMP/root-browser.png"
+      - name: Stage receipt
         run: |
-          set -euo pipefail
           python3 - <<'PY'
           import hashlib,json,os,pathlib
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
-          def read(name): return json.loads((root/name).read_text())
           ui=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'root-ui/apps/root-jsonl-map/index.html'
-          receipt={
-            'schema':'ops.rootJsonlMapProviderReceipt/1',
-            'status':'PASS',
-            'url':'${{ steps.deploy.outputs.url }}',
-            'endpoint':'/',
-            'ui':{
-              'repository':'roccho-dev/ui',
-              'commit':'6fd40d961bd6d2ee9c19a44aeebb2206c3021362',
-              'path':'apps/root-jsonl-map/index.html',
-              'sha256':'sha256:'+hashlib.sha256(ui.read_bytes()).hexdigest(),
-            },
+          read=lambda name: json.loads((root/name).read_text())
+          value={
+            'schema':'ops.rootJsonlMapProviderReceipt/1','status':'PASS',
+            'url':'${{ steps.deploy.outputs.url }}','endpoint':'/',
+            'ui':{'repository':'roccho-dev/ui','commit':'4e75603dede194cc8a69afb1b8806b562a6d515a','path':'apps/root-jsonl-map/index.html','sha256':'sha256:'+hashlib.sha256(ui.read_bytes()).hexdigest()},
             'publicModeCleanup':read('public-mode-cleanup-receipt.json'),
             'jsonReadback':read('root-json-receipt.json'),
             'browser':read('root-browser-receipt.json'),
-            'authority':False,
-            'cutover':False,
+            'authority':False,'cutover':False,
           }
-          (root/'root-jsonl-map-provider-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          (root/'root-jsonl-map-provider-receipt.json').write_text(json.dumps(value,indent=2,sort_keys=True)+'\n')
           PY
       - uses: actions/upload-artifact@v4
         with:
