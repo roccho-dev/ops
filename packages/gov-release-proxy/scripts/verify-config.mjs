@@ -1,49 +1,55 @@
 import assert from "node:assert/strict";
-import {
-  CONFIG,
-  PRIVATE_FIXTURE_ROOT_ASSET,
-  PRIVATE_FIXTURE_RELEASE,
-  PUBLIC_RELEASE,
-  PUBLIC_ROOT_ASSET,
-  configFor,
-} from "../src/assets.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { CONFIG, SOURCE } from "../src/assets.mjs";
 
-assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/3");
+assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/4");
 assert.equal(CONFIG.authority, false);
-assert.equal(CONFIG.deliveryModel, "one-root");
 assert.equal(CONFIG.endpoint, "/");
+assert.equal(CONFIG.deliveryModel, "one-root");
 assert.equal(CONFIG.browserDirectGitHubFetch, false);
-assert.equal(PUBLIC_RELEASE.repository, "roccho-dev/governance");
-assert.equal(PUBLIC_RELEASE.visibility, "public");
-assert.equal(PRIVATE_FIXTURE_RELEASE.repository, "roccho-dev/adrs");
-assert.equal(PRIVATE_FIXTURE_RELEASE.visibility, "private");
-assert.equal(PUBLIC_ROOT_ASSET.requiresCredential, false);
-assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.requiresCredential, true);
-assert.match(
-  PUBLIC_ROOT_ASSET.downloadUrl,
-  /^https:\/\/github\.com\/roccho-dev\/governance\/releases\/download\//u,
-);
-assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.downloadUrl, null);
+assert.equal(CONFIG.runtimeFixture, false);
+assert.equal(SOURCE.repository, "roccho-dev/governance");
+assert.equal(SOURCE.releaseSelector, "latest");
+assert.equal(SOURCE.assetName, "accepted-decision.json");
+assert.deepEqual([...SOURCE.acceptedContentTypes], ["application/json", "application/x-ndjson"]);
+assert.equal(SOURCE.maxBytes, 2_000_000);
 
-for (const asset of [PUBLIC_ROOT_ASSET, PRIVATE_FIXTURE_ROOT_ASSET]) {
-  assert.match(asset.repository, /^[^/]+\/[^/]+$/u);
-  assert.ok(Number.isSafeInteger(asset.releaseId) && asset.releaseId > 0);
-  assert.ok(Number.isSafeInteger(asset.assetId) && asset.assetId > 0);
-  assert.ok(Number.isSafeInteger(asset.bytes) && asset.bytes > 0);
-  assert.match(asset.digest, /^sha256:[0-9a-f]{64}$/u);
-  assert.match(asset.contentType, /^application\/(json|x-ndjson)/u);
-  assert.equal(asset.requiresCredential, asset.visibility === "private");
+const self = fileURLToPath(import.meta.url);
+const root = path.resolve(path.dirname(self), "..");
+const files = [];
+const walk = directory => {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) walk(absolute);
+    else if (absolute !== self && /\.(?:mjs|json|jsonc|md)$/u.test(entry.name)) files.push(absolute);
+  }
+};
+walk(root);
+const source = files.map(file => fs.readFileSync(file, "utf8")).join("\n");
+for (const forbidden of [
+  "PRIVATE_FIXTURE",
+  "ENABLE_PRIVATE_FIXTURE",
+  "REQUIRE_GITHUB_AUTH",
+  "roccho-dev/adrs",
+  "351310910",
+  "471043875",
+  "356287183",
+  "482207652",
+  "6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6",
+]) {
+  assert.equal(source.includes(forbidden), false, `runtime fixture or fixed release identity remains: ${forbidden}`);
 }
 
-assert.equal(configFor().asset, PUBLIC_ROOT_ASSET);
-assert.equal(configFor({ privateFixtureEnabled: true }).asset, PRIVATE_FIXTURE_ROOT_ASSET);
 console.log(JSON.stringify({
   schema: "check-receipt/1",
   checkId: "ops.gov-release-proxy.config",
   status: "PASS",
   endpoint: "/",
-  publicUpstream: "immutable-release-download",
-  privateUpstream: "authenticated-release-asset-api",
-  publicAsset: PUBLIC_ROOT_ASSET.name,
-  privateFixtureAsset: PRIVATE_FIXTURE_ROOT_ASSET.name,
+  source: SOURCE.repository,
+  releaseSelector: SOURCE.releaseSelector,
+  semanticAsset: SOURCE.assetName,
+  fixedReleaseIdentity: false,
+  runtimeFixture: false,
 }));

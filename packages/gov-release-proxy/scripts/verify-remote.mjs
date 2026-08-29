@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { PUBLIC_ROOT_ASSET } from "../src/assets.mjs";
+import { resolveCurrentAsset } from "../src/worker.mjs";
 
 const baseUrl = process.argv[2];
 assert.ok(baseUrl, "base URL is required");
+const expected = await resolveCurrentAsset({ env: process.env });
 const clientId = process.env.CF_ACCESS_CLIENT_ID ?? "";
 const clientSecret = process.env.CF_ACCESS_CLIENT_SECRET ?? "";
 const headers = {
@@ -24,7 +25,7 @@ for (attempts = 1; attempts <= 30; attempts += 1) {
 }
 if (response.status >= 300 && response.status < 400 && !clientId) {
   console.log(JSON.stringify({
-    schema: "ops.govReleaseProxyRemoteReceipt/2",
+    schema: "ops.govReleaseProxyRemoteReceipt/3",
     status: "ACCESS_BLOCKED",
     anonymousStatus: response.status,
     authenticatedReadback: false,
@@ -35,17 +36,34 @@ if (response.status >= 300 && response.status < 400 && !clientId) {
 assert.equal(response.status, 200, `root data: ${response.status} after ${attempts} attempts`);
 const bytes = Buffer.from(await response.arrayBuffer());
 const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-assert.equal(bytes.byteLength, PUBLIC_ROOT_ASSET.bytes);
-assert.equal(digest, PUBLIC_ROOT_ASSET.digest);
-assert.equal(response.headers.get("x-gov-release-digest"), PUBLIC_ROOT_ASSET.digest);
-assert.match(response.headers.get("content-type") ?? "", /^application\/json/u);
+assert.equal(bytes.byteLength, expected.bytes);
+assert.equal(digest, expected.digest);
+assert.equal(response.headers.get("x-gov-release-selector"), "latest");
+assert.equal(response.headers.get("x-gov-release-repository"), expected.repository);
+assert.equal(response.headers.get("x-gov-release-id"), expected.releaseId);
+assert.equal(response.headers.get("x-gov-release-numeric-id"), String(expected.releaseNumericId));
+assert.equal(response.headers.get("x-gov-release-tag"), expected.tag);
+assert.equal(response.headers.get("x-gov-release-commit"), expected.targetCommit);
+assert.equal(response.headers.get("x-gov-release-asset"), expected.name);
+assert.equal(response.headers.get("x-gov-release-asset-id"), String(expected.assetId));
+assert.equal(response.headers.get("x-gov-release-digest"), expected.digest);
+assert.equal(response.headers.get("x-gov-release-upstream-auth"), expected.credentialUsed ? "credential" : "anonymous");
 console.log(JSON.stringify({
-  schema: "ops.govReleaseProxyRemoteReceipt/2",
+  schema: "ops.govReleaseProxyRemoteReceipt/3",
   status: "PASS",
   endpoint: "/",
+  source: expected.repository,
+  releaseId: expected.releaseId,
+  releaseNumericId: expected.releaseNumericId,
+  releaseTag: expected.tag,
+  assetId: expected.assetId,
+  assetName: expected.name,
   accessServiceToken: Boolean(clientId),
   authenticatedReadback: Boolean(clientId),
+  upstreamCredentialUsed: expected.credentialUsed,
   attempts,
   bytes: bytes.byteLength,
   digest,
+  authority: false,
+  cutover: false,
 }));

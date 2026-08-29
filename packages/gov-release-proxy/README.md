@@ -1,4 +1,4 @@
-# Root JSONL map delivery
+# Root semantic JSON delivery
 
 Bounded Cloudflare Worker transport for `roccho-dev/adrs#318`.
 
@@ -7,25 +7,61 @@ GET /  Accept: text/html
   -> exact UI asset
 
 GET /  Accept: application/json | application/x-ndjson
-  -> exact semantic source asset
+  -> current real gov Release semantic asset
 ```
 
 The browser has one URL and one path. It does not know the GitHub repository, Release, asset ID, or credential.
 
-## Current public proof
+## Producer-to-page closure
 
 ```text
-source: roccho-dev/governance
-asset: accepted-decision.json
-bytes: 942
-sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6
+governance publishes a real non-draft, non-prerelease Release
+  -> GitHub exposes that Release as /releases/latest
+  -> Worker resolves the latest Release at request time
+  -> Worker selects the single accepted-decision.json asset
+  -> Worker verifies GitHub metadata, byte count and SHA-256
+  -> UI fetches / and recreates its in-memory map
 ```
 
-Public data is fetched from the exact immutable Release download URL without a GitHub credential. A private source uses the Release Asset API with a server-side read credential. The browser contract remains `/`.
+No Worker or UI redeploy is required for the next valid gov Release. The old hard-coded public Release identity and the private ADRS runtime fixture are absent.
+
+## Gov/Web file contract
+
+The contract is more than a filename.
+
+```text
+repository      roccho-dev/governance
+release         latest published, non-prerelease GitHub Release
+release tag     gov-release/<release-id>/<64 lowercase hex manifest digest>
+release title   exactly <release-id>
+target          exact 40-hex commit
+asset count     exactly one accepted-decision.json
+asset state     uploaded
+asset type      application/json or application/x-ndjson
+asset size      1..2,000,000 bytes
+asset digest    sha256:<64 lowercase hex>
+```
+
+The Worker validates the Release and asset metadata before download, then validates downloaded bytes against the metadata. A matching filename alone is insufficient.
+
+## Public and private source behavior
+
+```text
+public repository
+  -> anonymous latest-Release request succeeds
+  -> anonymous immutable asset download
+
+private repository
+  -> anonymous latest-Release request returns 404
+  -> Worker retries the same fixed repository with GITHUB_RELEASE_TOKEN
+  -> authenticated Release Asset API download
+```
+
+The token is server-side only. Public access never requires it. Repository, Release, asset, and URL remain non-user-selectable.
 
 ## UI boundary
 
-The staged UI is pinned to an exact `roccho-dev/ui` commit. It parses JSON or JSONL and creates an in-memory map projection.
+The UI parses JSON or JSONL and creates an in-memory map projection.
 
 ```text
 id      = package_id | decision_id | id | schema | record index
@@ -40,7 +76,8 @@ No relation, lifecycle state, responsibility, or authority is inferred. No displ
 ```text
 401 -> 認証が必要です
 403 -> このデータを表示する権限がありません
-invalid media type / size / JSON / JSONL -> fail closed
+invalid Release / asset / media type / size / digest -> fail closed
+invalid JSON or JSONL -> fail closed
 ```
 
 Stale cards are removed before an error is displayed.
@@ -65,30 +102,9 @@ arbitrary repository / Release / asset / URL input
 
 ## Responsibility
 
-- `gov*` owns semantic reduction and Release assets.
+- `gov*` owns semantic reduction and real Release publication.
 - UI owns view-only projection.
-- `ops` owns exact delivery and remote readback.
-- No DB, KV, R2, D1, mirror, generated decision HTML, or current-state reduction.
+- `ops` owns current Release resolution, exact delivery, and remote readback.
+- No runtime fixture, DB, KV, R2, D1, mirror, generated decision HTML, or current-state semantic reduction.
 
-## Verified proof
-
-Actions run `33238288024` proved:
-
-```text
-candidate and destructive checks PASS
-Cloudflare deploy               PASS
-root JSON byte/digest readback  PASS
-real Chromium root UI           PASS
-map projection                  PASS
-page and console errors         0
-other path                      404
-POST /                          405
-```
-
-Hosted proof:
-
-```text
-https://stg-gov-release-proxy.roccho.workers.dev/
-```
-
-This is a replaceable minimum adapter while the final semantic-map UI integration is still in progress. `authority=false`, `cutover=false`.
+`authority=false`, `cutover=false`.
