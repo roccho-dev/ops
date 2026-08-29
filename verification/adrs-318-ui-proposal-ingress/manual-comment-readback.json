@@ -1,0 +1,18 @@
+{
+  "schema": "ops.adrsUiProposalManualCommentReadback/1",
+  "status": "PASS",
+  "claim_ceiling": "MANUAL_ADRS_COMMENT_RECORDED",
+  "authority": false,
+  "proposal_id": "adrs318-ui-proposal-oidc-canary-v1",
+  "proposal_digest": "sha256:029bc192a2fa022879a3c72c0d9f4e45eac8005ba153a4eb15b84a0808b0033e",
+  "comment_body_sha256": "sha256:dbcbfb240e416055ff6c73637ed5097d0d138b7c0b852db26bb0dbaa42b770ad",
+  "comment_id": 5462452549,
+  "comment_url": "https://github.com/roccho-dev/adrs/issues/318#issuecomment-5462452549",
+  "exact_comment_readback": true,
+  "bridge": "manual ChatGPT GitHub connector fallback",
+  "reason": "Private ADRS GitHub Actions jobs were unavailable before runner startup; no writable GitHub credential was placed in the public Worker.",
+  "gov_materialized": false,
+  "current_changed": false,
+  "authority_changed": false,
+  "cutover": false
+}
