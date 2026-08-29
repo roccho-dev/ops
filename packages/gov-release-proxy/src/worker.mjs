@@ -1,12 +1,13 @@
 import {
   CONFIG,
-  PRIVATE_FIXTURE_ASSETS,
-  PUBLIC_ASSETS,
+  PRIVATE_FIXTURE_ROOT_ASSET,
+  PUBLIC_ROOT_ASSET,
   configFor,
+  rootAssetFor,
 } from "./assets.mjs";
 
 const GITHUB_API = "https://api.github.com";
-const USER_AGENT = "roccho-dev-ops-gov-release-proxy/2";
+const USER_AGENT = "roccho-dev-ops-gov-release-proxy/3";
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
 export class ProxyError extends Error {
@@ -32,6 +33,7 @@ const json = (value, status = 200, headers = {}) => new Response(`${JSON.stringi
   headers: {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "private, no-store",
+    "vary": "Accept",
     "x-content-type-options": "nosniff",
     ...headers,
   },
@@ -39,12 +41,11 @@ const json = (value, status = 200, headers = {}) => new Response(`${JSON.stringi
 
 export const privateFixtureEnabled = env => enabled(env.ENABLE_PRIVATE_FIXTURE);
 export const githubAuthRequired = (asset, env) => asset.requiresCredential || enabled(env.REQUIRE_GITHUB_AUTH);
-export const availableAssets = env => Object.freeze({
-  ...PUBLIC_ASSETS,
-  ...(privateFixtureEnabled(env) ? PRIVATE_FIXTURE_ASSETS : {}),
-});
-export const resolveAsset = (pathname, env = {}) => availableAssets(env)[pathname] ?? null;
+export const selectedRootAsset = env => rootAssetFor({ privateFixtureEnabled: privateFixtureEnabled(env) });
+export const availableAssets = env => Object.freeze({ "/": selectedRootAsset(env) });
+export const resolveAsset = (pathname, env = {}) => pathname === "/" ? selectedRootAsset(env) : null;
 export const upstreamUrl = asset => `${GITHUB_API}/repos/${asset.repository}/releases/assets/${asset.assetId}`;
+export const wantsData = request => /application\/(?:x-ndjson|json)/iu.test(request.headers.get("accept") ?? "");
 
 export const fetchAsset = async ({
   asset,
@@ -67,6 +68,8 @@ export const fetchAsset = async ({
     headers,
     redirect: "follow",
   });
+  if (response.status === 401) throw new ProxyError("AUTHENTICATION_REQUIRED", 401, "GitHub authentication is required");
+  if (response.status === 403) throw new ProxyError("ACCESS_DENIED", 403, "GitHub access is denied");
   fail(response.ok, "UPSTREAM_HTTP", 502, `GitHub asset fetch failed: ${response.status}`);
   const bytes = await response.arrayBuffer();
   fail(bytes.byteLength === asset.bytes,
@@ -81,6 +84,7 @@ const assetHeaders = (asset, credentialUsed) => ({
   "content-type": asset.contentType,
   "content-length": String(asset.bytes),
   "cache-control": "private, no-store",
+  "vary": "Accept",
   "x-content-type-options": "nosniff",
   "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
   "referrer-policy": "no-referrer",
@@ -91,36 +95,35 @@ const assetHeaders = (asset, credentialUsed) => ({
   "x-gov-release-upstream-auth": credentialUsed ? "credential" : "anonymous",
 });
 
+const serveUi = async (request, env) => {
+  fail(env.ASSETS && typeof env.ASSETS.fetch === "function", "UI_NOT_CONFIGURED", 503, "UI assets are not configured");
+  const response = await env.ASSETS.fetch(request);
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "public, max-age=300");
+  headers.set("vary", "Accept");
+  headers.set("x-content-type-options", "nosniff");
+  return new Response(request.method === "HEAD" ? null : response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
 export const handleRequest = async (request, env = {}, context = {}) => {
   fail(SAFE_METHODS.has(request.method), "METHOD_NOT_ALLOWED", 405, "Only GET and HEAD are allowed");
   const url = new URL(request.url);
+  fail(url.pathname === "/", "NOT_FOUND", 404, "Only the root endpoint exists");
   fail(url.search === "" && url.hash === "", "URL_UNSAFE", 400, "Query and fragment are not accepted");
 
-  if (url.pathname === "/health") {
-    return json({
-      schema: "ops.govReleaseProxyHealth/2",
-      status: "PASS",
-      authority: false,
-      deliveryModel: "always-worker",
-      githubCredentialConfigured: Boolean(env.GITHUB_RELEASE_TOKEN),
-      githubAuthRequired: enabled(env.REQUIRE_GITHUB_AUTH),
-      privateFixtureEnabled: privateFixtureEnabled(env),
-      routes: Object.keys(availableAssets(env)),
-    });
-  }
-  if (url.pathname === "/config") {
-    return json(privateFixtureEnabled(env) ? configFor({ privateFixtureEnabled: true }) : CONFIG);
-  }
+  if (!wantsData(request)) return serveUi(request, env);
 
-  const asset = resolveAsset(url.pathname, env);
-  fail(Boolean(asset), "NOT_FOUND", 404, "Route not found");
+  const asset = selectedRootAsset(env);
   if (request.method === "HEAD") {
     return new Response(null, {
       status: 200,
       headers: assetHeaders(asset, Boolean(env.GITHUB_RELEASE_TOKEN)),
     });
   }
-
   const loaded = await fetchAsset({
     asset,
     env,
@@ -155,4 +158,5 @@ const worker = {
   },
 };
 
+export { CONFIG, PRIVATE_FIXTURE_ROOT_ASSET, PUBLIC_ROOT_ASSET, configFor };
 export default worker;
