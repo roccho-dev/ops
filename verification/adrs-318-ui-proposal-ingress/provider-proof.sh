@@ -11,7 +11,9 @@ WORKER="stg-adrs-ui-proposal-ingress"
 BUCKET="stg-adrs-ui-proposals"
 WRANGLER_VERSION="4.112.0"
 PROPOSAL_ID="adrs318-ui-proposal-oidc-canary-v1"
+GENERATED_CONFIG="$ROOT/wrangler.proof.json"
 mkdir -p "$EVIDENCE"
+trap 'rm -f "$GENERATED_CONFIG"' EXIT
 
 node --test "$ROOT/tests/worker.test.mjs" | tee "$EVIDENCE/node-tests.log"
 
@@ -31,7 +33,7 @@ if [ "$bucket_exists" = false ]; then
   bucket_created=true
 fi
 
-python3 - "$ROOT/wrangler.jsonc" "$RUNNER_TEMP/wrangler.adrs318.json" "$CANDIDATE_SHA" <<'PY'
+python3 - "$ROOT/wrangler.jsonc" "$GENERATED_CONFIG" "$CANDIDATE_SHA" <<'PY'
 import json,sys
 source,target,sha=sys.argv[1:]
 value=json.load(open(source,encoding='utf-8'))
@@ -39,7 +41,7 @@ value['vars']['APP_VERSION']=sha
 open(target,'w',encoding='utf-8').write(json.dumps(value,sort_keys=True,indent=2)+'\n')
 PY
 
-deploy_output="$(cd "$ROOT" && npx --yes "wrangler@$WRANGLER_VERSION" deploy --config "$RUNNER_TEMP/wrangler.adrs318.json" 2>&1)"
+deploy_output="$(cd "$ROOT" && npx --yes "wrangler@$WRANGLER_VERSION" deploy --config "$(basename "$GENERATED_CONFIG")" 2>&1)"
 printf '%s\n' "$deploy_output" > "$EVIDENCE/wrangler-deploy.log"
 worker_url="$(printf '%s\n' "$deploy_output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -n1 || true)"
 test -n "$worker_url"
