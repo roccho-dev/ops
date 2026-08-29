@@ -18,12 +18,13 @@ assert.equal(SOURCE.maxBytes, 2_000_000);
 
 const self = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(self), "..");
+const legacyCleanup = path.join(root, "scripts", "cleanup-worker-proof.mjs");
 const files = [];
 const walk = directory => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) walk(absolute);
-    else if (absolute !== self && /\.(?:mjs|json|jsonc|md)$/u.test(entry.name)) files.push(absolute);
+    else if (absolute !== self && absolute !== legacyCleanup && /\.(?:mjs|json|jsonc|md)$/u.test(entry.name)) files.push(absolute);
   }
 };
 walk(root);
@@ -42,6 +43,10 @@ for (const forbidden of [
   assert.equal(source.includes(forbidden), false, `runtime fixture or fixed release identity remains: ${forbidden}`);
 }
 
+const cleanup = fs.readFileSync(legacyCleanup, "utf8");
+assert.match(cleanup, /const names = \["REQUIRE_GITHUB_AUTH", "ENABLE_PRIVATE_FIXTURE"\]/u);
+assert.doesNotMatch(cleanup, /const names = \[[^\]]*GITHUB_RELEASE_TOKEN/u);
+
 console.log(JSON.stringify({
   schema: "check-receipt/1",
   checkId: "ops.gov-release-proxy.config",
@@ -52,4 +57,5 @@ console.log(JSON.stringify({
   semanticAsset: SOURCE.assetName,
   fixedReleaseIdentity: false,
   runtimeFixture: false,
+  legacyFixtureCleanupBounded: true,
 }));
