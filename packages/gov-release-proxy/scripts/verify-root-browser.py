@@ -8,6 +8,11 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+def optional_int(headers: dict[str, str], name: str) -> int | None:
+    value = headers.get(name)
+    return int(value) if value else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url")
@@ -53,13 +58,21 @@ def main() -> None:
         assert data.status == 200
         body = data.body()
         assert len(body) > 0
+        headers = data.headers
         digest = "sha256:" + hashlib.sha256(body).hexdigest()
-        assert digest == data.headers["x-gov-release-digest"]
-        assert data.headers["x-gov-release-selector"] == "latest"
-        assert data.headers["x-gov-release-repository"] == "roccho-dev/governance"
-        assert data.headers["x-gov-release-asset"] == "accepted-decision.json"
-        assert data.headers["x-gov-release-upstream-auth"] in {"anonymous", "credential"}
-        assert data.headers["content-type"].startswith(("application/json", "application/x-ndjson"))
+        assert digest == headers["x-gov-release-digest"]
+        assert headers["x-gov-release-selector"] == "latest"
+        assert headers["x-gov-release-locator"] in {
+            "github-web-latest",
+            "github-api-latest",
+        }
+        assert headers["x-gov-release-repository"] == "roccho-dev/governance"
+        assert headers["x-gov-release-asset"] == "accepted-decision.json"
+        assert headers["x-gov-release-upstream-auth"] in {"anonymous", "credential"}
+        assert headers["x-gov-release-manifest-digest"].startswith("sha256:")
+        assert headers["x-gov-release-semantic-digest"].startswith("sha256:")
+        assert int(headers["x-gov-release-sequence"]) >= 0
+        assert headers["content-type"].startswith(("application/json", "application/x-ndjson"))
 
         missing = page.request.get(base + "data/manifest")
         assert missing.status == 404
@@ -71,21 +84,25 @@ def main() -> None:
     assert console_errors == []
     screenshot = Path(args.screenshot)
     receipt = {
-        "schema": "ops.rootJsonlMapBrowserProof/2",
+        "schema": "ops.rootJsonlMapBrowserProof/3",
         "status": "PASS",
         "endpoint": "/",
         "html": "PASS",
         "release": {
-            "repository": data.headers["x-gov-release-repository"],
-            "releaseId": data.headers["x-gov-release-id"],
-            "releaseNumericId": int(data.headers["x-gov-release-numeric-id"]),
-            "tag": data.headers["x-gov-release-tag"],
-            "commit": data.headers["x-gov-release-commit"],
-            "asset": data.headers["x-gov-release-asset"],
-            "assetId": int(data.headers["x-gov-release-asset-id"]),
+            "repository": headers["x-gov-release-repository"],
+            "locator": headers["x-gov-release-locator"],
+            "releaseId": headers["x-gov-release-id"],
+            "releaseNumericId": optional_int(headers, "x-gov-release-numeric-id"),
+            "tag": headers["x-gov-release-tag"],
+            "sequence": int(headers["x-gov-release-sequence"]),
+            "commit": headers.get("x-gov-release-commit"),
+            "manifestDigest": headers["x-gov-release-manifest-digest"],
+            "asset": headers["x-gov-release-asset"],
+            "assetId": optional_int(headers, "x-gov-release-asset-id"),
             "bytes": len(body),
             "sha256": digest,
-            "upstreamAuth": data.headers["x-gov-release-upstream-auth"],
+            "semanticDigest": headers["x-gov-release-semantic-digest"],
+            "upstreamAuth": headers["x-gov-release-upstream-auth"],
         },
         "projection": proof,
         "otherPathStatus": 404,
@@ -98,6 +115,7 @@ def main() -> None:
             "sha256": "sha256:" + hashlib.sha256(screenshot.read_bytes()).hexdigest(),
         },
         "runtimeFixture": False,
+        "fixedReleaseIdentity": False,
         "authority": False,
         "cutover": False,
     }
