@@ -1,26 +1,26 @@
 import assert from "node:assert/strict";
 import {
   CONFIG,
-  PRIVATE_FIXTURE_ASSETS,
+  PRIVATE_FIXTURE_ROOT_ASSET,
   PRIVATE_FIXTURE_RELEASE,
-  PUBLIC_ASSETS,
   PUBLIC_RELEASE,
+  PUBLIC_ROOT_ASSET,
   configFor,
 } from "../src/assets.mjs";
 
-assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/2");
+assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/3");
 assert.equal(CONFIG.authority, false);
-assert.equal(CONFIG.deliveryModel, "always-worker");
+assert.equal(CONFIG.deliveryModel, "one-root");
+assert.equal(CONFIG.endpoint, "/");
 assert.equal(CONFIG.browserDirectGitHubFetch, false);
 assert.equal(PUBLIC_RELEASE.repository, "roccho-dev/governance");
 assert.equal(PUBLIC_RELEASE.visibility, "public");
 assert.equal(PRIVATE_FIXTURE_RELEASE.repository, "roccho-dev/adrs");
 assert.equal(PRIVATE_FIXTURE_RELEASE.visibility, "private");
-assert.equal(Object.keys(PUBLIC_ASSETS).length, 2);
-assert.equal(Object.keys(PRIVATE_FIXTURE_ASSETS).length, 2);
+assert.equal(PUBLIC_ROOT_ASSET.requiresCredential, false);
+assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.requiresCredential, true);
 
-for (const [route, asset] of Object.entries({ ...PUBLIC_ASSETS, ...PRIVATE_FIXTURE_ASSETS })) {
-  assert.match(route, /^\/(data|proof\/private)\/[a-z-]+$/u);
+for (const asset of [PUBLIC_ROOT_ASSET, PRIVATE_FIXTURE_ROOT_ASSET]) {
   assert.match(asset.repository, /^[^/]+\/[^/]+$/u);
   assert.ok(Number.isSafeInteger(asset.releaseId) && asset.releaseId > 0);
   assert.ok(Number.isSafeInteger(asset.assetId) && asset.assetId > 0);
@@ -30,12 +30,13 @@ for (const [route, asset] of Object.entries({ ...PUBLIC_ASSETS, ...PRIVATE_FIXTU
   assert.equal(asset.requiresCredential, asset.visibility === "private");
 }
 
-assert.equal(configFor().routes.length, 2);
-assert.equal(configFor({ privateFixtureEnabled: true }).routes.length, 4);
+assert.equal(configFor().asset, PUBLIC_ROOT_ASSET);
+assert.equal(configFor({ privateFixtureEnabled: true }).asset, PRIVATE_FIXTURE_ROOT_ASSET);
 console.log(JSON.stringify({
   schema: "check-receipt/1",
   checkId: "ops.gov-release-proxy.config",
   status: "PASS",
-  publicRoutes: Object.keys(PUBLIC_ASSETS),
-  privateFixtureRoutes: Object.keys(PRIVATE_FIXTURE_ASSETS),
+  endpoint: "/",
+  publicAsset: PUBLIC_ROOT_ASSET.name,
+  privateFixtureAsset: PRIVATE_FIXTURE_ROOT_ASSET.name,
 }));
