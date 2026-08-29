@@ -38,10 +38,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Prove UI proposal submit and OIDC-only relay surface
+      - name: Prove UI submit, R2 queue, manual ADRS bridge and recorded UI state
         run: |
           export EVIDENCE="$RUNNER_TEMP/adrs-ui-proposal-evidence"
           bash "$ROOT/provider-proof.sh"
+          bash "$ROOT/manual-bridge-proof.sh"
       - name: Upload exact non-secret evidence
         uses: actions/upload-artifact@v4
         with:
