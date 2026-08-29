@@ -18,10 +18,10 @@ const retryStatuses = new Set([404, 429, 500, 502, 503, 504]);
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 let response;
 let attempts = 0;
-for (attempts = 1; attempts <= 30; attempts += 1) {
+for (attempts = 1; attempts <= 15; attempts += 1) {
   response = await fetch(new URL("/", baseUrl), { headers, redirect: "manual" });
   if (!retryStatuses.has(response.status)) break;
-  if (attempts < 30) await sleep(2000);
+  if (attempts < 15) await sleep(2000);
 }
 if (response.status >= 300 && response.status < 400 && !clientId) {
   console.log(JSON.stringify({
@@ -33,7 +33,10 @@ if (response.status >= 300 && response.status < 400 && !clientId) {
   }));
   process.exit(0);
 }
-assert.equal(response.status, 200, `root data: ${response.status} after ${attempts} attempts`);
+if (response.status !== 200) {
+  const body = await response.text();
+  throw new Error(`root data failed: status=${response.status} attempts=${attempts} body=${body.slice(0, 500)}`);
+}
 const bytes = Buffer.from(await response.arrayBuffer());
 const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 assert.equal(bytes.byteLength, expected.bytes);
