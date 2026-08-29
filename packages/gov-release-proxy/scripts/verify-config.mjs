@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG, SOURCE } from "../src/assets.mjs";
 
-assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/4");
+assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/5");
 assert.equal(CONFIG.authority, false);
 assert.equal(CONFIG.endpoint, "/");
 assert.equal(CONFIG.deliveryModel, "one-root");
@@ -12,8 +12,10 @@ assert.equal(CONFIG.browserDirectGitHubFetch, false);
 assert.equal(CONFIG.runtimeFixture, false);
 assert.equal(SOURCE.repository, "roccho-dev/governance");
 assert.equal(SOURCE.releaseSelector, "latest");
+assert.equal(SOURCE.manifestName, "gov-release-manifest.json");
 assert.equal(SOURCE.assetName, "accepted-decision.json");
 assert.deepEqual([...SOURCE.acceptedContentTypes], ["application/json", "application/x-ndjson"]);
+assert.equal(SOURCE.maxManifestBytes, 256_000);
 assert.equal(SOURCE.maxBytes, 2_000_000);
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,6 +46,12 @@ for (const forbidden of [
 ]) {
   assert.equal(source.includes(forbidden), false, `runtime fixture or fixed release identity remains: ${forbidden}`);
 }
+assert.match(source, /releases\/latest/u);
+assert.match(source, /gov-release-manifest\.json/u);
+assert.match(source, /accepted-decision\.json/u);
+assert.match(source, /acceptedDecisionDigest/u);
+assert.match(source, /github-web-latest/u);
+assert.match(source, /github-api-latest/u);
 
 const cleanup = fs.readFileSync(path.join(root, "scripts", "cleanup-worker-proof.mjs"), "utf8");
 assert.match(cleanup, /const names = \["REQUIRE_GITHUB_AUTH", "ENABLE_PRIVATE_FIXTURE"\]/u);
@@ -56,7 +64,10 @@ console.log(JSON.stringify({
   endpoint: "/",
   source: SOURCE.repository,
   releaseSelector: SOURCE.releaseSelector,
+  manifest: SOURCE.manifestName,
   semanticAsset: SOURCE.assetName,
+  publicLocator: "github-web-latest",
+  privateLocator: "github-api-latest",
   runtimeClosureFiles: runtimeFiles.length,
   fixedReleaseIdentity: false,
   runtimeFixture: false,
