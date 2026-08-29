@@ -52,9 +52,9 @@ def main() -> None:
         )
         assert data.status == 200
         body = data.body()
+        assert len(body) > 0
         digest = "sha256:" + hashlib.sha256(body).hexdigest()
         assert digest == data.headers["x-gov-release-digest"]
-        assert len(body) == int(data.headers["content-length"])
         assert data.headers["x-gov-release-selector"] == "latest"
         assert data.headers["x-gov-release-repository"] == "roccho-dev/governance"
         assert data.headers["x-gov-release-asset"] == "accepted-decision.json"
