@@ -35,15 +35,15 @@ def main() -> None:
         response = page.goto(base, wait_until="load", timeout=30_000)
         assert response is not None and response.status == 200
         page.wait_for_function(
-            "globalThis.rootJsonlMapProof?.status === 'PASS'", timeout=30_000
+            "Boolean(globalThis.rootJsonlMapProof?.status)", timeout=30_000
         )
         proof = page.evaluate("globalThis.rootJsonlMapProof")
-        assert proof["status"] == "PASS"
+        page.screenshot(path=args.screenshot, full_page=True)
+        assert proof["status"] == "PASS", f"browser projection failed: {proof}"
         assert proof["records"] >= 1
         assert proof["nodes"] == proof["records"]
         assert page.title() == "Decision JSONL Map"
         assert page.locator("#map article").count() == proof["nodes"]
-        page.screenshot(path=args.screenshot, full_page=True)
 
         data = page.request.get(
             base,
