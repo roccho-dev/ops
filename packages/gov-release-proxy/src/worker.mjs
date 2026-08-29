@@ -19,8 +19,12 @@ const fail = (condition, code, status, message) => {
 };
 const hex = bytes => [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
 const digestBytes = async (bytes, cryptoScope = globalThis.crypto) => {
-  const result = await cryptoScope.subtle.digest("SHA-256", bytes);
-  return `sha256:${hex(new Uint8Array(result))}`;
+  try {
+    const result = await cryptoScope.subtle.digest("SHA-256", bytes);
+    return `sha256:${hex(new Uint8Array(result))}`;
+  } catch {
+    throw new ProxyError("UPSTREAM_DIGEST_COMPUTE", 502, "Unable to calculate the upstream digest");
+  }
 };
 const json = (value, status = 200, headers = {}) => new Response(`${JSON.stringify(value)}\n`, {
   status,
@@ -40,6 +44,13 @@ const githubHeaders = ({ token = "", binary = false } = {}) => {
   });
   if (token) headers.set("authorization", `Bearer ${token}`);
   return headers;
+};
+const fetchGitHub = async ({ url, init, fetchImpl, code }) => {
+  try {
+    return await fetchImpl(url, init);
+  } catch {
+    throw new ProxyError(code, 502, "GitHub transport failed");
+  }
 };
 const githubFailure = (response, { credentialUsed = false } = {}) => {
   if (response.status === 429 || response.headers.get("x-ratelimit-remaining") === "0") {
@@ -126,10 +137,15 @@ export const normalizeLatestRelease = (value, source = SOURCE) => {
 };
 
 const requestLatest = async ({ token = "", fetchImpl = globalThis.fetch } = {}) => (
-  fetchImpl(latestReleaseUrl(), {
-    method: "GET",
-    headers: githubHeaders({ token }),
-    redirect: "error",
+  fetchGitHub({
+    url: latestReleaseUrl(),
+    init: {
+      method: "GET",
+      headers: githubHeaders({ token }),
+      redirect: "follow",
+    },
+    fetchImpl,
+    code: "RELEASE_METADATA_FETCH",
   })
 );
 
@@ -155,13 +171,20 @@ export const fetchAsset = async ({
   const token = String(env.GITHUB_RELEASE_TOKEN ?? "");
   fail(!asset.credentialUsed || token.length > 0,
     "UPSTREAM_CREDENTIAL_REQUIRED", 503, "A bounded GitHub read credential is required");
-  const response = await fetchImpl(asset.credentialUsed ? asset.apiUrl : asset.downloadUrl, {
-    method: "GET",
-    headers: githubHeaders({ token: asset.credentialUsed ? token : "", binary: true }),
-    redirect: "follow",
+  const response = await fetchGitHub({
+    url: asset.credentialUsed ? asset.apiUrl : asset.downloadUrl,
+    init: {
+      method: "GET",
+      headers: githubHeaders({ token: asset.credentialUsed ? token : "", binary: true }),
+      redirect: "follow",
+    },
+    fetchImpl,
+    code: "RELEASE_ASSET_FETCH",
   });
   if (!response.ok) githubFailure(response, { credentialUsed: asset.credentialUsed });
-  const bytes = await response.arrayBuffer();
+  let bytes;
+  try { bytes = await response.arrayBuffer(); }
+  catch { throw new ProxyError("UPSTREAM_BODY", 502, "Unable to read the upstream body"); }
   fail(bytes.byteLength === asset.bytes,
     "UPSTREAM_BYTES", 502, `GitHub asset bytes mismatch: ${bytes.byteLength}`);
   const observedDigest = await digestBytes(bytes, cryptoScope);
