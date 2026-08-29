@@ -23,6 +23,7 @@ export const PUBLIC_ROOT_ASSET = frozenAsset({
   bytes: 942,
   digest: "sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6",
   contentType: "application/json; charset=utf-8",
+  downloadUrl: "https://github.com/roccho-dev/governance/releases/download/gov-release/company-operating-contract-v0.2.0/8f087d7babfbb04bce7e9e6a1bd21169dec5d37299c58bfcbb49c5756468c461/accepted-decision.json",
   requiresCredential: false,
 });
 
@@ -33,10 +34,10 @@ export const PRIVATE_FIXTURE_ROOT_ASSET = frozenAsset({
   bytes: 1439,
   digest: "sha256:4dd299b514f2f4a8fa15f6c1a343429c3c62c79860db87d397756e1a5190aa7e",
   contentType: "application/x-ndjson; charset=utf-8",
+  downloadUrl: null,
   requiresCredential: true,
 });
 
-// Compatibility exports for the existing proof helpers. Both modes expose only `/`.
 export const PUBLIC_ASSETS = Object.freeze({ "/": PUBLIC_ROOT_ASSET });
 export const PRIVATE_FIXTURE_ASSETS = Object.freeze({ "/": PRIVATE_FIXTURE_ROOT_ASSET });
 export const RELEASE = PUBLIC_RELEASE;
