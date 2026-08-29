@@ -26,16 +26,16 @@ jobs:
         with:
           repository: ${{ env.UI_REPOSITORY }}
           ref: ${{ env.UI_COMMIT }}
-          path: ${{ runner.temp }}/root-ui
+          path: root-ui
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - name: Stage exact UI source
         run: |
           set -euo pipefail
-          cp "$RUNNER_TEMP/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
+          cp "$GITHUB_WORKSPACE/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
           test -s packages/gov-release-proxy/public/index.html
-          node "$RUNNER_TEMP/root-ui/apps/root-jsonl-map/check.mjs"
+          node "$GITHUB_WORKSPACE/root-ui/apps/root-jsonl-map/check.mjs"
       - name: Unit, destructive and contract checks
         working-directory: packages/gov-release-proxy
         run: npm run check
@@ -77,14 +77,14 @@ jobs:
         with:
           repository: ${{ env.UI_REPOSITORY }}
           ref: ${{ env.UI_COMMIT }}
-          path: ${{ runner.temp }}/root-ui
+          path: root-ui
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
       - name: Stage exact UI source
         run: |
           set -euo pipefail
-          cp "$RUNNER_TEMP/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
+          cp "$GITHUB_WORKSPACE/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
           test -s packages/gov-release-proxy/public/index.html
           sha256sum packages/gov-release-proxy/public/index.html | tee "$RUNNER_TEMP/ui-sha256.txt"
       - name: Deploy one-root Worker
@@ -120,7 +120,7 @@ jobs:
           import hashlib,json,os,pathlib
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
           def read(name): return json.loads((root/name).read_text())
-          ui=root/'root-ui/apps/root-jsonl-map/index.html'
+          ui=pathlib.Path(os.environ['GITHUB_WORKSPACE'])/'root-ui/apps/root-jsonl-map/index.html'
           receipt={
             'schema':'ops.rootJsonlMapProviderReceipt/1',
             'status':'PASS',
