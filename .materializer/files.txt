@@ -1,0 +1,17 @@
+.github/workflows/gov-package-validation.yml
+README.md
+build/checks.jsonl
+build/packages.jsonl
+ci.intent.v1.jsonl
+docs/ops-exact-gov-package-obligation-receipts.md
+docs/ops-gov-package-output-boundary.md
+docs/ops-package-evidence-digest-closure.md
+docs/proposals/ops-package-response-checks-260630.md
+docs/proposals/ops-package-responsibility-closure-adoption-260701.md
+packages/ops-gov-package-output/bin/ops-gov-package-output.mjs
+packages/ops-gov-package-output/tests/e2e.mjs
+packages/ops-package-responses/README.md
+packages/ops-package-responses/bin/ops-package-responses.mjs
+packages/ops-package-responses/lib/core.mjs
+packages/ops-package-responses/lib/selftest.mjs
+packages/ops-package-responses/tests/e2e.mjs
