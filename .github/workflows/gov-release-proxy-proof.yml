@@ -71,6 +71,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_WORKER_NAME: stg-gov-release-proxy
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -87,6 +88,11 @@ jobs:
           cp "$GITHUB_WORKSPACE/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
           test -s packages/gov-release-proxy/public/index.html
           sha256sum packages/gov-release-proxy/public/index.html | tee "$RUNNER_TEMP/ui-sha256.txt"
+      - name: Ensure anonymous public source mode
+        working-directory: packages/gov-release-proxy
+        env:
+          WORKER_CLEANUP_RECEIPT: ${{ runner.temp }}/public-mode-cleanup-receipt.json
+        run: node scripts/cleanup-worker-proof.mjs
       - name: Deploy one-root Worker
         id: deploy
         working-directory: packages/gov-release-proxy
@@ -132,6 +138,7 @@ jobs:
               'path':'apps/root-jsonl-map/index.html',
               'sha256':'sha256:'+hashlib.sha256(ui.read_bytes()).hexdigest(),
             },
+            'publicModeCleanup':read('public-mode-cleanup-receipt.json'),
             'jsonReadback':read('root-json-receipt.json'),
             'browser':read('root-browser-receipt.json'),
             'authority':False,
@@ -143,6 +150,7 @@ jobs:
         with:
           name: root-jsonl-map-proof-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/public-mode-cleanup-receipt.json
             ${{ runner.temp }}/root-json-receipt.json
             ${{ runner.temp }}/root-browser-receipt.json
             ${{ runner.temp }}/root-browser.png
