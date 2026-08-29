@@ -1,0 +1,83 @@
+name: materialize-exact-candidate-ops
+
+on:
+  push:
+    branches:
+      - transport/exact-gov-package-receipts-260829
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-exact-candidate-ops
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Materialize exact candidate
+        env:
+          BASE_SHA: 3a6fda79212bdb646ea5597f794b5b9e6636daf6
+          EXPECTED_TREE: 4b227c0c9d8bf3120142cf2ba3b777a928452654
+          ARCHIVE_SHA256: 1d24f91e3f0111489e41dd74e85563f9e54586dde7fdb05f757174f04c680096
+          TARGET_BRANCH: feat/exact-gov-package-obligation-receipts-260829
+          COMMIT_MESSAGE: "feat: execute exact gov package obligations for all packages"
+        run: |
+          set -euo pipefail
+          transport="$RUNNER_TEMP/materializer"
+          mkdir -p "$transport"
+          cp .materializer/part-*.txt "$transport/"
+          cp .materializer/files.txt .materializer/delete.txt "$transport/"
+          git cat-file -e "$BASE_SHA^{commit}"
+          git reset --hard "$BASE_SHA"
+          git clean -fdx
+          cat "$transport"/part-*.txt | base64 -d > "$transport/changes.tar.xz"
+          test "$(sha256sum "$transport/changes.tar.xz" | awk '{print $1}')" = "$ARCHIVE_SHA256"
+          python3 - "$transport/changes.tar.xz" "$transport/files.txt" <<'PY2'
+          import pathlib,sys,tarfile
+          archive=pathlib.Path(sys.argv[1])
+          expected=[line for line in pathlib.Path(sys.argv[2]).read_text().splitlines() if line]
+          with tarfile.open(archive,'r:xz') as tf:
+              names=[]
+              for member in tf.getmembers():
+                  p=pathlib.PurePosixPath(member.name)
+                  if p.is_absolute() or '..' in p.parts or not member.isfile():
+                      raise SystemExit(f'unsafe archive member: {member.name}')
+                  names.append(member.name)
+              if sorted(names)!=sorted(expected):
+                  raise SystemExit(f'archive inventory mismatch: expected={expected} observed={names}')
+              tf.extractall('.',filter='data')
+          PY2
+          while IFS= read -r path; do
+            test -z "$path" || rm -f -- "$path"
+          done < "$transport/delete.txt"
+          git add -A
+          observed_tree="$(git write-tree)"
+          test "$observed_tree" = "$EXPECTED_TREE"
+          node packages/ops-package-responses/tests/e2e.mjs
+          node packages/ops-gov-package-output/tests/e2e.mjs
+          python3 - <<'PY2'
+          import json
+          from pathlib import Path
+          for name in ('build/packages.jsonl','build/checks.jsonl','ci.intent.v1.jsonl'):
+              for line in Path(name).read_text().splitlines():
+                  if line.strip(): json.loads(line)
+          PY2
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "$COMMIT_MESSAGE"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          git push origin "HEAD:refs/heads/$TARGET_BRANCH"
+          {
+            echo "base=$BASE_SHA"
+            echo "tree=$EXPECTED_TREE"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "target=$TARGET_BRANCH"
+          } >> "$GITHUB_STEP_SUMMARY"
