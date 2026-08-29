@@ -5,7 +5,6 @@ import argparse
 import json
 import os
 import pathlib
-import time
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -19,7 +18,14 @@ def canonical(value: object) -> str:
 
 
 def get_json(url: str) -> dict:
-    request = Request(url, headers={"cache-control": "no-cache", "accept": "application/json"})
+    request = Request(
+        url,
+        headers={
+            "cache-control": "no-cache",
+            "accept": "application/json",
+            "user-agent": "roccho-ops-adrs318-ui-proposal-browser-proof/1",
+        },
+    )
     with urlopen(request, timeout=30) as response:
         return json.loads(response.read())
 
