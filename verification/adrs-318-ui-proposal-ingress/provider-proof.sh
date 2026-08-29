@@ -49,10 +49,12 @@ worker_url="${worker_url%/}"
 printf '%s\n' "$worker_url" > "$EVIDENCE/worker-url.txt"
 
 for attempt in $(seq 1 100); do
-  if curl -fsS "$worker_url/api/meta" >/dev/null; then break; fi
+  if curl -fsS -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' "$worker_url/api/meta" >/dev/null; then break; fi
   sleep .3
 done
-curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/api/meta" > "$EVIDENCE/meta.json"
+curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
+  -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' \
+  "$worker_url/api/meta" > "$EVIDENCE/meta.json"
 python3 - "$EVIDENCE/meta.json" "$CANDIDATE_SHA" <<'PY'
 import json,sys
 meta=json.load(open(sys.argv[1],encoding='utf-8'))
@@ -78,7 +80,9 @@ cmp "$ROOT/public/app.mjs" "$EVIDENCE/app.remote.mjs"
 cmp "$ROOT/public/style.css" "$EVIDENCE/style.remote.css"
 sha256sum "$ROOT/public/index.html" "$ROOT/public/app.mjs" "$ROOT/public/style.css" > "$EVIDENCE/static-assets.sha256"
 
-relay_status="$(curl -sS -o "$EVIDENCE/relay-without-token.json" -w '%{http_code}' "$worker_url/api/relay/pending")"
+relay_status="$(curl -sS -o "$EVIDENCE/relay-without-token.json" -w '%{http_code}' \
+  -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' \
+  "$worker_url/api/relay/pending")"
 test "$relay_status" = 401
 python3 - "$EVIDENCE/relay-without-token.json" <<'PY'
 import json,sys
@@ -86,20 +90,40 @@ value=json.load(open(sys.argv[1],encoding='utf-8'))
 assert value['code']=='RELAY_AUTH_DENIED'
 PY
 
-curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
-  "$worker_url/api/proposals/$PROPOSAL_ID" > "$EVIDENCE/proposal-status.json"
+recorded=false
+for attempt in $(seq 1 180); do
+  curl --retry 5 --retry-all-errors --retry-delay 1 -fsS \
+    -H 'Accept: application/json' \
+    -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' \
+    "$worker_url/api/proposals/$PROPOSAL_ID" > "$EVIDENCE/proposal-status.json"
+  state="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$EVIDENCE/proposal-status.json")"
+  if [ "$state" = recorded ]; then
+    recorded=true
+    break
+  fi
+  sleep 2
+done
+test "$recorded" = true
+
+CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
+  "$worker_url/" "$EVIDENCE/browser-recorded.json" "$EVIDENCE/browser-recorded.png"
 
 BUCKET_CREATED="$bucket_created" WORKER_URL="$worker_url" WORKER="$WORKER" BUCKET="$BUCKET" \
-python3 - "$EVIDENCE/browser-submit.json" "$EVIDENCE/proposal-status.json" "$EVIDENCE/provider-proof.json" <<'PY'
+python3 - "$EVIDENCE/browser-submit.json" "$EVIDENCE/browser-recorded.json" "$EVIDENCE/proposal-status.json" "$EVIDENCE/provider-proof.json" <<'PY'
 import json,os,sys
-browser=json.load(open(sys.argv[1],encoding='utf-8'))
-status=json.load(open(sys.argv[2],encoding='utf-8'))
-assert browser['status']==status['status']=='PASS'
-assert status['state'] in {'submitted','recorded'}
+submitted=json.load(open(sys.argv[1],encoding='utf-8'))
+recorded_browser=json.load(open(sys.argv[2],encoding='utf-8'))
+status=json.load(open(sys.argv[3],encoding='utf-8'))
+assert submitted['status']==recorded_browser['status']==status['status']=='PASS'
+assert status['state']=='recorded'
+assert status['exact_comment_readback'] is True
+assert isinstance(status['comment_id'],int) and status['comment_id']>0
+assert status['comment_url'].startswith('https://github.com/roccho-dev/adrs/issues/318#issuecomment-')
+assert recorded_browser['status_after_submit']['state']=='recorded'
 receipt={
-  'schema':'ops.adrsUiProposalIngressProviderProof/1',
+  'schema':'ops.adrsUiProposalIngressProviderProof/2',
   'status':'PASS',
-  'claim_ceiling':'UI_TO_R2_PROPOSAL_SUBMIT_PROVEN',
+  'claim_ceiling':'UI_TO_ADRS_COMMENT_OIDC_RELAY_PROVEN',
   'authority':False,
   'repository':os.environ['GITHUB_REPOSITORY'],
   'candidate_sha':os.environ['CANDIDATE_SHA'],
@@ -114,24 +138,30 @@ receipt={
     'bucket':os.environ['BUCKET'],
     'created_this_run':os.environ['BUCKET_CREATED']=='true',
     'conditional_append':'PASS',
-    'exact_readback':'PASS',
+    'proposal_exact_readback':'PASS',
+    'recorded_receipt_exact_readback':'PASS',
   },
   'proposal_id':status['proposal_id'],
   'proposal_digest':status['proposal_digest'],
   'comment_body_sha256':status['comment_body_sha256'],
-  'state':status['state'],
+  'comment_id':status['comment_id'],
+  'comment_url':status['comment_url'],
+  'state':'recorded',
   'local_tests':4,
-  'real_chromium':True,
+  'real_chromium_submit':'PASS',
+  'real_chromium_recorded':'PASS',
   'browser_errors':0,
   'external_requests':0,
   'relay_without_oidc':'DENIED',
-  'adrs_comment_recorded':status['state']=='recorded',
+  'automatic_oidc_relay':True,
+  'adrs_comment_recorded':True,
+  'exact_comment_readback':True,
   'gov_materialized':False,
   'current_changed':False,
   'authority_changed':False,
   'cutover':False,
 }
-open(sys.argv[3],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+open(sys.argv[4],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
 print(json.dumps(receipt,sort_keys=True))
 PY
 
