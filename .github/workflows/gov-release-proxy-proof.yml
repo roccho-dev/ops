@@ -1,4 +1,4 @@
-name: Governance Release always-Worker proof
+name: Governance Release root JSONL map proof
 
 on:
   pull_request:
@@ -11,127 +11,83 @@ on:
 permissions:
   contents: read
 
+env:
+  UI_REPOSITORY: roccho-dev/ui
+  UI_COMMIT: 6fd40d961bd6d2ee9c19a44aeebb2206c3021362
+  UI_PATH: apps/root-jsonl-map/index.html
+
 jobs:
   candidate:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPOSITORY }}
+          ref: ${{ env.UI_COMMIT }}
+          path: ${{ runner.temp }}/root-ui
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
+      - name: Stage exact UI source
+        run: |
+          set -euo pipefail
+          cp "$RUNNER_TEMP/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
+          test -s packages/gov-release-proxy/public/index.html
+          node "$RUNNER_TEMP/root-ui/apps/root-jsonl-map/check.mjs"
       - name: Unit, destructive and contract checks
         working-directory: packages/gov-release-proxy
         run: npm run check
-      - name: Wrangler dry-run
+      - name: Wrangler dry-run with staged UI
         working-directory: packages/gov-release-proxy
         run: npm run check:dry-run
-      - name: Prove pinned public GitHub Release assets directly
+      - name: Prove pinned public source bytes directly
         working-directory: packages/gov-release-proxy
         run: |
           set -euo pipefail
           node - <<'NODE'
           import assert from 'node:assert/strict';
           import { createHash } from 'node:crypto';
-          import { PUBLIC_ASSETS } from './src/assets.mjs';
+          import { PUBLIC_ROOT_ASSET } from './src/assets.mjs';
           import { upstreamUrl } from './src/worker.mjs';
-          for (const [route, asset] of Object.entries(PUBLIC_ASSETS)) {
-            const response = await fetch(upstreamUrl(asset), {
-              headers: { accept: 'application/octet-stream', 'user-agent': 'roccho-dev-ops-gov-release-proxy-proof/2', 'x-github-api-version': '2022-11-28' },
-              redirect: 'follow',
-            });
-            assert.equal(response.status, 200, `${route}: ${response.status}`);
-            const bytes = Buffer.from(await response.arrayBuffer());
-            assert.equal(bytes.length, asset.bytes);
-            assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, asset.digest);
-          }
-          console.log(JSON.stringify({schema:'ops.govReleasePublicOracleReceipt/1',status:'PASS',routes:Object.keys(PUBLIC_ASSETS)}));
+          const response = await fetch(upstreamUrl(PUBLIC_ROOT_ASSET), {
+            headers: { accept: 'application/octet-stream', 'user-agent': 'roccho-dev-ops-root-jsonl-map-proof/1', 'x-github-api-version': '2022-11-28' },
+            redirect: 'follow',
+          });
+          assert.equal(response.status, 200);
+          const bytes = Buffer.from(await response.arrayBuffer());
+          assert.equal(bytes.length, PUBLIC_ROOT_ASSET.bytes);
+          assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, PUBLIC_ROOT_ASSET.digest);
+          console.log(JSON.stringify({schema:'ops.rootPublicOracleReceipt/1',status:'PASS',bytes:bytes.length,digest:PUBLIC_ROOT_ASSET.digest}));
           NODE
 
   provider-proof:
     needs: candidate
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 25
     environment: cloudflare-production
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_WORKER_NAME: stg-gov-release-proxy
-      ADRS_READER_CLIENT_ID: ${{ vars.ADRS_READER_CLIENT_ID || secrets.ADRS_READER_CLIENT_ID }}
-      ADRS_READER_PRIVATE_KEY: ${{ secrets.ADRS_READER_PRIVATE_KEY }}
-      STATIC_GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPOSITORY }}
+          ref: ${{ env.UI_COMMIT }}
+          path: ${{ runner.temp }}/root-ui
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-
-      - name: Verify Cloudflare Worker and Access API scopes
-        working-directory: packages/gov-release-proxy
-        env:
-          CLOUDFLARE_PREFLIGHT_RECEIPT: ${{ runner.temp }}/cloudflare-token-preflight.json
-        run: node scripts/verify-cloudflare-token.mjs
-
-      - name: Create bounded GitHub App installation token
-        id: github-app-token
-        if: env.ADRS_READER_CLIENT_ID != '' && env.ADRS_READER_PRIVATE_KEY != ''
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ env.ADRS_READER_CLIENT_ID }}
-          private-key: ${{ env.ADRS_READER_PRIVATE_KEY }}
-          owner: roccho-dev
-          repositories: adrs,governance
-          permission-contents: read
-
-      - name: Select bounded GitHub read credential
-        id: reader
-        env:
-          APP_TOKEN: ${{ steps.github-app-token.outputs.token }}
+      - name: Stage exact UI source
         run: |
           set -euo pipefail
-          token="${APP_TOKEN:-$STATIC_GITHUB_RELEASE_TOKEN}"
-          source='none'
-          [ -n "$APP_TOKEN" ] && source='github-app'
-          [ -z "$APP_TOKEN" ] && [ -n "$STATIC_GITHUB_RELEASE_TOKEN" ] && source='static-token'
-          python3 - "$source" "${ADRS_READER_CLIENT_ID:+configured}" "${ADRS_READER_PRIVATE_KEY:+configured}" "${STATIC_GITHUB_RELEASE_TOKEN:+configured}" <<'PY'
-          import json,pathlib,sys
-          source,client_id,private_key,static_token=sys.argv[1:]
-          receipt={
-            'schema':'ops.govReleaseGitHubCredentialSelection/1',
-            'status':'PASS' if source!='none' else 'FAIL',
-            'source':source,
-            'githubAppClientIdConfigured':client_id=='configured',
-            'githubAppPrivateKeyConfigured':private_key=='configured',
-            'staticTokenConfigured':static_token=='configured',
-          }
-          (pathlib.Path(__import__('os').environ['RUNNER_TEMP'])/'github-credential-selection.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
-          PY
-          if [ -z "$token" ]; then
-            echo '::error::Missing bounded GitHub read credential. Configure ADRS_READER_CLIENT_ID + ADRS_READER_PRIVATE_KEY, or GITHUB_RELEASE_TOKEN, in the cloudflare-production Environment.'
-            exit 1
-          fi
-          umask 077
-          printf '%s' "$token" > "$RUNNER_TEMP/github-release-token"
-          echo "available=true" >> "$GITHUB_OUTPUT"
-          echo "source=$source" >> "$GITHUB_OUTPUT"
-
-      - name: Prove one credential reads public and private exact assets
-        working-directory: packages/gov-release-proxy
-        run: |
-          set -euo pipefail
-          export GITHUB_RELEASE_TOKEN="$(cat "$RUNNER_TEMP/github-release-token")"
-          node scripts/verify-upstreams.mjs | tee "$RUNNER_TEMP/authenticated-upstream-receipt.json"
-
-      - name: Install short-lived Worker proof secrets
-        working-directory: packages/gov-release-proxy
-        run: |
-          set -euo pipefail
-          cat "$RUNNER_TEMP/github-release-token" | npx --yes wrangler@4.112.0 secret put GITHUB_RELEASE_TOKEN
-          printf 'true' | npx --yes wrangler@4.112.0 secret put REQUIRE_GITHUB_AUTH
-          printf 'true' | npx --yes wrangler@4.112.0 secret put ENABLE_PRIVATE_FIXTURE
-
-      - name: Deploy credential-required Worker proof version
+          cp "$RUNNER_TEMP/root-ui/$UI_PATH" packages/gov-release-proxy/public/index.html
+          test -s packages/gov-release-proxy/public/index.html
+          sha256sum packages/gov-release-proxy/public/index.html | tee "$RUNNER_TEMP/ui-sha256.txt"
+      - name: Deploy one-root Worker
         id: deploy
         working-directory: packages/gov-release-proxy
         run: |
@@ -145,93 +101,52 @@ jobs:
           url="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -n1)"
           test -n "$url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Prove Worker uses credential for public and private assets
+      - name: Verify exact root JSON readback
         working-directory: packages/gov-release-proxy
-        run: node scripts/verify-worker-proof.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/credential-worker-receipt.json"
-
-      - name: Prove Cloudflare Access anonymous block and service-token readback
-        working-directory: packages/gov-release-proxy
-        env:
-          ACCESS_PROOF_RECEIPT: ${{ runner.temp }}/access-proof-receipt.json
-        run: node scripts/prove-access.mjs '${{ steps.deploy.outputs.url }}'
-
-      - name: Remove short-lived Worker proof secrets
-        if: always()
-        working-directory: packages/gov-release-proxy
-        env:
-          WORKER_CLEANUP_RECEIPT: ${{ runner.temp }}/worker-cleanup-receipt.json
-        run: node scripts/cleanup-worker-proof.mjs
-
-      - name: Verify restored public-only Worker state
-        if: always() && steps.deploy.outputs.url != ''
+        run: node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/root-json-receipt.json"
+      - name: Verify hosted UI in real Chromium
         working-directory: packages/gov-release-proxy
         run: |
           set -euo pipefail
-          base='${{ steps.deploy.outputs.url }}'
-          test -n "$base"
-          status=''
-          for attempt in $(seq 1 30); do
-            status="$(curl -sS -o /dev/null -w '%{http_code}' "$base/health")"
-            [ "$status" = 200 ] && break
-            sleep 2
-          done
-          test "$status" = 200
-          node scripts/verify-remote.mjs "$base" | tee "$RUNNER_TEMP/restored-public-receipt.json"
-          for attempt in $(seq 1 30); do
-            status="$(curl -sS -o /dev/null -w '%{http_code}' "$base/proof/private/manifest")"
-            [ "$status" = 404 ] && break
-            sleep 2
-          done
-          test "$status" = 404
-
-      - name: Stage provider proof receipt
-        if: always()
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          python3 scripts/verify-root-browser.py \
+            '${{ steps.deploy.outputs.url }}' \
+            "$RUNNER_TEMP/root-browser-receipt.json" \
+            "$RUNNER_TEMP/root-browser.png"
+      - name: Stage provider receipt
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,pathlib
+          import hashlib,json,os,pathlib
           root=pathlib.Path(os.environ['RUNNER_TEMP'])
-          def read(name):
-            p=root/name
-            if not p.exists(): return None
-            text=p.read_text()
-            try:
-              return json.loads(text)
-            except json.JSONDecodeError:
-              rows=[line for line in text.splitlines() if line.strip()]
-              for line in reversed(rows):
-                try: return json.loads(line)
-                except json.JSONDecodeError: pass
-              return {'status':'UNPARSEABLE','path':name}
+          def read(name): return json.loads((root/name).read_text())
+          ui=root/'root-ui/apps/root-jsonl-map/index.html'
           receipt={
-            'schema':'ops.govReleaseAlwaysWorkerProviderReceipt/1',
-            'workerUrl':'${{ steps.deploy.outputs.url }}',
-            'cloudflarePreflight':read('cloudflare-token-preflight.json'),
-            'githubCredentialSelection':read('github-credential-selection.json'),
-            'authenticatedUpstream':read('authenticated-upstream-receipt.json'),
-            'credentialWorker':read('credential-worker-receipt.json'),
-            'access':read('access-proof-receipt.json'),
-            'workerCleanup':read('worker-cleanup-receipt.json'),
-            'restoredPublic':read('restored-public-receipt.json'),
+            'schema':'ops.rootJsonlMapProviderReceipt/1',
+            'status':'PASS',
+            'url':'${{ steps.deploy.outputs.url }}',
+            'endpoint':'/',
+            'ui':{
+              'repository':'roccho-dev/ui',
+              'commit':'6fd40d961bd6d2ee9c19a44aeebb2206c3021362',
+              'path':'apps/root-jsonl-map/index.html',
+              'sha256':'sha256:'+hashlib.sha256(ui.read_bytes()).hexdigest(),
+            },
+            'jsonReadback':read('root-json-receipt.json'),
+            'browser':read('root-browser-receipt.json'),
             'authority':False,
             'cutover':False,
           }
-          (root/'gov-release-always-worker-provider-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          (root/'root-jsonl-map-provider-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
           PY
-
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: gov-release-always-worker-proof-${{ github.run_id }}
+          name: root-jsonl-map-proof-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/cloudflare-token-preflight.json
-            ${{ runner.temp }}/github-credential-selection.json
-            ${{ runner.temp }}/authenticated-upstream-receipt.json
-            ${{ runner.temp }}/credential-worker-receipt.json
-            ${{ runner.temp }}/access-proof-receipt.json
-            ${{ runner.temp }}/worker-cleanup-receipt.json
-            ${{ runner.temp }}/restored-public-receipt.json
-            ${{ runner.temp }}/gov-release-always-worker-provider-receipt.json
-          if-no-files-found: warn
+            ${{ runner.temp }}/root-json-receipt.json
+            ${{ runner.temp }}/root-browser-receipt.json
+            ${{ runner.temp }}/root-browser.png
+            ${{ runner.temp }}/root-jsonl-map-provider-receipt.json
+            ${{ runner.temp }}/ui-sha256.txt
+          if-no-files-found: error
           retention-days: 14
