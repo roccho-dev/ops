@@ -85,6 +85,11 @@ jobs:
           mkdir -p out
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
             go build -trimpath -ldflags='-s -w -buildid=' -o out/policyctl ./cmd/policyctl
+          out/policyctl --help | grep -F 'policyctl runbook nway'
+          out/policyctl runbook nway > out/nway-runbook.md
+          cmp out/nway-runbook.md docs/nway-runbook.md
+          out/policyctl help nway > out/nway-runbook-help.md
+          cmp out/nway-runbook-help.md docs/nway-runbook.md
           POLICYCTL_BIN="$PWD/out/policyctl" node tests/local-e2e.mjs | tee out/local-e2e.json
           grep -q '"status":"PASS"' out/local-e2e.json
           cp /tmp/astgrep-conformance-a.json out/astgrep-conformance.json
@@ -96,10 +101,18 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf artifact
-          mkdir -p artifact/source artifact/proof/samples artifact/proof/expected
+          mkdir -p \
+            artifact/source/share/doc/shiftleft-admission \
+            artifact/proof/samples \
+            artifact/proof/expected
           install -m 0755 out/policyctl artifact/source/policyctl
           install -m 0755 "$AST_GREP_BIN" artifact/source/ast-grep
+          install -m 0444 docs/nway-runbook.md \
+            artifact/source/share/doc/shiftleft-admission/nway-runbook.md
           cp -a policy adapters providers rulepacks toolchains artifact/source/
+          artifact/source/policyctl runbook nway > "$RUNNER_TEMP/carried-nway-runbook.md"
+          cmp "$RUNNER_TEMP/carried-nway-runbook.md" \
+            artifact/source/share/doc/shiftleft-admission/nway-runbook.md
           find artifact/source -type d -name __pycache__ -prune -exec rm -rf {} +
           find artifact/source -type f -name '*.pyc' -delete
           cp -a local-fixtures/. artifact/proof/samples/
@@ -138,6 +151,10 @@ jobs:
             --policy-ref "$HEAD_SHA" \
             --policy-sha256 "$POLICY_HASH" \
             --out-dir "$RUNNER_TEMP/session"
+          "$RUNNER_TEMP/session/bin/policyctl" runbook nway > \
+            "$RUNNER_TEMP/session-nway-runbook.md"
+          cmp "$RUNNER_TEMP/session-nway-runbook.md" \
+            artifact/source/share/doc/shiftleft-admission/nway-runbook.md
 
           run_python() {
             local suffix="$1"
@@ -262,6 +279,14 @@ jobs:
           chmod +x source/policyctl source/ast-grep
           test "$(source/ast-grep --version)" = "ast-grep 0.42.1"
           test "sha256:$(sha256sum source/ast-grep | awk '{print $1}')" = "sha256:eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905"
+          test -f source/share/doc/shiftleft-admission/nway-runbook.md
+          source/policyctl --help | grep -F 'policyctl runbook nway'
+          source/policyctl runbook nway > "$RUNNER_TEMP/carried-nway-runbook.md"
+          cmp "$RUNNER_TEMP/carried-nway-runbook.md" \
+            source/share/doc/shiftleft-admission/nway-runbook.md
+          source/policyctl help nway > "$RUNNER_TEMP/carried-nway-help.md"
+          cmp "$RUNNER_TEMP/carried-nway-help.md" \
+            source/share/doc/shiftleft-admission/nway-runbook.md
 
           SOURCE_SHA="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["sourceSha256"])')"
           POLICY_HASH="$(python3 -c 'import json; print(json.load(open("proof/metadata.json"))["policyHash"])')"
@@ -280,6 +305,10 @@ jobs:
             --policy-sha256 "$POLICY_HASH" \
             --out-dir "$RUNNER_TEMP/session"
           cmp "$RUNNER_TEMP/session/intake-receipt.json" proof/expected/intake-receipt.json
+          "$RUNNER_TEMP/session/bin/policyctl" runbook nway > \
+            "$RUNNER_TEMP/session-nway-runbook.md"
+          cmp "$RUNNER_TEMP/session-nway-runbook.md" \
+            source/share/doc/shiftleft-admission/nway-runbook.md
 
           cp -a proof/samples/python/workspace "$RUNNER_TEMP/python"
           "$RUNNER_TEMP/session/bin/policyctl" run \

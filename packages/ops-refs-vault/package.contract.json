@@ -1,0 +1,52 @@
+{
+  "schema": "package-docs-contract/1",
+  "packageId": "ops-refs-vault",
+  "ownerRoot": "packages/ops-refs-vault",
+  "kind": "cli",
+  "responsibility": "Audit and project selected refs from bare Git SSOT repositories to a replaceable remote forge using explicit compare-and-swap rules.",
+  "externalContracts": [
+    {
+      "id": "ops-refs-vault",
+      "entrypoint": "bin/ops-refs-vault.mjs",
+      "input": "Manifest, exact source and remote ref identities, and explicit operator decisions",
+      "output": "Audit, backup, candidate, restore, and promotion receipts",
+      "error": "Non-zero exit without mutating an unclassified or raced ref",
+      "effect": "Checked Git ref updates only in effect commands",
+      "compatibility": "Manifest and receipt schemas remain versioned"
+    }
+  ],
+  "internalContracts": [
+    {
+      "id": "audit-before-effect",
+      "boundary": "Read-only audit and candidate classification precede every write-capable command.",
+      "invariants": [
+        "Unknown or changed refs stop before write",
+        "Remote-only state is never silently deleted"
+      ],
+      "forbiddenEffects": [
+        "No mirror-force update",
+        "No direct restore into SSOT"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "package-contract",
+      "kind": "contract-projection",
+      "title": "ops-refs-vault package contract",
+      "path": "docs/package-contract.md",
+      "required": true
+    },
+    {
+      "id": "runbook",
+      "kind": "authored",
+      "title": "ops-refs-vault runbook",
+      "path": "docs/runbook.md",
+      "required": true
+    }
+  ],
+  "currentConsumers": [
+    "SSOT host operator",
+    "governance checked publish workflow"
+  ]
+}

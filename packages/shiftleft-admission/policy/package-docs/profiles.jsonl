@@ -1,0 +1,4 @@
+{"schema":"shiftleft-profile/1","id":"package.docs.identity","ruleId":"SL-PACKAGE-DOCS-001","language":"language-neutral","provider":"package-docs-provider","adapter":"builtin","tool":"package-docs","required":true,"forbiddenImports":[]}
+{"schema":"shiftleft-profile/1","id":"package.docs.projection","ruleId":"SL-PACKAGE-DOCS-002","language":"language-neutral","provider":"package-docs-provider","adapter":"builtin","tool":"package-docs","required":true,"forbiddenImports":[]}
+{"schema":"shiftleft-profile/1","id":"package.docs.discovery","ruleId":"SL-PACKAGE-DOCS-003","language":"language-neutral","provider":"package-docs-provider","adapter":"builtin","tool":"package-docs","required":true,"forbiddenImports":[]}
+{"schema":"shiftleft-profile/1","id":"package.docs.distribution","ruleId":"SL-PACKAGE-DOCS-004","language":"language-neutral","provider":"package-docs-provider","adapter":"builtin","tool":"package-docs","required":true,"forbiddenImports":[]}
