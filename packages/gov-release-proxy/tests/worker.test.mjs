@@ -25,6 +25,7 @@ const asset = Object.freeze({
   bytes: bytes.byteLength,
   digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
   contentType: "application/json; charset=utf-8",
+  downloadUrl: "https://github.com/roccho-dev/example/releases/download/proof/fixture.json",
   requiresCredential: false,
 });
 const responseFor = (body = bytes, status = 200) => new Response(body, {
@@ -66,8 +67,9 @@ test("JSON is served from the same root with pinned bytes and digest", async () 
     {
       cryptoScope: digestCrypto(selected.digest),
       fetchImpl: async (url, init) => {
-        assert.equal(url, upstreamUrl(selected));
+        assert.equal(url, selected.downloadUrl);
         assert.equal(init.headers.get("authorization"), null);
+        assert.equal(init.headers.get("x-github-api-version"), null);
         return responseFor(Buffer.alloc(selected.bytes));
       },
     },
@@ -76,6 +78,14 @@ test("JSON is served from the same root with pinned bytes and digest", async () 
   assert.equal((await response.arrayBuffer()).byteLength, selected.bytes);
   assert.equal(response.headers.get("x-gov-release-digest"), selected.digest);
   assert.equal(response.headers.get("vary"), "Accept");
+});
+
+test("public download URL is anonymous; private root uses asset API", () => {
+  assert.equal(upstreamUrl(asset), asset.downloadUrl);
+  assert.equal(
+    upstreamUrl(PRIVATE_FIXTURE_ROOT_ASSET),
+    `https://api.github.com/repos/roccho-dev/adrs/releases/assets/${PRIVATE_FIXTURE_ROOT_ASSET.assetId}`,
+  );
 });
 
 test("public root needs no credential; private root does", async () => {
@@ -105,6 +115,7 @@ test("private root uses the credential only upstream", async () => {
   );
   assert.equal(response.status, 200);
   assert.equal(upstreamHeaders.get("authorization"), "Bearer secret");
+  assert.equal(upstreamHeaders.get("x-github-api-version"), "2022-11-28");
   assert.equal(response.headers.get("authorization"), null);
   assert.equal(response.headers.get("x-gov-release-upstream-auth"), "credential");
 });
