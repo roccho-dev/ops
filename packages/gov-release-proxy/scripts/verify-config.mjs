@@ -19,6 +19,11 @@ assert.equal(PRIVATE_FIXTURE_RELEASE.repository, "roccho-dev/adrs");
 assert.equal(PRIVATE_FIXTURE_RELEASE.visibility, "private");
 assert.equal(PUBLIC_ROOT_ASSET.requiresCredential, false);
 assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.requiresCredential, true);
+assert.match(
+  PUBLIC_ROOT_ASSET.downloadUrl,
+  /^https:\/\/github\.com\/roccho-dev\/governance\/releases\/download\//u,
+);
+assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.downloadUrl, null);
 
 for (const asset of [PUBLIC_ROOT_ASSET, PRIVATE_FIXTURE_ROOT_ASSET]) {
   assert.match(asset.repository, /^[^/]+\/[^/]+$/u);
@@ -37,6 +42,8 @@ console.log(JSON.stringify({
   checkId: "ops.gov-release-proxy.config",
   status: "PASS",
   endpoint: "/",
+  publicUpstream: "immutable-release-download",
+  privateUpstream: "authenticated-release-asset-api",
   publicAsset: PUBLIC_ROOT_ASSET.name,
   privateFixtureAsset: PRIVATE_FIXTURE_ROOT_ASSET.name,
 }));
