@@ -40,7 +40,7 @@ const json = (value, status = 200, headers = {}) => new Response(`${JSON.stringi
 });
 
 export const privateFixtureEnabled = env => enabled(env.ENABLE_PRIVATE_FIXTURE);
-export const githubAuthRequired = (asset, env) => asset.requiresCredential || enabled(env.REQUIRE_GITHUB_AUTH);
+export const githubAuthRequired = asset => asset.requiresCredential;
 export const selectedRootAsset = env => rootAssetFor({ privateFixtureEnabled: privateFixtureEnabled(env) });
 export const availableAssets = env => Object.freeze({ "/": selectedRootAsset(env) });
 export const resolveAsset = (pathname, env = {}) => pathname === "/" ? selectedRootAsset(env) : null;
@@ -54,7 +54,8 @@ export const fetchAsset = async ({
   cryptoScope = globalThis.crypto,
 }) => {
   const token = String(env.GITHUB_RELEASE_TOKEN ?? "");
-  fail(!githubAuthRequired(asset, env) || token.length > 0,
+  const credentialRequired = githubAuthRequired(asset);
+  fail(!credentialRequired || token.length > 0,
     "UPSTREAM_CREDENTIAL_REQUIRED", 503, "A bounded GitHub read credential is required");
 
   const headers = new Headers({
@@ -62,7 +63,7 @@ export const fetchAsset = async ({
     "user-agent": USER_AGENT,
     "x-github-api-version": "2022-11-28",
   });
-  if (token) headers.set("authorization", `Bearer ${token}`);
+  if (credentialRequired) headers.set("authorization", `Bearer ${token}`);
   const response = await fetchImpl(upstreamUrl(asset), {
     method: "GET",
     headers,
@@ -77,7 +78,7 @@ export const fetchAsset = async ({
   const observedDigest = await digestBytes(bytes, cryptoScope);
   fail(observedDigest === asset.digest,
     "UPSTREAM_DIGEST", 502, `GitHub asset digest mismatch: ${observedDigest}`);
-  return { bytes, observedDigest, credentialUsed: token.length > 0 };
+  return { bytes, observedDigest, credentialUsed: credentialRequired };
 };
 
 const assetHeaders = (asset, credentialUsed) => ({
@@ -121,7 +122,7 @@ export const handleRequest = async (request, env = {}, context = {}) => {
   if (request.method === "HEAD") {
     return new Response(null, {
       status: 200,
-      headers: assetHeaders(asset, Boolean(env.GITHUB_RELEASE_TOKEN)),
+      headers: assetHeaders(asset, githubAuthRequired(asset)),
     });
   }
   const loaded = await fetchAsset({
