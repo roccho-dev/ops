@@ -5,32 +5,27 @@ on:
     branches: [proposals]
     paths:
       - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
-      - 'verification/adrs-318-ui-proposal-ingress/**'
-  push:
-    branches:
-      - proof/adrs-318-ui-proposal-ingress-260829
-    paths:
-      - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
-      - 'verification/adrs-318-ui-proposal-ingress/**'
+      - 'verification/adrs-318-gov-json-runtime/**'
 
 permissions:
   contents: read
 
 jobs:
-  proposal-ingress-provider-proof:
+  provider-proof:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: cloudflare-production
     env:
-      ROOT: verification/adrs-318-ui-proposal-ingress
-      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      ROOT: verification/adrs-318-gov-json-runtime
+      PROJECT: stg-gov-json-reduce
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.number }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -38,15 +33,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Prove UI submit, R2 queue, manual ADRS bridge and recorded UI state
+      - name: Prove exact gov JSON runtime on Cloudflare Pages
         run: |
-          export EVIDENCE="$RUNNER_TEMP/adrs-ui-proposal-evidence"
+          export DIST="$RUNNER_TEMP/gov-json-runtime-site"
+          export EVIDENCE="$RUNNER_TEMP/gov-json-runtime-evidence"
           bash "$ROOT/provider-proof.sh"
-          bash "$ROOT/manual-bridge-proof.sh"
-      - name: Upload exact non-secret evidence
+      - name: Upload exact evidence
         uses: actions/upload-artifact@v4
         with:
-          name: adrs-318-ui-proposal-ingress-${{ github.run_id }}
-          path: ${{ runner.temp }}/adrs-ui-proposal-evidence/
+          name: adrs-318-gov-json-runtime-pages-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/gov-json-runtime-site/
+            ${{ runner.temp }}/gov-json-runtime-evidence/
           if-no-files-found: error
           retention-days: 30
