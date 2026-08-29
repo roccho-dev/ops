@@ -1,4 +1,4 @@
-name: Governance Release proxy proof
+name: Governance Release always-Worker proof
 
 on:
   pull_request:
@@ -33,11 +33,11 @@ jobs:
           node - <<'NODE'
           import assert from 'node:assert/strict';
           import { createHash } from 'node:crypto';
-          import { ASSETS } from './src/assets.mjs';
+          import { PUBLIC_ASSETS } from './src/assets.mjs';
           import { upstreamUrl } from './src/worker.mjs';
-          for (const [route, asset] of Object.entries(ASSETS)) {
+          for (const [route, asset] of Object.entries(PUBLIC_ASSETS)) {
             const response = await fetch(upstreamUrl(asset), {
-              headers: { accept: 'application/octet-stream', 'user-agent': 'roccho-dev-ops-gov-release-proxy-proof/1', 'x-github-api-version': '2022-11-28' },
+              headers: { accept: 'application/octet-stream', 'user-agent': 'roccho-dev-ops-gov-release-proxy-proof/2', 'x-github-api-version': '2022-11-28' },
               redirect: 'follow',
             });
             assert.equal(response.status, 200, `${route}: ${response.status}`);
@@ -45,33 +45,73 @@ jobs:
             assert.equal(bytes.length, asset.bytes);
             assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, asset.digest);
           }
-          console.log(JSON.stringify({schema:'ops.govReleaseUpstreamReceipt/1',status:'PASS',routes:Object.keys(ASSETS)}));
+          console.log(JSON.stringify({schema:'ops.govReleasePublicOracleReceipt/1',status:'PASS',routes:Object.keys(PUBLIC_ASSETS)}));
           NODE
 
-  deploy-public-proof:
+  provider-proof:
     needs: candidate
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: cloudflare-production
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CF_ACCESS_ALLOWED_EMAILS_JSON: ${{ vars.CF_ACCESS_ALLOWED_EMAILS_JSON }}
-      CF_ACCESS_OTP_IDP_ID: ${{ vars.CF_ACCESS_OTP_IDP_ID }}
-      CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
-      CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      CLOUDFLARE_WORKER_NAME: stg-gov-release-proxy
+      ADRS_READER_CLIENT_ID: ${{ vars.ADRS_READER_CLIENT_ID }}
+      ADRS_READER_PRIVATE_KEY: ${{ secrets.ADRS_READER_PRIVATE_KEY }}
+      STATIC_GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
-      - name: Require existing Cloudflare wiring
+
+      - name: Verify Cloudflare Worker and Access API scopes
+        working-directory: packages/gov-release-proxy
+        env:
+          CLOUDFLARE_PREFLIGHT_RECEIPT: ${{ runner.temp }}/cloudflare-token-preflight.json
+        run: node scripts/verify-cloudflare-token.mjs
+
+      - name: Create bounded GitHub App installation token
+        id: github-app-token
+        if: env.ADRS_READER_CLIENT_ID != '' && env.ADRS_READER_PRIVATE_KEY != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ env.ADRS_READER_CLIENT_ID }}
+          private-key: ${{ env.ADRS_READER_PRIVATE_KEY }}
+          owner: roccho-dev
+          repositories: adrs,governance
+          permission-contents: read
+
+      - name: Select bounded GitHub read credential
+        id: reader
+        env:
+          APP_TOKEN: ${{ steps.github-app-token.outputs.token }}
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$CLOUDFLARE_API_TOKEN"
-      - name: Deploy staging Worker
+          token="${APP_TOKEN:-$STATIC_GITHUB_RELEASE_TOKEN}"
+          test -n "$token"
+          umask 077
+          printf '%s' "$token" > "$RUNNER_TEMP/github-release-token"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Prove one credential reads public and private exact assets
+        working-directory: packages/gov-release-proxy
+        run: |
+          set -euo pipefail
+          export GITHUB_RELEASE_TOKEN="$(cat "$RUNNER_TEMP/github-release-token")"
+          node scripts/verify-upstreams.mjs | tee "$RUNNER_TEMP/authenticated-upstream-receipt.json"
+
+      - name: Install short-lived Worker proof secrets
+        working-directory: packages/gov-release-proxy
+        run: |
+          set -euo pipefail
+          cat "$RUNNER_TEMP/github-release-token" | npx --yes wrangler@4.112.0 secret put GITHUB_RELEASE_TOKEN
+          printf 'true' | npx --yes wrangler@4.112.0 secret put REQUIRE_GITHUB_AUTH
+          printf 'true' | npx --yes wrangler@4.112.0 secret put ENABLE_PRIVATE_FIXTURE
+
+      - name: Deploy credential-required Worker proof version
         id: deploy
         working-directory: packages/gov-release-proxy
         run: |
@@ -85,24 +125,47 @@ jobs:
           url="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | head -n1)"
           test -n "$url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
-      - name: Verify deployed public proxy before optional Access bootstrap
+
+      - name: Prove Worker uses credential for public and private assets
         working-directory: packages/gov-release-proxy
-        run: node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/public-proxy-receipt.json"
-      - name: Bootstrap exact-email OTP Access when configured
-        id: access
-        if: env.CF_ACCESS_ALLOWED_EMAILS_JSON != '' && env.CF_ACCESS_OTP_IDP_ID != ''
+        run: node scripts/verify-worker-proof.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/credential-worker-receipt.json"
+
+      - name: Prove Cloudflare Access anonymous block and service-token readback
         working-directory: packages/gov-release-proxy
         env:
-          WORKER_URL: ${{ steps.deploy.outputs.url }}
-        run: node scripts/bootstrap-access.mjs | tee "$RUNNER_TEMP/access-bootstrap-receipt.json"
-      - name: Verify Access boundary and optional authenticated readback
-        if: steps.access.outcome == 'success'
+          ACCESS_PROOF_RECEIPT: ${{ runner.temp }}/access-proof-receipt.json
+        run: node scripts/prove-access.mjs '${{ steps.deploy.outputs.url }}'
+
+      - name: Remove short-lived Worker proof secrets
+        if: always()
+        working-directory: packages/gov-release-proxy
+        env:
+          WORKER_CLEANUP_RECEIPT: ${{ runner.temp }}/worker-cleanup-receipt.json
+        run: node scripts/cleanup-worker-proof.mjs
+
+      - name: Verify restored public-only Worker state
+        if: always()
         working-directory: packages/gov-release-proxy
         run: |
           set -euo pipefail
-          sleep 5
-          node scripts/verify-remote.mjs '${{ steps.deploy.outputs.url }}' | tee "$RUNNER_TEMP/access-readback-receipt.json"
-      - name: Stage proof receipt
+          base='${{ steps.deploy.outputs.url }}'
+          test -n "$base"
+          status=''
+          for attempt in $(seq 1 30); do
+            status="$(curl -sS -o /dev/null -w '%{http_code}' "$base/health")"
+            [ "$status" = 200 ] && break
+            sleep 2
+          done
+          test "$status" = 200
+          node scripts/verify-remote.mjs "$base" | tee "$RUNNER_TEMP/restored-public-receipt.json"
+          for attempt in $(seq 1 30); do
+            status="$(curl -sS -o /dev/null -w '%{http_code}' "$base/proof/private/manifest")"
+            [ "$status" = 404 ] && break
+            sleep 2
+          done
+          test "$status" = 404
+
+      - name: Stage provider proof receipt
         if: always()
         run: |
           set -euo pipefail
@@ -112,24 +175,34 @@ jobs:
           def read(name):
             p=root/name
             if not p.exists(): return None
-            rows=[x for x in p.read_text().splitlines() if x.strip()]
+            rows=[line for line in p.read_text().splitlines() if line.strip()]
             return json.loads(rows[-1]) if rows else None
           receipt={
-            'schema':'ops.govReleaseProxyWorkflowReceipt/1',
+            'schema':'ops.govReleaseAlwaysWorkerProviderReceipt/1',
             'workerUrl':'${{ steps.deploy.outputs.url }}',
-            'publicProxy':read('public-proxy-receipt.json'),
-            'accessBootstrap':read('access-bootstrap-receipt.json'),
-            'accessReadback':read('access-readback-receipt.json'),
+            'cloudflarePreflight':read('cloudflare-token-preflight.json'),
+            'authenticatedUpstream':read('authenticated-upstream-receipt.json'),
+            'credentialWorker':read('credential-worker-receipt.json'),
+            'access':read('access-proof-receipt.json'),
+            'workerCleanup':read('worker-cleanup-receipt.json'),
+            'restoredPublic':read('restored-public-receipt.json'),
             'authority':False,
             'cutover':False,
-            'privateUpstream':False,
           }
-          (root/'gov-release-proxy-workflow-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          (root/'gov-release-always-worker-provider-receipt.json').write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
           PY
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gov-release-proxy-proof-${{ github.run_id }}
-          path: ${{ runner.temp }}/gov-release-proxy-workflow-receipt.json
-          if-no-files-found: error
+          name: gov-release-always-worker-proof-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/cloudflare-token-preflight.json
+            ${{ runner.temp }}/authenticated-upstream-receipt.json
+            ${{ runner.temp }}/credential-worker-receipt.json
+            ${{ runner.temp }}/access-proof-receipt.json
+            ${{ runner.temp }}/worker-cleanup-receipt.json
+            ${{ runner.temp }}/restored-public-receipt.json
+            ${{ runner.temp }}/gov-release-always-worker-provider-receipt.json
+          if-no-files-found: warn
           retention-days: 14

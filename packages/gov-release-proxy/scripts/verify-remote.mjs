@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { ASSETS } from "../src/assets.mjs";
+import { PUBLIC_ASSETS } from "../src/assets.mjs";
 
 const baseUrl = process.argv[2];
 assert.ok(baseUrl, "base URL is required");
@@ -46,7 +46,7 @@ const healthValue = await health.json();
 assert.equal(healthValue.status, "PASS");
 
 const results = [];
-for (const [route, asset] of Object.entries(ASSETS)) {
+for (const [route, asset] of Object.entries(PUBLIC_ASSETS)) {
   const readback = await fetchReadback(route);
   const response = readback.response;
   assert.equal(response.status, 200, `${route}: ${response.status} after ${readback.attempts} attempts`);

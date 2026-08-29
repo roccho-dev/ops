@@ -23,19 +23,24 @@ const call = async path => {
 const userToken = await call("/user/tokens/verify");
 const accountToken = await call(`/accounts/${accountId}/tokens/verify`);
 const workersScripts = await call(`/accounts/${accountId}/workers/scripts`);
+const accessApps = await call(`/accounts/${accountId}/access/apps?per_page=1`);
+const accessServiceTokens = await call(`/accounts/${accountId}/access/service_tokens?per_page=1`);
 const activeToken = [userToken, accountToken].some(result => result.httpStatus === 200 && result.success && result.tokenStatus === "active");
-const effectiveWorkersScope = workersScripts.httpStatus === 200 && workersScripts.success;
 const receipt = {
-  schema: "ops.cloudflareWorkerTokenPreflight/1",
-  status: activeToken && effectiveWorkersScope ? "PASS" : "FAIL",
+  schema: "ops.cloudflareWorkerTokenPreflight/2",
+  status: activeToken && workersScripts.success ? "PASS" : "FAIL",
   accountId,
   userToken,
   accountToken,
   workersScripts,
+  accessApps,
+  accessServiceTokens,
   activeToken,
-  effectiveWorkersScope,
+  effectiveWorkersScope: workersScripts.success,
+  effectiveAccessAppsScope: accessApps.success,
+  effectiveAccessServiceTokenScope: accessServiceTokens.success,
 };
 fs.writeFileSync(output, `${JSON.stringify(receipt, null, 2)}\n`);
 console.log(JSON.stringify(receipt));
-assert.equal(activeToken, true, "Cloudflare token is not active for either user or account token verification");
-assert.equal(effectiveWorkersScope, true, "Cloudflare token cannot list Workers scripts for the configured account");
+assert.equal(activeToken, true, "Cloudflare token is not active");
+assert.equal(workersScripts.success, true, "Cloudflare token cannot list Workers scripts");

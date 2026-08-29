@@ -30,6 +30,7 @@ const body = {
   policies: [{
     name: `${appName} email OTP`,
     decision: "allow",
+    precedence: 1,
     include: allowedEmails.map(email => ({ email: { email } })),
     require: [{ login_method: { id: otpIdpId } }],
   }],

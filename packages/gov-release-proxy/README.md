@@ -1,18 +1,29 @@
-# Governance Release proxy
+# Governance Release always-Worker delivery
 
 Bounded Cloudflare Worker transport for `roccho-dev/adrs#318` and `roccho-dev/ops#327`.
 
 ```text
-Cloudflare Access
-  -> Worker fixed route
-  -> exact GitHub Release asset ID
+Human / CI
+  -> Cloudflare Access
+  -> one fixed-route Worker
+  -> one bounded GitHub read credential
+  -> exact public or private Release asset ID
   -> byte count + SHA-256 verification
   -> JSON response
 ```
 
-## Current proof input
+## Single delivery model
 
-The public proof pins one existing `roccho-dev/governance` Release and two JSON assets. It does not use `latest`, accept arbitrary URLs, reduce decision meaning, or claim authority.
+The browser always uses the Worker. It never selects between GitHub and Worker and never falls back between them.
+
+```text
+public repository  -> same Worker -> credentialed GitHub API -> exact asset
+private repository -> same Worker -> credentialed GitHub API -> exact asset
+```
+
+A public governance Release is the initial fixture for the common delivery path, not a public-only production route.
+
+## Production routes
 
 ```text
 /data/manifest
@@ -21,41 +32,62 @@ The public proof pins one existing `roccho-dev/governance` Release and two JSON 
 /config
 ```
 
+Private fixture routes exist only while the short-lived proof flag is installed:
+
+```text
+/proof/private/manifest
+/proof/private/events
+```
+
+The provider workflow removes the proof credential and flags after the proof, then verifies that private routes return `404` and public transport remains available.
+
 ## Boundary
 
 - `gov*` owns semantic reduction and Release assets.
-- This package owns transport verification only.
+- This package owns transport/authentication verification only.
 - UI owns runtime fetch and view-only reduction.
-- Access is enforced by Cloudflare before Worker execution.
-- Public proof needs no GitHub credential.
-- Private proof later sets `GITHUB_RELEASE_TOKEN`; no route or UI contract changes.
+- Worker routes are allowlisted; arbitrary URL/repository/Release input is rejected.
+- GitHub credentials are server-side only and never enter a browser response, receipt, or error.
 - No DB, KV, R2, D1, mirror, HTML generation, or current decision reduction.
 
-## Cloudflare configuration
+## Provider proof
 
-Required for public proxy deployment:
+The proof uses one short-lived bounded GitHub credential to read:
+
+- exact public `roccho-dev/governance` Release assets;
+- exact private `roccho-dev/adrs` Release fixture assets.
+
+It also creates a temporary Cloudflare Access service token and exact-domain Access application, proves anonymous blocking and authenticated exact-body readback, then deletes both.
+
+Human email OTP remains a separate persistent configuration. `bootstrap-access.mjs` permits only exact emails plus a selected OTP IdP; it forbids Everyone, domain-wide, and bypass policy shapes.
+
+## Required Environment values
 
 ```text
 CLOUDFLARE_ACCOUNT_ID
-CLOUDFLARE_API_TOKEN with Workers Scripts: Edit
+CLOUDFLARE_API_TOKEN
 ```
 
-Optional Access bootstrap:
+Cloudflare token permissions required by the complete provider proof:
 
 ```text
-CF_ACCESS_ALLOWED_EMAILS_JSON=["person@example.com"]
-CF_ACCESS_OTP_IDP_ID=<Cloudflare One-time PIN IdP UUID>
-CLOUDFLARE_API_TOKEN additionally has Access: Apps and Policies Edit
+Workers Scripts: Edit
+Access: Apps and Policies Edit
+Access: Service Tokens Edit
 ```
 
-Optional CI authenticated readback after creating a service token:
+One GitHub credential source is required:
 
 ```text
-CF_ACCESS_CLIENT_ID
-CF_ACCESS_CLIENT_SECRET
+preferred:
+ADRS_READER_CLIENT_ID
+ADRS_READER_PRIVATE_KEY
+
+bounded fallback:
+GITHUB_RELEASE_TOKEN
 ```
 
-The Access bootstrap never creates an Everyone, domain-wide, or bypass policy. It binds an exact Worker hostname, exact email addresses, and the selected OTP IdP.
+The GitHub credential must read only the selected `adrs` and `governance` repositories with `Contents: read`.
 
 ## Local checks
 
@@ -65,11 +97,15 @@ npm run check
 npm run check:dry-run
 ```
 
-## Completion labels
+## Truth labels
 
-- Unit and dry-run only: `PROXY_CANDIDATE_GREEN`
-- Deployed public asset exact readback: `PUBLIC_PROXY_PASS`
-- Anonymous request blocked by Access: `ACCESS_BOUNDARY_PASS`
-- Service token exact body readback: `ACCESS_AUTHENTICATED_READBACK_PASS`
-- Private Release readback: not part of the public proof
-- Cutover: false
+```text
+PROXY_CANDIDATE_GREEN
+PUBLIC_PROXY_PASS
+AUTHENTICATED_PUBLIC_UPSTREAM_PASS
+PRIVATE_UPSTREAM_PASS
+ACCESS_BOUNDARY_PASS
+ACCESS_AUTHENTICATED_READBACK_PASS
+```
+
+None of these labels imply semantic authority, Human UI completion, production cutover, or legacy retirement.
