@@ -23,7 +23,6 @@ jobs:
     environment: cloudflare-production
     env:
       ROOT: verification/adrs-318-ui-proposal-ingress
-      EVIDENCE: ${{ runner.temp }}/adrs-ui-proposal-evidence
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -40,7 +39,9 @@ jobs:
         with:
           python-version: '3.13'
       - name: Prove UI proposal submit and OIDC-only relay surface
-        run: bash "$ROOT/provider-proof.sh"
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/adrs-ui-proposal-evidence"
+          bash "$ROOT/provider-proof.sh"
       - name: Upload exact non-secret evidence
         uses: actions/upload-artifact@v4
         with:
