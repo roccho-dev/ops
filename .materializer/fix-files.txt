@@ -1,0 +1,4 @@
+packages/ops-gov-package-output/bin/ops-gov-package-output.mjs
+packages/ops-package-responses/bin/ops-package-responses.mjs
+packages/ops-package-responses/lib/core.mjs
+packages/ops-package-responses/lib/selftest.mjs
