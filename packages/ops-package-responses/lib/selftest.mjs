@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { objectDigest, readJsonl } from "./core.mjs";
+import { bytesDigest, objectDigest, readJsonl } from "./core.mjs";
 
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -17,7 +17,7 @@ function git(root, ...args) {
 }
 function writeFakeNix(file, fakeRoot) {
   const rootLiteral = JSON.stringify(fakeRoot);
-  fs.writeFileSync(file, `#!/usr/bin/env node
+  fs.writeFileSync(file, `#!${process.execPath}
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -194,6 +194,19 @@ export function runSelftest({ execute, validatePacket }) {
     if (logTamper.ok || !logTamper.errors.some((row) => row.code === "evidence-log-digest-mismatch")) throw Error("selftest-log-tamper-not-rejected");
     fs.writeFileSync(firstLog, firstLogBytes);
 
+    const evidenceFile = path.join(passOut, "ops-package-evidence.jsonl");
+    fs.appendFileSync(firstLog, "coordinated-tamper\n");
+    const coordinatedEvidence = readJsonl(evidenceFile);
+    coordinatedEvidence[0].stdout_digest = bytesDigest(fs.readFileSync(firstLog));
+    const coordinatedBase = { ...coordinatedEvidence[0] };
+    delete coordinatedBase.evidence_digest;
+    coordinatedEvidence[0].evidence_digest = objectDigest(coordinatedBase);
+    writeJsonl(evidenceFile, coordinatedEvidence);
+    const coordinatedTamper = validatePacket(passOut, { strict: true });
+    if (coordinatedTamper.ok || !coordinatedTamper.errors.some((row) => row.code === "required-test-evidence-binding")) throw Error("selftest-coordinated-log-evidence-tamper-not-rejected");
+    fs.writeFileSync(firstLog, firstLogBytes);
+    writeJsonl(evidenceFile, passEvidence);
+
     const failMarker = path.join(passFixture.fakeRoot, "fail", "beta-check");
     fs.mkdirSync(path.dirname(failMarker), { recursive: true });
     fs.writeFileSync(failMarker, "fail\n");
@@ -245,6 +258,7 @@ export function runSelftest({ execute, validatePacket }) {
       failing_required_check: "blocked",
       exact_release_tamper: "rejected",
       log_tamper: "rejected",
+      coordinated_log_and_evidence_tamper: "rejected",
       dirty_worktree: "rejected",
       wrong_governance_source: "rejected",
       actual_check_outputs_bound: true,

@@ -355,7 +355,7 @@ function validate(outDir, { strict = false } = {}) {
         if (!evidence || evidence.kind !== "ops.packageTestEvidence.v1" || evidence.package_id !== packageId || evidence.authority !== false) { errors.push({ code: "receipt-evidence-boundary", packageId }); continue; }
         if (observedEvidence.has(evidence.evidence_id)) errors.push({ code: "receipt-evidence-duplicate", packageId, evidenceId: evidence.evidence_id });
         observedEvidence.add(evidence.evidence_id);
-        if (expectedEvidence.get(evidence.evidence_id) !== evidence.semantic_evidence_digest || evidence.package_source_digest !== receipt.packageSource?.digest) errors.push({ code: "receipt-evidence-digest-binding", packageId, evidenceId: evidence.evidence_id });
+        if (expectedEvidence.get(evidence.evidence_id) !== evidence.evidence_digest || evidence.package_source_digest !== receipt.packageSource?.digest) errors.push({ code: "receipt-evidence-digest-binding", packageId, evidenceId: evidence.evidence_id });
         const semantic = {
           release_digest: evidence.release_digest,
           accepted_decision_digest: evidence.accepted_decision_digest,
@@ -375,6 +375,9 @@ function validate(outDir, { strict = false } = {}) {
           status: evidence.status,
         };
         if (!isDigest(evidence.semantic_evidence_digest) || objectDigest(semantic) !== evidence.semantic_evidence_digest) errors.push({ code: "receipt-evidence-semantic-digest", packageId, evidenceId: evidence.evidence_id });
+        const evidenceBase = { ...evidence };
+        delete evidenceBase.evidence_digest;
+        if (!isDigest(evidence.evidence_digest) || objectDigest(evidenceBase) !== evidence.evidence_digest) errors.push({ code: "receipt-evidence-full-digest", packageId, evidenceId: evidence.evidence_id });
         for (const [stream, expectedDigest] of [["stdout", evidence.stdout_digest], ["stderr", evidence.stderr_digest]]) {
           const ref = evidence.log_refs?.[stream];
           if (!ref || path.isAbsolute(ref) || ref.split(path.sep).includes("..")) { errors.push({ code: "receipt-evidence-log-ref", packageId, evidenceId: evidence.evidence_id, stream }); continue; }
@@ -405,14 +408,15 @@ function writeSourceFixture(root, blocked = false) {
   packageSource.digest = objectDigest(packageSource.objects);
   const semantic = { release_digest: releaseDigest, accepted_decision_digest: decisionDigest, obligation_digest: objectDigest({ obligation: "alpha" }), repo_commit: "fixture", repo_tree: "git-tree-sha1:fixture", package_tree: `git-tree-sha1:${"a".repeat(40)}`, package_source_digest: packageSource.digest, toolchain: { nix: "fixture" }, package_id: "alpha", test_id: "alpha-check", check_ref: "checks.x86_64-linux.alpha-check", command, command_digest: objectDigest(command), exit_code: 0, outputs: [{ path_digest: "sha256-fixture", file_count: 1, bytes: 1 }], status: "pass" };
   const stdout = "fixture output\n", stderr = "";
-  const evidence = blocked ? [] : [{ kind: "ops.packageTestEvidence.v1", evidence_id: "evidence.alpha", response_claim_id: "ops-package-response.alpha", ...semantic, semantic_evidence_digest: objectDigest(semantic), stdout_digest: bytesDigest(Buffer.from(stdout)), stderr_digest: bytesDigest(Buffer.from(stderr)), log_refs: { stdout: "logs/alpha/alpha-check.stdout", stderr: "logs/alpha/alpha-check.stderr" }, authority: false }];
+  const evidenceBase = { kind: "ops.packageTestEvidence.v1", evidence_id: "evidence.alpha", response_claim_id: "ops-package-response.alpha", ...semantic, semantic_evidence_digest: objectDigest(semantic), stdout_digest: bytesDigest(Buffer.from(stdout)), stderr_digest: bytesDigest(Buffer.from(stderr)), log_refs: { stdout: "logs/alpha/alpha-check.stdout", stderr: "logs/alpha/alpha-check.stderr" }, authority: false };
+  const evidence = blocked ? [] : [{ ...evidenceBase, evidence_digest: objectDigest(evidenceBase) }];
   if (!blocked) {
     fs.mkdirSync(path.join(root, "logs", "alpha"), { recursive: true });
     fs.writeFileSync(path.join(root, "logs", "alpha", "alpha-check.stdout"), stdout);
     fs.writeFileSync(path.join(root, "logs", "alpha", "alpha-check.stderr"), stderr);
   }
   const residuals = blocked ? [{ kind: "ops.packageResidual.v1", residual_id: "residual.alpha.test-failing", response_claim_id: "ops-package-response.alpha", package_id: "alpha", obligation_id: "obligation.alpha", status: "returned", code: "test-failing", returned_to: "governance-final-scope-purpose-join", reason: "fixture failure", authority: false }] : [];
-  const receiptBase = { kind: "ops.packageReceipt.v2", receipt_id: "receipt.alpha", response_claim_id: "ops-package-response.alpha", repo_locator: repoId, package_id: "alpha", status: blocked ? "blocked" : "pass", governance_release_digest: releaseDigest, accepted_decision_digest: decisionDigest, obligation_id: "obligation.alpha", obligation_digest: objectDigest({ obligation: "alpha" }), repo_commit: "fixture", repo_tree: "git-tree-sha1:fixture", package_tree: semantic.package_tree, package_source: packageSource, entrypoints: [], required_tests: blocked ? [] : [{ test_id: "alpha-check", evidence_ref: "evidence.alpha", evidence_digest: evidence[0].semantic_evidence_digest }], evidence_refs: blocked ? [] : ["evidence.alpha"], residual_refs: residuals.map((row) => row.residual_id), observed_at: "2026-01-01T00:00:00Z", emitted_by: "ops-package-responses", authority: false };
+  const receiptBase = { kind: "ops.packageReceipt.v2", receipt_id: "receipt.alpha", response_claim_id: "ops-package-response.alpha", repo_locator: repoId, package_id: "alpha", status: blocked ? "blocked" : "pass", governance_release_digest: releaseDigest, accepted_decision_digest: decisionDigest, obligation_id: "obligation.alpha", obligation_digest: objectDigest({ obligation: "alpha" }), repo_commit: "fixture", repo_tree: "git-tree-sha1:fixture", package_tree: semantic.package_tree, package_source: packageSource, entrypoints: [], required_tests: blocked ? [] : [{ test_id: "alpha-check", evidence_ref: "evidence.alpha", evidence_digest: evidence[0].evidence_digest }], evidence_refs: blocked ? [] : ["evidence.alpha"], residual_refs: residuals.map((row) => row.residual_id), observed_at: "2026-01-01T00:00:00Z", emitted_by: "ops-package-responses", authority: false };
   const receipt = { ...receiptBase, receipt_digest: objectDigest(receiptBase) };
   const response = { kind: "ops.packageResponse.v2", claim_id: "ops-package-response.alpha", adrs_ref: "roccho-dev/adrs#fixture", obligation_id: "obligation.alpha", obligation_digest: receipt.obligation_digest, governance_release_digest: releaseDigest, accepted_decision_digest: decisionDigest, repo_locator: repoId, package_id: "alpha", package_path: "packages/alpha", owner_role: "ops", state: blocked ? "blocked" : "covered", test_refs: ["alpha-check"], evidence_refs: receipt.evidence_refs, receipt_ref: receipt.receipt_id, residuals: receipt.residual_refs, authority: false };
   const manifest = { kind: "ops.packageResponsePacket.v2", status: blocked ? "blocked" : "pass", repo_locator: repoId, repo_commit: "fixture", repo_tree: "git-tree-sha1:fixture", observed_at: "2026-01-01T00:00:00Z", governance_release_id: "fixture", governance_release_digest: releaseDigest, accepted_decision_digest: decisionDigest, authority: false };
@@ -435,6 +439,17 @@ function selftest(repoRoot) {
     project(passSource, passOut);
     const pass = validate(passOut, { strict: true });
     if (!pass.ok) throw Error(`gov-output-pass-validation:${JSON.stringify(pass.errors)}`);
+    const receiptsFile = path.join(passOut, "receipts.jsonl");
+    const tamperedReceipts = readJsonl(receiptsFile);
+    const tamperedEvidence = tamperedReceipts[0].evidence[0];
+    tamperedEvidence.stdout_digest = bytesDigest(Buffer.from("coordinated downstream tamper\n"));
+    const tamperedEvidenceBase = { ...tamperedEvidence };
+    delete tamperedEvidenceBase.evidence_digest;
+    tamperedEvidence.evidence_digest = objectDigest(tamperedEvidenceBase);
+    writeJsonl(receiptsFile, tamperedReceipts);
+    const coordinatedTamper = validate(passOut, { strict: true });
+    if (coordinatedTamper.ok || !coordinatedTamper.errors.some((row) => row.code === "receipt-evidence-digest-binding")) throw Error("gov-output-coordinated-evidence-tamper-not-rejected");
+    project(passSource, passOut);
     const blockedSource = path.join(tmp, "blocked-source"), blockedOut = path.join(tmp, "blocked-out");
     writeSourceFixture(blockedSource, true);
     project(blockedSource, blockedOut);
@@ -443,7 +458,7 @@ function selftest(repoRoot) {
     if (!structural.ok || strict.ok || !strict.errors.some((row) => row.code === "blocking-package-output")) throw Error("gov-output-blocked-gate");
     fs.rmSync(path.join(passOut, "receipts.jsonl"));
     if (validate(passOut).ok) throw Error("gov-output-missing-receipt-not-rejected");
-    return { ok: true, kind: "ops.govPackageOutputSelftest.v2", exact_release_projection: "pass", blocked_packet: "blocked", missing_receipts: "rejected", organization_active_minted: false };
+    return { ok: true, kind: "ops.govPackageOutputSelftest.v2", exact_release_projection: "pass", blocked_packet: "blocked", missing_receipts: "rejected", coordinated_evidence_tamper: "rejected", organization_active_minted: false };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

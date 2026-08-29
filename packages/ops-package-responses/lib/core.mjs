@@ -228,7 +228,7 @@ export function validatePacket(outDir, { strict = false } = {}) {
       if (requiredIds.has(test.test_id)) errors.push({ code: "duplicate-required-test", package_id: row.package_id, test_id: test.test_id });
       requiredIds.add(test.test_id);
       const evidence = evidenceById.get(test.evidence_ref);
-      if (!evidence || evidence.package_id !== row.package_id || evidence.test_id !== test.test_id || evidence.semantic_evidence_digest !== test.evidence_digest || evidence.package_source_digest !== row.package_source?.digest) errors.push({ code: "required-test-evidence-binding", package_id: row.package_id, test_id: test.test_id });
+      if (!evidence || evidence.package_id !== row.package_id || evidence.test_id !== test.test_id || evidence.evidence_digest !== test.evidence_digest || evidence.package_source_digest !== row.package_source?.digest) errors.push({ code: "required-test-evidence-binding", package_id: row.package_id, test_id: test.test_id });
     }
     const evidenceRefs = [...new Set(row.evidence_refs ?? [])].sort();
     const requiredRefs = required.map((test) => test.evidence_ref).sort();
@@ -260,7 +260,10 @@ export function validatePacket(outDir, { strict = false } = {}) {
       outputs: row.outputs,
       status: row.status,
     };
-    if (!isDigest(row.semantic_evidence_digest) || objectDigest(semantic) !== row.semantic_evidence_digest) errors.push({ code: "evidence-digest-mismatch", evidence_id: row.evidence_id });
+    if (!isDigest(row.semantic_evidence_digest) || objectDigest(semantic) !== row.semantic_evidence_digest) errors.push({ code: "semantic-evidence-digest-mismatch", evidence_id: row.evidence_id });
+    const evidenceBase = { ...row };
+    delete evidenceBase.evidence_digest;
+    if (!isDigest(row.evidence_digest) || objectDigest(evidenceBase) !== row.evidence_digest) errors.push({ code: "evidence-digest-mismatch", evidence_id: row.evidence_id });
     if (!Array.isArray(row.command) || !row.command.length || objectDigest(row.command) !== row.command_digest || !isDigest(row.stdout_digest) || !isDigest(row.stderr_digest) || !isDigest(row.command_digest)) errors.push({ code: "evidence-process-digest", evidence_id: row.evidence_id });
     for (const [stream, expected] of [["stdout", row.stdout_digest], ["stderr", row.stderr_digest]]) {
       const ref = row.log_refs?.[stream];

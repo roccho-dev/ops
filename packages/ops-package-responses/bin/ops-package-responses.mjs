@@ -278,7 +278,7 @@ function executeTest({ root, outDir, packageId, obligation, testId, system, nixB
     status: result.exitCode === 0 && outputs.length > 0 ? "pass" : "blocked",
   };
   const evidenceId = `evidence.${safeId(packageId)}.${safeId(testId)}.${objectDigest(semantic).slice(7, 19)}`;
-  return {
+  const evidence = {
     kind: "ops.packageTestEvidence.v1",
     evidence_id: evidenceId,
     response_claim_id: `ops-package-response.${packageId}`,
@@ -289,6 +289,7 @@ function executeTest({ root, outDir, packageId, obligation, testId, system, nixB
     log_refs: { stdout: stdoutRef, stderr: stderrRef },
     authority: false,
   };
+  return { ...evidence, evidence_digest: objectDigest(evidence) };
 }
 function residual(packageId, claimId, code, reason, obligation = null) {
   return {
@@ -360,7 +361,7 @@ function execute({ releaseDir, outDir, repoRoot, governanceSource, system, nixBi
     evidence.push(...localEvidence); residuals.push(...localResiduals);
     for (const row of localResiduals) drifts.push({ kind: "packageDrift.v1", drift_id: `ops.packageDrift.${safeId(row.code)}.${safeId(packageId)}`, driftId: `ops.packageDrift.${safeId(row.code)}.${safeId(packageId)}`, drift_type: row.code, driftType: row.code, repo: REPO_ID, repo_locator: REPO_ID, package_id: packageId, packageId: packageId, package_path: inv?.package_path ?? obligation?.package_path ?? null, packagePath: inv?.package_path ?? obligation?.package_path ?? null, status: "open", severity: "blocking", meaning: row.reason, returned_to: row.returned_to, authority: false });
     const receiptBase = {
-      kind: "ops.packageReceipt.v2", receipt_id: `receipt.${safeId(packageId)}`, response_claim_id: claimId, repo_locator: REPO_ID, package_id: packageId, status, governance_release_digest: release.identity.release_digest, accepted_decision_digest: release.identity.accepted_decision_digest, obligation_id: obligation?.obligation_id ?? null, obligation_digest: obligation?.obligation_digest ?? null, obligation: baseObligation ?? null, repo_commit: repoIdentity.commit, repo_tree: repoIdentity.tree, package_tree: packageIdentityValue.package_tree, package_source: packageIdentityValue.package_source, toolchain: repoIdentity.toolchain, entrypoints: packageIdentityValue.entrypoints, required_tests: localEvidence.map((row) => ({ test_id: row.test_id, evidence_ref: row.evidence_id, evidence_digest: row.semantic_evidence_digest })), evidence_refs: localEvidence.map((row) => row.evidence_id), residual_refs: localResiduals.map((row) => row.residual_id), observed_at: repoIdentity.observed_at, emitted_by: "ops-package-responses", authority: false,
+      kind: "ops.packageReceipt.v2", receipt_id: `receipt.${safeId(packageId)}`, response_claim_id: claimId, repo_locator: REPO_ID, package_id: packageId, status, governance_release_digest: release.identity.release_digest, accepted_decision_digest: release.identity.accepted_decision_digest, obligation_id: obligation?.obligation_id ?? null, obligation_digest: obligation?.obligation_digest ?? null, obligation: baseObligation ?? null, repo_commit: repoIdentity.commit, repo_tree: repoIdentity.tree, package_tree: packageIdentityValue.package_tree, package_source: packageIdentityValue.package_source, toolchain: repoIdentity.toolchain, entrypoints: packageIdentityValue.entrypoints, required_tests: localEvidence.map((row) => ({ test_id: row.test_id, evidence_ref: row.evidence_id, evidence_digest: row.evidence_digest })), evidence_refs: localEvidence.map((row) => row.evidence_id), residual_refs: localResiduals.map((row) => row.residual_id), observed_at: repoIdentity.observed_at, emitted_by: "ops-package-responses", authority: false,
     };
     const receipt = { ...receiptBase, receipt_digest: objectDigest(receiptBase) };
     receipts.push(receipt);
