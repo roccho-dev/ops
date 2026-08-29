@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  UI_COMMIT: 4e75603dede194cc8a69afb1b8806b562a6d515a
+  UI_COMMIT: f0c1ff68889e21a3cd203dd2a4ef4e2ed0bc6bb7
   UI_PATH: apps/root-jsonl-map/index.html
 
 jobs:
@@ -117,7 +117,7 @@ jobs:
           value={
             'schema':'ops.rootJsonlMapProviderReceipt/1','status':'PASS',
             'url':'${{ steps.deploy.outputs.url }}','endpoint':'/',
-            'ui':{'repository':'roccho-dev/ui','commit':'4e75603dede194cc8a69afb1b8806b562a6d515a','path':'apps/root-jsonl-map/index.html','sha256':'sha256:'+hashlib.sha256(ui.read_bytes()).hexdigest()},
+            'ui':{'repository':'roccho-dev/ui','commit':'f0c1ff68889e21a3cd203dd2a4ef4e2ed0bc6bb7','path':'apps/root-jsonl-map/index.html','sha256':'sha256:'+hashlib.sha256(ui.read_bytes()).hexdigest()},
             'publicModeCleanup':read('public-mode-cleanup-receipt.json'),
             'jsonReadback':read('root-json-receipt.json'),
             'browser':read('root-browser-receipt.json'),
