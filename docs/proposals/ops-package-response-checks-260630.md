@@ -52,3 +52,8 @@ Each package response row carries `claim_id`, `adrs_ref`, `obligation_id`, `repo
 ## Acceptance
 
 This PR is no longer a work-order-only PR. It implements the ops package response emitter, validator, response packet CI wiring, generated check registration, and governance-connected check adoption boundary for ops.
+
+## Supersession
+
+The fixed five-package implementation described above is historical. The current
+execution contract is [`../ops-exact-gov-package-obligation-receipts.md`](../ops-exact-gov-package-obligation-receipts.md). This appended note preserves the original proposal and changes no accepted meaning.

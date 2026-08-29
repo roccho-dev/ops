@@ -1,90 +1,403 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  PACKET_FILES,
+  REPO_ID,
+  bytesDigest,
+  nonGoalIds,
+  normalizeObligation,
+  objectDigest,
+  packetStatus,
+  readJson,
+  readJsonl,
+  requirementIds,
+  validatePacket,
+  validateReleaseObjects,
+  writeJsonl,
+} from "../lib/core.mjs";
 
-const at = "2026-06-30T00:00:00Z";
-const repo = "roccho-dev/ops";
-const selected = [
-  ["ops-build-receipt-check","package-obligation.ops.receipts","packages/ops-build-receipt-check",["receipt-shape","receipt-classification","drift-detection"],["build/checks.jsonl:ops-build-receipt-check"],[]],
-  ["ops-handoff-pack","package-obligation.ops.handoff","packages/ops-handoff-pack",["handoff-pack-created","handoff-pack-valid","tamper-and-drift-rejection"],["build/checks.jsonl:ops-handoff-pack"],[]],
-  ["ops-artifact-materialize","package-obligation.ops.artifact-materialization","packages/ops-artifact-materialize",["artifact-materialize","manifest-produced","strict-count"],["flake.nix:checks.ops-artifact-materialize"],[]],
-  ["ops-knowledge-intake","package-obligation.ops.knowledge-intake","packages/ops-knowledge-intake",["knowledge-id-header","retry-template-candidate","gate-candidate"],["flake.nix:checks.ops-knowledge-intake"],[]],
-  ["ops-package-responses","package-obligation.ops.package-response-adoption","packages/ops-package-responses",["response-shape","evidence-linkage","receipt-linkage","residual-return"],["build/checks.jsonl:ops-package-responses",".github/workflows/gov-package-validation.yml"],["residual.gov-package-check-export-wait"]],
-];
-const explicit = ["poc-from-jsonl","ops-build-defs-snapshot","ops-tools-from-defs","nodejs26","prove-feat","ops-bootstrap","ops-cdp-core","find-packages-skill","find-packages-lib","find-packages-sql","default"];
-const files = ["ops-package-responses.jsonl","ops-package-evidence.jsonl","ops-package-receipts.jsonl","ops-package-residuals.jsonl","package-inventory.jsonl","package-responses.jsonl","package-residuals.jsonl","package-drifts.jsonl","manifest.json"];
-const sourceKinds = ["build-packages-jsonl","build-checks-jsonl","flake-generated","flake-explicit","source-dir","evidence-output"];
-const required = ["claim_id","adrs_ref","obligation_id","repo_locator","package_id","package_path","owner_role","state","covered_requirements","test_refs","evidence_refs","receipt_ref","residuals","blocked_reason","evidence_freshness","overclaim_boundary"];
-
-function response([id, obligation, pkgPath, reqs, tests, residuals]) {
+function usage() {
+  return [
+    "usage: ops-package-responses execute --release-dir <dir> --out-dir <dir> [--repo-root <dir>] --governance-source <path:...|github:...> [--system <system>] [--nix-bin <path>] [--json]",
+    "       ops-package-responses emit --release-dir <dir> --out-dir <dir> [--repo-root <dir>] --governance-source <path:...|github:...> [--system <system>] [--nix-bin <path>] [--json]",
+    "       ops-package-responses validate --out-dir <dir> [--strict] [--json]",
+    "       ops-package-responses selftest [--json]",
+  ].join("\n");
+}
+function parseArgv(input) {
+  const args = [...input];
+  let command = "execute", releaseDir, outDir, repoRoot, governanceSource, system = "x86_64-linux", nixBin = "nix", json = false, strict = false;
+  if (args[0] && !args[0].startsWith("-")) command = args.shift();
+  while (args.length) {
+    const arg = args.shift();
+    if (arg === "--release-dir") releaseDir = args.shift();
+    else if (arg === "--out-dir") outDir = args.shift();
+    else if (arg === "--repo-root") repoRoot = args.shift();
+    else if (arg === "--governance-source") governanceSource = args.shift();
+    else if (arg === "--system") system = args.shift();
+    else if (arg === "--nix-bin") nixBin = args.shift();
+    else if (arg === "--json") json = true;
+    else if (arg === "--strict") strict = true;
+    else throw Error(`unknown-argument:${arg}`);
+  }
+  return { command, releaseDir, outDir, repoRoot, governanceSource, system, nixBin, json, strict };
+}
+function up(start) {
+  const values = [];
+  let current = path.resolve(start);
+  for (;;) {
+    values.push(current);
+    const parent = path.dirname(current);
+    if (parent === current) return values;
+    current = parent;
+  }
+}
+function hasBuild(root) { return fs.existsSync(path.join(root, "build/packages.jsonl")); }
+function repoRootOf(given) {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  return [given, process.cwd(), ...up(here)].filter(Boolean).map((value) => path.resolve(value)).find(hasBuild) ?? path.resolve(given ?? process.cwd());
+}
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options });
+  return { command: [command, ...args], exitCode: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? String(result.error?.message ?? "") };
+}
+function mustRun(command, args, options = {}) {
+  const result = run(command, args, options);
+  if (result.exitCode !== 0) throw Error(`command-failed:${result.command.join(" ")}:${result.stderr.trim()}`);
+  return result.stdout.trim();
+}
+function safeId(value) { return String(value).replace(/[^A-Za-z0-9._-]+/g, "_"); }
+function packagePathFromEntry(entry) {
+  const parts = String(entry).split("/");
+  return parts[0] === "packages" && parts[1] ? parts.slice(0, 2).join("/") : path.posix.dirname(String(entry));
+}
+function git(root, ...args) { return mustRun("git", ["-C", root, ...args]); }
+function tryGit(root, ...args) {
+  const result = run("git", ["-C", root, ...args]);
+  return result.exitCode === 0 ? result.stdout.trim() : null;
+}
+function isInside(parent, candidate) {
+  const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+function requireCleanRepo(root) {
+  const commit = git(root, "rev-parse", "HEAD");
+  if (!/^[0-9a-f]{40}$/.test(commit)) throw Error(`ops-head-invalid:${commit}`);
+  const status = git(root, "status", "--porcelain=v1", "--untracked-files=all");
+  if (status) throw Error("ops-worktree-not-clean");
+  return commit;
+}
+function prepareOutputDir(root, releaseDir, outDir) {
+  const output = path.resolve(outDir);
+  if (output === path.parse(output).root || isInside(root, output) || isInside(releaseDir, output) || output === path.resolve(releaseDir)) throw Error(`out-dir-unsafe:${output}`);
+  if (fs.existsSync(output) && fs.lstatSync(output).isSymbolicLink()) throw Error(`out-dir-symlink:${output}`);
+  fs.rmSync(output, { recursive: true, force: true });
+  fs.mkdirSync(output, { recursive: true });
+  return output;
+}
+function entrypointRows(root) { return readJsonl(path.join(root, "build/packages.jsonl")); }
+function flakeAttrNames(root, nixBin, system, surface, overrideArgs) {
+  const raw = mustRun(nixBin, ["eval", "--json", "--no-write-lock-file", ...overrideArgs, `.#${surface}.${system}`, "--apply", "builtins.attrNames"], { cwd: root });
+  const values = JSON.parse(raw);
+  if (!Array.isArray(values) || values.some((value) => typeof value !== "string")) throw Error(`flake-${surface}-inventory-invalid`);
+  return [...new Set(values)].sort();
+}
+function inventory(root, outDir, observedAt, nixBin, system, overrideArgs) {
+  const byId = new Map();
+  for (const row of entrypointRows(root)) {
+    const id = String(row.name);
+    const current = byId.get(id) ?? { package_id: id, package_path: packagePathFromEntry(row.entry), entrypoints: [], source_kinds: new Set(), source_refs: [] };
+    current.package_path = current.package_path || packagePathFromEntry(row.entry);
+    current.entrypoints.push({ kind: "source", bin: row.bin, entry: row.entry, runtime: row.runtime, deps: row.deps ?? [] });
+    current.source_kinds.add("build-packages-jsonl");
+    current.source_refs.push(`build/packages.jsonl:${id}`);
+    byId.set(id, current);
+  }
+  for (const id of flakeAttrNames(root, nixBin, system, "packages", overrideArgs)) {
+    const current = byId.get(id) ?? { package_id: id, package_path: `flake.nix:packages.${system}.${id}`, entrypoints: [], source_kinds: new Set(), source_refs: [] };
+    current.source_kinds.add("flake-package");
+    current.source_refs.push(`flake.nix:packages.${system}.${id}`);
+    const attr = `packages.${system}.${id}`;
+    if (!current.entrypoints.some((entry) => entry.kind === "nix-package" && entry.attr === attr)) current.entrypoints.push({ kind: "nix-package", attr });
+    byId.set(id, current);
+  }
+  const packagesDir = path.join(root, "packages");
+  if (fs.existsSync(packagesDir)) {
+    for (const item of fs.readdirSync(packagesDir, { withFileTypes: true }).filter((item) => item.isDirectory())) {
+      const id = item.name;
+      const current = byId.get(id) ?? { package_id: id, package_path: `packages/${id}`, entrypoints: [], source_kinds: new Set(), source_refs: [] };
+      current.source_kinds.add("source-dir");
+      current.source_refs.push(`packages/${id}`);
+      byId.set(id, current);
+    }
+  }
+  for (const file of PACKET_FILES) {
+    const id = `ops-package-responses/${file}`;
+    byId.set(id, { package_id: id, package_path: path.join(outDir, file), entrypoints: [], source_kinds: new Set(["evidence-output"]), source_refs: [file], item_kind: "evidence-output" });
+  }
+  return [...byId.values()].sort((a, b) => a.package_id.localeCompare(b.package_id)).map((row) => ({
+    kind: "packageInventory.v1",
+    inventory_id: `ops.inventory.${row.item_kind ?? "package"}.${safeId(row.package_id)}`,
+    repo_locator: REPO_ID,
+    repo: REPO_ID,
+    package_id: row.package_id,
+    packageId: row.package_id,
+    package_path: row.package_path,
+    packagePath: row.package_path,
+    item_kind: row.item_kind ?? "package",
+    source_kinds: [...row.source_kinds].sort(),
+    source_refs: [...new Set(row.source_refs)].sort(),
+    entrypoints: row.entrypoints.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    observed_at: observedAt,
+    authority: false,
+  }));
+}
+function loadRelease(releaseDir, nixBin) {
+  if (!releaseDir) throw Error("--release-dir-is-required");
+  const root = path.resolve(releaseDir);
+  const outputDir = path.join(root, "gov-package-output");
+  const files = {
+    manifest: path.join(root, "gov-release-manifest.json"),
+    acceptedDecision: path.join(root, "accepted-decision.json"),
+    engineDescriptor: path.join(root, "gov-engine-descriptor.json"),
+    descriptor: path.join(root, "gov-nix-output-descriptor.json"),
+    readbackReceipt: path.join(root, "gov-release-readback-receipt.json"),
+    obligations: path.join(outputDir, "package-obligations.jsonl"),
+  };
+  if (!fs.existsSync(outputDir) || !fs.lstatSync(outputDir).isDirectory() || fs.lstatSync(outputDir).isSymbolicLink()) throw Error(`gov-release-output-directory-invalid:${outputDir}`);
+  const outputReal = fs.realpathSync(outputDir);
+  for (const [name, file] of Object.entries(files)) {
+    if (!fs.existsSync(file)) throw Error(`gov-release-file-missing:${name}:${file}`);
+    const stat = fs.lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw Error(`gov-release-file-not-regular:${name}:${file}`);
+    if (name === "obligations") {
+      const real = fs.realpathSync(file);
+      if (real !== outputReal && !real.startsWith(outputReal + path.sep)) throw Error(`gov-release-obligation-outside-output:${file}`);
+    }
+  }
+  const observedNarHash = mustRun(nixBin, ["hash", "path", "--type", "sha256", outputDir]);
+  const identity = validateReleaseObjects({ manifest: readJson(files.manifest), acceptedDecision: readJson(files.acceptedDecision), engineDescriptor: readJson(files.engineDescriptor), descriptor: readJson(files.descriptor), readbackReceipt: readJson(files.readbackReceipt), observedNarHash });
+  return { root, outputDir, files, identity };
+}
+function governanceInput(source, expectedCommit) {
+  if (!source) throw Error("--governance-source-is-required");
+  if (source.startsWith("path:")) {
+    const root = path.resolve(source.slice(5));
+    if (!fs.existsSync(path.join(root, ".git"))) throw Error(`governance-source-not-git:${root}`);
+    const observed = mustRun("git", ["-C", root, "rev-parse", "HEAD"]);
+    if (observed !== expectedCommit) throw Error(`governance-source-commit-mismatch:${observed}:${expectedCommit}`);
+    const ref = `git+${pathToFileURL(root).href}?rev=${expectedCommit}`;
+    return { ref, mode: "local-git", commit: expectedCommit, override_args: ["--override-input", "governance", ref, "--override-input", "conventionGovernance", ref] };
+  }
+  const exactGithub = `github:roccho-dev/governance/${expectedCommit}`;
+  if (source !== exactGithub) throw Error(`governance-source-ref-mismatch:${source}:${exactGithub}`);
+  return { ref: source, mode: "github", commit: expectedCommit, override_args: ["--override-input", "governance", source, "--override-input", "conventionGovernance", source] };
+}
+function normalizeObligations(release, system) {
+  const rows = readJsonl(release.files.obligations).map((row) => normalizeObligation(row, system)).filter((row) => row.repo_locator === REPO_ID);
+  const byPackage = new Map(), ids = new Set();
+  for (const row of rows) {
+    if (byPackage.has(row.package_id)) throw Error(`duplicate-package-obligation:${row.package_id}`);
+    if (ids.has(row.obligation_id)) throw Error(`duplicate-obligation-id:${row.obligation_id}`);
+    byPackage.set(row.package_id, row); ids.add(row.obligation_id);
+  }
+  if (!rows.length) throw Error("ops-package-obligations-empty");
+  return byPackage;
+}
+function hashFile(file) { return bytesDigest(fs.readFileSync(file)); }
+function sourceObject(root, sourcePath) {
+  const sha = tryGit(root, "rev-parse", `HEAD:${sourcePath}`);
+  if (!sha) return null;
+  const type = tryGit(root, "cat-file", "-t", sha);
+  if (!["blob", "tree"].includes(type)) return null;
+  return { path: sourcePath, type, object_id: `git-${type}-sha1:${sha}` };
+}
+function packageIdentity(root, inventoryRow) {
+  const packagePath = inventoryRow.package_path;
+  const primarySourcePath = packagePath.startsWith("flake.nix:") ? "flake.nix" : packagePath;
+  const sourcePaths = new Set(primarySourcePath ? [primarySourcePath] : []);
+  for (const entry of inventoryRow.entrypoints ?? []) if (entry.kind === "source") sourcePaths.add(entry.entry);
+  const sourceObjects = [...sourcePaths].sort().map((value) => sourceObject(root, value)).filter(Boolean);
+  const packageSource = { objects: sourceObjects, digest: objectDigest(sourceObjects) };
+  const entrypoints = [];
+  for (const entry of inventoryRow.entrypoints ?? []) {
+    if (entry.kind === "nix-package") {
+      entrypoints.push({ ...entry, exists: true, digest: objectDigest({ kind: entry.kind, attr: entry.attr }) });
+      continue;
+    }
+    const file = path.join(root, entry.entry);
+    entrypoints.push({ ...entry, exists: fs.existsSync(file), digest: fs.existsSync(file) ? hashFile(file) : null });
+  }
+  return { package_tree: sourceObjects.find((row) => row.type === "tree")?.object_id ?? null, package_source: packageSource, entrypoints };
+}
+function pathSummary(target, nixBin) {
+  const stack = [target];
+  let fileCount = 0, bytes = 0;
+  while (stack.length) {
+    const current = stack.pop();
+    const stat = fs.lstatSync(current);
+    if (stat.isDirectory()) for (const name of fs.readdirSync(current)) stack.push(path.join(current, name));
+    else { fileCount += 1; bytes += stat.isSymbolicLink() ? Buffer.byteLength(fs.readlinkSync(current)) : stat.size; }
+  }
+  return { path_digest: mustRun(nixBin, ["hash", "path", "--type", "sha256", target]), file_count: fileCount, bytes };
+}
+function executeTest({ root, outDir, packageId, obligation, testId, system, nixBin, repoIdentity, packageIdentityValue, governanceInputValue }) {
+  const attr = `.#checks.${system}.${testId}`;
+  const args = ["build", "--no-link", "--print-out-paths", "--no-write-lock-file", ...governanceInputValue.override_args, attr];
+  const result = run(nixBin, args, { cwd: root });
+  const logDir = path.join(outDir, "logs", safeId(packageId));
+  fs.mkdirSync(logDir, { recursive: true });
+  const stdoutRef = path.relative(outDir, path.join(logDir, `${safeId(testId)}.stdout`));
+  const stderrRef = path.relative(outDir, path.join(logDir, `${safeId(testId)}.stderr`));
+  fs.writeFileSync(path.join(outDir, stdoutRef), result.stdout);
+  fs.writeFileSync(path.join(outDir, stderrRef), result.stderr);
+  const outputPaths = result.exitCode === 0 ? result.stdout.split("\n").map((line) => line.trim()).filter((line) => line && fs.existsSync(line)) : [];
+  const outputs = outputPaths.map((outputPath) => pathSummary(outputPath, nixBin));
+  const command = ["nix", "build", "--no-link", "--print-out-paths", "--no-write-lock-file", "--governance-engine-commit", governanceInputValue.commit, attr];
+  const semantic = {
+    release_digest: obligation.release_digest,
+    accepted_decision_digest: obligation.accepted_decision_digest,
+    obligation_digest: obligation.obligation_digest,
+    repo_commit: repoIdentity.commit,
+    repo_tree: repoIdentity.tree,
+    package_tree: packageIdentityValue.package_tree,
+    package_source_digest: packageIdentityValue.package_source.digest,
+    toolchain: repoIdentity.toolchain,
+    package_id: packageId,
+    test_id: testId,
+    check_ref: `checks.${system}.${testId}`,
+    command,
+    command_digest: objectDigest(command),
+    exit_code: result.exitCode,
+    outputs,
+    status: result.exitCode === 0 && outputs.length > 0 ? "pass" : "blocked",
+  };
+  const evidenceId = `evidence.${safeId(packageId)}.${safeId(testId)}.${objectDigest(semantic).slice(7, 19)}`;
   return {
-    kind:"ops.packageResponse.v1", claim_id:`ops-package-response.${id}`, adrs_ref:"roccho-dev/adrs#101",
-    obligation_id:obligation, repo_locator:repo, package_id:id, package_path:pkgPath, owner_role:"ops", state:"covered",
-    covered_requirements:reqs, test_refs:tests, evidence_refs:[`evidence.${id}.ci`,`evidence.${id}.test`], receipt_ref:`receipt.${id}`,
-    residuals, blocked_reason:"", evidence_freshness:{status:"current",checked_by:"ops-package-responses",source:"checked-in-ci-and-nix-check",generated_at:at},
-    overclaim_boundary:"ops emits package evidence only; ADRS/governance retain meaning authority", authority:false
+    kind: "ops.packageTestEvidence.v1",
+    evidence_id: evidenceId,
+    response_claim_id: `ops-package-response.${packageId}`,
+    ...semantic,
+    semantic_evidence_digest: objectDigest(semantic),
+    stdout_digest: bytesDigest(Buffer.from(result.stdout)),
+    stderr_digest: bytesDigest(Buffer.from(result.stderr)),
+    log_refs: { stdout: stdoutRef, stderr: stderrRef },
+    authority: false,
   };
 }
-const responses = selected.map(response);
-const residuals = [{kind:"ops.packageResidual.v1",residual_id:"residual.gov-package-check-export-wait",response_claim_id:"ops-package-response.ops-package-responses",package_id:"ops-package-responses",status:"returned",returned_to:"governance#64",reason:"governance reusable package check export is owned by governance",authority:false}];
+function residual(packageId, claimId, code, reason, obligation = null) {
+  return {
+    kind: "ops.packageResidual.v1",
+    residual_id: `residual.${safeId(packageId)}.${safeId(code)}`,
+    response_claim_id: claimId,
+    package_id: packageId,
+    obligation_id: obligation?.obligation_id ?? null,
+    status: "returned",
+    code,
+    returned_to: "governance-final-scope-purpose-join",
+    reason,
+    authority: false,
+  };
+}
+function canonicalResponse(response) {
+  return {
+    kind: "packageResponse.v1", claimId: response.claim_id, claim_id: response.claim_id, adrsRef: response.adrs_ref, adrs_ref: response.adrs_ref, obligationId: response.obligation_id, obligation_id: response.obligation_id, repo: response.repo_locator, repo_locator: response.repo_locator, packageId: response.package_id, package_id: response.package_id, packagePath: response.package_path, package_path: response.package_path, ownerRole: response.owner_role, owner_role: response.owner_role, tests: response.test_refs, test_refs: response.test_refs, receipt: response.receipt_ref, receipt_ref: response.receipt_ref, residuals: response.residuals, state: response.state, governanceReleaseDigest: response.governance_release_digest, acceptedDecisionDigest: response.accepted_decision_digest, authority: false, source_kind: response.kind,
+  };
+}
+function canonicalResidual(row) {
+  return { kind: "packageResidual.v1", residualId: row.residual_id, residual_id: row.residual_id, responseClaimId: row.response_claim_id, response_claim_id: row.response_claim_id, packageId: row.package_id, package_id: row.package_id, obligationId: row.obligation_id, obligation_id: row.obligation_id, status: row.status, code: row.code, returnedTo: row.returned_to, returned_to: row.returned_to, reason: row.reason, authority: false, source_kind: row.kind };
+}
+function execute({ releaseDir, outDir, repoRoot, governanceSource, system, nixBin }) {
+  if (!outDir) throw Error("--out-dir-is-required");
+  const root = repoRootOf(repoRoot);
+  const repoCommit = requireCleanRepo(root);
+  const release = loadRelease(releaseDir, nixBin);
+  const output = prepareOutputDir(root, release.root, outDir);
+  const governanceInputValue = governanceInput(governanceSource, release.identity.governance_engine_commit);
+  const obligations = normalizeObligations(release, system);
+  const repoIdentity = {
+    commit: repoCommit,
+    tree: `git-tree-sha1:${git(root, "rev-parse", "HEAD^{tree}")}`,
+    observed_at: git(root, "show", "-s", "--format=%cI", "HEAD"),
+    toolchain: { nix: mustRun(nixBin, ["--version"]), git: mustRun("git", ["--version"]), system, governance_engine_commit: governanceInputValue.commit },
+  };
+  const inventoryRows = inventory(root, output, repoIdentity.observed_at, nixBin, system, governanceInputValue.override_args);
+  const availableChecks = new Set(flakeAttrNames(root, nixBin, system, "checks", governanceInputValue.override_args));
+  const packageInventory = inventoryRows.filter((row) => row.item_kind === "package");
+  const inventoryById = new Map(packageInventory.map((row) => [row.package_id, row]));
+  const packageIds = [...new Set([...inventoryById.keys(), ...obligations.keys()])].sort();
+  const responses = [], evidence = [], receipts = [], residuals = [], drifts = [];
+  for (const packageId of packageIds) {
+    const inv = inventoryById.get(packageId), baseObligation = obligations.get(packageId);
+    const claimId = `ops-package-response.${packageId}`;
+    const localResiduals = [], localEvidence = [];
+    const packageIdentityValue = inv ? packageIdentity(root, inv) : { package_tree: null, entrypoints: [] };
+    if (!baseObligation) localResiduals.push(residual(packageId, claimId, "obligation-missing", "package exists in ops inventory but exact gov release contains no package obligation"));
+    if (!inv) localResiduals.push(residual(packageId, claimId, "registered-package-missing-on-disk", "exact gov release package obligation has no matching ops package", baseObligation));
+    if (baseObligation && inv && baseObligation.package_path !== inv.package_path) localResiduals.push(residual(packageId, claimId, "package-path-drift", `gov=${baseObligation.package_path} ops=${inv.package_path}`, baseObligation));
+    if (inv && !(inv.entrypoints?.length)) localResiduals.push(residual(packageId, claimId, "entrypoint-missing", "ops package inventory has no build/packages.jsonl entrypoint", baseObligation));
+    if (inv && inv.entrypoints?.some((entry) => entry.kind === "source" && !fs.existsSync(path.join(root, entry.entry)))) localResiduals.push(residual(packageId, claimId, "entrypoint-path-missing", "one or more declared source entrypoints do not exist", baseObligation));
+    if (inv && !(packageIdentityValue.package_source?.objects?.length)) localResiduals.push(residual(packageId, claimId, "package-source-missing", "ops package has no exact Git source object", baseObligation));
+    const obligation = baseObligation ? { ...baseObligation, ...release.identity } : null;
+    if (obligation && obligation.claim_required && !obligation.required_tests.length) localResiduals.push(residual(packageId, claimId, "required-test-missing", "package obligation requires a claim but declares no required tests", obligation));
+    if (obligation?.claim_required) {
+      for (const testId of obligation.required_tests) if (!availableChecks.has(testId)) localResiduals.push(residual(packageId, claimId, "required-test-unknown", `required test ${testId} is absent from checks.${system}`, obligation));
+    }
+    if (obligation && inv && localResiduals.length === 0 && obligation.claim_required) {
+      for (const testId of obligation.required_tests) {
+        const row = executeTest({ root, outDir: output, packageId, obligation, testId, system, nixBin, repoIdentity, packageIdentityValue, governanceInputValue });
+        localEvidence.push(row);
+        if (row.status !== "pass") localResiduals.push(residual(packageId, claimId, "test-failing", `required test ${testId} did not produce a successful Nix check output`, obligation));
+      }
+    }
+    const status = localResiduals.length ? "blocked" : !obligation?.claim_required && obligation ? "out-of-scope" : "pass";
+    const state = status === "pass" ? "covered" : status === "out-of-scope" ? "out-of-scope" : "blocked";
+    evidence.push(...localEvidence); residuals.push(...localResiduals);
+    for (const row of localResiduals) drifts.push({ kind: "packageDrift.v1", drift_id: `ops.packageDrift.${safeId(row.code)}.${safeId(packageId)}`, driftId: `ops.packageDrift.${safeId(row.code)}.${safeId(packageId)}`, drift_type: row.code, driftType: row.code, repo: REPO_ID, repo_locator: REPO_ID, package_id: packageId, packageId: packageId, package_path: inv?.package_path ?? obligation?.package_path ?? null, packagePath: inv?.package_path ?? obligation?.package_path ?? null, status: "open", severity: "blocking", meaning: row.reason, returned_to: row.returned_to, authority: false });
+    const receiptBase = {
+      kind: "ops.packageReceipt.v2", receipt_id: `receipt.${safeId(packageId)}`, response_claim_id: claimId, repo_locator: REPO_ID, package_id: packageId, status, governance_release_digest: release.identity.release_digest, accepted_decision_digest: release.identity.accepted_decision_digest, obligation_id: obligation?.obligation_id ?? null, obligation_digest: obligation?.obligation_digest ?? null, obligation: baseObligation ?? null, repo_commit: repoIdentity.commit, repo_tree: repoIdentity.tree, package_tree: packageIdentityValue.package_tree, package_source: packageIdentityValue.package_source, toolchain: repoIdentity.toolchain, entrypoints: packageIdentityValue.entrypoints, required_tests: localEvidence.map((row) => ({ test_id: row.test_id, evidence_ref: row.evidence_id, evidence_digest: row.semantic_evidence_digest })), evidence_refs: localEvidence.map((row) => row.evidence_id), residual_refs: localResiduals.map((row) => row.residual_id), observed_at: repoIdentity.observed_at, emitted_by: "ops-package-responses", authority: false,
+    };
+    const receipt = { ...receiptBase, receipt_digest: objectDigest(receiptBase) };
+    receipts.push(receipt);
+    responses.push({
+      kind: "ops.packageResponse.v2", claim_id: claimId, adrs_ref: obligation?.adrs_ref ?? "", obligation_id: obligation?.obligation_id ?? null, obligation_digest: obligation?.obligation_digest ?? null, governance_release_digest: release.identity.release_digest, accepted_decision_digest: release.identity.accepted_decision_digest, repo_locator: REPO_ID, authority_surface: obligation?.authority_surface ?? "", target_universe_id: obligation?.target_universe_id ?? "", package_id: packageId, package_path: inv?.package_path ?? obligation?.package_path ?? null, owner_role: obligation?.owner_role ?? "unknown", state, covered_requirements: status === "pass" ? requirementIds(obligation.requirements) : [], protected_non_goals: status === "pass" ? nonGoalIds(obligation.non_goals) : [], test_refs: obligation?.required_tests ?? [], evidence_refs: receipt.evidence_refs, receipt_ref: receipt.receipt_id, residuals: receipt.residual_refs, blocked_reason: localResiduals.map((row) => row.code).join(","), evidence_freshness: { status: "current", source: "exact-gov-release+actual-nix-check", repo_commit: repoIdentity.commit, governance_release_digest: release.identity.release_digest }, overclaim_boundary: "ops reports exact execution evidence only; ADRS owns meaning and governance owns final join", authority: false,
+    });
+  }
+  const canonicalResponses = responses.map(canonicalResponse), canonicalResiduals = residuals.map(canonicalResidual);
+  writeJsonl(path.join(output, "ops-package-responses.jsonl"), responses);
+  writeJsonl(path.join(output, "ops-package-evidence.jsonl"), evidence);
+  writeJsonl(path.join(output, "ops-package-receipts.jsonl"), receipts);
+  writeJsonl(path.join(output, "ops-package-residuals.jsonl"), residuals);
+  writeJsonl(path.join(output, "package-inventory.jsonl"), inventoryRows);
+  writeJsonl(path.join(output, "package-responses.jsonl"), canonicalResponses);
+  writeJsonl(path.join(output, "package-residuals.jsonl"), canonicalResiduals);
+  writeJsonl(path.join(output, "package-drifts.jsonl"), drifts);
+  const status = packetStatus(receipts);
+  const manifest = { kind: "ops.packageResponsePacket.v2", status, repo_locator: REPO_ID, repo_commit: repoIdentity.commit, repo_tree: repoIdentity.tree, observed_at: repoIdentity.observed_at, governance_release_id: release.identity.release_id, governance_release_digest: release.identity.release_digest, accepted_decision_digest: release.identity.accepted_decision_digest, governance_engine_digest: release.identity.governance_engine_digest, governance_engine_commit: release.identity.governance_engine_commit, governance_output_descriptor_digest: release.identity.governance_output_descriptor_digest, governance_output_nar_hash: release.identity.governance_output_nar_hash, system, toolchain: repoIdentity.toolchain, authority: false, files: PACKET_FILES, row_counts: { responses: responses.length, evidence: evidence.length, receipts: receipts.length, residuals: residuals.length, inventory: inventoryRows.length, canonical_responses: canonicalResponses.length, canonical_residuals: canonicalResiduals.length, drifts: drifts.length }, boundary: "exact gov release obligations are executed through actual Nix check outputs; missing obligation, entrypoint, test, output, receipt, or residual is blocking" };
+  fs.writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+  return { ok: true, ...manifest };
+}
+async function selftest() {
+  const module = await import("../lib/selftest.mjs");
+  return module.runSelftest({ execute, validatePacket });
+}
 
-function usage(){return "usage: ops-package-responses emit --out-dir <dir> [--repo-root <dir>] [--json]\n       ops-package-responses validate --out-dir <dir> [--json]\n       ops-package-responses selftest [--repo-root <dir>] [--json]";}
-function argv(a){let command="emit", json=false, outDir, repoRoot; a=[...a]; if(a[0]&&!a[0].startsWith("-")) command=a.shift(); while(a.length){let k=a.shift(); if(k==="--json")json=true; else if(k==="--out-dir")outDir=a.shift(); else if(k==="--repo-root")repoRoot=a.shift(); else throw Error(`unknown argument: ${k}`);} return {command,json,outDir,repoRoot};}
-function readJsonl(file){return fs.readFileSync(file,"utf8").split("\n").filter(Boolean).map((l,i)=>{try{return JSON.parse(l)}catch(e){throw Error(`${file}:${i+1}: ${e.message}`)}})}
-function readIf(file){return fs.existsSync(file)?readJsonl(file):[]}
-function writeJsonl(file, rows){fs.writeFileSync(file, rows.map(x=>JSON.stringify(x)).join("\n")+"\n")}
-function up(start){let r=[],c=path.resolve(start); for(;;){r.push(c); let p=path.dirname(c); if(p===c) return r; c=p}}
-function hasBuild(root){return fs.existsSync(path.join(root,"build/packages.jsonl"))&&fs.existsSync(path.join(root,"build/checks.jsonl"))}
-function root(x){let s=fileURLToPath(import.meta.url); return [x,process.cwd(),...up(path.dirname(s))].filter(Boolean).map(x=>path.resolve(x)).find(hasBuild)??path.resolve(x??process.cwd())}
-function pkgPath(entry){let p=String(entry).split("/"); return p[0]==="packages"&&p[1]?p.slice(0,2).join("/"):path.dirname(entry)}
-function checkPath(script){let p=String(script).split("/"); return p[0]==="packages"&&p[1]?p.slice(0,2).join("/"):p[0]==="tools"?"tools":path.dirname(script)}
-function dirs(root){let d=path.join(root,"packages"); if(!fs.existsSync(d))return[]; return fs.readdirSync(d,{withFileTypes:true}).filter(e=>e.isDirectory()).map(e=>e.name).filter(n=>["bin","lib","src","tests","test","skill","sql","viewer","flake.nix"].some(c=>fs.existsSync(path.join(d,n,c)))).sort()}
-function inv(kind,id,p,ref,item="package",extra={}){let {kind:source_record_kind,...rest}=extra; return {kind:"packageInventory.v1",inventory_id:`ops.inventory.${kind}.${id}`,repo_locator:repo,repo,package_id:id,packageId:id,package_path:p,packagePath:p,item_kind:item,source_kind:kind,sourceKind:kind,source_ref:ref,generated_at:at,authority:false,source_record_kind,...rest}}
-function uniq(xs){let s=new Set; return xs.filter(x=>s.has(x.inventory_id)?false:(s.add(x.inventory_id),true))}
-function inventory(rootDir,outDir){
-  let rows=[], pkgs=readIf(path.join(rootDir,"build/packages.jsonl")), checks=readIf(path.join(rootDir,"build/checks.jsonl"));
-  for(let p of pkgs){rows.push(inv("build-packages-jsonl",p.name,pkgPath(p.entry),"build/packages.jsonl","package",p)); rows.push(inv("flake-generated",p.name,pkgPath(p.entry),"flake.nix:mkGeneratedPackages","package",{derived_from:`build/packages.jsonl:${p.name}`}))}
-  for(let c of checks) rows.push(inv("build-checks-jsonl",c.name,checkPath(c.script),"build/checks.jsonl","check",{script:c.script,deps:c.deps??[]}));
-  for(let id of explicit) rows.push(inv("flake-explicit",id,`flake.nix:packages.${id}`,`flake.nix:packages.${id}`));
-  for(let d of dirs(rootDir)) rows.push(inv("source-dir",d,`packages/${d}`,`packages/${d}`));
-  for(let f of files) rows.push(inv("evidence-output",`ops-package-responses/${f}`,path.join(outDir,f),f,"evidence-output",{source_package_id:"ops-package-responses"}));
-  return uniq(rows).sort((a,b)=>a.inventory_id.localeCompare(b.inventory_id));
+try {
+  const args = parseArgv(process.argv.slice(2));
+  let result;
+  if (args.command === "execute" || args.command === "emit") result = execute(args);
+  else if (args.command === "validate") result = validatePacket(path.resolve(args.outDir ?? ""), { strict: args.strict });
+  else if (args.command === "selftest") result = await selftest();
+  else throw Error(`unknown-command:${args.command}`);
+  if (args.json || args.command !== "execute") process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  else process.stdout.write(`ops package response packet: ${result.status}\n`);
+  process.exit(result.ok === false ? 1 : 0);
+} catch (error) {
+  process.stderr.write(`${error.message}\n${usage()}\n`);
+  process.exit(2);
 }
-function evidence(){return responses.flatMap(r=>[{kind:"ops.packageEvidence.v1",evidence_id:`evidence.${r.package_id}.ci`,response_claim_id:r.claim_id,repo_locator:repo,package_id:r.package_id,evidence_type:"ci-check",ref:r.test_refs[0],produced_by:"nix flake check",freshness:r.evidence_freshness,authority:false},{kind:"ops.packageEvidence.v1",evidence_id:`evidence.${r.package_id}.test`,response_claim_id:r.claim_id,repo_locator:repo,package_id:r.package_id,evidence_type:"test-ref",ref:r.test_refs.join(","),produced_by:r.package_id==="ops-package-responses"?"ops-package-responses selftest":"repo-local package check",freshness:r.evidence_freshness,authority:false}])}
-function receipts(){return responses.map(r=>({kind:"ops.packageReceipt.v1",receipt_id:r.receipt_ref,response_claim_id:r.claim_id,repo_locator:repo,package_id:r.package_id,status:"pass",evidence_refs:r.evidence_refs,residual_refs:r.residuals,emitted_by:"ops-package-responses",generated_at:at,authority:false}))}
-function canonicalResponses(){return responses.map(r=>({kind:"packageResponse.v1",claimId:r.claim_id,claim_id:r.claim_id,adrsRef:r.adrs_ref,adrs_ref:r.adrs_ref,obligationId:r.obligation_id,obligation_id:r.obligation_id,repo:r.repo_locator,repo_locator:r.repo_locator,packageId:r.package_id,package_id:r.package_id,packagePath:r.package_path,package_path:r.package_path,ownerRole:r.owner_role,owner_role:r.owner_role,tests:r.test_refs,test_refs:r.test_refs,receipt:r.receipt_ref,receipt_ref:r.receipt_ref,residuals:r.residuals,state:r.state,authority:false,source_kind:r.kind}))}
-function canonicalResiduals(){return residuals.map(r=>({kind:"packageResidual.v1",residualId:r.residual_id,residual_id:r.residual_id,responseClaimId:r.response_claim_id,response_claim_id:r.response_claim_id,packageId:r.package_id,package_id:r.package_id,status:r.status,returnedTo:r.returned_to,returned_to:r.returned_to,reason:r.reason,authority:false,source_kind:r.kind}))}
-function drifts(invRows, canon){
-  let covered=new Set(canon.map(r=>r.package_id)), by=new Map;
-  for(let r of invRows){if(["build-checks-jsonl","evidence-output"].includes(r.source_kind))continue; let x=by.get(r.package_id)??{refs:[],k:new Set,p:r.package_path}; x.refs.push(r.inventory_id); x.k.add(r.source_kind); if(String(x.p).startsWith("flake.nix:"))x.p=r.package_path; by.set(r.package_id,x)}
-  return [...by.entries()].sort(([a],[b])=>a.localeCompare(b)).filter(([id])=>!covered.has(id)).map(([id,x])=>({kind:"packageDrift.v1",drift_id:`ops.packageDrift.unregistered-package.${id}`,driftId:`ops.packageDrift.unregistered-package.${id}`,drift_type:"unregistered-package",driftType:"unregistered-package",repo,repo_locator:repo,package_id:id,packageId:id,package_path:x.p,packagePath:x.p,source_kinds:[...x.k].sort(),inventory_refs:x.refs.sort(),status:"open",severity:"info",meaning:"package exists in ops inventory, but this PR does not claim ADRS obligation coverage or package response coverage for it",returned_to:"ADRS/governance package closure plane",authority:false}))
-}
-function emit(outDir, repoRoot){
-  if(!outDir)throw Error("--out-dir is required"); fs.mkdirSync(outDir,{recursive:true});
-  let rr=root(repoRoot), ev=evidence(), rec=receipts(), cr=canonicalResponses(), cres=canonicalResiduals(), invRows=inventory(rr,outDir), drift=drifts(invRows,cr);
-  writeJsonl(path.join(outDir,"ops-package-responses.jsonl"),responses); writeJsonl(path.join(outDir,"ops-package-evidence.jsonl"),ev); writeJsonl(path.join(outDir,"ops-package-receipts.jsonl"),rec); writeJsonl(path.join(outDir,"ops-package-residuals.jsonl"),residuals);
-  writeJsonl(path.join(outDir,"package-inventory.jsonl"),invRows); writeJsonl(path.join(outDir,"package-responses.jsonl"),cr); writeJsonl(path.join(outDir,"package-residuals.jsonl"),cres); writeJsonl(path.join(outDir,"package-drifts.jsonl"),drift);
-  let m={kind:"ops.packageResponsePacket.v1",repo_locator:repo,generated_at:at,repo_root:rr,authority:false,non_authority_diagnostic:true,files,row_counts:{responses:responses.length,evidence:ev.length,receipts:rec.length,residuals:residuals.length,inventory:invRows.length,canonical_responses:cr.length,canonical_residuals:cres.length,drifts:drift.length},boundary:"ops reports package inventory, normalized responses, receipts, residuals, and non-authority drift only; ADRS defines meaning and governance provides reusable checks"};
-  fs.writeFileSync(path.join(outDir,"manifest.json"),JSON.stringify(m,null,2)+"\n"); return m;
-}
-function validate(outDir){
-  if(!outDir)throw Error("--out-dir is required"); let file=n=>path.join(outDir,n), errors=[];
-  for(let f of files) if(!fs.existsSync(file(f))) errors.push({code:"missing-file",file:file(f)}); if(errors.length)return{ok:false,errors};
-  let rs=readJsonl(file("ops-package-responses.jsonl")), ev=readJsonl(file("ops-package-evidence.jsonl")), rec=readJsonl(file("ops-package-receipts.jsonl")), res=readJsonl(file("ops-package-residuals.jsonl")), invs=readJsonl(file("package-inventory.jsonl")), cr=readJsonl(file("package-responses.jsonl")), cres=readJsonl(file("package-residuals.jsonl")), ds=readJsonl(file("package-drifts.jsonl")), m=JSON.parse(fs.readFileSync(file("manifest.json"),"utf8"));
-  if(m.authority!==false||m.non_authority_diagnostic!==true)errors.push({code:"manifest-boundary"});
-  for(let [name,rows] of Object.entries({responses:rs,evidence:ev,receipts:rec,residuals:res,inventory:invs,canonical_responses:cr,canonical_residuals:cres,drifts:ds})) if(m.row_counts?.[name]!==rows.length) errors.push({code:"manifest-row-count-drift",field:name});
-  let evid=new Set(ev.map(x=>x.evidence_id)), receiptsSet=new Set(rec.map(x=>x.receipt_id)), resid=new Set(res.map(x=>x.residual_id)), cresid=new Set(cres.map(x=>x.residual_id)), claims=new Set;
-  for(let r of rs){for(let f of required)if(!(f in r))errors.push({code:"missing-response-field",claim_id:r.claim_id,field:f}); if(claims.has(r.claim_id))errors.push({code:"duplicate-claim-id",claim_id:r.claim_id}); claims.add(r.claim_id); if(r.evidence_freshness?.status!=="current")errors.push({code:"missing-current-evidence-freshness",claim_id:r.claim_id}); if(!receiptsSet.has(r.receipt_ref))errors.push({code:"missing-receipt",claim_id:r.claim_id}); for(let id of r.evidence_refs??[])if(!evid.has(id))errors.push({code:"missing-evidence",claim_id:r.claim_id}); for(let id of r.residuals??[]){if(!resid.has(id))errors.push({code:"missing-residual",claim_id:r.claim_id}); if(!cresid.has(id))errors.push({code:"missing-canonical-residual",claim_id:r.claim_id})}}
-  for(let r of [...ev,...rec,...res,...invs,...cr,...cres,...ds]) if(r.authority!==false) errors.push({code:"authority-boundary",kind:r.kind});
-  let kinds=new Set(invs.map(x=>x.source_kind)); for(let k of sourceKinds) if(!kinds.has(k)) errors.push({code:"missing-inventory-source-kind",source_kind:k});
-  for(let r of invs) if(r.kind!=="packageInventory.v1") errors.push({code:"inventory-kind",inventory_id:r.inventory_id}); else if(r.source_kind==="evidence-output"&&r.item_kind!=="evidence-output") errors.push({code:"evidence-output-treated-as-source-package",inventory_id:r.inventory_id});
-  let covered=new Set(cr.map(x=>x.package_id)), invIds=new Set(invs.map(x=>x.inventory_id)); for(let r of cr){if(r.kind!=="packageResponse.v1")errors.push({code:"canonical-response-kind",claim_id:r.claim_id}); if(!claims.has(r.claim_id))errors.push({code:"canonical-response-unknown-claim",claim_id:r.claim_id})}
-  for(let r of cres){if(r.kind!=="packageResidual.v1")errors.push({code:"canonical-residual-kind",residual_id:r.residual_id}); if(!resid.has(r.residual_id))errors.push({code:"canonical-residual-without-ops-residual",residual_id:r.residual_id})}
-  for(let r of ds){if(r.kind!=="packageDrift.v1")errors.push({code:"drift-kind",drift_id:r.drift_id}); if(r.drift_type!=="unregistered-package")errors.push({code:"unknown-drift-type",drift_id:r.drift_id}); if(covered.has(r.package_id))errors.push({code:"drift-for-covered-response",drift_id:r.drift_id}); for(let id of r.inventory_refs??[])if(!invIds.has(id))errors.push({code:"drift-unknown-inventory-ref",drift_id:r.drift_id,inventory_ref:id})}
-  return{ok:errors.length===0,kind:"ops.packageResponseValidation.v1",repo_locator:repo,counts:{responses:rs.length,evidence:ev.length,receipts:rec.length,residuals:res.length,inventory:invs.length,canonical_responses:cr.length,canonical_residuals:cres.length,drifts:ds.length},errors};
-}
-function selftest(repoRoot){let tmp=fs.mkdtempSync(path.join(os.tmpdir(),"ops-package-responses-")), p=path.join(tmp,"packet"); try{emit(p,repoRoot); let result=validate(p); if(!result.ok)return result; let b=path.join(tmp,"broken"); fs.mkdirSync(b); for(let f of files.filter(x=>x!=="ops-package-responses.jsonl"))fs.copyFileSync(path.join(p,f),path.join(b,f)); let broken={...responses[0]}; delete broken.evidence_freshness; writeJsonl(path.join(b,"ops-package-responses.jsonl"),[broken]); if(validate(b).ok)return{ok:false,errors:[{code:"negative-fixture-passed"}]}; return{...result,negative_fixture:"pass"}} finally{fs.rmSync(tmp,{recursive:true,force:true})}}
-try{let v=argv(process.argv.slice(2)), result; if(v.command==="emit")result=emit(v.outDir,v.repoRoot); else if(v.command==="validate")result=validate(v.outDir); else if(v.command==="selftest")result=selftest(v.repoRoot); else throw Error(`unknown command: ${v.command}\n${usage()}`); if(v.json||v.command!=="emit")console.log(JSON.stringify(result,null,2)); else console.log(`emitted ops package response packet to ${v.outDir}`); process.exit(result.ok===false?1:0)}catch(e){console.error(e.message); console.error(usage()); process.exit(2)}
