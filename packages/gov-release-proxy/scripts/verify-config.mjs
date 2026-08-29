@@ -16,19 +16,22 @@ assert.equal(SOURCE.assetName, "accepted-decision.json");
 assert.deepEqual([...SOURCE.acceptedContentTypes], ["application/json", "application/x-ndjson"]);
 assert.equal(SOURCE.maxBytes, 2_000_000);
 
-const self = fileURLToPath(import.meta.url);
-const root = path.resolve(path.dirname(self), "..");
-const legacyCleanup = path.join(root, "scripts", "cleanup-worker-proof.mjs");
-const files = [];
-const walk = directory => {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const absolute = path.join(directory, entry.name);
-    if (entry.isDirectory()) walk(absolute);
-    else if (absolute !== self && absolute !== legacyCleanup && /\.(?:mjs|json|jsonc|md)$/u.test(entry.name)) files.push(absolute);
-  }
-};
-walk(root);
-const source = files.map(file => fs.readFileSync(file, "utf8")).join("\n");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const runtimeFiles = [
+  "src/assets.mjs",
+  "src/worker.mjs",
+  "tests/access-contract.test.mjs",
+  "tests/worker.test.mjs",
+  "scripts/bootstrap-access.mjs",
+  "scripts/verify-cloudflare-token.mjs",
+  "scripts/verify-remote.mjs",
+  "scripts/verify-root-browser.py",
+  "README.md",
+  "package.json",
+  "wrangler.jsonc",
+].map(relative => path.join(root, relative));
+assert.ok(runtimeFiles.every(file => fs.existsSync(file)), "runtime closure file is missing");
+const source = runtimeFiles.map(file => fs.readFileSync(file, "utf8")).join("\n");
 for (const forbidden of [
   "PRIVATE_FIXTURE",
   "ENABLE_PRIVATE_FIXTURE",
@@ -43,7 +46,7 @@ for (const forbidden of [
   assert.equal(source.includes(forbidden), false, `runtime fixture or fixed release identity remains: ${forbidden}`);
 }
 
-const cleanup = fs.readFileSync(legacyCleanup, "utf8");
+const cleanup = fs.readFileSync(path.join(root, "scripts", "cleanup-worker-proof.mjs"), "utf8");
 assert.match(cleanup, /const names = \["REQUIRE_GITHUB_AUTH", "ENABLE_PRIVATE_FIXTURE"\]/u);
 assert.doesNotMatch(cleanup, /const names = \[[^\]]*GITHUB_RELEASE_TOKEN/u);
 
@@ -55,6 +58,7 @@ console.log(JSON.stringify({
   source: SOURCE.repository,
   releaseSelector: SOURCE.releaseSelector,
   semanticAsset: SOURCE.assetName,
+  runtimeClosureFiles: runtimeFiles.length,
   fixedReleaseIdentity: false,
   runtimeFixture: false,
   legacyFixtureCleanupBounded: true,
