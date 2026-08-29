@@ -6,6 +6,12 @@ on:
     paths:
       - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
       - 'verification/adrs-318-ui-proposal-ingress/**'
+  push:
+    branches:
+      - proof/adrs-318-ui-proposal-ingress-260829
+    paths:
+      - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
+      - 'verification/adrs-318-ui-proposal-ingress/**'
 
 permissions:
   contents: read
@@ -18,14 +24,14 @@ jobs:
     env:
       ROOT: verification/adrs-318-ui-proposal-ingress
       EVIDENCE: ${{ runner.temp }}/adrs-ui-proposal-evidence
-      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
