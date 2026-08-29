@@ -26,7 +26,6 @@ const runtimeFiles = [
   "scripts/verify-cloudflare-token.mjs",
   "scripts/verify-remote.mjs",
   "scripts/verify-root-browser.py",
-  "README.md",
   "package.json",
   "wrangler.jsonc",
 ].map(relative => path.join(root, relative));
