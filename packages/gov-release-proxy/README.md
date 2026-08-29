@@ -1,111 +1,94 @@
-# Governance Release always-Worker delivery
+# Root JSONL map delivery
 
-Bounded Cloudflare Worker transport for `roccho-dev/adrs#318` and `roccho-dev/ops#327`.
-
-```text
-Human / CI
-  -> Cloudflare Access
-  -> one fixed-route Worker
-  -> one bounded GitHub read credential
-  -> exact public or private Release asset ID
-  -> byte count + SHA-256 verification
-  -> JSON response
-```
-
-## Single delivery model
-
-The browser always uses the Worker. It never selects between GitHub and Worker and never falls back between them.
+Bounded Cloudflare Worker transport for `roccho-dev/adrs#318`.
 
 ```text
-public repository  -> same Worker -> credentialed GitHub API -> exact asset
-private repository -> same Worker -> credentialed GitHub API -> exact asset
+GET /  Accept: text/html
+  -> exact UI asset
+
+GET /  Accept: application/json | application/x-ndjson
+  -> exact semantic source asset
 ```
 
-A public governance Release is the initial fixture for the common delivery path, not a public-only production route.
+The browser has one URL and one path. It does not know the GitHub repository, Release, asset ID, or credential.
 
-## Production routes
+## Current public proof
 
 ```text
-/data/manifest
-/data/accepted-decision
-/health
-/config
+source: roccho-dev/governance
+asset: accepted-decision.json
+bytes: 942
+sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6
 ```
 
-Private fixture routes exist only while the short-lived proof flag is installed:
+Public data is fetched from the exact immutable Release download URL without a GitHub credential. A private source uses the Release Asset API with a server-side read credential. The browser contract remains `/`.
+
+## UI boundary
+
+The staged UI is pinned to an exact `roccho-dev/ui` commit. It parses JSON or JSONL and creates an in-memory map projection.
 
 ```text
-/proof/private/manifest
-/proof/private/events
+id      = package_id | decision_id | id | schema | record index
+label   = title | name | package_id | decision_id | id | schema
+summary = responsibility | summary | description | status | schema
 ```
 
-The provider workflow removes the proof credential and flags after the proof, then verifies that private routes return `404` and public transport remains available.
+No relation, lifecycle state, responsibility, or authority is inferred. No display-purpose JSONL is produced or persisted.
 
-## Boundary
+## Closed states
+
+```text
+401 -> 認証が必要です
+403 -> このデータを表示する権限がありません
+invalid media type / size / JSON / JSONL -> fail closed
+```
+
+Stale cards are removed before an error is displayed.
+
+## Endpoint boundary
+
+Allowed:
+
+```text
+GET /
+HEAD /
+```
+
+Forbidden:
+
+```text
+all other paths
+query or fragment input
+POST / PUT / PATCH / DELETE
+arbitrary repository / Release / asset / URL input
+```
+
+## Responsibility
 
 - `gov*` owns semantic reduction and Release assets.
-- This package owns transport/authentication verification only.
-- UI owns runtime fetch and view-only reduction.
-- Worker routes are allowlisted; arbitrary URL/repository/Release input is rejected.
-- GitHub credentials are server-side only and never enter a browser response, receipt, or error.
-- No DB, KV, R2, D1, mirror, HTML generation, or current decision reduction.
+- UI owns view-only projection.
+- `ops` owns exact delivery and remote readback.
+- No DB, KV, R2, D1, mirror, generated decision HTML, or current-state reduction.
 
-## Provider proof
+## Verified proof
 
-The proof uses one short-lived bounded GitHub credential to read:
-
-- exact public `roccho-dev/governance` Release assets;
-- exact private `roccho-dev/adrs` Release fixture assets.
-
-It also creates a temporary Cloudflare Access service token and exact-domain Access application, proves anonymous blocking and authenticated exact-body readback, then deletes both.
-
-Human email OTP remains a separate persistent configuration. `bootstrap-access.mjs` permits only exact emails plus a selected OTP IdP; it forbids Everyone, domain-wide, and bypass policy shapes.
-
-## Required Environment values
+Actions run `33238288024` proved:
 
 ```text
-CLOUDFLARE_ACCOUNT_ID
-CLOUDFLARE_API_TOKEN
+candidate and destructive checks PASS
+Cloudflare deploy               PASS
+root JSON byte/digest readback  PASS
+real Chromium root UI           PASS
+map projection                  PASS
+page and console errors         0
+other path                      404
+POST /                          405
 ```
 
-Cloudflare token permissions required by the complete provider proof:
+Hosted proof:
 
 ```text
-Workers Scripts: Edit
-Access: Apps and Policies Edit
-Access: Service Tokens Edit
+https://stg-gov-release-proxy.roccho.workers.dev/
 ```
 
-One GitHub credential source is required:
-
-```text
-preferred:
-ADRS_READER_CLIENT_ID
-ADRS_READER_PRIVATE_KEY
-
-bounded fallback:
-GITHUB_RELEASE_TOKEN
-```
-
-The GitHub credential must read only the selected `adrs` and `governance` repositories with `Contents: read`.
-
-## Local checks
-
-```sh
-cd packages/gov-release-proxy
-npm run check
-npm run check:dry-run
-```
-
-## Truth labels
-
-```text
-PROXY_CANDIDATE_GREEN
-PUBLIC_PROXY_PASS
-AUTHENTICATED_PUBLIC_UPSTREAM_PASS
-PRIVATE_UPSTREAM_PASS
-ACCESS_BOUNDARY_PASS
-ACCESS_AUTHENTICATED_READBACK_PASS
-```
-
-None of these labels imply semantic authority, Human UI completion, production cutover, or legacy retirement.
+This is a replaceable minimum adapter while the final semantic-map UI integration is still in progress. `authority=false`, `cutover=false`.
