@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/adrs-318-gov-json-runtime-pages.yml'
       - 'verification/adrs-318-gov-json-runtime/**'
+      - 'verification/adrs-318-ui-proposal-ingress/**'
 
 permissions:
   contents: read
@@ -47,3 +48,53 @@ jobs:
             ${{ runner.temp }}/gov-json-runtime-evidence/
           if-no-files-found: error
           retention-days: 30
+
+  proposal-write-credential-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: cloudflare-production
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+      ADRS_PROPOSAL_TOKEN: ${{ secrets.ADRS_PROPOSAL_TOKEN }}
+      ADRS_READER_TOKEN: ${{ secrets.ADRS_READER_TOKEN }}
+      GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
+      ADRS_PROPOSAL_APP_ID: ${{ vars.ADRS_PROPOSAL_APP_ID || secrets.ADRS_PROPOSAL_APP_ID }}
+      ADRS_PROPOSAL_PRIVATE_KEY: ${{ secrets.ADRS_PROPOSAL_PRIVATE_KEY }}
+      ADRS_PROPOSAL_APP_PRIVATE_KEY: ${{ secrets.ADRS_PROPOSAL_APP_PRIVATE_KEY }}
+      ADRS_PROPOSAL_INSTALLATION_ID: ${{ vars.ADRS_PROPOSAL_INSTALLATION_ID || secrets.ADRS_PROPOSAL_INSTALLATION_ID }}
+      ADRS_PROPOSAL_APP_INSTALLATION_ID: ${{ vars.ADRS_PROPOSAL_APP_INSTALLATION_ID || secrets.ADRS_PROPOSAL_APP_INSTALLATION_ID }}
+      ADRS_READER_APP_ID: ${{ vars.ADRS_READER_APP_ID || secrets.ADRS_READER_APP_ID }}
+      ADRS_READER_PRIVATE_KEY: ${{ secrets.ADRS_READER_PRIVATE_KEY }}
+      ADRS_READER_APP_PRIVATE_KEY: ${{ secrets.ADRS_READER_APP_PRIVATE_KEY }}
+      ADRS_READER_INSTALLATION_ID: ${{ vars.ADRS_READER_INSTALLATION_ID || secrets.ADRS_READER_INSTALLATION_ID }}
+      ADRS_READER_APP_INSTALLATION_ID: ${{ vars.ADRS_READER_APP_INSTALLATION_ID || secrets.ADRS_READER_APP_INSTALLATION_ID }}
+      ADRS_APP_ID: ${{ vars.ADRS_APP_ID || secrets.ADRS_APP_ID }}
+      ADRS_PRIVATE_KEY: ${{ secrets.ADRS_PRIVATE_KEY }}
+      ADRS_APP_PRIVATE_KEY: ${{ secrets.ADRS_APP_PRIVATE_KEY }}
+      ADRS_INSTALLATION_ID: ${{ vars.ADRS_INSTALLATION_ID || secrets.ADRS_INSTALLATION_ID }}
+      ADRS_APP_INSTALLATION_ID: ${{ vars.ADRS_APP_INSTALLATION_ID || secrets.ADRS_APP_INSTALLATION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Prove one bounded server-side credential can append and read back an ADRS canary
+        id: smoke
+        continue-on-error: true
+        run: |
+          export RECEIPT_PATH="$RUNNER_TEMP/adrs-proposal-credential-smoke.json"
+          node verification/adrs-318-ui-proposal-ingress/credential-smoke.mjs
+      - name: Upload non-secret credential receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adrs-318-ui-proposal-credential-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/adrs-proposal-credential-smoke.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Require writable exact-readback credential
+        if: always()
+        run: test '${{ steps.smoke.outcome }}' = success
