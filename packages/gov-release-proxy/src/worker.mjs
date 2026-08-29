@@ -44,7 +44,9 @@ export const githubAuthRequired = asset => asset.requiresCredential;
 export const selectedRootAsset = env => rootAssetFor({ privateFixtureEnabled: privateFixtureEnabled(env) });
 export const availableAssets = env => Object.freeze({ "/": selectedRootAsset(env) });
 export const resolveAsset = (pathname, env = {}) => pathname === "/" ? selectedRootAsset(env) : null;
-export const upstreamUrl = asset => `${GITHUB_API}/repos/${asset.repository}/releases/assets/${asset.assetId}`;
+export const upstreamUrl = asset => asset.requiresCredential
+  ? `${GITHUB_API}/repos/${asset.repository}/releases/assets/${asset.assetId}`
+  : asset.downloadUrl;
 export const wantsData = request => /application\/(?:x-ndjson|json)/iu.test(request.headers.get("accept") ?? "");
 
 export const fetchAsset = async ({
@@ -61,9 +63,11 @@ export const fetchAsset = async ({
   const headers = new Headers({
     accept: "application/octet-stream",
     "user-agent": USER_AGENT,
-    "x-github-api-version": "2022-11-28",
   });
-  if (credentialRequired) headers.set("authorization", `Bearer ${token}`);
+  if (credentialRequired) {
+    headers.set("authorization", `Bearer ${token}`);
+    headers.set("x-github-api-version", "2022-11-28");
+  }
   const response = await fetchImpl(upstreamUrl(asset), {
     method: "GET",
     headers,
