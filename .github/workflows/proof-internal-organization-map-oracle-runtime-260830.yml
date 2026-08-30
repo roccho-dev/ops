@@ -1,0 +1,116 @@
+name: Proof internal organization map visual oracle runtime 260830
+
+on:
+  push:
+    branches:
+      - proof/internal-organization-map-oracle-runtime-260830
+
+permissions:
+  contents: read
+
+concurrency:
+  group: internal-organization-map-oracle-runtime-260830
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-readback:
+    runs-on: ubuntu-24.04
+    environment: cloudflare-production
+    timeout-minutes: 40
+    env:
+      ROOT: ${{ github.workspace }}/verification/internal-organization-map-oracle
+      DIST: ${{ runner.temp }}/internal-organization-map-site
+      EVIDENCE: ${{ runner.temp }}/internal-organization-map-evidence
+      PROJECT: stg-artifact-runtime
+      BRANCH: internal-organization-map
+      CANDIDATE_SHA: ${{ github.sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Restore exact content-addressed proof sources
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, os, pathlib, urllib.request
+
+          repo = os.environ['GITHUB_REPOSITORY']
+          root = pathlib.Path(os.environ['ROOT'])
+          token = os.environ['GH_TOKEN']
+          blobs = {
+              'README.md': ('b373cdcb5bfb6ee1530550f63319966bfff13a28', 0o644),
+              'browser-check.py': ('863b8abdd022ee14606b92f961b4cb1b90e535dc', 0o755),
+              'build-state.py': ('8253cbaff93e272a77d2f95eef5c46c6ef72981f', 0o755),
+              'materialize.py': ('6d9783635adb9ba06f9b72a6ff5fb0036148a8db', 0o755),
+              'organization-current.jsonl': ('be7088cbcd28b7eca0e2c6c4cbf747d5fa449b5', 0o644),
+              'provider-proof.sh': ('131769860f5efe404b3ae26cd08b88b55ce71c2b', 0o755),
+              'readback.py': ('1533750cebc5c2cd8ae3742d6b8d42e3a5ca37e7', 0o755),
+          }
+          root.mkdir(parents=True, exist_ok=True)
+          for name, (expected, mode) in blobs.items():
+              url = f'https://api.github.com/repos/{repo}/git/blobs/{expected}'
+              request = urllib.request.Request(url, headers={
+                  'Authorization': f'Bearer {token}',
+                  'Accept': 'application/vnd.github+json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                  'User-Agent': 'roccho-ops-org-map-proof/1',
+              })
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  value = json.load(response)
+              content = base64.b64decode(value['content'])
+              actual = hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
+              if actual != expected:
+                  raise SystemExit(f'{name}: blob mismatch {actual} != {expected}')
+              path = root / name
+              path.write_bytes(content)
+              path.chmod(mode)
+              print(json.dumps({'path': str(path), 'blob': actual, 'bytes': len(content)}, sort_keys=True))
+          PY
+          python3 -m py_compile "$ROOT/build-state.py" "$ROOT/materialize.py" "$ROOT/browser-check.py" "$ROOT/readback.py"
+
+      - name: Materialize, deploy, and independently read back all three views
+        shell: bash
+        run: bash "$ROOT/provider-proof.sh"
+
+      - name: Publish verified URL and depiction
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(cat "$EVIDENCE/alias-url.txt")"
+          {
+            echo '### Verified Internal Organization Semantic Map'
+            echo
+            echo "$url"
+            echo
+            echo '- map/1, graph/1, seq/1: real Chromium PASS'
+            echo '- exact remote byte readback: PASS'
+            echo '- visible: ADRS/Governance/Policy/Deploy/UI/Ops, 49 Ops packages, 13 UI packages, 2 Governance packages, delivery/readback, and explicit residuals'
+            echo '- authority:false; productionCutover:false'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots and receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-organization-map-oracle-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/internal-organization-map-site/
+            ${{ runner.temp }}/internal-organization-map-evidence/
+          if-no-files-found: error
+          retention-days: 30
