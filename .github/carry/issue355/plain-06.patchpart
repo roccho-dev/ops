@@ -1,0 +1,149 @@
+eSnapshotNarHash !== "string" || !manifest.sourceSnapshotNarHash.startsWith("sha256-")) throw Error("manifest:source-snapshot-nar-hash");
++  if (catalog.length !== manifest.rowCount) throw Error("manifest:row-count");
++  const bytes = fs.readFileSync(path.join(outDir, "operation-catalog.jsonl"));
++  if (digestBytes(bytes) !== manifest.catalogDigest) throw Error("manifest:catalog-digest");
++  const base = { ...manifest }; delete base.manifestDigest;
++  if (objectDigest(base) !== manifest.manifestDigest) throw Error("manifest:self-digest");
++  let previous = "";
++  for (const row of catalog) {
++    const contentDigest = row.contentDigest; const source = { ...row }; delete source.contentDigest;
++    validateOperation(source);
++    if (objectDigest(source) !== contentDigest) throw Error(`catalog:content-digest:${row.operationId}`);
++    const key = `${row.operationId}@${row.operationVersion}`;
++    if (previous && previous.localeCompare(key) >= 0) throw Error("catalog:not-sorted-or-duplicate");
++    previous = key;
++  }
++  return { catalog, manifest };
++}
++export function projectForEdits(row) {
++  const source = { ...row }; delete source.contentDigest; validateOperation(source);
++  return {
++    kind: "ops.operation.shadow.v1",
++    operationId: row.operationId,
++    operationVersion: row.operationVersion,
++    command: row.command,
++    intent: row.intent,
++    target: row.target,
++    risk: "shadow-only",
++    status: "shadow",
++  };
++}
+diff --git a/packages/ops-operation-catalog/lib/selftest.mjs b/packages/ops-operation-catalog/lib/selftest.mjs
+new file mode 100644
+index 0000000..26aec24
+--- /dev/null
++++ b/packages/ops-operation-catalog/lib/selftest.mjs
+@@ -0,0 +1,130 @@
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++import {
++  compileCatalog,
++  objectDigest,
++  projectForEdits,
++  readJson,
++  readJsonl,
++  validateOutput,
++  writeJson,
++  writeJsonl,
++} from "./core.mjs";
++
++function copyDir(source, target) { fs.cpSync(source, target, { recursive: true }); }
++function rejected(fn) { try { fn(); return false; } catch { return true; } }
++function bytesEqual(a, b) { return fs.readFileSync(a).equals(fs.readFileSync(b)); }
++
++export function runSelftest({ repoRoot, packageRoot }) {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ops-operation-catalog-selftest-"));
++  const source = path.join(packageRoot, "source");
++  const outA = path.join(root, "a");
++  const outB = path.join(root, "b");
++  const base = {
++    repoRoot,
++    sourceDir: source,
++    sourceCommit: "0".repeat(40),
++    sourceSnapshotNarHash: "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
++  };
++  const first = compileCatalog({ ...base, outDir: outA });
++  const second = compileCatalog({ ...base, outDir: outB });
++  validateOutput(outA);
++  validateOutput(outB);
++
++  const negative = {};
++  const mutate = (name, fn) => {
++    const dir = path.join(root, `negative-${name}`);
++    copyDir(source, dir);
++    fn(dir);
++    negative[name] = rejected(() => compileCatalog({ ...base, sourceDir: dir, outDir: path.join(dir, "out") }));
++  };
++  mutate("malformed", (dir) => fs.writeFileSync(path.join(dir, "operations.jsonl"), "{\n"));
++  mutate("duplicate", (dir) => {
++    const file = path.join(dir, "operations.jsonl");
++    const text = fs.readFileSync(file, "utf8");
++    fs.writeFileSync(file, text + text.split("\n")[0] + "\n");
++  });
++  mutate("orphan", (dir) => {
++    const file = path.join(dir, "operations.jsonl");
++    const rows = readJsonl(file);
++    rows[0].command.name = "";
++    writeJsonl(file, rows);
++  });
++  mutate("unknown-kind", (dir) => {
++    const file = path.join(dir, "operations.jsonl");
++    const rows = readJsonl(file);
++    rows[0].kind = "ops.unknown.v1";
++    writeJsonl(file, rows);
++  });
++  mutate("missing-package", (dir) => {
++    const file = path.join(dir, "operations.jsonl");
++    const rows = readJsonl(file);
++    rows[0].packageId = "missing";
++    writeJsonl(file, rows);
++  });
++  mutate("missing-obligation", (dir) => {
++    const file = path.join(dir, "operations.jsonl");
++    const rows = readJsonl(file);
++    rows[0].obligationId = "missing";
++    writeJsonl(file, rows);
++  });
++  mutate("digest-drift", (dir) => {
++    const file = path.join(dir, "release.json");
++    const release = readJson(file);
++    release.selected[0].contentDigest = "f".repeat(64);
++    writeJson(file, release);
++  });
++
++  const unselectedDir = path.join(root, "unselected");
++  copyDir(source, unselectedDir);
++  const unselectedFile = path.join(unselectedDir, "operations.jsonl");
++  const unselectedRows = readJsonl(unselectedFile);
++  unselectedRows.at(-1).command.description += " changed while unselected";
++  writeJsonl(unselectedFile, unselectedRows);
++  const unselectedOut = path.join(root, "unselected-out");
++  const isolation = compileCatalog({ ...base, sourceDir: unselectedDir, outDir: unselectedOut });
++
++  const extensionDir = path.join(root, "extension");
++  copyDir(source, extensionDir);
++  const extensionReleaseFile = path.join(extensionDir, "release.json");
++  const extensionRelease = readJson(extensionReleaseFile);
++  const future = readJsonl(path.join(extensionDir, "operations.jsonl")).at(-1);
++  extensionRelease.selected.push({
++    operationId: future.operationId,
++    operationVersion: future.operationVersion,
++    contentDigest: objectDigest(future),
++  });
++  writeJson(extensionReleaseFile, extensionRelease);
++  const extensionOut = path.join(root, "extension-out");
++  const extension = compileCatalog({ ...base, sourceDir: extensionDir, outDir: extensionOut });
++
++  const editsProjection = first.catalog.map(projectForEdits);
++  const editsRejected = editsProjection.filter((row) =>
++    row.kind !== "ops.operation.shadow.v1" ||
++    row.risk !== "shadow-only" ||
++    row.status !== "shadow" ||
++    !row.operationId || !row.operationVersion || !row.command?.name
++  ).length;
++
++  return {
++    kind: "ops.operationCatalogSelftest.v1",
++    ok:
++      
