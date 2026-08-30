@@ -10,11 +10,6 @@ set -euo pipefail
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
 
 mkdir -p "$DIST" "$EVIDENCE"
-cat "$ROOT"/site.tar.xz.b64.* > "$EVIDENCE/site.tar.xz.b64"
-test "$(sha256sum "$EVIDENCE/site.tar.xz.b64" | cut -d' ' -f1)" = "5ac05ee5b1873f482b478622203b350fa6ced893ab594eb86e5811989e8c2ca3"
-base64 --decode "$EVIDENCE/site.tar.xz.b64" > "$ROOT/site.tar.xz"
-test "$(sha256sum "$ROOT/site.tar.xz" | cut -d' ' -f1)" = "884575bbae7a37a7515b5c3c7f2e95a06a12414f0228a77332c707b713432f37"
-xz --test "$ROOT/site.tar.xz"
 python3 "$ROOT/materialize.py" "$ROOT/source.json" "$DIST" \
   | tee "$EVIDENCE/materialize.stdout.json"
 python3 - "$DIST/materialize-receipt.json" <<'PY'
@@ -27,6 +22,8 @@ assert value['projection']['profile_id']=='governance.selectedUniverseRepo.v1/ma
 assert value['projection']['pattern']=='map/1'
 assert value['projection']['region_count']==5
 assert value['projection']['relation_count']==0
+assert value['html']['bytes']==15976
+assert value['html']['sha256']=='sha256:86668cda9f72231c097bf57eabb8952b9a99c58b9466c4ef0148ffc0b3b70a38'
 assert value['boundary']['html_visual_evaluation_only'] is True
 assert value['boundary']['html_authority'] is False
 assert value['boundary']['semantic_map_renderer_owned_by_ui'] is True
@@ -45,7 +42,7 @@ python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
 chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
 test -n "$chrome"
 
-# Local visual proof checks the exact UI bytes before provider effect.
+# Local visual proof checks the exact UI bytes before the provider effect.
 python3 -m http.server 4173 --bind 127.0.0.1 --directory "$DIST" > "$EVIDENCE/local-http.log" 2>&1 &
 server=$!
 trap 'kill $server 2>/dev/null || true' EXIT
@@ -86,10 +83,15 @@ WORKER_URL="$worker_url" python3 - \
   "$EVIDENCE/remote-browser.json" \
   "$EVIDENCE/provider-proof.json" <<'PY'
 import json,os,sys
-materialize,local,readback,browser,output=[json.load(open(path,encoding='utf-8')) for path in sys.argv[1:5]]+[sys.argv[5]]
+materialize,local,readback,browser=[json.load(open(path,encoding='utf-8')) for path in sys.argv[1:5]]
+output=sys.argv[5]
 assert all(value['status']=='PASS' for value in (materialize,local,readback,browser))
+assert local['state_hash']==browser['state_hash']==materialize['projection']['state_hash']
+assert local['meaning_sha256']==browser['meaning_sha256']==materialize['meaning']['sha256']
+assert local['profile_sha256']==browser['profile_sha256']==materialize['projection']['profile_sha256']
+assert local['svg_sha256']==browser['svg_sha256']==materialize['projection']['svg_sha256']
 receipt={
-  'schema':'ops.selectedUniverseSemanticMapWorkerProof/1',
+  'schema':'ops.selectedUniverseSemanticMapWorkerProof/2',
   'status':'PASS',
   'claim_ceiling':'VISUAL_EVALUATION_ONLY',
   'authority':False,
