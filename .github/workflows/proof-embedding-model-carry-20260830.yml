@@ -1,0 +1,100 @@
+name: Proof embedding model carry 20260830
+
+on:
+  push:
+    branches:
+      - proof/embedding-model-carry-20260830
+    paths:
+      - .github/workflows/proof-embedding-model-carry-20260830.yml
+
+permissions:
+  contents: read
+
+jobs:
+  carry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CRISP_REPO: CrispStrobe/CrispEmbed
+      CRISP_TAG: v0.3.1
+      CRISP_ASSET: crispembed-linux-x86_64.tar.gz
+      CRISP_SHA256: cb40fd0c9aa5836b75c80deef0e8a97866aef28972415db0324dc7f4aa10548d
+      HF_REPO: cstr/multilingual-e5-small-GGUF
+      HF_COMMIT: 81029b587b49626c84c3104a05f66e7b999a771e
+      MODEL: multilingual-e5-small-q4_k.gguf
+      OUT: ${{ runner.temp }}/embedding-model-carry
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Materialize exact runtime and pinned model
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"/{archives,runtime,logs}
+
+          crisp_api_digest="$(gh api "repos/$CRISP_REPO/releases/tags/$CRISP_TAG" --jq ".assets[] | select(.name == \"$CRISP_ASSET\") | .digest")"
+          test "$crisp_api_digest" = "sha256:$CRISP_SHA256"
+          gh release download "$CRISP_TAG" --repo "$CRISP_REPO" --pattern "$CRISP_ASSET" --dir "$OUT/archives"
+          test "$(sha256sum "$OUT/archives/$CRISP_ASSET" | cut -d' ' -f1)" = "$CRISP_SHA256"
+
+          model_url="https://huggingface.co/$HF_REPO/resolve/$HF_COMMIT/$MODEL?download=true"
+          curl --fail --location --retry 3 --retry-all-errors --output "$OUT/$MODEL" "$model_url"
+          test -s "$OUT/$MODEL"
+          sha256sum "$OUT/$MODEL" > "$OUT/logs/model.sha256"
+          stat -c '%s' "$OUT/$MODEL" > "$OUT/logs/model.bytes"
+
+          tar -xzf "$OUT/archives/$CRISP_ASSET" -C "$OUT/runtime"
+          bin="$(find "$OUT/runtime" -type f -name crispembed -perm -111 -print -quit)"
+          test -n "$bin"
+          "$bin" --help > "$OUT/logs/crispembed.help.txt" 2>&1 || test "$?" -le 1
+          printf '%s\n' "$bin" > "$OUT/logs/crispembed.path.txt"
+
+      - name: Seal receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_sha="$(sha256sum "$OUT/archives/$CRISP_ASSET" | cut -d' ' -f1)"
+          model_sha="$(sha256sum "$OUT/$MODEL" | cut -d' ' -f1)"
+          model_bytes="$(stat -c '%s' "$OUT/$MODEL")"
+          python3 - "$OUT/receipt.json" "$runtime_sha" "$model_sha" "$model_bytes" <<'PY'
+          import json, os, sys
+          out, runtime_sha, model_sha, model_bytes = sys.argv[1:]
+          receipt = {
+            "schema": "ops.embeddingModelCarry/1",
+            "status": "PASS",
+            "target": "linux-x86_64",
+            "runtime": {
+              "repository": os.environ["CRISP_REPO"],
+              "tag": os.environ["CRISP_TAG"],
+              "asset": os.environ["CRISP_ASSET"],
+              "sha256": runtime_sha,
+            },
+            "model": {
+              "repository": os.environ["HF_REPO"],
+              "commit": os.environ["HF_COMMIT"],
+              "file": os.environ["MODEL"],
+              "bytes": int(model_bytes),
+              "sha256": model_sha,
+            },
+            "smoke": {"runtimeHelp": "PASS"},
+            "externalEffect": False,
+          }
+          open(out, "w", encoding="utf-8").write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+          (cd "$OUT" && sha256sum "$MODEL" "archives/$CRISP_ASSET" > SHA256SUMS)
+          cat "$OUT/receipt.json"
+          cat "$OUT/SHA256SUMS"
+
+      - name: Upload carry
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedding-model-carry-${{ github.run_id }}
+          path: ${{ runner.temp }}/embedding-model-carry/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
