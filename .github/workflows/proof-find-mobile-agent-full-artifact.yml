@@ -1,0 +1,93 @@
+name: Proof find complete Mobile Agent artifact
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-find-mobile-agent-full-artifact.yml'
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  find:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Scan every PR 246 commit and workflow artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/find"
+          mkdir -p "$root"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/pulls/246/commits" -f per_page=100 > "$root/commits.json"
+          python3 - "$root/commits.json" > "$root/shas.txt" <<'PY'
+          import json,sys
+          for row in json.load(open(sys.argv[1],encoding='utf-8')):
+              print(row['sha'])
+          PY
+          : > "$root/results.jsonl"
+          while read -r sha; do
+            gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs" -f head_sha="$sha" -f per_page=100 > "$root/runs-$sha.json"
+            python3 - "$root/runs-$sha.json" "$sha" > "$root/run-ids.txt" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          sha=sys.argv[2]
+          for run in value.get('workflow_runs',[]):
+              if run.get('name')=='Mobile Agent preset static host':
+                  print(run['id'])
+          PY
+            while read -r run_id; do
+              test -n "$run_id" || continue
+              gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" > "$root/run-$run_id.json"
+              gh api -X GET "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" -f per_page=100 > "$root/artifacts-$run_id.json"
+              python3 - "$root/run-$run_id.json" "$root/artifacts-$run_id.json" >> "$root/results.jsonl" <<'PY'
+          import json,sys
+          run=json.load(open(sys.argv[1],encoding='utf-8'))
+          artifacts=json.load(open(sys.argv[2],encoding='utf-8')).get('artifacts',[])
+          print(json.dumps({
+              'sha':run['head_sha'],'runId':run['id'],'status':run['status'],'conclusion':run.get('conclusion'),
+              'createdAt':run.get('created_at'),'artifacts':[
+                  {'id':a['id'],'name':a['name'],'bytes':a['size_in_bytes'],'expired':a['expired'],'digest':a.get('digest')}
+                  for a in artifacts
+              ],
+          },sort_keys=True))
+          PY
+            done < "$root/run-ids.txt"
+          done < "$root/shas.txt"
+          python3 - "$root/results.jsonl" > "$root/comment.md" <<'PY'
+          import json,sys
+          rows=[json.loads(line) for line in open(sys.argv[1],encoding='utf-8') if line.strip()]
+          candidates=[]
+          print('## PR #246 complete Mobile Agent artifact scan')
+          print()
+          print(f'- Mobile Agent workflow runs: `{len(rows)}`')
+          for row in rows:
+              print(f"- `{row['sha']}` run `{row['runId']}`: `{row['status']} / {row['conclusion']}`")
+              for artifact in row['artifacts']:
+                  print(f"  - artifact `{artifact['id']}` `{artifact['name']}` `{artifact['bytes']}` bytes expired=`{artifact['expired']}` digest=`{artifact['digest']}`")
+                  if not artifact['expired'] and artifact['bytes'] > 1_000_000:
+                      candidates.append((row,artifact))
+          print()
+          if candidates:
+              print('### Candidate complete artifacts')
+              for row,artifact in candidates:
+                  print(f"- run `{row['runId']}` artifact `{artifact['id']}` `{artifact['name']}`")
+          else:
+              print('### Candidate complete artifacts: 0')
+          print()
+          print('Read-only diagnostic; this PR must never merge.')
+          PY
+          gh issue comment 286 --repo "$GITHUB_REPOSITORY" --body-file "$root/comment.md"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-full-artifact-scan-${{ github.run_id }}
+          path: ${{ runner.temp }}/find/
+          if-no-files-found: error
+          retention-days: 7
