@@ -114,6 +114,7 @@ def main() -> None:
         assert posted.status == 405
         browser.close()
 
+    print(json.dumps({"pageErrors": page_errors, "consoleErrors": console_errors}, ensure_ascii=False, sort_keys=True))
     assert page_errors == []
     assert console_errors == []
     screenshot = Path(args.screenshot)
