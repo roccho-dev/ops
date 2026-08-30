@@ -228,6 +228,7 @@
     "find-packages-sql",
     "functional-core-governance-gate",
     "gosh",
+    "gov-release-proxy",
     "hq-chromium",
     "hq-modeling-runtime",
     "hq-source-evidence-runtime",
@@ -352,6 +353,7 @@
     "find-packages-sql": "flake.nix:packages.x86_64-linux.find-packages-sql",
     "functional-core-governance-gate": "packages/functional-core-governance-gate",
     "gosh": "packages/gosh",
+    "gov-release-proxy": "packages/gov-release-proxy",
     "hq-chromium": "flake.nix:packages.x86_64-linux.hq-chromium",
     "hq-modeling-runtime": "packages/hq-modeling-runtime",
     "hq-source-evidence-runtime": "packages/hq-source-evidence-runtime",
@@ -429,6 +431,7 @@
     "find-packages",
     "functional-core-governance-gate",
     "gosh",
+    "gov-release-proxy",
     "hq-modeling-runtime",
     "hq-source-evidence-runtime",
     "jsonl-inspect",
@@ -467,6 +470,6 @@
     "ui-raw-loop-runtime"
   ],
   "system": "x86_64-linux",
-  "target_commit": "2dea52262cfe4840486e8e3ee94a75ff3d07aa3f",
-  "target_tree": "f565788a9dd39ec65a33fc55a8311074689a19cb"
+  "target_commit": "0c07b2d3214ab10f1eb33f3af589670a0b0b179a",
+  "target_tree": "55c70e307648913ff57ab9c54afbc443200857ba"
 }

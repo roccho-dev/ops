@@ -5,7 +5,7 @@
   "findings": 0,
   "kind": "ops.packageObligationGoldenExpected.v1",
   "organization_active_minted": false,
-  "out_of_scope": 119,
-  "packages": 122,
+  "out_of_scope": 120,
+  "packages": 123,
   "status": "pass"
 }

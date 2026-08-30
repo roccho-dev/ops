@@ -57,7 +57,7 @@ function validateCheckedInExample() {
   assert.equal(sourceDigest, source.source_sha256);
   assert.equal(sourceDigest, materialization.source_sha256);
   assert.equal(sourceDigest, materialization.output_sha256);
-  assert.equal(obligations.length, 122);
+  assert.equal(obligations.length, expected.packages);
   assert.equal(obligations.length, manifest.row_count);
   assert.equal(obligations.length, materialization.row_count);
 
@@ -90,10 +90,10 @@ function validateCheckedInExample() {
 
   assert.equal(expected.kind, "ops.packageObligationGoldenExpected.v1");
   assert.equal(expected.status, "pass");
-  assert.equal(expected.packages, 122);
-  assert.equal(expected.active, 3);
-  assert.equal(expected.out_of_scope, 119);
-  assert.equal(expected.evidence, 3);
+  assert.equal(expected.packages, manifest.row_count);
+  assert.equal(expected.active, manifest.active_package_ids.length);
+  assert.equal(expected.out_of_scope, expected.packages - expected.active);
+  assert.equal(expected.evidence, expected.active);
   assert.equal(expected.findings, 0);
   assert.equal(expected.organization_active_minted, false);
   assert.equal(expected.authority, false);
@@ -253,18 +253,18 @@ export function runGovernanceFixtureE2E() {
 
     assert.equal(result.ok, true);
     assert.equal(result.status, "pass");
-    assert.equal(result.rowCounts.packages, 122);
-    assert.equal(result.rowCounts.assertions, 122);
-    assert.equal(result.rowCounts.receipts, 122);
-    assert.equal(result.rowCounts.admission, 122);
+    assert.equal(result.rowCounts.packages, example.expected.packages);
+    assert.equal(result.rowCounts.assertions, example.expected.packages);
+    assert.equal(result.rowCounts.receipts, example.expected.packages);
+    assert.equal(result.rowCounts.admission, example.expected.packages);
     assert.equal(result.rowCounts.findings, 0);
     assert.deepEqual({
       kind: example.expected.kind,
       status: result.status,
       packages: result.rowCounts.packages,
-      active: 3,
-      out_of_scope: 119,
-      evidence: 3,
+      active: example.expected.active,
+      out_of_scope: example.expected.out_of_scope,
+      evidence: example.expected.evidence,
       findings: result.rowCounts.findings,
       organization_active_minted: false,
       authority: false,
@@ -273,22 +273,22 @@ export function runGovernanceFixtureE2E() {
     const packages = readJsonl(path.join(outDir, "packages.jsonl"));
     const receipts = readJsonl(path.join(outDir, "receipts.jsonl"));
     const admissions = readJsonl(path.join(outDir, "admission.jsonl"));
-    assert.equal(packages.filter((row) => row.status === "candidate-pass").length, 3);
-    assert.equal(packages.filter((row) => row.status === "out-of-scope").length, 119);
-    assert.equal(receipts.filter((row) => row.status === "pass").length, 3);
-    assert.equal(receipts.filter((row) => row.status === "out-of-scope").length, 119);
-    assert.equal(receipts.reduce((count, row) => count + row.evidence.length, 0), 3);
+    assert.equal(packages.filter((row) => row.status === "candidate-pass").length, example.expected.active);
+    assert.equal(packages.filter((row) => row.status === "out-of-scope").length, example.expected.out_of_scope);
+    assert.equal(receipts.filter((row) => row.status === "pass").length, example.expected.active);
+    assert.equal(receipts.filter((row) => row.status === "out-of-scope").length, example.expected.out_of_scope);
+    assert.equal(receipts.reduce((count, row) => count + row.evidence.length, 0), example.expected.evidence);
     assert.ok(admissions.every((row) => row.active === false && row.authority === false));
-    assert.equal(admissions.filter((row) => row.status === "candidate-pass").length, 3);
-    assert.equal(admissions.filter((row) => row.status === "out-of-scope").length, 119);
+    assert.equal(admissions.filter((row) => row.status === "candidate-pass").length, example.expected.active);
+    assert.equal(admissions.filter((row) => row.status === "out-of-scope").length, example.expected.out_of_scope);
 
     return {
       ok: true,
       kind: "ops.governancePackageObligationGoldenE2E.v1",
       packages: packages.length,
-      active: 3,
-      out_of_scope: 119,
-      evidence: 3,
+      active: example.expected.active,
+      out_of_scope: example.expected.out_of_scope,
+      evidence: example.expected.evidence,
       findings: 0,
       organization_active_minted: false,
       authority: false,
@@ -302,5 +302,5 @@ export function runGovernanceFixtureE2E() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const result = runGovernanceFixtureE2E();
   if (process.argv.includes("--json")) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  else process.stdout.write("ops-package-responses: 122-package governance fixture replay passed\n");
+  else process.stdout.write(`ops-package-responses: ${result.packages}-package governance fixture replay passed\n`);
 }

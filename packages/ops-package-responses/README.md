@@ -54,14 +54,14 @@ any package receipt is blocked.
 ## Package-owned governance fixture
 
 `examples/governance-package-obligations-v1/` is the golden input for the
-current Ops package universe. It contains all 122 package obligations from the
-Governance merge train, with three selected package checks and 119 explicit
+current Ops package universe. It contains all 123 package obligations from the
+Governance merge train, with three selected package checks and 120 explicit
 out-of-scope rows. The E2E test verifies the source inventory digests, replays the
 real package entrypoint through a deterministic Nix adapter, and requires:
 
 ```text
-122 responses + 122 receipts
-3 pass + 119 out-of-scope
+123 responses + 123 receipts
+3 pass + 120 out-of-scope
 0 findings
 organization-active = false
 ```

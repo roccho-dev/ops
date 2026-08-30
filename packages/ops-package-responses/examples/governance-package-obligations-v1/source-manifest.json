@@ -7,7 +7,7 @@
   ],
   "authority": false,
   "boundary": "fixture states the exact provider-neutral JSONL source ADRS must eventually release; it is test input only and cannot authorize production admission",
-  "fixture_id": "adrs-package-obligations-v1-ops-2dea5226",
+  "fixture_id": "adrs-package-obligations-v1-ops-0c07b2d",
   "inventory_algorithm": "ops-package-responses.inventory.v1-static-equivalent",
   "inventory_inputs": [
     {
@@ -28,16 +28,16 @@
     },
     {
       "path": "packages/<directory-name-set>",
-      "sha256": "sha256:821b41f2af52dc8a4946d32de0bdf7c006cfb19bfdee7935c7024dff98268729"
+      "sha256": "sha256:ea5e493cc98e86fa2d5435e066548689834d1515b52f38cd308fc1a243c2e7f6"
     }
   ],
   "kind": "adrsPackageObligationFixtureManifest.v1",
   "production_gate": false,
-  "row_count": 122,
+  "row_count": 123,
   "source_file": "source.jsonl",
-  "source_sha256": "sha256:501450c079029d30172b9da74fb102e26c0069a467a92c232f9993ca6a8baa85",
-  "target_commit": "2dea52262cfe4840486e8e3ee94a75ff3d07aa3f",
+  "source_sha256": "sha256:29031ead40de8692bd1e5652e75e91697f6f0eee14e3bfa0ef25813bf62ade52",
+  "target_commit": "0c07b2d3214ab10f1eb33f3af589670a0b0b179a",
   "target_repository": "roccho-dev/ops",
   "target_system": "x86_64-linux",
-  "target_tree": "f565788a9dd39ec65a33fc55a8311074689a19cb"
+  "target_tree": "55c70e307648913ff57ab9c54afbc443200857ba"
 }
