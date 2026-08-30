@@ -1,0 +1,103 @@
+name: Proof browser-host tool carry 20260830
+
+on:
+  push:
+    branches:
+      - proof/browser-host-tool-carry-20260830
+    paths:
+      - .github/workflows/proof-browser-host-tool-carry-20260830.yml
+
+permissions:
+  contents: read
+
+jobs:
+  carry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUNNER_REPO: actions/runner
+      RUNNER_TAG: v2.337.0
+      RUNNER_ASSET: actions-runner-linux-x64-2.337.0.tar.gz
+      RUNNER_SHA256: 70920811a4f8ad4328818682bca5c6469c1c942fab52448868071d0063816613
+      BC_REPO: keon/browser-control
+      BC_TAG: v0.1.1
+      BC_ASSET: browser-control-x86_64-unknown-linux-gnu.tar.gz
+      OUT: ${{ runner.temp }}/browser-host-tools
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Materialize exact release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT"/{archives,runner,browser-control,logs}
+
+          runner_api_digest="$(gh api "repos/$RUNNER_REPO/releases/tags/$RUNNER_TAG" --jq ".assets[] | select(.name == \"$RUNNER_ASSET\") | .digest")"
+          test "$runner_api_digest" = "sha256:$RUNNER_SHA256"
+          gh release download "$RUNNER_TAG" --repo "$RUNNER_REPO" --pattern "$RUNNER_ASSET" --dir "$OUT/archives"
+          test "$(sha256sum "$OUT/archives/$RUNNER_ASSET" | cut -d' ' -f1)" = "$RUNNER_SHA256"
+
+          bc_api_digest="$(gh api "repos/$BC_REPO/releases/tags/$BC_TAG" --jq ".assets[] | select(.name == \"$BC_ASSET\") | .digest")"
+          test "${bc_api_digest#sha256:}" != "$bc_api_digest"
+          gh release download "$BC_TAG" --repo "$BC_REPO" --pattern "$BC_ASSET" --dir "$OUT/archives"
+          test "sha256:$(sha256sum "$OUT/archives/$BC_ASSET" | cut -d' ' -f1)" = "$bc_api_digest"
+          printf '%s\n' "$bc_api_digest" > "$OUT/logs/browser-control.asset-digest.txt"
+
+      - name: Extract and smoke executables
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -xzf "$OUT/archives/$RUNNER_ASSET" -C "$OUT/runner"
+          tar -xzf "$OUT/archives/$BC_ASSET" -C "$OUT/browser-control"
+
+          test -x "$OUT/runner/bin/Runner.Listener"
+          "$OUT/runner/bin/Runner.Listener" --version | tee "$OUT/logs/actions-runner.version.txt"
+
+          bc_bin="$(find "$OUT/browser-control" -maxdepth 2 -type f -name browser-control -perm -111 -print -quit)"
+          test -n "$bc_bin"
+          "$bc_bin" --version | tee "$OUT/logs/browser-control.version.txt"
+          "$bc_bin" --help > "$OUT/logs/browser-control.help.txt"
+          cp "$bc_bin" "$OUT/browser-control.bin"
+          chmod 0555 "$OUT/browser-control.bin"
+
+      - name: Seal carry receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_sha="$(sha256sum "$OUT/archives/$RUNNER_ASSET" | cut -d' ' -f1)"
+          bc_sha="$(sha256sum "$OUT/archives/$BC_ASSET" | cut -d' ' -f1)"
+          bc_bin_sha="$(sha256sum "$OUT/browser-control.bin" | cut -d' ' -f1)"
+          python3 - "$OUT/receipt.json" "$runner_sha" "$bc_sha" "$bc_bin_sha" <<'PY'
+          import json, os, sys
+          out, runner_sha, bc_sha, bc_bin_sha = sys.argv[1:]
+          receipt = {
+            "schema": "ops.browserHostToolCarry/1",
+            "status": "PASS",
+            "target": "linux-x86_64",
+            "sources": [
+              {"repository": os.environ["RUNNER_REPO"], "tag": os.environ["RUNNER_TAG"], "asset": os.environ["RUNNER_ASSET"], "sha256": runner_sha},
+              {"repository": os.environ["BC_REPO"], "tag": os.environ["BC_TAG"], "asset": os.environ["BC_ASSET"], "sha256": bc_sha},
+            ],
+            "smoke": {"actionsRunnerVersion": "PASS", "browserControlVersion": "PASS", "browserControlHelp": "PASS"},
+            "browserControlBinarySha256": bc_bin_sha,
+            "boundaries": {"runnerRegistered": False, "browserAuthenticated": False, "externalEffect": False},
+          }
+          open(out, "w", encoding="utf-8").write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+          (cd "$OUT" && find archives -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          cat "$OUT/receipt.json"
+          cat "$OUT/SHA256SUMS"
+
+      - name: Upload carry
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-host-tools-${{ github.run_id }}
+          path: ${{ runner.temp }}/browser-host-tools/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
