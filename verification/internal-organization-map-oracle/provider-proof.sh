@@ -8,10 +8,25 @@ set -euo pipefail
 : "${CANDIDATE_SHA:?CANDIDATE_SHA required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID required}"
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN required}"
+UI_REF="59ba7c0370de72a790c8828994d5b726ce4cd944"
+UI_REPOSITORY="https://github.com/roccho-dev/ui.git"
 mkdir -p "$DIST" "$EVIDENCE/local-screens" "$EVIDENCE/deployment-screens" "$EVIDENCE/alias-screens"
+
 state="$EVIDENCE/organization-current.jsonl"
+envelope="$EVIDENCE/semantic-map-envelope.json"
+ui_source="$EVIDENCE/ui-source"
+ui_oracle="$EVIDENCE/ui-standalone"
 python3 "$ROOT/build-state.py" "$state" | tee "$EVIDENCE/build-state.stdout.json"
-python3 "$ROOT/materialize.py" "$state" "$DIST" | tee "$EVIDENCE/materialize.stdout.json"
+python3 "$ROOT/build-envelope.py" "$state" "$envelope" | tee "$EVIDENCE/build-envelope.stdout.json"
+
+git init -q "$ui_source"
+git -C "$ui_source" remote add origin "$UI_REPOSITORY"
+git -C "$ui_source" fetch -q --depth=1 origin "$UI_REF"
+git -C "$ui_source" checkout -q --detach FETCH_HEAD
+test "$(git -C "$ui_source" rev-parse HEAD)" = "$UI_REF"
+node "$ui_source/packages/semantic-map/scripts/build-browser-example.mjs" --input="$envelope" --out="$ui_oracle" | tee "$EVIDENCE/ui-standalone-build.stdout.json"
+cp "$ui_oracle/receipt.json" "$EVIDENCE/ui-standalone-receipt.json"
+python3 "$ROOT/materialize.py" "$state" "$DIST" --oracle-file "$ui_oracle/index.html" --ui-ref "$UI_REF" | tee "$EVIDENCE/materialize.stdout.json"
 
 sudo apt-get update -qq
 sudo apt-get install -y -qq fonts-noto-cjk >/dev/null
@@ -55,14 +70,15 @@ CHROME_BIN="$chrome" python3 "$ROOT/browser-check.py" "$deployment_url" "$EVIDEN
 python3 "$ROOT/readback.py" "$DIST" "$alias_url" "$EVIDENCE/alias-readback.json" --attempts 50
 CHROME_BIN="$chrome" python3 "$ROOT/browser-check.py" "$alias_url" "$EVIDENCE/alias-browser.json" "$EVIDENCE/alias-screens"
 
-PROJECT="$PROJECT" BRANCH="$BRANCH" CANDIDATE_SHA="$CANDIDATE_SHA" DEPLOYMENT_URL="$deployment_url" ALIAS_URL="$alias_url" python3 - "$DIST/materialize-receipt.json" "$EVIDENCE/local-browser.json" "$EVIDENCE/deployment-readback.json" "$EVIDENCE/deployment-browser.json" "$EVIDENCE/alias-readback.json" "$EVIDENCE/alias-browser.json" "$EVIDENCE/provider-proof.json" <<'PY'
+PROJECT="$PROJECT" BRANCH="$BRANCH" CANDIDATE_SHA="$CANDIDATE_SHA" UI_REF="$UI_REF" DEPLOYMENT_URL="$deployment_url" ALIAS_URL="$alias_url" python3 - "$DIST/materialize-receipt.json" "$EVIDENCE/local-browser.json" "$EVIDENCE/deployment-readback.json" "$EVIDENCE/deployment-browser.json" "$EVIDENCE/alias-readback.json" "$EVIDENCE/alias-browser.json" "$EVIDENCE/provider-proof.json" <<'PY'
 import json,os,sys
 paths=sys.argv[1:-1];out=sys.argv[-1];values=[json.load(open(p,encoding='utf-8')) for p in paths]
 assert all(v['status']=='PASS' for v in values)
 receipt={
- 'schema':'ops.internalOrganizationMapProviderProof/1','status':'PASS','authority':False,
+ 'schema':'ops.internalOrganizationMapProviderProof/2','status':'PASS','authority':False,
  'claimCeiling':'BOUNDED_READ_ONLY_STAGING_VISUAL_EVALUATION',
  'candidateSha':os.environ['CANDIDATE_SHA'],
+ 'ui':{'repository':'roccho-dev/ui','ref':os.environ['UI_REF'],'builder':'packages/semantic-map/scripts/build-browser-example.mjs'},
  'cloudflare':{'project':os.environ['PROJECT'],'branch':os.environ['BRANCH'],'deploymentUrl':os.environ['DEPLOYMENT_URL'],'stableBranchAlias':os.environ['ALIAS_URL']},
  'localBrowser':'PASS','deploymentByteReadback':'PASS','deploymentBrowser':'PASS','aliasByteReadback':'PASS','aliasBrowser':'PASS',
  'patterns':['map/1','graph/1','seq/1'],'productionCutover':False,
