@@ -1,14 +1,16 @@
 const frozenAsset = value => Object.freeze(value);
 
 export const PUBLIC_RELEASE = Object.freeze({
+  sourceKind: "git-raw",
   repository: "roccho-dev/governance",
-  releaseId: 356287183,
-  tag: "gov-release/company-operating-contract-v0.2.0/8f087d7babfbb04bce7e9e6a1bd21169dec5d37299c58bfcbb49c5756468c461",
-  targetCommit: "42d0bf9de25161fb5f6c2a1538fc61ec1f55650b",
+  releaseId: null,
+  tag: "git/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl",
+  targetCommit: "6b20ba62e5b84de7549cc1df801af453dec03a38",
   visibility: "public",
 });
 
 export const PRIVATE_FIXTURE_RELEASE = Object.freeze({
+  sourceKind: "github-release-asset",
   repository: "roccho-dev/adrs",
   releaseId: 351310910,
   tag: "decision-live-jsonl-dump-20260709-054012-f9f67b1",
@@ -18,12 +20,13 @@ export const PRIVATE_FIXTURE_RELEASE = Object.freeze({
 
 export const PUBLIC_ROOT_ASSET = frozenAsset({
   ...PUBLIC_RELEASE,
-  assetId: 482207652,
-  name: "accepted-decision.json",
-  bytes: 942,
-  digest: "sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6",
-  contentType: "application/json; charset=utf-8",
-  downloadUrl: "https://github.com/roccho-dev/governance/releases/download/gov-release/company-operating-contract-v0.2.0/8f087d7babfbb04bce7e9e6a1bd21169dec5d37299c58bfcbb49c5756468c461/accepted-decision.json",
+  assetId: null,
+  name: "selected-universe.jsonl",
+  path: "docs/final-scope-purpose-join/selected-universe.jsonl",
+  bytes: 1378,
+  digest: "sha256:d29c4cbee8e3c38fc9a29e9dbe2d39e0a6989a62ba2771302b85711025c9ebc3",
+  contentType: "application/x-ndjson; charset=utf-8",
+  downloadUrl: "https://raw.githubusercontent.com/roccho-dev/governance/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl",
   requiresCredential: false,
 });
 
