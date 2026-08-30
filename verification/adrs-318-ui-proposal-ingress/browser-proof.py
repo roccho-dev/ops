@@ -132,10 +132,10 @@ def main() -> int:
             )
 
         def switch_pattern(pattern: str) -> dict:
-            page.select_option("#pattern-select", pattern)
+            page.select_option("pattern-select", pattern)
             page.wait_for_function(
                 "pattern => globalThis.semanticMapSite?.runtime?.view?.pattern === pattern",
-                pattern,
+                arg=pattern,
                 timeout=120_000,
             )
             page.locator("#graph-container svg").first.wait_for(state="attached", timeout=120_000)
