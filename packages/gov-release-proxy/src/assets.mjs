@@ -1,63 +1,70 @@
-const frozenAsset = value => Object.freeze(value);
+import publicBindingSource from "../bindings/selected-universe.json" with { type: "json" };
+import privateFixtureBindingSource from "../bindings/private-fixture.json" with { type: "json" };
+import { deepFreeze, parseBinding, validateBinding } from "./binding.mjs";
 
-export const PUBLIC_RELEASE = Object.freeze({
-  sourceKind: "git-raw",
-  repository: "roccho-dev/governance",
-  releaseId: null,
-  tag: "git/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl",
-  targetCommit: "6b20ba62e5b84de7549cc1df801af453dec03a38",
-  visibility: "public",
-});
+const clone = value => JSON.parse(JSON.stringify(value));
+const enabled = value => value === true || value === "true" || value === "1";
 
-export const PRIVATE_FIXTURE_RELEASE = Object.freeze({
-  sourceKind: "github-release-asset",
-  repository: "roccho-dev/adrs",
-  releaseId: 351310910,
-  tag: "decision-live-jsonl-dump-20260709-054012-f9f67b1",
-  targetCommit: null,
-  visibility: "private",
-});
+export const PUBLIC_BINDING = validateBinding(publicBindingSource);
+export const PRIVATE_FIXTURE_BINDING = validateBinding(privateFixtureBindingSource);
 
-export const PUBLIC_ROOT_ASSET = frozenAsset({
-  ...PUBLIC_RELEASE,
-  assetId: null,
-  name: "selected-universe.jsonl",
-  path: "docs/final-scope-purpose-join/selected-universe.jsonl",
-  bytes: 1378,
-  digest: "sha256:d29c4cbee8e3c38fc9a29e9dbe2d39e0a6989a62ba2771302b85711025c9ebc3",
-  contentType: "application/x-ndjson; charset=utf-8",
-  downloadUrl: "https://raw.githubusercontent.com/roccho-dev/governance/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl",
-  requiresCredential: false,
-});
+const releaseCache = new WeakMap();
+const assetCache = new WeakMap();
 
-export const PRIVATE_FIXTURE_ROOT_ASSET = frozenAsset({
-  ...PRIVATE_FIXTURE_RELEASE,
-  assetId: 471043875,
-  name: "decision-jsonl-dump-20260709-054012.000001.jsonl",
-  bytes: 1439,
-  digest: "sha256:4dd299b514f2f4a8fa15f6c1a343429c3c62c79860db87d397756e1a5190aa7e",
-  contentType: "application/x-ndjson; charset=utf-8",
-  downloadUrl: null,
-  requiresCredential: true,
-});
+export const releaseForBinding = binding => {
+  if (!releaseCache.has(binding)) releaseCache.set(binding, deepFreeze(clone(binding.release)));
+  return releaseCache.get(binding);
+};
 
+export const assetForBinding = binding => {
+  if (!assetCache.has(binding)) {
+    assetCache.set(binding, deepFreeze({ ...clone(binding.release), ...clone(binding.asset) }));
+  }
+  return assetCache.get(binding);
+};
+
+export const privateFixtureEnabled = env => enabled(env.ENABLE_PRIVATE_FIXTURE);
+export const bindingFromEnv = (env = {}) => {
+  const supplied = env.GOV_RELEASE_BINDING_JSON;
+  if (supplied !== undefined && supplied !== null && supplied !== "") return parseBinding(supplied);
+  return privateFixtureEnabled(env) ? PRIVATE_FIXTURE_BINDING : PUBLIC_BINDING;
+};
+
+export const PUBLIC_RELEASE = releaseForBinding(PUBLIC_BINDING);
+export const PRIVATE_FIXTURE_RELEASE = releaseForBinding(PRIVATE_FIXTURE_BINDING);
+export const PUBLIC_ROOT_ASSET = assetForBinding(PUBLIC_BINDING);
+export const PRIVATE_FIXTURE_ROOT_ASSET = assetForBinding(PRIVATE_FIXTURE_BINDING);
 export const PUBLIC_ASSETS = Object.freeze({ "/": PUBLIC_ROOT_ASSET });
 export const PRIVATE_FIXTURE_ASSETS = Object.freeze({ "/": PRIVATE_FIXTURE_ROOT_ASSET });
 export const RELEASE = PUBLIC_RELEASE;
 export const ASSETS = PUBLIC_ASSETS;
 
-export const rootAssetFor = ({ privateFixtureEnabled = false } = {}) => (
-  privateFixtureEnabled ? PRIVATE_FIXTURE_ROOT_ASSET : PUBLIC_ROOT_ASSET
-);
+export const bindingFor = ({ binding, bindingJson, privateFixtureEnabled: usePrivateFixture = false } = {}) => {
+  if (bindingJson !== undefined && bindingJson !== null) return parseBinding(bindingJson);
+  if (binding !== undefined && binding !== null) {
+    if (binding === PUBLIC_BINDING || binding === PRIVATE_FIXTURE_BINDING) return binding;
+    return validateBinding(binding);
+  }
+  return usePrivateFixture ? PRIVATE_FIXTURE_BINDING : PUBLIC_BINDING;
+};
 
-export const configFor = ({ privateFixtureEnabled = false } = {}) => Object.freeze({
-  schema: "ops.govReleaseProxyConfig/3",
-  authority: false,
-  endpoint: "/",
-  deliveryModel: "one-root",
-  browserDirectGitHubFetch: false,
-  release: privateFixtureEnabled ? PRIVATE_FIXTURE_RELEASE : PUBLIC_RELEASE,
-  asset: rootAssetFor({ privateFixtureEnabled }),
-});
+export const rootAssetFor = options => assetForBinding(bindingFor(options));
+
+export const configFor = options => {
+  const binding = bindingFor(options);
+  return Object.freeze({
+    schema: "ops.govReleaseProxyConfig/4",
+    bindingId: binding.bindingId,
+    authority: false,
+    claimCeiling: binding.claimCeiling,
+    productionCutover: false,
+    endpoint: binding.endpoint,
+    deliveryModel: binding.deliveryModel,
+    browserDirectGitHubFetch: binding.browserDirectGitHubFetch,
+    release: releaseForBinding(binding),
+    asset: assetForBinding(binding),
+    ui: binding.ui,
+  });
+};
 
 export const CONFIG = configFor();

@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { createHash, webcrypto } from "node:crypto";
 import {
   PRIVATE_FIXTURE_ROOT_ASSET,
+  PUBLIC_BINDING,
   PUBLIC_ROOT_ASSET,
 } from "../src/assets.mjs";
+import { validateBinding } from "../src/binding.mjs";
 import worker, {
   ProxyError,
   fetchAsset,
@@ -37,12 +39,19 @@ const digestCrypto = digest => ({
     digest: async () => Uint8Array.from(Buffer.from(digest.slice("sha256:".length), "hex")).buffer,
   },
 });
+const uiBody = Buffer.from(`<!doctype html><meta name="meaning" content="${PUBLIC_ROOT_ASSET.digest}"><title>UI</title>`);
+const uiBindingValue = JSON.parse(JSON.stringify(PUBLIC_BINDING));
+uiBindingValue.bindingId = "governance.worker-test.semantic-map/1";
+uiBindingValue.ui.htmlBytes = uiBody.byteLength;
+uiBindingValue.ui.htmlDigest = `sha256:${createHash("sha256").update(uiBody).digest("hex")}`;
+const uiBinding = validateBinding(uiBindingValue);
 const uiAssets = {
-  fetch: async request => new Response("<!doctype html><title>UI</title>", {
+  fetch: async request => new Response(uiBody, {
     status: 200,
     headers: { "content-type": "text/html; charset=utf-8", "x-request-method": request.method },
   }),
 };
+const uiEnv = { ASSETS: uiAssets, GOV_RELEASE_BINDING_JSON: JSON.stringify(uiBinding) };
 
 test("root content negotiation distinguishes HTML from JSON", () => {
   assert.equal(wantsData(new Request("https://worker.invalid/", { headers: { accept: "text/html" } })), false);
@@ -51,7 +60,7 @@ test("root content negotiation distinguishes HTML from JSON", () => {
 });
 
 test("HTML is served from the same root without touching GitHub", async () => {
-  const response = await handleRequest(new Request("https://worker.invalid/", { headers: { accept: "text/html" } }), { ASSETS: uiAssets }, {
+  const response = await handleRequest(new Request("https://worker.invalid/", { headers: { accept: "text/html" } }), uiEnv, {
     fetchImpl: async () => { throw new Error("must not fetch upstream"); },
   });
   assert.equal(response.status, 200);
@@ -143,12 +152,12 @@ test("digest and byte mismatch fail closed", async () => {
 });
 
 test("only root GET and HEAD exist", async () => {
-  const post = await worker.fetch(new Request("https://worker.invalid/", { method: "POST" }), { ASSETS: uiAssets }, {});
+  const post = await worker.fetch(new Request("https://worker.invalid/", { method: "POST" }), uiEnv, {});
   assert.equal(post.status, 405);
   assert.equal((await post.json()).code, "METHOD_NOT_ALLOWED");
-  const missing = await worker.fetch(new Request("https://worker.invalid/data/manifest"), { ASSETS: uiAssets }, {});
+  const missing = await worker.fetch(new Request("https://worker.invalid/data/manifest"), uiEnv, {});
   assert.equal(missing.status, 404);
-  const query = await worker.fetch(new Request("https://worker.invalid/?repo=evil"), { ASSETS: uiAssets }, {});
+  const query = await worker.fetch(new Request("https://worker.invalid/?repo=evil"), uiEnv, {});
   assert.equal(query.status, 400);
 });
 
@@ -165,7 +174,7 @@ test("root data HEAD exposes metadata without upstream fetch", async () => {
 });
 
 test("root HTML HEAD remains delegated to static assets", async () => {
-  const response = await handleRequest(new Request("https://worker.invalid/", { method: "HEAD", headers: { accept: "text/html" } }), { ASSETS: uiAssets });
+  const response = await handleRequest(new Request("https://worker.invalid/", { method: "HEAD", headers: { accept: "text/html" } }), uiEnv);
   assert.equal(response.status, 200);
   assert.equal(response.body, null);
 });
