@@ -1,0 +1,82 @@
+name: export exact ops proposals head bundle
+
+on:
+  push:
+    branches:
+      - proof/carry-proposals-head-0c07b2d3-20260830
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-ops-proposals-head-0c07b2d3
+  cancel-in-progress: true
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout carrier branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Export and verify exact head
+        shell: bash
+        env:
+          TARGET_SHA: 0c07b2d3214ab10f1eb33f3af589670a0b0b179a
+          TARGET_TREE: 55c70e307648913ff57ab9c54afbc443200857ba
+          BUNDLE_NAME: ops-proposals-0c07b2d3.git.bundle
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/ops-proposals-head"
+          clone_dir="$RUNNER_TEMP/verify-clone"
+
+          git merge-base --is-ancestor "$TARGET_SHA" HEAD
+          test "$(git rev-parse "$TARGET_SHA^{tree}")" = "$TARGET_TREE"
+          test -z "$(git status --porcelain=v1)"
+
+          mkdir -p "$artifact_dir"
+          git update-ref refs/heads/proposals "$TARGET_SHA"
+          git bundle create "$artifact_dir/$BUNDLE_NAME" refs/heads/proposals
+          git bundle verify "$artifact_dir/$BUNDLE_NAME" | tee "$artifact_dir/bundle.verify.txt"
+          git bundle list-heads "$artifact_dir/$BUNDLE_NAME" | tee "$artifact_dir/bundle.heads.txt"
+          grep -Fx "$TARGET_SHA refs/heads/proposals" "$artifact_dir/bundle.heads.txt"
+
+          git clone --quiet --branch proposals "$artifact_dir/$BUNDLE_NAME" "$clone_dir"
+          test "$(git -C "$clone_dir" rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git -C "$clone_dir" rev-parse 'HEAD^{tree}')" = "$TARGET_TREE"
+          test -z "$(git -C "$clone_dir" status --porcelain=v1)"
+          git -C "$clone_dir" fsck --strict --no-dangling
+
+          commit_count="$(git -C "$clone_dir" rev-list --count HEAD)"
+          bundle_sha="$(sha256sum "$artifact_dir/$BUNDLE_NAME" | awk '{print $1}')"
+          python3 - "$artifact_dir/head.json" "$TARGET_SHA" "$TARGET_TREE" "$commit_count" "$BUNDLE_NAME" "$bundle_sha" <<'PY'
+          import json, pathlib, sys
+          out, commit, tree, count, bundle, digest = sys.argv[1:]
+          pathlib.Path(out).write_text(json.dumps({
+              "schema": "ops.exactHeadCarry.v1",
+              "repository": "roccho-dev/ops",
+              "branch": "proposals",
+              "commit": commit,
+              "tree": tree,
+              "commitCount": int(count),
+              "bundle": bundle,
+              "bundleSha256": digest,
+              "bundleVerify": "pass",
+              "cloneVerify": "pass",
+              "fsck": "pass"
+          }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+          sha256sum "$artifact_dir/$BUNDLE_NAME" "$artifact_dir/head.json" > "$artifact_dir/SHA256SUMS"
+
+      - name: Upload exact head bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ops-proposals-0c07b2d3-carry
+          path: ${{ runner.temp }}/ops-proposals-head
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
