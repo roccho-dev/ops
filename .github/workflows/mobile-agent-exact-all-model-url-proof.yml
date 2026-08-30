@@ -1,0 +1,234 @@
+name: Mobile Agent exact all-model URL proof
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-exact-all-model-url-proof.yml'
+      - 'verification/mobile-agent-url-only-runtime/**'
+      - 'verification/mobile-agent-business-model-presentation/**'
+      - 'verification/mobile-agent-preset-app/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: mobile-agent-exact-all-model-url-proof-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ROOT: verification/mobile-agent-url-only-runtime
+  PRESET_ROOT: verification/mobile-agent-preset-app
+  SOURCE_REPOSITORY: roccho-dev/mobile-agent
+  APP_BYTES: '2412388'
+  APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+  APP_GIT_BLOB: ebdb39084fa3cc57b0295818f6f339f62f0fca90
+  CARRY_TAG: mobile-agent-app-sha256-3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      source_sha: ${{ steps.build.outputs.source_sha }}
+      project: ${{ steps.build.outputs.project }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - run: python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+
+      - name: Build existing Business Model runtime
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          CHROMIUM_PATH="$chrome" CHROME_BIN="$chrome" python3 "$ROOT/build.py" \
+            --source-sha "$(git rev-parse HEAD)" --out "$RUNNER_TEMP/result" --github-output "$GITHUB_OUTPUT"
+
+      - name: Materialize exact existing App from immutable Git object
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          mkdir -p "$root/site/app"
+          ref="tags/$CARRY_TAG"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/$ref" > "$root/carry-ref.json" 2>/dev/null; then
+            python3 - "$root/carry-ref.json" "$root/carry-commit.txt" <<'PY'
+          import json,pathlib,sys
+          r=json.load(open(sys.argv[1])); assert r['object']['type']=='commit',r
+          pathlib.Path(sys.argv[2]).write_text(r['object']['sha'])
+          PY
+            commit="$(cat "$root/carry-commit.txt")"
+            gh api "repos/$GITHUB_REPOSITORY/git/commits/$commit" > "$root/carry-commit.json"
+            tree="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["tree"]["sha"])' "$root/carry-commit.json")"
+            gh api "repos/$GITHUB_REPOSITORY/git/trees/$tree?recursive=1" > "$root/carry-tree.json"
+            blob="$(python3 - "$root/carry-tree.json" <<'PY'
+          import json,sys
+          rows=[x for x in json.load(open(sys.argv[1]))['tree'] if x.get('path')=='mobile-agent/app.index.html' and x.get('type')=='blob']
+          assert len(rows)==1,rows
+          print(rows[0]['sha'])
+          PY
+            )"
+            test "$blob" = "$APP_GIT_BLOB"
+            gh api "repos/$GITHUB_REPOSITORY/git/blobs/$blob" > "$root/app-blob.json"
+            source="ops-tag:$CARRY_TAG"
+          else
+            gh api "repos/$SOURCE_REPOSITORY/git/blobs/$APP_GIT_BLOB" > "$root/app-blob.json"
+            source="$SOURCE_REPOSITORY:$APP_GIT_BLOB"
+          fi
+          python3 - "$root/app-blob.json" "$root/site/app/index.html" "$root/app-source.json" "$source" <<'PY'
+          import base64,hashlib,json,os,pathlib,sys
+          record=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert record['sha']==os.environ['APP_GIT_BLOB'],record.get('sha')
+          app=base64.b64decode(''.join(record['content'].split()),validate=True)
+          assert len(app)==int(os.environ['APP_BYTES']),len(app)
+          assert hashlib.sha256(app).hexdigest()==os.environ['APP_SHA256']
+          assert hashlib.sha1(f"blob {len(app)}\0".encode()+app).hexdigest()==os.environ['APP_GIT_BLOB']
+          text=app.decode('utf-8')
+          for token in ('graph/1','map/1','seq/1','maxgraph'):
+              assert token.lower() in text.lower(),token
+          pathlib.Path(sys.argv[2]).write_bytes(app)
+          proof={'schema':'mobile-agent-exact-app-source/2','status':'PASS','source':sys.argv[4],'bytes':len(app),'sha256':hashlib.sha256(app).hexdigest(),'gitBlob':record['sha']}
+          pathlib.Path(sys.argv[3]).write_text(json.dumps(proof,sort_keys=True,separators=(',',':'))+'\n')
+          print(json.dumps(proof,sort_keys=True))
+          PY
+
+      - name: Validate existing Carrier-compiled Graph Map Seq URLs
+        run: |
+          python3 - "$ROOT/preset-render-cases.json" "$PRESET_ROOT/manifest.json" <<'PY'
+          import json,sys
+          c=json.load(open(sys.argv[1])); m=json.load(open(sys.argv[2])); fixtures={x['id']:x for x in m['fixtures']}
+          assert c['status']=='PASS' and c['sourceCarrier']['distTreeDigest']==m['publication']['distTreeDigest']
+          assert [x['id'] for x in c['cases']]==['graph','map','seq']
+          for x in c['cases']:
+              f=fixtures[x['id']]
+              assert x['fixtureSha256']==f['sha256'] and x['view']==f['view'] and x['labels']==f['labels']
+              assert x['roundTripExact'] is True
+          PY
+
+      - name: Prove all models locally in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/result/site" >/dev/null 2>&1 & server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 100); do
+            curl -fsS http://127.0.0.1:4173/app/ >/dev/null && curl -fsS http://127.0.0.1:4173/business-model/ >/dev/null && break
+            sleep .2
+          done
+          python3 - "$ROOT/preset-render-cases.json" "$RUNNER_TEMP/result/preset-local.json" <<'PY'
+          import json,pathlib,sys
+          x=json.load(open(sys.argv[1]))
+          for row in x['cases']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/','http://127.0.0.1:4173/')
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
+          PY
+          CHROME_BIN="$chrome" python3 "$PRESET_ROOT/browser-smoke.py" "$RUNNER_TEMP/result/preset-local.json" "$RUNNER_TEMP/result/preset-local-browser.json" "$RUNNER_TEMP/result/preset-local-shots"
+          CHROMIUM_PATH="$chrome" python3 "$ROOT/tests/browser_compiler.py" http://127.0.0.1:4173/ verification/mobile-agent-business-model-presentation/examples "$RUNNER_TEMP/result/business-local-browser.json"
+          python3 - "$RUNNER_TEMP/result/preset-local-browser.json" "$RUNNER_TEMP/result/business-local-browser.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2]))
+          assert p['status']=='PASS' and [x['pattern'] for x in p['cases']]==['graph/1','map/1','seq/1']
+          assert b['urlGeneration']==b['urlRendering']=='PASS' and [x['actorCount'] for x in b['cases']]==[2,3,4]
+          print(json.dumps({'status':'PASS','models':['graph/1','map/1','seq/1','business-model/1']}))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-exact-all-models-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    needs: materialize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.materialize.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-agent-exact-all-models-site-${{ github.run_id }}
+          path: ${{ runner.temp }}/staged
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - run: python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+
+      - name: Verify Pages project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PROJECT: ${{ needs.materialize.outputs.project }}
+        run: |
+          set -euo pipefail
+          test "$PROJECT" = stg-mobile-agent
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT")"
+          test "$code" = 200
+
+      - name: Deploy combined root and prove Business Model URLs
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          CHROMIUM_PATH="$chrome" CHROME_BIN="$chrome" python3 "$ROOT/deploy.py" --staged "$RUNNER_TEMP/staged" --source-sha "${{ needs.materialize.outputs.source_sha }}" --out "$RUNNER_TEMP/public-proof" --github-output "$GITHUB_OUTPUT"
+
+      - name: Prove exact App and Graph Map Seq on both public hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          for pair in "stable:${{ steps.deploy.outputs.stable_base }}" "immutable:${{ steps.deploy.outputs.deployment_base }}"; do
+            name="${pair%%:*}"; base="${pair#*:}"
+            curl -fsSL --retry 15 --retry-delay 2 -H 'Cache-Control: no-cache' "${base}app/" -o "$RUNNER_TEMP/public-proof/app-$name.html"
+            test "$(wc -c < "$RUNNER_TEMP/public-proof/app-$name.html")" -eq "$APP_BYTES"
+            test "$(sha256sum "$RUNNER_TEMP/public-proof/app-$name.html" | cut -d' ' -f1)" = "$APP_SHA256"
+            python3 - "$ROOT/preset-render-cases.json" "$RUNNER_TEMP/public-proof/preset-$name-urls.json" "$base" <<'PY'
+          import json,pathlib,sys
+          x=json.load(open(sys.argv[1])); base=sys.argv[3]
+          for row in x['cases']: row['url']=row['url'].replace('https://stg-mobile-agent.pages.dev/',base)
+          pathlib.Path(sys.argv[2]).write_text(json.dumps({'cases':x['cases']},ensure_ascii=False)+'\n')
+          PY
+            CHROME_BIN="$chrome" python3 "$PRESET_ROOT/browser-smoke.py" "$RUNNER_TEMP/public-proof/preset-$name-urls.json" "$RUNNER_TEMP/public-proof/preset-$name-browser.json" "$RUNNER_TEMP/public-proof/preset-$name-shots"
+          done
+
+      - name: Build one accepted runtime receipt
+        run: |
+          python3 - "$RUNNER_TEMP/public-proof" "${{ steps.deploy.outputs.stable_base }}" "${{ steps.deploy.outputs.deployment_base }}" <<'PY'
+          import json,pathlib,sys
+          r=pathlib.Path(sys.argv[1]); stable=sys.argv[2]; immutable=sys.argv[3]
+          b=json.load(open(r/'accepted-public-url-receipt.json')); s=json.load(open(r/'preset-stable-browser.json')); i=json.load(open(r/'preset-immutable-browser.json'))
+          sm={x['id']:x for x in s['cases']}; im={x['id']:x for x in i['cases']}; models={}
+          for key in ('graph','map','seq'):
+              a,c=sm[key],im[key]; assert a['status']==c['status']=='PASS'
+              models[a['pattern']]={'status':'PASS','stableUrl':a['url'],'immutableUrl':c['url'],'chrome':'PASS'}
+          assert b['status']=='PASS' and [x['actorCount'] for x in b['cases']]==[2,3,4]
+          models['business-model/1']={'status':'PASS','stableUrl':b['cases'][0]['stableUrl'],'immutableUrl':b['cases'][0]['immutableUrl'],'chrome':'PASS','actorCases':[2,3,4]}
+          out={'schema':'ops.mobileAgentAllModelsPublicReceipt/2','status':'PASS_MOBILE_AGENT_ALL_MODEL_URL_RUNTIME','authority':'roccho-dev/adrs#316','candidateSha':b['candidateSha'],'provider':b['provider'],'hosts':{'stable':stable,'immutable':immutable},'app':{'bytes':2412388,'sha256':'sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6','gitBlob':'ebdb39084fa3cc57b0295818f6f339f62f0fca90','stableReadback':'PASS','immutableReadback':'PASS'},'models':models,'proof':{'graph':'PASS','map':'PASS','seq':'PASS','businessModel':'PASS','stableChrome':'PASS','immutableChrome':'PASS'}}
+          (r/'all-models-public-receipt.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,ensure_ascii=False,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-exact-all-models-public-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/public-proof/
+          if-no-files-found: error
+          retention-days: 90
