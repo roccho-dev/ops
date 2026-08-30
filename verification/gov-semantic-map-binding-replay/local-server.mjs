@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import http from "node:http";
-import { handleRequest } from "../../packages/gov-release-proxy/src/worker.mjs";
+import { handleRequest, ProxyError } from "../../packages/gov-release-proxy/src/worker.mjs";
 
 const [meaningPath, portInput = "4173"] = process.argv.slice(2);
 if (!meaningPath) throw new Error("usage: node local-server.mjs <meaning-path> [port]");
@@ -26,6 +26,11 @@ const server = http.createServer(async (incoming, outgoing) => {
     outgoing.writeHead(response.status, Object.fromEntries(response.headers.entries()));
     outgoing.end(response.body === null ? undefined : Buffer.from(await response.arrayBuffer()));
   } catch (error) {
+    if (error instanceof ProxyError) {
+      outgoing.writeHead(error.status, { "content-type": "application/json; charset=utf-8" });
+      outgoing.end(`${JSON.stringify({ schema: "ops.govReleaseProxyError/1", status: "FAIL", code: error.code })}\n`);
+      return;
+    }
     outgoing.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
     outgoing.end(String(error?.stack ?? error));
   }
