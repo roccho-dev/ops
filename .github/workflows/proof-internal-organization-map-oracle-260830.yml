@@ -1,13 +1,92 @@
 name: Proof internal organization map visual oracle 260830
 
 on:
+  push:
+    branches:
+      - proof/internal-organization-map-oracle-260830
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: internal-organization-map-oracle-260830
+  cancel-in-progress: true
+
 jobs:
-  paused-during-atomic-repair:
+  deploy-and-readback:
     runs-on: ubuntu-24.04
+    environment: cloudflare-production
+    timeout-minutes: 35
     steps:
-      - run: echo repair staging only
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Verify exact branch and provider credentials
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "proof/internal-organization-map-oracle-260830"
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -s verification/internal-organization-map-oracle/build-state.py
+          test -s verification/internal-organization-map-oracle/build-envelope.py
+          test -s verification/internal-organization-map-oracle/materialize.py
+          test -s verification/internal-organization-map-oracle/browser-check.py
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Generate exact UI shell, deploy branch alias, and prove rendered views
+        shell: bash
+        env:
+          ROOT: ${{ github.workspace }}/verification/internal-organization-map-oracle
+          DIST: ${{ runner.temp }}/internal-organization-map-site
+          EVIDENCE: ${{ runner.temp }}/internal-organization-map-evidence
+          PROJECT: stg-artifact-runtime
+          BRANCH: internal-organization-map
+          CANDIDATE_SHA: ${{ github.sha }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: bash "$ROOT/provider-proof.sh"
+
+      - name: Publish exact verified URL and depiction
+        if: success()
+        shell: bash
+        env:
+          EVIDENCE: ${{ runner.temp }}/internal-organization-map-evidence
+        run: |
+          set -euo pipefail
+          url="$(cat "$EVIDENCE/alias-url.txt")"
+          echo "### Verified Internal Organization Semantic Map" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '- exact UI standalone generator at pinned UI commit: PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo '- map/1, graph/1, seq/1: real Chromium PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo '- exact remote byte readback: PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo '- visible: 49 Ops packages, 13 UI packages, 2 Governance packages, ADRS lineage, Policy/Deploy gaps, delivery/readback, explicit residuals' >> "$GITHUB_STEP_SUMMARY"
+          echo '- authority:false; production cutover:false' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload screenshots and receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-organization-map-oracle-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/internal-organization-map-site/
+            ${{ runner.temp }}/internal-organization-map-evidence/
+          if-no-files-found: error
+          retention-days: 30
