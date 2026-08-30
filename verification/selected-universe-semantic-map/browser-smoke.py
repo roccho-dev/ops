@@ -44,57 +44,73 @@ def main() -> int:
             if response.status >= 400
             else None,
         )
-        page.goto(args.url, wait_until="load", timeout=120_000)
-        page.wait_for_function("globalThis.semanticMapSite?.ready === true", timeout=120_000)
+        response = page.goto(args.url, wait_until="load", timeout=120_000)
+        assert response is not None and response.status == 200
+        page.wait_for_function("globalThis.semanticMapEvaluation?.ready === true", timeout=30_000)
+        before = page.locator("#semantic-map-svg").get_attribute("viewBox")
+        page.locator("#zoom-in").click()
+        page.wait_for_timeout(100)
+        zoomed = page.locator("#semantic-map-svg").get_attribute("viewBox")
+        page.locator("#fit").click()
+        page.wait_for_timeout(100)
+        fitted = page.locator("#semantic-map-svg").get_attribute("viewBox")
         observed = page.evaluate(
-            """() => {
-              const domain = semanticMapApp.store.domain;
-              return {
-                pattern: semanticMapRuntime.view.pattern,
-                scenePattern: semanticMapSite.editor.snapshot().scene.pattern,
-                svg: Boolean(document.querySelector('#graph-container svg')),
-                editorReady: Boolean(semanticMapSite.editor?.ready),
-                title: document.querySelector('#map-title')?.textContent,
-                regionIds: [...domain.regions.keys()],
-                relationIds: domain.relations.map((relation) => relation.id),
-                patternControl: document.querySelector('#pattern-select')?.value,
-                sourceControl: Boolean(document.querySelector('#source-open')),
-                helpControl: Boolean(document.querySelector('a.help-link')),
-                bodyText: document.body.innerText,
-              };
-            }"""
+            """() => ({
+              evaluation: globalThis.semanticMapEvaluation,
+              documentAuthority: document.documentElement.dataset.authority,
+              htmlPurpose: document.documentElement.dataset.htmlPurpose,
+              stateHash: document.documentElement.dataset.stateHash,
+              meaningSha256: document.documentElement.dataset.meaningSha256,
+              profileSha256: document.documentElement.dataset.profileSha256,
+              svgSha256: document.documentElement.dataset.svgSha256,
+              svg: Boolean(document.querySelector('#semantic-map-svg')),
+              title: document.querySelector('#map-title')?.textContent,
+              cardRepoIds: [...document.querySelectorAll('[data-repo]')].map((node) => node.dataset.repo),
+              bodyText: document.body.innerText,
+            })"""
         )
         page.screenshot(path=str(args.screenshot), full_page=True)
         browser.close()
 
-    expected_ids = {
-        "selected-universe",
+    expected_repo_ids = [
         "roccho-dev/governance",
         "roccho-dev/adrs",
         "roccho-dev/ops",
         "roccho-dev/ui",
-    }
-    assert observed["pattern"] == "map/1"
-    assert observed["scenePattern"] == "map/1"
-    assert observed["patternControl"] == "map/1"
+    ]
+    expected_region_ids = ["selected-universe", *expected_repo_ids]
+    evaluation = observed["evaluation"]
+    assert evaluation["pattern"] == "map/1"
+    assert evaluation["mapId"] == "urn:roccho:governance:selected-universe"
+    assert evaluation["stateHash"] == "sha256:70c0dec23c66140af759a05446049d01efef4c2cfd6d9ea7e2cb711117679c3e"
+    assert evaluation["meaningSha256"] == "sha256:d29c4cbee8e3c38fc9a29e9dbe2d39e0a6989a62ba2771302b85711025c9ebc3"
+    assert evaluation["profileSha256"] == "sha256:135ba5e65d0c939967d953ad39068bd371c46d30393a94a794c2a1f6403ae611"
+    assert evaluation["svgSha256"] == "sha256:a170306bebeaf7ca9f12de433bc6c169db4c3be3c24a993cea1ffa5b7993e6da"
+    assert evaluation["regionIds"] == expected_region_ids
+    assert evaluation["relationIds"] == []
+    assert evaluation["authority"] is False
+    assert evaluation["htmlPurpose"] == "visual-evaluation-only"
+    assert observed["documentAuthority"] == "false"
+    assert observed["htmlPurpose"] == "visual-evaluation-only"
+    assert observed["stateHash"] == evaluation["stateHash"]
+    assert observed["meaningSha256"] == evaluation["meaningSha256"]
+    assert observed["profileSha256"] == evaluation["profileSha256"]
+    assert observed["svgSha256"] == evaluation["svgSha256"]
     assert observed["svg"] is True
-    assert observed["editorReady"] is True
     assert observed["title"] == "governance selected universe"
-    assert set(observed["regionIds"]) == expected_ids
-    assert observed["relationIds"] == []
-    assert observed["sourceControl"] is True
-    assert observed["helpControl"] is True
+    assert observed["cardRepoIds"] == expected_repo_ids
+    assert before == "0 0 1600 1000"
+    assert zoomed != before
+    assert fitted == before
     for text in (
-        "roccho-dev/governance",
-        "roccho-dev/adrs",
-        "roccho-dev/ops",
-        "roccho-dev/ui",
+        *expected_repo_ids,
         "projection_gate",
         "authority_records",
         "effectful_executor",
         "renderer_preview",
         "shadow-observed",
         "blocking-candidate",
+        "VISUAL EVALUATION",
     ):
         assert text in observed["bodyText"], text
     assert not page_errors, page_errors
@@ -107,15 +123,22 @@ def main() -> int:
     assert not external, external
 
     receipt = {
-        "schema": "ops.selectedUniverseSemanticMapBrowserReceipt/1",
+        "schema": "ops.selectedUniverseSemanticMapBrowserReceipt/2",
         "status": "PASS",
         "claim_ceiling": "VISUAL_EVALUATION_ONLY",
         "authority": False,
         "url": args.url,
-        "pattern": observed["pattern"],
-        "region_count": len(observed["regionIds"]),
-        "relation_count": len(observed["relationIds"]),
-        "repo_ids_visible": sorted(expected_ids - {"selected-universe"}),
+        "pattern": evaluation["pattern"],
+        "map_id": evaluation["mapId"],
+        "state_hash": evaluation["stateHash"],
+        "meaning_sha256": evaluation["meaningSha256"],
+        "profile_sha256": evaluation["profileSha256"],
+        "svg_sha256": evaluation["svgSha256"],
+        "region_count": len(evaluation["regionIds"]),
+        "relation_count": len(evaluation["relationIds"]),
+        "repo_ids_visible": expected_repo_ids,
+        "zoom_changed_viewbox": True,
+        "fit_restored_viewbox": True,
         "html_visual_evaluation_only": True,
         "page_errors": page_errors,
         "console_errors": console_errors,
