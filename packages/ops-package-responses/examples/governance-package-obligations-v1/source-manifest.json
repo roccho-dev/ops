@@ -1,0 +1,43 @@
+{
+  "accepted_meaning_authority": false,
+  "active_package_ids": [
+    "ops-gov-package-output",
+    "ops-package-responses",
+    "shiftleft-admission"
+  ],
+  "authority": false,
+  "boundary": "fixture states the exact provider-neutral JSONL source ADRS must eventually release; it is test input only and cannot authorize production admission",
+  "fixture_id": "adrs-package-obligations-v1-ops-0c07b2d",
+  "inventory_algorithm": "ops-package-responses.inventory.v1-static-equivalent",
+  "inventory_inputs": [
+    {
+      "path": "build/packages.jsonl",
+      "sha256": "sha256:f88b534a7c82e682c9a1f79b79d9c1eb53d744de59ed418a2276b908c1fb2abc"
+    },
+    {
+      "path": "flake.base.nix",
+      "sha256": "sha256:39110c718e6ece51205aa29dcb6c6e0a5ac0b9417787a2ddf6121ea65e108dd1"
+    },
+    {
+      "path": "flake.nix",
+      "sha256": "sha256:efda4425fb444c5e5e5f9fe794779abd476f76142b11fbc36e7a9c01611b43bf"
+    },
+    {
+      "path": "packages/ops-cdp-core/src/cdp/chromium-cdp.nix",
+      "sha256": "sha256:a69b18c41fe9beac1663fcc3a1a9c0e6ed06bcb7eb60ac85c2f6f4089f9161af"
+    },
+    {
+      "path": "packages/<directory-name-set>",
+      "sha256": "sha256:ea5e493cc98e86fa2d5435e066548689834d1515b52f38cd308fc1a243c2e7f6"
+    }
+  ],
+  "kind": "adrsPackageObligationFixtureManifest.v1",
+  "production_gate": false,
+  "row_count": 123,
+  "source_file": "source.jsonl",
+  "source_sha256": "sha256:29031ead40de8692bd1e5652e75e91697f6f0eee14e3bfa0ef25813bf62ade52",
+  "target_commit": "0c07b2d3214ab10f1eb33f3af589670a0b0b179a",
+  "target_repository": "roccho-dev/ops",
+  "target_system": "x86_64-linux",
+  "target_tree": "55c70e307648913ff57ab9c54afbc443200857ba"
+}

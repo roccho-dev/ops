@@ -1,0 +1,43 @@
+{
+  "authority": false,
+  "boundary": "package-owned golden evidence only; accepted ADRS authority, real Nix, remote Release, merge admission, and organization-active remain unproven",
+  "command": [
+    "node",
+    "packages/ops-package-responses/tests/governance-fixture-e2e.mjs",
+    "--json"
+  ],
+  "environment": {
+    "network": false,
+    "nix_mode": "deterministic-test-adapter",
+    "node": "v22.16.0",
+    "real_nix_proven": false
+  },
+  "implementation_commit": "ca2f3cb720c311b0c29465088973a3f25afb0e7a",
+  "implementation_tree": "git-tree-sha1:c1edd0322983b221156741be4b2d809b2a6b7efc",
+  "input_digests": {
+    "expected.json": "sha256:4ab6c46cd038c2b9a6350e92e8d5539d1191c6b202e0f48ed743da979283caa9",
+    "governance-source.json": "sha256:cbccb8bb692b0ad14e47d9ec41c72646da8d7d09c723b6653ab020f59cef4056",
+    "inventory-projection.json": "sha256:5cde62f0949bd32bedfbfe16e49f21cf56ffea3065ac49551b6636c1c84bbc87",
+    "package-obligations-materialization.json": "sha256:aeb3c746abeb0ffff3eb801ac783a04a190d4c57b3be4aea0baae367c0aaad7e",
+    "package-obligations.jsonl": "sha256:29031ead40de8692bd1e5652e75e91697f6f0eee14e3bfa0ef25813bf62ade52",
+    "source-manifest.json": "sha256:4dec0ca196e3bbf082793dc1f7420f2c3d129bd5b45d738993d1aa6a8133b6d4"
+  },
+  "kind": "ops.packageObligationGoldenReceipt.v1",
+  "observed": {
+    "active": 3,
+    "authority": false,
+    "evidence": 3,
+    "findings": 0,
+    "kind": "ops.packageObligationGoldenExpected.v1",
+    "organization_active_minted": false,
+    "out_of_scope": 120,
+    "packages": 123,
+    "status": "pass"
+  },
+  "observed_at": "2026-08-29T21:28:06Z",
+  "package_id": "ops-package-responses",
+  "package_tree": "git-tree-sha1:b3cb988ccb6e43c8af3f7b9406da716e73d88f4d",
+  "receipt_digest": "sha256:5f102cbac71ecec019829d8d5a6426bfeee4bb5963bbdfef22f584e19507d060",
+  "status": "pass",
+  "test_blob": "git-blob-sha1:7f0a3fee7b8f5926ebfad67c4da910baca591f33"
+}

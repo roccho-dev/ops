@@ -1,0 +1,14 @@
+{
+  "accepted_meaning_authority": false,
+  "authority": false,
+  "boundary": "exact local merge-train evidence only; downstream replay does not accept ADRS meaning or mint organization-active admission",
+  "governance_commit": "3e6b51af7b7bc9043ad11819c44d034fe24b190b",
+  "governance_tree": "125430a74b945b25b9b3029ac6ce147193623559",
+  "inventory_projection_sha256": "sha256:5cde62f0949bd32bedfbfe16e49f21cf56ffea3065ac49551b6636c1c84bbc87",
+  "kind": "ops.governancePackageObligationSource.v1",
+  "materialization_receipt_sha256": "sha256:aeb3c746abeb0ffff3eb801ac783a04a190d4c57b3be4aea0baae367c0aaad7e",
+  "production_gate": false,
+  "source_blob": "git-blob-sha1:c27c24f642039545e658844315852411d9945a04",
+  "source_path": "fixtures/adrs-package-obligations/v1/source.jsonl",
+  "source_sha256": "sha256:29031ead40de8692bd1e5652e75e91697f6f0eee14e3bfa0ef25813bf62ade52"
+}

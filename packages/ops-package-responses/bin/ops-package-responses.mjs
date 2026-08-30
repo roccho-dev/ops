@@ -231,7 +231,14 @@ function packageIdentity(root, inventoryRow) {
       continue;
     }
     const file = path.join(root, entry.entry);
-    entrypoints.push({ ...entry, exists: fs.existsSync(file), digest: fs.existsSync(file) ? hashFile(file) : null });
+    const exists = fs.existsSync(file);
+    const stat = exists ? fs.lstatSync(file) : null;
+    const source = exists ? sourceObject(root, entry.entry) : null;
+    const digest = !exists ? null
+      : stat.isDirectory() ? (source?.type === "tree" ? objectDigest(source) : null)
+        : stat.isFile() || stat.isSymbolicLink() ? hashFile(file)
+          : null;
+    entrypoints.push({ ...entry, exists, source_type: source?.type ?? null, source_object: source?.object_id ?? null, digest });
   }
   return { package_tree: sourceObjects.find((row) => row.type === "tree")?.object_id ?? null, package_source: packageSource, entrypoints };
 }
@@ -341,9 +348,9 @@ function execute({ releaseDir, outDir, repoRoot, governanceSource, system, nixBi
     if (!baseObligation) localResiduals.push(residual(packageId, claimId, "obligation-missing", "package exists in ops inventory but exact gov release contains no package obligation"));
     if (!inv) localResiduals.push(residual(packageId, claimId, "registered-package-missing-on-disk", "exact gov release package obligation has no matching ops package", baseObligation));
     if (baseObligation && inv && baseObligation.package_path !== inv.package_path) localResiduals.push(residual(packageId, claimId, "package-path-drift", `gov=${baseObligation.package_path} ops=${inv.package_path}`, baseObligation));
-    if (inv && !(inv.entrypoints?.length)) localResiduals.push(residual(packageId, claimId, "entrypoint-missing", "ops package inventory has no build/packages.jsonl entrypoint", baseObligation));
-    if (inv && inv.entrypoints?.some((entry) => entry.kind === "source" && !fs.existsSync(path.join(root, entry.entry)))) localResiduals.push(residual(packageId, claimId, "entrypoint-path-missing", "one or more declared source entrypoints do not exist", baseObligation));
-    if (inv && !(packageIdentityValue.package_source?.objects?.length)) localResiduals.push(residual(packageId, claimId, "package-source-missing", "ops package has no exact Git source object", baseObligation));
+    if (inv && baseObligation?.claim_required && !(inv.entrypoints?.length)) localResiduals.push(residual(packageId, claimId, "entrypoint-missing", "selected package has no executable source or Nix entrypoint", baseObligation));
+    if (inv && baseObligation?.claim_required && inv.entrypoints?.some((entry) => entry.kind === "source" && !fs.existsSync(path.join(root, entry.entry)))) localResiduals.push(residual(packageId, claimId, "entrypoint-path-missing", "one or more selected source entrypoints do not exist", baseObligation));
+    if (inv && baseObligation?.claim_required && !(packageIdentityValue.package_source?.objects?.length)) localResiduals.push(residual(packageId, claimId, "package-source-missing", "selected package has no exact Git source object", baseObligation));
     const obligation = baseObligation ? { ...baseObligation, ...release.identity } : null;
     if (obligation && obligation.claim_required && !obligation.required_tests.length) localResiduals.push(residual(packageId, claimId, "required-test-missing", "package obligation requires a claim but declares no required tests", obligation));
     if (obligation?.claim_required) {

@@ -50,3 +50,22 @@ converted to Green.
 
 `validate` checks packet integrity. `validate --strict` additionally fails whenever
 any package receipt is blocked.
+
+## Package-owned governance fixture
+
+`examples/governance-package-obligations-v1/` is the golden input for the
+current Ops package universe. It contains all 123 package obligations from the
+Governance merge train, with three selected package checks and 120 explicit
+out-of-scope rows. The E2E test verifies the source inventory digests, replays the
+real package entrypoint through a deterministic Nix adapter, and requires:
+
+```text
+123 responses + 123 receipts
+3 pass + 120 out-of-scope
+0 findings
+organization-active = false
+```
+
+An explicit out-of-scope obligation does not require an implementation
+entrypoint. Missing obligations, selected-package entrypoints, selected checks,
+or evidence remain blocking.
