@@ -36,6 +36,8 @@ function validateCheckedInExample() {
   const projection = readJson(path.join(exampleRoot, "inventory-projection.json"));
   const source = readJson(path.join(exampleRoot, "governance-source.json"));
   const materialization = readJson(path.join(exampleRoot, "package-obligations-materialization.json"));
+  const expected = readJson(path.join(exampleRoot, "expected.json"));
+  const receipt = readJson(path.join(exampleRoot, "receipt.json"));
   const obligationFile = path.join(exampleRoot, "package-obligations.jsonl");
   const obligations = readJsonl(obligationFile);
 
@@ -86,6 +88,28 @@ function validateCheckedInExample() {
   assert.equal(sha256File(path.join(exampleRoot, "inventory-projection.json")), source.inventory_projection_sha256);
   assert.equal(sha256File(path.join(exampleRoot, "package-obligations-materialization.json")), source.materialization_receipt_sha256);
 
+  assert.equal(expected.kind, "ops.packageObligationGoldenExpected.v1");
+  assert.equal(expected.status, "pass");
+  assert.equal(expected.packages, 122);
+  assert.equal(expected.active, 3);
+  assert.equal(expected.out_of_scope, 119);
+  assert.equal(expected.evidence, 3);
+  assert.equal(expected.findings, 0);
+  assert.equal(expected.organization_active_minted, false);
+  assert.equal(expected.authority, false);
+  assert.equal(receipt.kind, "ops.packageObligationGoldenReceipt.v1");
+  assert.equal(receipt.status, "pass");
+  assert.equal(receipt.authority, false);
+  assert.equal(receipt.environment.real_nix_proven, false);
+  assert.deepEqual(receipt.observed, expected);
+  const receiptBase = { ...receipt };
+  delete receiptBase.receipt_digest;
+  assert.equal(objectDigest(receiptBase), receipt.receipt_digest);
+  for (const [name, digest] of Object.entries(receipt.input_digests)) assert.equal(sha256File(path.join(exampleRoot, name)), digest);
+  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}^{tree}`), receipt.implementation_tree.slice("git-tree-sha1:".length));
+  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses`), receipt.package_tree.slice("git-tree-sha1:".length));
+  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses/tests/governance-fixture-e2e.mjs`), receipt.test_blob.slice("git-blob-sha1:".length));
+
   for (const input of manifest.inventory_inputs) {
     const observed = input.path === "packages/<directory-name-set>"
       ? directorySetDigest(path.join(repoRoot, "packages"))
@@ -93,7 +117,7 @@ function validateCheckedInExample() {
     assert.equal(observed, input.sha256, `inventory source drift: ${input.path}`);
   }
   assert.deepEqual(sortedDirectories(path.join(repoRoot, "packages")), projection.source_directory_ids);
-  return { manifest, projection, obligations, source, materialization };
+  return { manifest, projection, obligations, source, materialization, expected, receipt };
 }
 
 function writeFakeNix(file, fakeRoot, projection) {
@@ -234,6 +258,17 @@ export function runGovernanceFixtureE2E() {
     assert.equal(result.rowCounts.receipts, 122);
     assert.equal(result.rowCounts.admission, 122);
     assert.equal(result.rowCounts.findings, 0);
+    assert.deepEqual({
+      kind: example.expected.kind,
+      status: result.status,
+      packages: result.rowCounts.packages,
+      active: 3,
+      out_of_scope: 119,
+      evidence: 3,
+      findings: result.rowCounts.findings,
+      organization_active_minted: false,
+      authority: false,
+    }, example.expected);
 
     const packages = readJsonl(path.join(outDir, "packages.jsonl"));
     const receipts = readJsonl(path.join(outDir, "receipts.jsonl"));

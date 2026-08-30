@@ -8,3 +8,8 @@ package explicitly as `out-of-scope`. It proves contract execution with a fake N
 adapter in the package test and is re-run with the real Governance worktree in the
 cross-repository lane. It does not replace real Nix, accepted ADRS authority, a
 published release, final merge admission, or `organization-active` state.
+
+The checked-in `expected.json` fixes the semantic result. `receipt.json` records
+the exact implementation commit/tree and test blob that produced it. The receipt
+uses the deterministic test adapter and explicitly leaves real Nix and remote
+provider proof false.

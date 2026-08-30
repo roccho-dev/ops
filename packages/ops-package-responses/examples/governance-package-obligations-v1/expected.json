@@ -1,0 +1,11 @@
+{
+  "active": 3,
+  "authority": false,
+  "evidence": 3,
+  "findings": 0,
+  "kind": "ops.packageObligationGoldenExpected.v1",
+  "organization_active_minted": false,
+  "out_of_scope": 119,
+  "packages": 122,
+  "status": "pass"
+}
