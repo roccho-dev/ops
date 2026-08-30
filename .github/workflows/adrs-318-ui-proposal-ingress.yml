@@ -24,7 +24,7 @@ jobs:
     env:
       ROOT: verification/adrs-318-ui-proposal-ingress
       CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      UI_COMMIT: 0cf5033d3d43412e9da6d28bbb34498f51416136
+      UI_COMMIT: 59ba7c0370de72a790c8828994d5b726ce4cd944
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
@@ -44,7 +44,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Generate approved UI, prove it locally, deploy exact bytes and verify live behavior
+      - name: Generate current organization UI, prove map/graph/seq, deploy exact bytes and verify live behavior
         run: |
           export EVIDENCE="$RUNNER_TEMP/adrs-ui-proposal-evidence"
           export UI_ROOT="$GITHUB_WORKSPACE/ui-source"

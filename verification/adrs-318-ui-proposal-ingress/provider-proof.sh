@@ -25,26 +25,54 @@ cleanup() {
 trap cleanup EXIT
 
 node --test "$ROOT/tests/worker.test.mjs" | tee "$EVIDENCE/node-tests.log"
+node --check "$ROOT/project-current-organization.mjs"
+node --check "$ROOT/build-approved-ui.mjs"
+python3 -m py_compile "$ROOT/browser-proof.py"
 python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
 chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
 test -n "$chrome"
 "$chrome" --version > "$EVIDENCE/chrome-version.txt"
 
 test "$(git -C "$UI_ROOT" rev-parse HEAD)" = "$UI_COMMIT"
-UI_COMMIT="$UI_COMMIT" node "$ROOT/build-approved-ui.mjs" "$UI_ROOT" "$ROOT/public" \
+UI_COMMIT="$UI_COMMIT" CANDIDATE_SHA="$CANDIDATE_SHA" \
+  node "$ROOT/build-approved-ui.mjs" "$UI_ROOT" "$ROOT/public" \
   | tee "$EVIDENCE/approved-ui-build.log"
 cp "$ROOT/public/approved-ui-receipt.json" "$EVIDENCE/approved-ui-receipt.json"
-python3 - "$EVIDENCE/approved-ui-receipt.json" "$UI_COMMIT" <<'PY'
+cp "$ROOT/public/organization-projection-receipt.json" "$EVIDENCE/organization-projection-receipt.json"
+python3 - "$EVIDENCE/approved-ui-receipt.json" "$EVIDENCE/organization-projection-receipt.json" "$UI_COMMIT" "$CANDIDATE_SHA" <<'PY'
 import json,sys
-value=json.load(open(sys.argv[1],encoding='utf-8'))
-assert value['status']=='PASS'
-assert value['uiCommit']==sys.argv[2]
-assert value['pattern']=='map/1'
-assert value['retiredFixedFormPresent'] is False
-assert value['requiredRegionIds']==['repo:adrs','repo:governance','repo:ops','pkg.adrs318.canary']
+build=json.load(open(sys.argv[1],encoding='utf-8'))
+projection=json.load(open(sys.argv[2],encoding='utf-8'))
+assert build['status']=='PASS'
+assert build['uiCommit']==sys.argv[3]
+assert build['opsCommit']==sys.argv[4]
+assert build['patterns']==['map/1','graph/1','seq/1']
+assert build['selectedUniverseComplete'] is True
+assert build['allOwnerRepositoriesObserved'] is False
+assert build['unknownsVisible'] is True
+assert build['retiredFixedFormPresent'] is False
+assert projection['status']=='PASS'
+assert projection['allSelectedRepositoriesRepresented'] is True
+assert projection['allSelectedPackageDirectoriesRepresented'] is True
+assert projection['allOwnerRepositoriesObserved'] is False
+assert projection['selectedRepositoryCount']==4
+assert projection['observedPackageDirectoryCount']>=15
+assert projection['eventCount']>=7
+assert projection['findingCount']>=3
+assert projection['relationCount']>=12
+required={
+ 'repo:adrs','repo:governance','repo:ops','repo:ui','decision:adrs:331',
+ 'finding:owner-repositories-unmaterialized','package:governance:repo-governance',
+ 'package:ops:artifact-assembly','package:ui:semantic-map','pkg.adrs318.canary',
+}
+assert required <= set(build['requiredRegionIds'])
 PY
 ! grep -R -F 'ADRS UI Proposal Canary' "$ROOT/public"
 ! grep -R -F '固定canary変更' "$ROOT/public"
+
+grep -F 'repo:ui' "$ROOT/public/map-state.jsonl" >/dev/null
+grep -F 'package:ops:artifact-assembly' "$ROOT/public/map-state.jsonl" >/dev/null
+grep -F 'finding:owner-repositories-unmaterialized' "$ROOT/public/map-state.jsonl" >/dev/null
 
 python3 -m http.server "$LOCAL_PORT" --bind 127.0.0.1 --directory "$ROOT/public" \
   > "$EVIDENCE/local-server.log" 2>&1 &
@@ -58,16 +86,22 @@ CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
 kill "$local_server_pid"
 wait "$local_server_pid" 2>/dev/null || true
 local_server_pid=""
-python3 - "$EVIDENCE/local-visual.json" "$EVIDENCE/local-visual.png" "$EVIDENCE/local-visual-proposal.png" <<'PY'
+python3 - "$EVIDENCE/local-visual.json" "$EVIDENCE" <<'PY'
 import json,os,sys
 value=json.load(open(sys.argv[1],encoding='utf-8'))
+root=sys.argv[2]
 assert value['status']=='PASS'
 assert value['mode']=='visual-only'
-assert value['pattern']=='map/1'
-assert value['representation_count']==20
-assert value['relation_count']==6
+assert set(value['patterns'])=={'map/1','graph/1','seq/1'}
+assert value['package_count']>=15
+assert value['unknown_count']>=2
+assert value['relation_count']>=12
+assert value['selected_universe_complete'] is True
+assert value['all_owner_repositories_observed'] is False
+assert value['unknowns_visible'] is True
 assert value['console_errors']==[] and value['page_errors']==[] and value['failed_responses']==[]
-assert os.path.getsize(sys.argv[2])>0 and os.path.getsize(sys.argv[3])>0
+for name in value['screenshots'].values():
+    assert os.path.getsize(os.path.join(root,name))>0, name
 PY
 
 api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets?name_contains=$BUCKET&per_page=1000"
@@ -103,7 +137,7 @@ printf '%s\n' "$worker_url" > "$EVIDENCE/worker-url.txt"
 
 meta_ready=false
 for _ in $(seq 1 120); do
-  if curl -fsS -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
+  if curl -fsS -H 'User-Agent: roccho-ops-internal-organization-map-proof/1' \
       "$worker_url/api/meta" > "$EVIDENCE/meta.candidate.json"; then
     if python3 - "$EVIDENCE/meta.candidate.json" "$CANDIDATE_SHA" <<'PY'
 import json,sys
@@ -125,22 +159,27 @@ done
 rm -f "$EVIDENCE/meta.candidate.json"
 test "$meta_ready" = true
 
-for name in index.html connectability.mjs proposal-connect.mjs receipt.json approved-ui-receipt.json; do
+static_assets=(
+  index.html
+  connectability.mjs
+  proposal-connect.mjs
+  receipt.json
+  approved-ui-receipt.json
+  current-organization.jsonl
+  map-state.jsonl
+  organization-projection-receipt.json
+)
+for name in "${static_assets[@]}"; do
   curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/$name" > "$EVIDENCE/$name.remote"
   cmp "$ROOT/public/$name" "$EVIDENCE/$name.remote"
 done
-sha256sum \
-  "$ROOT/public/index.html" \
-  "$ROOT/public/connectability.mjs" \
-  "$ROOT/public/proposal-connect.mjs" \
-  "$ROOT/public/receipt.json" \
-  "$ROOT/public/approved-ui-receipt.json" > "$EVIDENCE/static-assets.sha256"
+sha256sum "${static_assets[@]/#/$ROOT/public/}" > "$EVIDENCE/static-assets.sha256"
 
 CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
   "$worker_url/" "$EVIDENCE/live-browser.json" "$EVIDENCE/live-browser.png"
 
 relay_status="$(curl -sS -o "$EVIDENCE/relay-without-token.json" -w '%{http_code}' \
-  -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
+  -H 'User-Agent: roccho-ops-internal-organization-map-proof/1' \
   "$worker_url/api/relay/pending")"
 test "$relay_status" = 401
 python3 - "$EVIDENCE/relay-without-token.json" <<'PY'
@@ -151,38 +190,52 @@ PY
 
 curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
   -H 'Accept: application/json' \
-  -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
+  -H 'User-Agent: roccho-ops-internal-organization-map-proof/1' \
   "$worker_url/api/proposals/$PROPOSAL_ID" > "$EVIDENCE/proposal-status.json"
 
 BUCKET_CREATED="$bucket_created" WORKER_URL="$worker_url" WORKER="$WORKER" BUCKET="$BUCKET" UI_COMMIT="$UI_COMMIT" \
-python3 - "$EVIDENCE/approved-ui-receipt.json" "$EVIDENCE/local-visual.json" "$EVIDENCE/live-browser.json" "$EVIDENCE/proposal-status.json" "$EVIDENCE/provider-proof.json" <<'PY'
+python3 - "$EVIDENCE/approved-ui-receipt.json" "$EVIDENCE/organization-projection-receipt.json" "$EVIDENCE/local-visual.json" "$EVIDENCE/live-browser.json" "$EVIDENCE/proposal-status.json" "$EVIDENCE/provider-proof.json" <<'PY'
 import json,os,sys
 build=json.load(open(sys.argv[1],encoding='utf-8'))
-local=json.load(open(sys.argv[2],encoding='utf-8'))
-live=json.load(open(sys.argv[3],encoding='utf-8'))
-status=json.load(open(sys.argv[4],encoding='utf-8'))
-assert build['status']==local['status']==live['status']==status['status']=='PASS'
+projection=json.load(open(sys.argv[2],encoding='utf-8'))
+local=json.load(open(sys.argv[3],encoding='utf-8'))
+live=json.load(open(sys.argv[4],encoding='utf-8'))
+status=json.load(open(sys.argv[5],encoding='utf-8'))
+assert build['status']==projection['status']==local['status']==live['status']==status['status']=='PASS'
 assert build['uiCommit']==local['ui_commit']==live['ui_commit']==os.environ['UI_COMMIT']
+assert build['opsCommit']==local['ops_commit']==live['ops_commit']==os.environ['CANDIDATE_SHA']
 assert local['mode']=='visual-only' and live['mode']=='live-provider'
-assert local['representation_count']==live['representation_count']==20
-assert local['relation_count']==live['relation_count']==6
+assert local['package_count']==live['package_count']==projection['observedPackageDirectoryCount']
+assert local['unknown_count']==live['unknown_count']
+assert local['relation_count']==live['relation_count']==projection['relationCount']
+assert local['patterns'].keys()==live['patterns'].keys()=={'map/1','graph/1','seq/1'}
 assert local['approved_ui'] is live['approved_ui'] is True
+assert local['selected_universe_complete'] is live['selected_universe_complete'] is True
+assert local['all_owner_repositories_observed'] is live['all_owner_repositories_observed'] is False
+assert local['unknowns_visible'] is live['unknowns_visible'] is True
 assert local['retired_fixed_form_present'] is live['retired_fixed_form_present'] is False
 assert live['proposal_state']=='recorded' and status['state']=='recorded'
 assert status['exact_comment_readback'] is True
 assert isinstance(status['comment_id'],int) and status['comment_id']>0
 assert status['comment_url'].startswith('https://github.com/roccho-dev/adrs/issues/318#issuecomment-')
 receipt={
-  'schema':'ops.approvedSemanticMapProviderProof/1',
+  'schema':'ops.internalOrganizationSemanticMapProviderProof/1',
   'status':'PASS',
-  'claim_ceiling':'APPROVED_SEMANTIC_MAP_TO_ADRS_COMMENT_RECORDED',
+  'claim_ceiling':'SELECTED_CORE_REPOSITORIES_AND_PACKAGE_SURFACES_READABLE_WITH_EXPLICIT_OWNER_UNIVERSE_GAP',
   'authority':False,
   'repository':os.environ['GITHUB_REPOSITORY'],
   'candidate_sha':os.environ['CANDIDATE_SHA'],
   'ui_commit':os.environ['UI_COMMIT'],
-  'ui_pattern':'map/1',
-  'visible_regions':live['representation_count'],
-  'visible_relations':live['relation_count'],
+  'patterns':live['patterns'],
+  'selected_repository_count':projection['selectedRepositoryCount'],
+  'observed_package_directory_count':projection['observedPackageDirectoryCount'],
+  'event_count':projection['eventCount'],
+  'finding_count':projection['findingCount'],
+  'visible_relations':projection['relationCount'],
+  'all_selected_repositories_represented':True,
+  'all_selected_package_directories_represented':True,
+  'all_owner_repositories_observed':False,
+  'unknowns_visible':True,
   'worker':{
     'name':os.environ['WORKER'],
     'url':os.environ['WORKER_URL']+'/',
@@ -198,8 +251,8 @@ receipt={
     'recorded_receipt_exact_readback':'PASS',
   },
   'expected_ui_generated_before_deploy':True,
-  'local_real_chromium_visual_proof':'PASS',
-  'remote_real_chromium_visual_and_submit_proof':'PASS',
+  'local_real_chromium_map_graph_seq_proof':'PASS',
+  'remote_real_chromium_map_graph_seq_and_submit_proof':'PASS',
   'approved_ui':True,
   'retired_fixed_form_present':False,
   'proposal_id':status['proposal_id'],
@@ -219,7 +272,7 @@ receipt={
   'authority_changed':False,
   'cutover':False,
 }
-open(sys.argv[5],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+open(sys.argv[6],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
 print(json.dumps(receipt,sort_keys=True))
 PY
 
