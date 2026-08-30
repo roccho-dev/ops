@@ -14,19 +14,28 @@ concurrency:
 
 jobs:
   deploy-and-readback:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: cloudflare-production
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Verify exact branch and inputs
         shell: bash
         env:
           CANDIDATE_SHA: ${{ github.sha }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
@@ -45,7 +54,7 @@ jobs:
           EVIDENCE: ${{ runner.temp }}/selected-universe-evidence
           WORKER_NAME: stg-selected-universe-map-260830
           CANDIDATE_SHA: ${{ github.sha }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: bash "$ROOT/provider-proof.sh"
 
