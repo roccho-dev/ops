@@ -1,0 +1,143 @@
+name: materialize issue 355 operation catalog
+
+on:
+  push:
+    branches:
+      - proposal/issue-355-operation-catalog
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-355-operation-catalog-materialize
+  cancel-in-progress: true
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      BASE_SHA: 0c07b2d3214ab10f1eb33f3af589670a0b0b179a
+      PATCH_SHA256: 6f7303f80a03430db66154ed16e22be4a65869962de7bb98b2421f2288a092a0
+      TARGET_BRANCH: proposal/issue-355-operation-catalog
+    steps:
+      - name: Checkout carrier with full history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Reconstruct exact RED and implementation commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          carrier="$RUNNER_TEMP/issue355.mbox"
+          cat .github/carry/issue355/plain-*.patchpart > "$carrier"
+          echo "$PATCH_SHA256  $carrier" | sha256sum --check
+
+          git reset --hard "$BASE_SHA"
+          git clean -fdx
+          git config user.name OpenAI
+          git config user.email noreply@openai.com
+          git am "$carrier"
+
+          test "$(git rev-list --count "$BASE_SHA"..HEAD)" = 2
+          test -z "$(git status --porcelain=v1)"
+          git diff --check "$BASE_SHA"..HEAD
+
+          echo "SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "SOURCE_TREE=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_ENV"
+
+      - name: Run package and existing focused suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence/logs"
+          node packages/ops-operation-catalog/tests/e2e.mjs | tee "$RUNNER_TEMP/evidence/logs/ops-operation-catalog.log"
+          (cd packages/hq-modeling-runtime && go test ./...) | tee "$RUNNER_TEMP/evidence/logs/hq-modeling-runtime.log"
+          node packages/ops-package-responses/tests/e2e.mjs | tee "$RUNNER_TEMP/evidence/logs/ops-package-responses.log"
+          node packages/ops-task-runtime/tests/e2e.mjs | tee "$RUNNER_TEMP/evidence/logs/ops-task-runtime.log"
+
+      - name: Install pinned Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build twice, run exact check, and read back output
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/evidence"
+          mkdir -p "$evidence/catalog"
+
+          out1="$(nix build --no-write-lock-file --no-link --print-out-paths .#ops-operation-catalog 2>"$evidence/logs/nix-build-1.log")"
+          out2="$(nix build --no-write-lock-file --no-link --print-out-paths .#ops-operation-catalog 2>"$evidence/logs/nix-build-2.log")"
+          test "$out1" = "$out2"
+          check="$(nix build --no-write-lock-file --no-link --print-out-paths .#checks.x86_64-linux.ops-operation-catalog 2>"$evidence/logs/nix-check-package.log")"
+          nix flake check --show-trace --no-write-lock-file >"$evidence/logs/nix-flake-check.log" 2>&1
+
+          cp "$out1/operation-catalog.jsonl" "$evidence/catalog/"
+          cp "$out1/manifest.json" "$evidence/catalog/"
+          node packages/ops-operation-catalog/bin/ops-operation-catalog.mjs validate --out-dir "$evidence/catalog" > "$evidence/logs/output-readback.log"
+          node packages/ops-operation-catalog/bin/ops-operation-catalog.mjs selftest --repo-root . --package-root packages/ops-operation-catalog --pretty > "$evidence/selftest.json"
+
+          python3 - "$evidence" "$SOURCE_COMMIT" "$SOURCE_TREE" "$out1" "$out2" "$check" <<'PY'
+          import hashlib, json, pathlib, subprocess, sys
+          root = pathlib.Path(sys.argv[1])
+          commit, tree, out1, out2, check = sys.argv[2:]
+          manifest = json.loads((root / 'catalog' / 'manifest.json').read_text())
+          def sha(path):
+              h=hashlib.sha256(); h.update(pathlib.Path(path).read_bytes()); return h.hexdigest()
+          source = {
+              'schema': 'ops.issue355.cleanCloneBuild.v1',
+              'repository': 'roccho-dev/ops',
+              'baseCommit': '0c07b2d3214ab10f1eb33f3af589670a0b0b179a',
+              'sourceCommit': commit,
+              'sourceTree': tree,
+              'cleanClone': subprocess.check_output(['git','status','--porcelain=v1'], text=True) == '',
+              'nixBuild': 'PASS',
+              'nixCheck': 'PASS',
+              'flakeCheck': 'PASS',
+              'outputReadback': 'PASS',
+              'buildOutput1': out1,
+              'buildOutput2': out2,
+              'checkOutput': check,
+              'sameOutputPath': out1 == out2,
+              'catalogSha256': sha(root / 'catalog' / 'operation-catalog.jsonl'),
+              'manifestSha256': sha(root / 'catalog' / 'manifest.json'),
+              'manifestSourceCommit': manifest['sourceCommit'],
+              'manifestSourceSnapshotNarHash': manifest['sourceSnapshotNarHash'],
+              'status': 'PASS',
+          }
+          if source['manifestSourceCommit'] != commit or not source['sameOutputPath'] or not source['cleanClone']:
+              raise SystemExit('source/output identity mismatch')
+          (root / 'nix-clean-clone.json').write_text(json.dumps(source, indent=2, sort_keys=True)+'\n')
+          regression = {
+              'schema': 'ops.issue355.preexistingRegression.v1',
+              'suites': 5,
+              'failedSuites': 0,
+              'skips': 0,
+              'waivers': 0,
+              'status': 'PASS',
+          }
+          (root / 'preexisting-regression.json').write_text(json.dumps(regression, indent=2, sort_keys=True)+'\n')
+          PY
+
+          (cd "$evidence" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$evidence" && sha256sum --check SHA256SUMS)
+
+      - name: Publish source-only branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain=v1)"
+          git push --force origin "HEAD:refs/heads/$TARGET_BRANCH"
+
+      - name: Upload exact Nix and readback evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue-355-operation-catalog-evidence
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0

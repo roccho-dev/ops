@@ -1,0 +1,118 @@
+atalog, validateOutput } from "../lib/core.mjs";
++import { runSelftest } from "../lib/selftest.mjs";
++
++function value(args, name) { const index=args.indexOf(name); if(index<0||index+1>=args.length) throw Error(`missing:${name}`); return args[index+1]; }
++const [command, ...args] = process.argv.slice(2);
++try {
++  if (command === "compile") {
++    const result=compileCatalog({repoRoot:path.resolve(value(args,"--repo-root")),sourceDir:path.resolve(value(args,"--source-dir")),outDir:path.resolve(value(args,"--out-dir")),sourceCommit:value(args,"--source-commit"),sourceSnapshotNarHash:value(args,"--source-snapshot-nar-hash")});
++    process.stdout.write(JSON.stringify({ok:true,rowCount:result.catalog.length,manifestDigest:result.manifest.manifestDigest})+"\n");
++  } else if (command === "validate") {
++    const result=validateOutput(path.resolve(value(args,"--out-dir"))); process.stdout.write(JSON.stringify({ok:true,rowCount:result.catalog.length,manifestDigest:result.manifest.manifestDigest})+"\n");
++  } else if (command === "selftest") {
++    process.stdout.write(JSON.stringify(runSelftest({repoRoot:path.resolve(value(args,"--repo-root")),packageRoot:path.resolve(value(args,"--package-root"))}),null,args.includes("--pretty")?2:0)+"\n");
++  } else throw Error("usage: ops-operation-catalog <compile|validate|selftest>");
++} catch (error) { process.stderr.write(`ops-operation-catalog: ${error.message}\n`); process.exitCode=1; }
+diff --git a/packages/ops-operation-catalog/default.nix b/packages/ops-operation-catalog/default.nix
+new file mode 100644
+index 0000000..21a56ee
+--- /dev/null
++++ b/packages/ops-operation-catalog/default.nix
+@@ -0,0 +1,22 @@
++{
++  pkgs,
++  sourceCommit,
++  sourceSnapshotNarHash,
++}:
++pkgs.runCommand "ops-operation-catalog-v1"
++  {
++    nativeBuildInputs = [ pkgs.nodejs ];
++  }
++  ''
++    set -euo pipefail
++    mkdir -p "$out"
++    node ${./bin/ops-operation-catalog.mjs} compile \
++      --repo-root ${../..} \
++      --source-dir ${./source} \
++      --out-dir "$out" \
++      --source-commit ${sourceCommit} \
++      --source-snapshot-nar-hash ${sourceSnapshotNarHash}
++    node ${./bin/ops-operation-catalog.mjs} validate --out-dir "$out"
++    test -s "$out/operation-catalog.jsonl"
++    test -s "$out/manifest.json"
++  ''
+diff --git a/packages/ops-operation-catalog/lib/core.mjs b/packages/ops-operation-catalog/lib/core.mjs
+new file mode 100644
+index 0000000..4a4fc9b
+--- /dev/null
++++ b/packages/ops-operation-catalog/lib/core.mjs
+@@ -0,0 +1,195 @@
++import crypto from "node:crypto";
++import fs from "node:fs";
++import path from "node:path";
++
++export const OPERATION_KIND = "ops.operation.v1";
++export const OBLIGATION_KIND = "ops.operationObligationRef.v1";
++export const CATALOG_KIND = "ops.operationCatalog.v1";
++export const MANIFEST_KIND = "ops.operationCatalogManifest.v1";
++
++function sortValue(value) {
++  if (Array.isArray(value)) return value.map(sortValue);
++  if (value && typeof value === "object") {
++    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortValue(value[key])]));
++  }
++  return value;
++}
++export function canonicalBytes(value) { return Buffer.from(JSON.stringify(sortValue(value)), "utf8"); }
++export function digestBytes(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
++export function objectDigest(value) { return digestBytes(canonicalBytes(value)); }
++export function readJson(file) {
++  const value = JSON.parse(fs.readFileSync(file, "utf8"));
++  if (!value || typeof value !== "object" || Array.isArray(value)) throw Error(`json-object-required:${file}`);
++  return value;
++}
++export function readJsonl(file) {
++  const text = fs.readFileSync(file, "utf8");
++  if (text && !text.endsWith("\n")) throw Error(`jsonl-final-newline-required:${file}`);
++  return text.split("\n").filter(Boolean).map((line, index) => {
++    try {
++      const value = JSON.parse(line);
++      if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("json-object-required");
++      return value;
++    } catch (error) {
++      throw Error(`${file}:${index + 1}:${error.message}`);
++    }
++  });
++}
++export function writeJson(file, value) {
++  fs.mkdirSync(path.dirname(file), { recursive: true });
++  fs.writeFileSync(file, JSON.stringify(sortValue(value), null, 2) + "\n");
++}
++export function writeJsonl(file, rows) {
++  fs.mkdirSync(path.dirname(file), { recursive: true });
++  fs.writeFileSync(file, rows.map((row) => JSON.stringify(sortValue(row))).join("\n") + "\n");
++}
++function exactKeys(value, expected, code) {
++  const actual = Object.keys(value).sort();
++  const wanted = [...expected].sort();
++  if (JSON.stringify(actual) !== JSON.stringify(wanted)) throw Error(`${code}:keys:${actual.join(",")}`);
++}
++function string(value, code) {
++  if (typeof value !== "string" || !value.trim()) throw Error(`${code}:nonempty-string-required`);
++  return value;
++}
++function strings(value, code) {
++  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item)) throw Error(`${code}:string-array-required`);
++  if (new Set(value).size !== value.length) throw Error(`${code}:duplicate-array-value`);
++  return value;
++}
++export function validateObligation(row) {
++  exactKeys(row, ["kind","obligationId","packageId","reference","scope","authority"], "obligation");
++  if (row.kind !== OBLIGATION_KIND || row.authority !== false) throw Error("obligation:boundary");
++  for (const key of ["obligationId","packageId","reference","scope"]) string(row[key], `obligation:${key}`);
++  return row;
++}
++export function validateOperation(row) {
++  exactKeys(row, ["kind","operationId","operationVersion","packageId","obligationId","command","intent","target","contracts","risk","viewPolicy","authority"], "operation");
++  if (row.kind !== OPERATION_KIND || row.authority !== false) throw Error("operation:boundary");
++  for (const key of ["operationId","operationVersion","packageId","obligationId","viewPolicy"]) string(row[key], `operation:

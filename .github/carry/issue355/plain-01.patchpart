@@ -1,0 +1,133 @@
+    expected_failures = sorted(short_id(t.id()) for t, _ in result.expectedFailures)
++    unexpected_successes = sorted(short_id(t.id()) for t in result.unexpectedSuccesses)
++
++    if args.expect_red:
++        status = (
++            not lock_errors
++            and ancestor_ok
++            and not missing_declared
++            and not undeclared
++            and not errored
++            and not skipped
++            and not expected_failures
++            and not unexpected_successes
++            and failed == declared
++        )
++        assertion = "all declared tests fail as assertions"
++    else:
++        status = (
++            not lock_errors
++            and ancestor_ok
++            and not missing_declared
++            and not undeclared
++            and not failed
++            and not errored
++            and not skipped
++            and not expected_failures
++            and not unexpected_successes
++        )
++        assertion = "all declared tests pass"
++
++    payload = {
++        "schema": "edits.issue118.canonTddResult.v1",
++        "issue": spec["issue"],
++        "lane": spec["lane"],
++        "mode": "red" if args.expect_red else "green",
++        "status": "PASS" if status else "FAIL",
++        "assertion": assertion,
++        "baseCommit": base,
++        "headCommit": git(repo, "rev-parse", "HEAD").stdout.strip(),
++        "specLock": "PASS" if not lock_errors else "FAIL",
++        "specLockErrors": lock_errors,
++        "baseAncestor": ancestor_ok,
++        "declaredTests": declared,
++        "discoveredTests": discovered,
++        "missingDeclaredTests": missing_declared,
++        "undeclaredTests": undeclared,
++        "failures": failed,
++        "errors": errored,
++        "skipped": skipped,
++        "expectedFailures": expected_failures,
++        "unexpectedSuccesses": unexpected_successes,
++    }
++    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
++    sys.stdout.write(text)
++    if args.result:
++        args.result.parent.mkdir(parents=True, exist_ok=True)
++        args.result.write_text(text, encoding="utf-8")
++    return 0 if status else 1
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/proofs/issue-355/operation-catalog/CANON.md b/proofs/issue-355/operation-catalog/CANON.md
+new file mode 100644
+index 0000000..71b80a8
+--- /dev/null
++++ b/proofs/issue-355/operation-catalog/CANON.md
+@@ -0,0 +1,15 @@
++# Kent Beck Canon TDD RED — ops#355 operation catalog
++
++This worktree begins with the executable tests below and no product implementation.
++The immutable RED specification is the merge contract.
++
++```text
++fixed tests first
++→ observe assertion-only RED
++→ smallest Green implementation
++→ refactor only while Green
++```
++
++Merge is forbidden when any declared test fails, errors, skips, xfails, is deleted,
++has a weakened assertion, or when an existing ops package check regresses. The exact
++head that passed the Nix build and clean-clone readback is the only merge candidate.
+diff --git a/proofs/issue-355/operation-catalog/SPEC.sha256 b/proofs/issue-355/operation-catalog/SPEC.sha256
+new file mode 100644
+index 0000000..a4b9244
+--- /dev/null
++++ b/proofs/issue-355/operation-catalog/SPEC.sha256
+@@ -0,0 +1,5 @@
++d0a850e6959788b7f1baab1db8bd68eb6b64b4b572dde4bf8078eed8d5dfa453  CANON.md
++2046fca111bb2b30193fa4f42913274ec7b15a2ac74704947281f6081adb8821  TEST_LIST.md
++6f11d5aa990fb63f5aaaa0bb28c2ca522b707cedd0fd4e44b8642ee666898c7e  canon.json
++e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  tests/__init__.py
++54b7e87c694e33a4ba4e31282e9c26ebe1118312658d869ff8895e7b0c964e52  tests/test_operation_catalog_producer.py
+diff --git a/proofs/issue-355/operation-catalog/TEST_LIST.md b/proofs/issue-355/operation-catalog/TEST_LIST.md
+new file mode 100644
+index 0000000..0de64bf
+--- /dev/null
++++ b/proofs/issue-355/operation-catalog/TEST_LIST.md
+@@ -0,0 +1,14 @@
++# Test list
++
++1. Materialize the finite operation-catalog package and exact source declarations.
++2. Bind every selected operation to one existing package and obligation reference.
++3. Reject malformed, duplicate, orphan, unknown-kind, missing-ref, and digest-drift inputs.
++4. Compile the same exact input twice to byte-identical catalog and manifest outputs.
++5. Bind source commit/tree, declarations, selected release, and output digests.
++6. Keep unselected declarations from changing selected output.
++7. Add a selected data row without changing edits source.
++8. Execute zero package, worker, shell, retry, cancel, or result-authority effects.
++9. Read zero mutable repository HEAD/latest references at compile or runtime.
++10. Produce output accepted by edits#118 WT-04's strict catalog consumer.
++11. Build and check the package through Nix from a clean clone.
++12. Keep all pre-existing ops checks Green with zero skip/waiver.
+diff --git a/proofs/issue-355/operation-catalog/canon.json b/proofs/issue-355/operation-catalog/canon.json
+new file mode 100644
+index 0000000..7bc79ac
+--- /dev/null
++++ b/proofs/issue-355/operation-catalog/canon.json
+@@ -0,0 +1,23 @@
++{
++  "schema": "ops.issue355.canonTdd.v1",
++  "issue": "roccho-dev/ops#355",
++  "lane": "WT-operation-catalog-producer",
++  "baseCommit": "0c07b2d3214ab10f1eb33f3af589670a0b0b179a",
++  "purpose": "Produce one exact deterministic non-authority operation catalog for the edits operator console.",
++  "mergeCondition": "The fixed RED suite is Green on the exact Nix-built clean-clone head, every operation is package/obligation bound, all invalid inputs fail closed, and all effect/mutable-read/regression counts are zero.",
++  "requiredTests": [
++    "TestOperationCatalogProducer.test_package_source_compiler_and_nix_contract_exist",
++    "TestOperationCatalogProducer.test_all_selected_operations_bind_existing_package_and_obligation",
++    "TestOperationCatalogProducer.test_all_negative_cases_are_rejected",
++    "TestOperationCatalogProducer.test_two_exact_compiles_are_byte_identical",
++    "TestOperationCatalogProducer.test_m
