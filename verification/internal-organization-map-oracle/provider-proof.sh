@@ -17,6 +17,7 @@ envelope="$EVIDENCE/semantic-map-envelope.json"
 ui_source="$EVIDENCE/ui-source"
 ui_oracle="$EVIDENCE/ui-standalone"
 python3 "$ROOT/build-state.py" "$state" | tee "$EVIDENCE/build-state.stdout.json"
+python3 "$ROOT/normalize-ui-state.py" "$state" | tee "$EVIDENCE/normalize-ui-state.stdout.json"
 python3 "$ROOT/build-envelope.py" "$state" "$envelope" | tee "$EVIDENCE/build-envelope.stdout.json"
 
 git init -q "$ui_source"
