@@ -1,0 +1,38 @@
+ Object.values(negative).every(Boolean) &&
++      bytesEqual(path.join(outA, "operation-catalog.jsonl"), path.join(outB, "operation-catalog.jsonl")) &&
++      bytesEqual(path.join(outA, "manifest.json"), path.join(outB, "manifest.json")) &&
++      first.manifest.catalogDigest === isolation.manifest.catalogDigest &&
++      extension.catalog.length === first.catalog.length + 1 &&
++      editsRejected === 0,
++    selectedOperations: first.catalog.length,
++    unselectedOperations: first.unselectedCount,
++    negative,
++    deterministicCatalog: bytesEqual(path.join(outA, "operation-catalog.jsonl"), path.join(outB, "operation-catalog.jsonl")),
++    deterministicManifest: bytesEqual(path.join(outA, "manifest.json"), path.join(outB, "manifest.json")),
++    unselectedCatalogStable: first.manifest.catalogDigest === isolation.manifest.catalogDigest,
++    selectedExtensionDelta: extension.catalog.length - first.catalog.length,
++    editsProjectionRows: editsProjection.length,
++    editsRejectedRows: editsRejected,
++    firstManifest: first.manifest,
++  };
++}
+diff --git a/packages/ops-operation-catalog/source/obligations.jsonl b/packages/ops-operation-catalog/source/obligations.jsonl
+new file mode 100644
+index 0000000..02ce3b4
+--- /dev/null
++++ b/packages/ops-operation-catalog/source/obligations.jsonl
+@@ -0,0 +1,2 @@
++{"kind":"ops.operationObligationRef.v1","obligationId":"edits.modeling-intent-surface.v1","packageId":"hq-modeling-runtime","reference":"roccho-dev/edits#50","scope":"model.* commands create intent only","authority":false}
++{"kind":"ops.operationObligationRef.v1","obligationId":"edits.agent-intent-surface.v1","packageId":"hq-modeling-runtime","reference":"roccho-dev/edits#54","scope":"agent.* commands create investigation intent only","authority":false}
+diff --git a/packages/ops-operation-catalog/source/operations.jsonl b/packages/ops-operation-catalog/source/operations.jsonl
+new file mode 100644
+index 0000000..b018d61
+--- /dev/null
++++ b/packages/ops-operation-catalog/source/operations.jsonl
+@@ -0,0 +1,13 @@
++{"kind":"ops.operation.v1","operationId":"ops.model.addSchema","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.modeling-intent-surface.v1","command":{"name":"model.addSchema","aliases":[],"keywords":["model","addSchema"],"description":"Human can propose a schema addition, but queue append is not admission."},"intent":{"queueKind":"hq.modelCommitQueued.v1","effectClass":"model_commit","op":"addSchema"},"target":{"required":true,"kinds":["contract","projectionNode"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.model.addField","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.modeling-intent-surface.v1","command":{"name":"model.addField","aliases":[],"keywords":["model","addField"],"description":"Human can propose a field addition against a selected model target."},"intent":{"queueKind":"hq.modelCommitQueued.v1","effectClass":"model_commit","op":"addField"},"target":{"required":true,"kinds":["schema","projectionNode"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.model.addEdge","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.modeling-intent-surface.v1","command":{"name":"model.addEdge","aliases":[],"keywords":["model","addEdge"],"description":"Human can confirm a semantic relation candidate for later validation/admission."},"intent":{"queueKind":"hq.modelCommitQueued.v1","effectClass":"model_commit","op":"addEdge"},"target":{"required":true,"kinds":["projectionNode","relation"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.model.deprecateField","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.modeling-intent-surface.v1","command":{"name":"model.deprecateField","aliases":[],"keywords":["model","deprecateField"],"description":"Human can mark a field deprecation intent without mutating accepted ledger."},"intent":{"queueKind":"hq.modelCommitQueued.v1","effectClass":"model_commit","op":"deprecateField"},"target":{"required":true,"kinds":["field","projectionNode"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.model.addProjection","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.modeling-intent-surface.v1","command":{"name":"model.addProjection","aliases":[],"keywords":["model","addProjection"],"description":"Human can confirm a projection modeling intent."},"intent":{"queueKind":"hq.modelCommitQueued.v1","effectClass":"model_commit","op":"addProjection"},"target":{"required":true,"kinds":["projection","contract"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.model.changeLodRule","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.modeling-intent-surface.v1","command":{"name":"model.changeLodRule","aliases":[],"keywords":["model","changeLodRule"],"description":"Human can confirm a LOD rule change as modeling intent."},"intent":{"queueKind":"hq.modelCommitQueued.v1","effectClass":"model_commit","op":"changeLodRule"},"target":{"required":true,"kinds":["repoMap.lod","projectionNode"]},"contracts":{"input":"edits.commandRequest.v1","
