@@ -1,23 +1,23 @@
 {"type":"meta","schema":"semantic-map-state/1","root":"all","title":"ADRS / governance / ops — package map"}
-{"type":"region","id":"all","parent":null,"label":"Package universe","kind":"organization","bounds":[0,0,1770,700],"summary":"sample · authority false · generated map/1 projection"}
-{"type":"region","id":"repo:adrs","parent":"all","label":"adrs","kind":"repository","bounds":[30,54,540,600],"summary":"ADRS意味の正本","order":10}
-{"type":"region","id":"repo:adrs:packages","parent":"repo:adrs","label":"packages","kind":"package-group","bounds":[52,139,494,483],"summary":"5 packages","order":11}
-{"type":"region","id":"package:adrs:decision-contract","parent":"repo:adrs:packages","label":"decision-contract","kind":"package","bounds":[76,195,218,116],"summary":"意思決定contractとstable identity","order":12}
-{"type":"region","id":"package:adrs:package-contract","parent":"repo:adrs:packages","label":"package-contract","kind":"package","bounds":[310,195,212,116],"summary":"package責務・配置・port契約","order":13}
-{"type":"region","id":"package:adrs:proposal-contract","parent":"repo:adrs:packages","label":"proposal-contract","kind":"package","bounds":[76,335,218,116],"summary":"non-authority proposal入力契約","order":14}
-{"type":"region","id":"package:adrs:accepted-decision-ledger","parent":"repo:adrs:packages","label":"accepted-decision-ledger","kind":"package","bounds":[310,335,212,116],"summary":"採択済みdecision eventの唯一正本","order":15}
-{"type":"region","id":"pkg.adrs318.canary","parent":"repo:adrs:packages","label":"proposal canary","kind":"package","bounds":[76,475,446,96],"summary":"選択してADRS Issueへの冪等proposal記録を確認","order":16}
-{"type":"region","id":"repo:governance","parent":"all","label":"governance","kind":"repository","bounds":[615,54,540,600],"summary":"ADRSからcurrent意味を決定的reduce","order":20}
-{"type":"region","id":"repo:governance:packages","parent":"repo:governance","label":"packages","kind":"package-group","bounds":[637,139,494,483],"summary":"4 packages","order":21}
-{"type":"region","id":"package:governance:decisionctl","parent":"repo:governance:packages","label":"decisionctl","kind":"package","bounds":[661,205,218,126],"summary":"accepted ADRSからcurrent stateをcompile","order":22}
-{"type":"region","id":"package:governance:release-projection","parent":"repo:governance:packages","label":"release-projection","kind":"package","bounds":[895,205,212,126],"summary":"semantic JSON/JSONLとmanifestを生成","order":23}
-{"type":"region","id":"package:governance:claim-port-join","parent":"repo:governance:packages","label":"claim-port-join","kind":"package","bounds":[661,365,218,126],"summary":"provider / consumer / receiptをjoin","order":24}
-{"type":"region","id":"package:governance:package-current","parent":"repo:governance:packages","label":"package-current","kind":"package","bounds":[895,365,212,126],"summary":"current package contract集合を公開","order":25}
-{"type":"region","id":"repo:ops","parent":"all","label":"ops","kind":"repository","bounds":[1200,54,540,600],"summary":"exact UIと意味assetを配信","order":30}
-{"type":"region","id":"repo:ops:packages","parent":"repo:ops","label":"packages","kind":"package-group","bounds":[1222,139,494,483],"summary":"3 packages","order":31}
-{"type":"region","id":"package:ops:gov-release-proxy","parent":"repo:ops:packages","label":"gov-release-proxy","kind":"package","bounds":[1246,205,218,126],"summary":"public/private Release asset取得","order":32}
-{"type":"region","id":"package:ops:adrs-proposal-ingress","parent":"repo:ops:packages","label":"adrs-proposal-ingress","kind":"package","bounds":[1480,205,212,126],"summary":"proposal検査・冪等保存・status","order":33}
-{"type":"region","id":"package:ops:ui-delivery","parent":"repo:ops:packages","label":"ui-delivery","kind":"package","bounds":[1246,365,446,126],"summary":"exact UI artifactを同一originで配信","order":34}
+{"type":"region","id":"all","parent":null,"label":"Package universe","kind":"organization","bounds":[0,0,2500,1040],"summary":"sample · authority false · generated map/1 projection"}
+{"type":"region","id":"repo:adrs","parent":"all","label":"adrs","kind":"repository","bounds":[30,45,780,930],"summary":"ADRS意味の正本","order":10}
+{"type":"region","id":"repo:adrs:packages","parent":"repo:adrs","label":"packages","kind":"package-group","bounds":[60,135,720,795],"summary":"5 packages","order":11}
+{"type":"region","id":"package:adrs:decision-contract","parent":"repo:adrs:packages","label":"decision-contract","kind":"package","bounds":[90,200,660,118],"summary":"意思決定contractとstable identity","order":12}
+{"type":"region","id":"package:adrs:package-contract","parent":"repo:adrs:packages","label":"package-contract","kind":"package","bounds":[90,336,660,118],"summary":"package責務・配置・port契約","order":13}
+{"type":"region","id":"package:adrs:proposal-contract","parent":"repo:adrs:packages","label":"proposal-contract","kind":"package","bounds":[90,472,660,118],"summary":"non-authority proposal入力契約","order":14}
+{"type":"region","id":"package:adrs:accepted-decision-ledger","parent":"repo:adrs:packages","label":"accepted-decision-ledger","kind":"package","bounds":[90,608,660,118],"summary":"採択済みdecision eventの唯一正本","order":15}
+{"type":"region","id":"pkg.adrs318.canary","parent":"repo:adrs:packages","label":"proposal canary","kind":"package","bounds":[90,744,660,118],"summary":"選択してADRS Issueへの冪等proposal記録を確認","order":16}
+{"type":"region","id":"repo:governance","parent":"all","label":"governance","kind":"repository","bounds":[860,45,780,930],"summary":"ADRSからcurrent意味を決定的reduce","order":20}
+{"type":"region","id":"repo:governance:packages","parent":"repo:governance","label":"packages","kind":"package-group","bounds":[890,135,720,795],"summary":"4 packages","order":21}
+{"type":"region","id":"package:governance:decisionctl","parent":"repo:governance:packages","label":"decisionctl","kind":"package","bounds":[920,200,660,118],"summary":"accepted ADRSからcurrent stateをcompile","order":22}
+{"type":"region","id":"package:governance:release-projection","parent":"repo:governance:packages","label":"release-projection","kind":"package","bounds":[920,336,660,118],"summary":"semantic JSON/JSONLとmanifestを生成","order":23}
+{"type":"region","id":"package:governance:claim-port-join","parent":"repo:governance:packages","label":"claim-port-join","kind":"package","bounds":[920,472,660,118],"summary":"provider / consumer / receiptをjoin","order":24}
+{"type":"region","id":"package:governance:package-current","parent":"repo:governance:packages","label":"package-current","kind":"package","bounds":[920,608,660,118],"summary":"current package contract集合を公開","order":25}
+{"type":"region","id":"repo:ops","parent":"all","label":"ops","kind":"repository","bounds":[1690,45,780,930],"summary":"exact UIと意味assetを配信","order":30}
+{"type":"region","id":"repo:ops:packages","parent":"repo:ops","label":"packages","kind":"package-group","bounds":[1720,135,720,795],"summary":"3 packages","order":31}
+{"type":"region","id":"package:ops:gov-release-proxy","parent":"repo:ops:packages","label":"gov-release-proxy","kind":"package","bounds":[1750,200,660,118],"summary":"public/private Release asset取得","order":32}
+{"type":"region","id":"package:ops:adrs-proposal-ingress","parent":"repo:ops:packages","label":"adrs-proposal-ingress","kind":"package","bounds":[1750,336,660,118],"summary":"proposal検査・冪等保存・status","order":33}
+{"type":"region","id":"package:ops:ui-delivery","parent":"repo:ops:packages","label":"ui-delivery","kind":"package","bounds":[1750,472,660,118],"summary":"exact UI artifactを同一originで配信","order":34}
 {"type":"relation","id":"relation:adrs-to-governance","from":"repo:adrs","to":"repo:governance","kind":"projects","label":"projects current meaning"}
 {"type":"relation","id":"relation:governance-to-proxy","from":"package:governance:release-projection","to":"package:ops:gov-release-proxy","kind":"materializes","label":"release asset"}
 {"type":"relation","id":"relation:package-current-to-proxy","from":"package:governance:package-current","to":"package:ops:gov-release-proxy","kind":"materializes","label":"current package contracts"}
