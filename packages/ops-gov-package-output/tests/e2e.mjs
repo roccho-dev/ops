@@ -41,19 +41,22 @@ try {
   assert.equal(emitted.kind, "govPackageOutput.v1");
   assert.equal(emitted.projectionMode, "exact-release-execution");
   assert.equal(emitted.status, "pass");
-  assert.equal(emitted.rowCounts.packages, 2);
-  assert.equal(emitted.rowCounts.receipts, 2);
+  assert.equal(emitted.rowCounts.packages, 3);
+  assert.equal(emitted.rowCounts.receipts, 3);
 
   const receipts = readJsonl(path.join(passOut, "receipts.jsonl"));
-  assert.equal(receipts.length, 2);
-  assert.ok(receipts.every((row) => row.status === "pass"));
-  assert.ok(receipts.every((row) => row.evidence.length === 1));
-  assert.ok(receipts.every((row) => row.evidence[0].outputs.length === 1));
+  assert.equal(receipts.length, 3);
+  assert.equal(receipts.filter((row) => row.status === "pass").length, 2);
+  assert.equal(receipts.filter((row) => row.status === "out-of-scope").length, 1);
+  assert.ok(receipts.filter((row) => row.status === "pass").every((row) => row.evidence.length === 1));
+  assert.ok(receipts.filter((row) => row.status === "out-of-scope").every((row) => row.evidence.length === 0));
+  assert.ok(receipts.filter((row) => row.status === "pass").every((row) => row.evidence[0].outputs.length === 1));
   assert.ok(receipts.every((row) => row.governanceReleaseDigest === emitted.governanceReleaseDigest));
-  assert.ok(receipts.every((row) => fs.existsSync(path.join(passOut, row.evidence[0].log_refs.stdout))));
+  assert.ok(receipts.filter((row) => row.status === "pass").every((row) => fs.existsSync(path.join(passOut, row.evidence[0].log_refs.stdout))));
   const admissions = readJsonl(path.join(passOut, "admission.jsonl"));
   assert.ok(admissions.every((row) => row.active === false));
-  assert.ok(admissions.every((row) => row.status === "candidate-pass"));
+  assert.equal(admissions.filter((row) => row.status === "candidate-pass").length, 2);
+  assert.equal(admissions.filter((row) => row.status === "out-of-scope").length, 1);
 
   const passValidation = run(["validate", "--out-dir", passOut, "--strict", "--json"]);
   assert.equal(passValidation.ok, true, JSON.stringify(passValidation.errors));

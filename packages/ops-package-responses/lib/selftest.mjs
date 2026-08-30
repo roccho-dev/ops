@@ -99,6 +99,26 @@ function obligationRows(includeBeta = true) {
       route_policy: "ops",
     });
   }
+  rows.push({
+    kind: "packageObligation.v1",
+    obligation_id: "obligation.gamma",
+    adrs_ref: "roccho-dev/adrs#fixture",
+    target_universe_id: "ops-all",
+    repo_locator: "roccho-dev/ops",
+    authority_surface: "adrs-release",
+    package_id: "gamma",
+    package_path: "packages/gamma",
+    owner_role: "ops",
+    goals: ["explicit out-of-scope response"],
+    non_goals: ["do not require an executable entrypoint"],
+    requirements: ["emit one out-of-scope receipt"],
+    required_tests: [],
+    claim_required: false,
+    receipt_required: true,
+    residual_required: false,
+    freshness_policy: "exact-commit",
+    route_policy: "ops",
+  });
   return rows;
 }
 function createRelease(root, fakeNixBin, rows, suffix, engineCommit) {
@@ -144,6 +164,8 @@ function createRepo(root) {
     fs.mkdirSync(path.join(root, "packages", id, "bin"), { recursive: true });
     fs.writeFileSync(path.join(root, "packages", id, "bin", `${id}.mjs`), `#!/usr/bin/env node\nconsole.log(${JSON.stringify(id)})\n`);
   }
+  fs.mkdirSync(path.join(root, "packages", "gamma"), { recursive: true });
+  fs.writeFileSync(path.join(root, "packages", "gamma", "README.md"), "out of scope fixture package\n");
   writeJsonl(path.join(root, "build", "packages.jsonl"), [
     { kind: "package", name: "alpha", bin: "alpha", entry: "packages/alpha/bin/alpha.mjs", runtime: "node", deps: [], env: [] },
     { kind: "package", name: "beta", bin: "beta", entry: "packages/beta/bin/beta.mjs", runtime: "node", deps: [], env: [] },
@@ -179,11 +201,13 @@ export function runSelftest({ execute, validatePacket }) {
   try {
     const passOut = path.join(passFixture.tmp, "pass-out");
     const pass = execute({ releaseDir: passFixture.releaseDir, outDir: passOut, repoRoot: passFixture.repo, governanceSource: passFixture.governanceSource, system: "x86_64-linux", nixBin: passFixture.fakeBin });
-    if (pass.status !== "pass" || pass.row_counts.receipts !== 2) throw Error("selftest-pass-packet");
+    if (pass.status !== "pass" || pass.row_counts.receipts !== 3) throw Error("selftest-pass-packet");
     const passValidation = validatePacket(passOut, { strict: true });
     if (!passValidation.ok) throw Error(`selftest-pass-validation:${JSON.stringify(passValidation.errors)}`);
     const passReceipts = readJsonl(path.join(passOut, "ops-package-receipts.jsonl"));
-    if (!passReceipts.every((row) => row.status === "pass" && row.required_tests.length === 1)) throw Error("selftest-real-receipts");
+    if (passReceipts.filter((row) => row.status === "pass").length !== 2 || passReceipts.filter((row) => row.status === "out-of-scope").length !== 1) throw Error("selftest-real-receipts");
+    const gamma = passReceipts.find((row) => row.package_id === "gamma");
+    if (!gamma || gamma.status !== "out-of-scope" || gamma.entrypoints.length !== 0 || gamma.residual_refs.length !== 0) throw Error("selftest-out-of-scope-entrypoint-boundary");
     const passEvidence = readJsonl(path.join(passOut, "ops-package-evidence.jsonl"));
     if (!passEvidence.every((row) => Array.isArray(row.command) && row.command.length && row.outputs.length === 1)) throw Error("selftest-command-and-output-binding");
 
@@ -262,6 +286,7 @@ export function runSelftest({ execute, validatePacket }) {
       dirty_worktree: "rejected",
       wrong_governance_source: "rejected",
       actual_check_outputs_bound: true,
+      explicit_out_of_scope_without_entrypoint: true,
     };
   } finally {
     passFixture.cleanup();

@@ -1,0 +1,26 @@
+{
+  "accepted_meaning_authority": false,
+  "active_package_ids": [
+    "ops-gov-package-output",
+    "ops-package-responses",
+    "shiftleft-admission"
+  ],
+  "authority": false,
+  "boundary": "validated fixture bytes are projected without semantic reinterpretation; receipt proves deterministic materialization only",
+  "fixture_id": "adrs-package-obligations-v1-ops-2dea5226",
+  "inventory_algorithm": "ops-package-responses.inventory.v1-static-equivalent",
+  "kind": "governance.packageObligationMaterializationReceipt.v1",
+  "output_file": "package-obligations.jsonl",
+  "output_sha256": "sha256:501450c079029d30172b9da74fb102e26c0069a467a92c232f9993ca6a8baa85",
+  "package_ids_sha256": "sha256:81ec83545234d83eebda085530c8adaa3c7defd6a2538d16ad8e8fbaa253a6e2",
+  "production_gate": false,
+  "receipt_digest": "sha256:8a5223e26a6e2176a53eb0ea4f70f84a129e8e2e7136d7d9dabdd978adb6163f",
+  "row_count": 122,
+  "source_file": "source.jsonl",
+  "source_sha256": "sha256:501450c079029d30172b9da74fb102e26c0069a467a92c232f9993ca6a8baa85",
+  "status": "pass",
+  "target_commit": "2dea52262cfe4840486e8e3ee94a75ff3d07aa3f",
+  "target_repository": "roccho-dev/ops",
+  "target_system": "x86_64-linux",
+  "target_tree": "f565788a9dd39ec65a33fc55a8311074689a19cb"
+}
