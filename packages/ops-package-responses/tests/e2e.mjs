@@ -23,6 +23,7 @@ assert.equal(result.dirty_worktree, "rejected");
 assert.equal(result.wrong_governance_source, "rejected");
 assert.equal(result.actual_check_outputs_bound, true);
 assert.equal(result.explicit_out_of_scope_without_entrypoint, true);
+assert.equal(result.directory_entrypoint_git_tree_bound, true);
 const golden = runGovernanceFixtureE2E();
 assert.equal(golden.ok, true);
 assert.equal(golden.packages, 122);

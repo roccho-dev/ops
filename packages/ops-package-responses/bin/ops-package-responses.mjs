@@ -231,7 +231,14 @@ function packageIdentity(root, inventoryRow) {
       continue;
     }
     const file = path.join(root, entry.entry);
-    entrypoints.push({ ...entry, exists: fs.existsSync(file), digest: fs.existsSync(file) ? hashFile(file) : null });
+    const exists = fs.existsSync(file);
+    const stat = exists ? fs.lstatSync(file) : null;
+    const source = exists ? sourceObject(root, entry.entry) : null;
+    const digest = !exists ? null
+      : stat.isDirectory() ? (source?.type === "tree" ? objectDigest(source) : null)
+        : stat.isFile() || stat.isSymbolicLink() ? hashFile(file)
+          : null;
+    entrypoints.push({ ...entry, exists, source_type: source?.type ?? null, source_object: source?.object_id ?? null, digest });
   }
   return { package_tree: sourceObjects.find((row) => row.type === "tree")?.object_id ?? null, package_source: packageSource, entrypoints };
 }
