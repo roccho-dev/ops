@@ -48,6 +48,9 @@ def main() -> int:
     console_errors: list[str] = []
     failed_responses: list[dict[str, object]] = []
     requests: list[str] = []
+    interaction_screenshot = args.screenshot.with_name(
+        f"{args.screenshot.stem}-proposal{args.screenshot.suffix}"
+    )
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome, headless=True)
@@ -59,11 +62,30 @@ def main() -> int:
         def record_failure(response: object) -> None:
             status = response.status
             url = response.url
-            ignored_local_status = args.visual_only and f"/api/proposals/{PROPOSAL_ID}" in url
-            if status >= 400 and not ignored_local_status:
+            if status >= 400:
                 failed_responses.append({"url": url, "status": status})
 
         page.on("response", record_failure)
+
+        if args.visual_only:
+            observation_url = f"{base}api/proposals/{PROPOSAL_ID}"
+
+            def fulfill_visual_observation(route: object) -> None:
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=canonical({
+                        "status": "PASS",
+                        "proposal_id": PROPOSAL_ID,
+                        "state": "ready",
+                        "authority": False,
+                        "current_changed": False,
+                        "cutover": False,
+                    }),
+                )
+
+            page.route(observation_url, fulfill_visual_observation)
+
         page.goto(base, wait_until="domcontentloaded", timeout=120_000)
         page.locator("#graph-container svg").first.wait_for(state="attached", timeout=120_000)
         page.locator("#proposal-connect-button").wait_for(state="visible", timeout=120_000)
@@ -106,6 +128,7 @@ def main() -> int:
         assert TARGET_ID in preview
         for forbidden in ('"bounds"', '"x"', '"y"', '"zoom"', '"view"'):
             assert forbidden not in preview, forbidden
+        page.screenshot(path=str(interaction_screenshot), full_page=True)
 
         status = None
         if not args.visual_only:
@@ -127,6 +150,12 @@ def main() -> int:
               last: globalThis.semanticProposalConnectability.last(),
               bodyState: document.body.dataset.proposalState,
             })"""
+        )
+        page.evaluate(
+            """() => {
+              const dialog = document.querySelector('#proposal-connect-dialog');
+              if (dialog?.open) dialog.close();
+            }"""
         )
         page.screenshot(path=str(args.screenshot), full_page=True)
         browser.close()
@@ -169,6 +198,8 @@ def main() -> int:
         "approved_ui": True,
         "retired_fixed_form_present": False,
         "geometry_in_proposal": False,
+        "overview_screenshot": args.screenshot.name,
+        "interaction_screenshot": interaction_screenshot.name,
         "page_errors": page_errors,
         "console_errors": console_errors,
         "failed_responses": failed_responses,
