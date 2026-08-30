@@ -23,8 +23,8 @@ def get_json(url: str) -> dict:
     request = Request(
         url,
         headers={
-            "cache-control": "no-cache",
             "accept": "application/json",
+            "cache-control": "no-cache",
             "user-agent": "roccho-ops-approved-semantic-map-browser-proof/1",
         },
     )
@@ -39,31 +39,35 @@ def main() -> int:
     parser.add_argument("screenshot", type=pathlib.Path)
     parser.add_argument("--visual-only", action="store_true")
     args = parser.parse_args()
+
     chrome = os.environ.get("CHROME_BIN")
     if not chrome:
         raise SystemExit("CHROME_BIN is required")
 
     base = args.url.rstrip("/") + "/"
+    interaction_screenshot = args.screenshot.with_name(
+        f"{args.screenshot.stem}-proposal{args.screenshot.suffix}"
+    )
     page_errors: list[str] = []
     console_errors: list[str] = []
     failed_responses: list[dict[str, object]] = []
     requests: list[str] = []
-    interaction_screenshot = args.screenshot.with_name(
-        f"{args.screenshot.stem}-proposal{args.screenshot.suffix}"
-    )
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=chrome, headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 960})
         page.on("pageerror", lambda error: page_errors.append(str(error)))
-        page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+        page.on(
+            "console",
+            lambda message: console_errors.append(message.text)
+            if message.type == "error"
+            else None,
+        )
         page.on("request", lambda request: requests.append(request.url))
 
         def record_failure(response: object) -> None:
-            status = response.status
-            url = response.url
-            if status >= 400:
-                failed_responses.append({"url": url, "status": status})
+            if response.status >= 400:
+                failed_responses.append({"url": response.url, "status": response.status})
 
         page.on("response", record_failure)
 
@@ -74,21 +78,31 @@ def main() -> int:
                 route.fulfill(
                     status=200,
                     content_type="application/json",
-                    body=canonical({
-                        "status": "PASS",
-                        "proposal_id": PROPOSAL_ID,
-                        "state": "ready",
-                        "authority": False,
-                        "current_changed": False,
-                        "cutover": False,
-                    }),
+                    body=canonical(
+                        {
+                            "status": "PASS",
+                            "proposal_id": PROPOSAL_ID,
+                            "state": "ready",
+                            "authority": False,
+                            "current_changed": False,
+                            "cutover": False,
+                        }
+                    ),
                 )
 
             page.route(observation_url, fulfill_visual_observation)
 
         page.goto(base, wait_until="domcontentloaded", timeout=120_000)
-        page.locator("#graph-container svg").first.wait_for(state="attached", timeout=120_000)
-        page.locator("#proposal-connect-button").wait_for(state="visible", timeout=120_000)
+        page.locator("#graph-container svg").first.wait_for(
+            state="attached", timeout=120_000
+        )
+        page.locator("#proposal-connect-button").wait_for(
+            state="visible", timeout=120_000
+        )
+        page.wait_for_function(
+            "() => globalThis.semanticProposalConnectability?.ready === true",
+            timeout=120_000,
+        )
 
         snapshot = page.evaluate(
             """() => ({
@@ -101,19 +115,34 @@ def main() -> int:
               regionIds: globalThis.semanticMapApp ? [...globalThis.semanticMapApp.domain.regions.keys()].sort() : [],
               relationCount: globalThis.semanticMapApp?.domain?.relations?.length ?? 0,
               representationCount: globalThis.semanticMapApp?.snapshot()?.scene?.representationIds?.length ?? 0,
+              selection: globalThis.semanticMapApp?.adapter?.selectionSnapshot?.() ?? null,
               oldFormPresent: document.body.innerText.includes('ADRS UI Proposal Canary') || document.body.innerText.includes('固定canary変更'),
               uiCommit: document.querySelector('meta[name="semantic-map-ui-commit"]')?.content ?? null,
             })"""
         )
-        assert snapshot["siteReady"] is True and snapshot["appReady"] is True and snapshot["connectabilityReady"] is True, snapshot
-        assert snapshot["title"].startswith("ADRS / governance / ops — package map"), snapshot
+        assert snapshot["siteReady"] is True, snapshot
+        assert snapshot["appReady"] is True, snapshot
+        assert snapshot["connectabilityReady"] is True, snapshot
+        assert snapshot["title"].startswith(
+            "ADRS / governance / ops — package map"
+        ), snapshot
         assert snapshot["h1"] == "ADRS / governance / ops — package map", snapshot
         assert snapshot["pattern"] == "map/1", snapshot
         assert REQUIRED_IDS.issubset(set(snapshot["regionIds"])), snapshot
-        assert snapshot["relationCount"] >= 5, snapshot
-        assert snapshot["representationCount"] >= 20, snapshot
+        assert snapshot["relationCount"] == 6, snapshot
+        assert snapshot["representationCount"] == 20, snapshot
         assert snapshot["oldFormPresent"] is False, snapshot
-        assert isinstance(snapshot["uiCommit"], str) and len(snapshot["uiCommit"]) == 40, snapshot
+        assert isinstance(snapshot["uiCommit"], str) and len(snapshot["uiCommit"]) == 40
+
+        # The overview proof must show the whole map without a selected canary,
+        # an open dialog, or an interaction-specific focus marker.
+        page.evaluate(
+            """() => globalThis.semanticMapApp.adapter.setSelection({
+              regionIds: [],
+              relationIds: [],
+            })"""
+        )
+        page.screenshot(path=str(args.screenshot), full_page=True)
 
         page.evaluate(
             """() => globalThis.semanticMapApp.adapter.setSelection({
@@ -133,7 +162,9 @@ def main() -> int:
         status = None
         if not args.visual_only:
             page.locator("#proposal-connect-confirm").click()
-            page.locator("body[data-proposal-state='recorded']").wait_for(timeout=180_000)
+            page.locator("body[data-proposal-state='recorded']").wait_for(
+                timeout=180_000
+            )
             status = get_json(f"{base}api/proposals/{PROPOSAL_ID}")
             assert status["status"] == "PASS"
             assert status["proposal_id"] == PROPOSAL_ID
@@ -151,33 +182,31 @@ def main() -> int:
               bodyState: document.body.dataset.proposalState,
             })"""
         )
-        page.evaluate(
-            """() => {
-              const dialog = document.querySelector('#proposal-connect-dialog');
-              if (dialog?.open) dialog.close();
-            }"""
-        )
-        page.screenshot(path=str(args.screenshot), full_page=True)
         browser.close()
 
     assert live["selected"] is True, live
-    assert live["bodyState"] == ("prepared" if args.visual_only else "recorded"), live
+    assert live["bodyState"] == (
+        "prepared" if args.visual_only else "recorded"
+    ), live
     if not args.visual_only:
         assert live["state"] == "recorded", live
-        assert live["last"]["observation"]["value"]["exact_comment_readback"] is True, live
+        assert live["last"]["observation"]["value"]["exact_comment_readback"] is True
     assert not page_errors, page_errors
     assert not console_errors, console_errors
     assert not failed_responses, failed_responses
 
     origin = urlparse(base)
     approved = f"{origin.scheme}://{origin.netloc}"
-    external = sorted({
-        url for url in requests
-        if not url.startswith(approved)
-        and not url.startswith("data:")
-        and not url.startswith("blob:")
-        and url != "about:blank"
-    })
+    external = sorted(
+        {
+            url
+            for url in requests
+            if not url.startswith(approved)
+            and not url.startswith("data:")
+            and not url.startswith("blob:")
+            and url != "about:blank"
+        }
+    )
     assert not external, external
 
     receipt = {
