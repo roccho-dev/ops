@@ -1,0 +1,61 @@
+name: Mobile Agent exact source ingress
+
+on:
+  push:
+    branches:
+      - proposal/mobile-agent-source-release-close-260827
+    paths:
+      - .github/workflows/mobile-agent-exact-source-ingress.yml
+      - verification/mobile-agent-exact-source-ingress.py
+      - verification/mobile-agent-exact-source-ingress.sh
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: mobile-agent-exact-source-ingress
+  cancel-in-progress: false
+
+jobs:
+  ingress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RECOVERY_REV: "3"
+      ISSUE_NUMBER: "286"
+      PR_NUMBER: "333"
+      TARGET_REF: source/mobile-agent-presets-v1
+      ORIGINAL_COMMIT: 1daa001bf780053f4319e3fb20b4ea9a6e0d0442
+      ORIGINAL_TREE: 59ff130fc7e20a4b5762c21fe97b417fc7a454ad
+      ORIGINAL_BUNDLE_SHA256: 208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6
+      EXPECTED_SOURCE_COMMIT: 608229b5a0b6fe370b07cef7c11a062e7add5ae1
+      EXPECTED_SOURCE_TREE: 2abfe78594e92831009236df6d34902990be020d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+
+      - name: Recover, verify, publish, and read back exact source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash verification/mobile-agent-exact-source-ingress.sh
+
+      - name: Upload ingress receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-exact-source-ingress-receipts
+          path: |
+            ${{ runner.temp }}/mobile-agent-source-ingress/recovery-diagnostic.json
+            ${{ runner.temp }}/mobile-agent-source-ingress/recovery-receipt.json
+            ${{ runner.temp }}/mobile-agent-source-ingress/build-receipt.json
+            ${{ runner.temp }}/mobile-agent-source-ingress/ingress-receipt.json
+          if-no-files-found: warn
+          retention-days: 30
