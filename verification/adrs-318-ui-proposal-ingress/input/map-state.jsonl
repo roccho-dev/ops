@@ -1,5 +1,5 @@
 {"type":"meta","schema":"semantic-map-state/1","root":"all","title":"ADRS / governance / ops — package map"}
-{"type":"region","id":"all","parent":null,"label":"Package universe","kind":"organization","bounds":[0,0,1770,700],"summary":"sample · authority false · generated map/1 projection","order":0}
+{"type":"region","id":"all","parent":null,"label":"Package universe","kind":"organization","bounds":[0,0,1770,700],"summary":"sample · authority false · generated map/1 projection"}
 {"type":"region","id":"repo:adrs","parent":"all","label":"adrs","kind":"repository","bounds":[30,54,540,600],"summary":"ADRS意味の正本","order":10}
 {"type":"region","id":"repo:adrs:packages","parent":"repo:adrs","label":"packages","kind":"package-group","bounds":[52,139,494,483],"summary":"5 packages","order":11}
 {"type":"region","id":"package:adrs:decision-contract","parent":"repo:adrs:packages","label":"decision-contract","kind":"package","bounds":[76,195,218,116],"summary":"意思決定contractとstable identity","order":12}
