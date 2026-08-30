@@ -1,0 +1,78 @@
+name: Mark internal organization map oracle PASS 260830
+
+on:
+  push:
+    branches:
+      - proof/internal-organization-map-oracle-runtime-260830
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  mark-exact-pass:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Wait for exact deploy and readback workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, time, urllib.error, urllib.request
+
+          repo = os.environ['REPOSITORY']
+          sha = os.environ['CANDIDATE_SHA']
+          token = os.environ['GH_TOKEN']
+          target = 'Proof internal organization map visual oracle runtime 260830'
+          marker_ref = 'refs/heads/proof/internal-organization-map-oracle-pass-260830'
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'roccho-ops-org-map-pass-marker/1',
+          }
+
+          def request(url, method='GET', body=None):
+              data = None if body is None else json.dumps(body).encode()
+              req = urllib.request.Request(url, data=data, method=method, headers=headers)
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  raw = response.read()
+                  return json.loads(raw) if raw else None
+
+          run = None
+          for attempt in range(120):
+              value = request(f'https://api.github.com/repos/{repo}/actions/runs?head_sha={sha}&per_page=100')
+              matches = [item for item in value.get('workflow_runs', []) if item.get('name') == target]
+              if matches:
+                  run = max(matches, key=lambda item: item['id'])
+                  if run.get('status') == 'completed':
+                      break
+              time.sleep(15)
+          if not run or run.get('status') != 'completed':
+              raise SystemExit('target workflow did not complete')
+          if run.get('conclusion') != 'success':
+              raise SystemExit(f"target workflow conclusion={run.get('conclusion')} url={run.get('html_url')}")
+
+          ref_url = f'https://api.github.com/repos/{repo}/git/{marker_ref}'
+          try:
+              request(ref_url)
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+              request(f'https://api.github.com/repos/{repo}/git/refs', 'POST', {'ref': marker_ref, 'sha': sha})
+          else:
+              request(ref_url, 'PATCH', {'sha': sha, 'force': True})
+
+          print(json.dumps({
+              'status': 'PASS',
+              'candidateSha': sha,
+              'workflowRunId': run['id'],
+              'workflowRunUrl': run['html_url'],
+              'markerRef': marker_ref,
+          }, sort_keys=True))
+          PY
