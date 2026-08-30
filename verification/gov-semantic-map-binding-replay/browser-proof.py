@@ -59,7 +59,7 @@ def main() -> None:
               pattern: semanticMapRuntime.view.pattern,
               scene: semanticMapSite.editor.snapshot().scene.pattern,
               svg: Boolean(document.querySelector('#graph-container svg')),
-              regionCount: semanticMapApp.adapter.lastScene.regions.length,
+              regionCount: semanticMapApp.adapter.cellsByRegionId.size,
               relationCount: semanticMapApp.adapter.lastScene.relations.length,
               tools: semanticMapApp.adapter.cellsByRegionId.has('package:tools'),
               modules: semanticMapApp.adapter.cellsByRegionId.has('package:modules'),
