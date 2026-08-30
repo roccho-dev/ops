@@ -65,25 +65,25 @@ def main() -> int:
 
         page.on("response", record_failure)
         page.goto(base, wait_until="domcontentloaded", timeout=120_000)
-        page.wait_for_function(
-            "globalThis.semanticMapSite?.ready === true && globalThis.semanticMapApp?.ready === true",
-            timeout=120_000,
-        )
-        page.wait_for_function("globalThis.semanticProposalConnectability?.ready === true", timeout=120_000)
-        page.wait_for_function("document.querySelectorAll('#graph-container svg').length > 0", timeout=120_000)
+        page.locator("#graph-container svg").wait_for(state="attached", timeout=120_000)
+        page.locator("#proposal-connect-button").wait_for(state="visible", timeout=120_000)
 
         snapshot = page.evaluate(
             """() => ({
+              siteReady: globalThis.semanticMapSite?.ready === true,
+              appReady: globalThis.semanticMapApp?.ready === true,
+              connectabilityReady: globalThis.semanticProposalConnectability?.ready === true,
               title: document.title,
               h1: document.querySelector('h1')?.textContent ?? '',
-              pattern: globalThis.semanticMapSite.runtime.view.pattern,
-              regionIds: [...globalThis.semanticMapApp.domain.regions.keys()].sort(),
-              relationCount: globalThis.semanticMapApp.domain.relations.length,
-              representationCount: globalThis.semanticMapApp.snapshot().scene?.representationIds?.length ?? 0,
+              pattern: globalThis.semanticMapSite?.runtime?.view?.pattern ?? null,
+              regionIds: globalThis.semanticMapApp ? [...globalThis.semanticMapApp.domain.regions.keys()].sort() : [],
+              relationCount: globalThis.semanticMapApp?.domain?.relations?.length ?? 0,
+              representationCount: globalThis.semanticMapApp?.snapshot()?.scene?.representationIds?.length ?? 0,
               oldFormPresent: document.body.innerText.includes('ADRS UI Proposal Canary') || document.body.innerText.includes('固定canary変更'),
               uiCommit: document.querySelector('meta[name="semantic-map-ui-commit"]')?.content ?? null,
             })"""
         )
+        assert snapshot["siteReady"] is True and snapshot["appReady"] is True and snapshot["connectabilityReady"] is True, snapshot
         assert snapshot["title"].startswith("ADRS / governance / ops — package map"), snapshot
         assert snapshot["h1"] == "ADRS / governance / ops — package map", snapshot
         assert snapshot["pattern"] == "map/1", snapshot
@@ -99,11 +99,7 @@ def main() -> int:
               relationIds: [],
             })"""
         )
-        page.wait_for_function(
-            "globalThis.semanticProposalConnectability.selected() === true && !document.querySelector('#proposal-connect-button').disabled",
-            timeout=30_000,
-        )
-        page.locator("#proposal-connect-button").click()
+        page.locator("#proposal-connect-button").click(timeout=30_000)
         page.locator("#proposal-connect-dialog[open]").wait_for(timeout=30_000)
         preview = page.locator("#proposal-connect-preview").text_content() or ""
         assert PROPOSAL_ID in preview
@@ -114,10 +110,7 @@ def main() -> int:
         status = None
         if not args.visual_only:
             page.locator("#proposal-connect-confirm").click()
-            page.wait_for_function(
-                "document.body.dataset.proposalState === 'recorded'",
-                timeout=180_000,
-            )
+            page.locator("body[data-proposal-state='recorded']").wait_for(timeout=180_000)
             status = get_json(f"{base}api/proposals/{PROPOSAL_ID}")
             assert status["status"] == "PASS"
             assert status["proposal_id"] == PROPOSAL_ID
