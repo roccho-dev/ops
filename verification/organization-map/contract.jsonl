@@ -1,0 +1,8 @@
+{"id":"organization-map.contract","kind":"verification_contract","part_of":"https://github.com/roccho-dev/adrs/issues/331","production_authority":false,"purpose":"Define the smallest deterministic builder contract before selecting or adding an Ops implementation package."}
+{"id":"organization-map.input","kind":"contract_input","records":["repository_observation","repository_requirement","package_observation","package_requirement","decision","obligation","proof","receipt","relation"],"rule":"Inputs remain source records; the builder does not decide accepted meaning."}
+{"id":"organization-map.output","kind":"contract_output","format":"jsonl","records":["entity","relation"],"rule":"Output is stable-sorted, source-linked, non-authority, and preserves unknown missing drift conflict orphan and retired states."}
+{"id":"organization-map.complete-universe","kind":"invariant","statement":"Every observed active repository appears even when no packet or package record exists; missing knowledge becomes an explicit gap rather than omission."}
+{"id":"organization-map.identity","kind":"invariant","statement":"All map graph and sequence views consume the same entity and relation IDs."}
+{"id":"organization-map.determinism","kind":"invariant","statement":"Reordering semantically identical input lines produces byte-identical output."}
+{"id":"organization-map.fail-closed","kind":"invariant","statement":"Duplicate IDs, dangling relation endpoints, mixed exact revisions, and contradictory current classifications are rejected."}
+{"id":"organization-map.red","kind":"verification_state","state":"RED","reason":"No selected existing Ops package or new implementation has yet produced the expected semantic JSONL from the fixture."}
