@@ -1,0 +1,83 @@
+{
+  "schema": "ops.selectedUniverseSemanticMapSource/1",
+  "status": "PASS",
+  "claim_ceiling": "VISUAL_EVALUATION_ONLY",
+  "authority": false,
+  "meaning": {
+    "repository": "roccho-dev/governance",
+    "commit": "6b20ba62e5b84de7549cc1df801af453dec03a38",
+    "tree": "aae076151f4c3b0758619c3e6202797ee04ab2b6",
+    "path": "docs/final-scope-purpose-join/selected-universe.jsonl",
+    "blob_sha1": "c4647e1703f6289b6c7c5683db64c53714ac6ba5",
+    "bytes": 1378,
+    "sha256": "sha256:d29c4cbee8e3c38fc9a29e9dbe2d39e0a6989a62ba2771302b85711025c9ebc3",
+    "content_type": "application/x-ndjson; charset=utf-8",
+    "raw_url": "https://raw.githubusercontent.com/roccho-dev/governance/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl"
+  },
+  "ui_source": {
+    "repository": "roccho-dev/ui",
+    "transport": "exact-git-bundle",
+    "bundle_name": "260829142218.6a8d6f71-cbac-83ee-ad15-566201f495bf.bundle",
+    "bundle_bytes": 1669992,
+    "bundle_sha256": "sha256:e5718c62d37f604e3795552adf8b34b396c497ec6a16c3e82d83a31abd8207cd",
+    "commit": "5b1101daedb6c64261c1fae52f065a51cf0be36f",
+    "tree": "c40e1ad7cd4843b7a7c59a21ed74b153d5644a55",
+    "package": "packages/semantic-map",
+    "capability": "render.semantic-map@1",
+    "build_script": "packages/semantic-map/scripts/build-browser-example.mjs"
+  },
+  "artifact": {
+    "archive_path": "site.tar.xz",
+    "archive_bytes": 388564,
+    "archive_sha256": "sha256:884575bbae7a37a7515b5c3c7f2e95a06a12414f0228a77332c707b713432f37",
+    "html_path": "index.html",
+    "html_bytes": 2415246,
+    "html_sha256": "sha256:607fd2082d7bc3ee4dcb6274bc1d74817b8935447226755cbb5fb08dd96e3829",
+    "profile_path": "projection-profile.jsonl",
+    "profile_sha256": "sha256:5f7e68b0957d438062bb0fa9a94d4aad2c8940c9bdf67c1c12421841ecb2cedb",
+    "projection_receipt_path": "projection-receipt.json",
+    "projection_receipt_sha256": "sha256:b10a70e8242c63465ffac224e2a248b8aafd7075d902cf4249db8bf72e621957",
+    "ui_build_receipt_path": "ui-build-receipt.json",
+    "ui_build_receipt_sha256": "sha256:c7c3473d9dbd6f921e1a5aedb4c4f619273c0574410c005bf815fe83d9c7017c",
+    "envelope_path": "semantic-map-envelope.json",
+    "envelope_sha256": "sha256:3f0223806f56feb87ffb070cffc8877717bda1079df5ab935b4d07db6a00367f",
+    "state_path": "semantic-map-state.jsonl",
+    "state_sha256": "sha256:e9df144d8d32e9af55ccb212b914bf7f0dd914e1afcb8aaaaffcf99a66f2e011",
+    "manifest_path": "manifest.json",
+    "manifest_sha256": "sha256:21433466f64c9c844004480f465c25c153a2e19013433b04b0b284063507ad45",
+    "archive_base64_sha256": "sha256:5ac05ee5b1873f482b478622203b350fa6ced893ab594eb86e5811989e8c2ca3",
+    "archive_base64_parts": 6
+  },
+  "expected": {
+    "record_kind": "governance.selectedUniverseRepo.v1",
+    "row_count": 4,
+    "repo_ids": [
+      "roccho-dev/governance",
+      "roccho-dev/adrs",
+      "roccho-dev/ops",
+      "roccho-dev/ui"
+    ],
+    "profile_id": "governance.selectedUniverseRepo.v1/map/1",
+    "pattern": "map/1",
+    "map_id": "urn:roccho:governance:selected-universe",
+    "title": "governance selected universe",
+    "region_count": 5,
+    "relation_count": 0,
+    "state_hash": "sha256:24112aa18d6c0fad5a90d9fa2aeca066e7e56ee3ff1f3afc63eb6a85f03752f3"
+  },
+  "ops": {
+    "repository": "roccho-dev/ops",
+    "base_commit": "0c07b2d3214ab10f1eb33f3af589670a0b0b179a",
+    "base_tree": "55c70e307648913ff57ab9c54afbc443200857ba",
+    "package": "packages/gov-release-proxy",
+    "delivery": "one-root-content-negotiation"
+  },
+  "boundary": {
+    "html_purpose": "visual-evaluation-only",
+    "html_authority": false,
+    "meaning_source_changed": false,
+    "ui_owns_renderer": true,
+    "ops_owns_delivery": true,
+    "production_cutover": false
+  }
+}
