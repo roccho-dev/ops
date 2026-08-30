@@ -17,6 +17,7 @@ GENERATED_CONFIG="$ROOT/wrangler.proof.json"
 LOCAL_PORT=8765
 local_server_pid=""
 mkdir -p "$EVIDENCE"
+
 cleanup() {
   if [ -n "$local_server_pid" ]; then kill "$local_server_pid" 2>/dev/null || true; fi
   rm -f "$GENERATED_CONFIG"
@@ -48,7 +49,7 @@ PY
 python3 -m http.server "$LOCAL_PORT" --bind 127.0.0.1 --directory "$ROOT/public" \
   > "$EVIDENCE/local-server.log" 2>&1 &
 local_server_pid=$!
-for attempt in $(seq 1 100); do
+for _ in $(seq 1 100); do
   if curl -fsS "http://127.0.0.1:$LOCAL_PORT/" >/dev/null; then break; fi
   sleep .1
 done
@@ -57,6 +58,17 @@ CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
 kill "$local_server_pid"
 wait "$local_server_pid" 2>/dev/null || true
 local_server_pid=""
+python3 - "$EVIDENCE/local-visual.json" "$EVIDENCE/local-visual.png" "$EVIDENCE/local-visual-proposal.png" <<'PY'
+import json,os,sys
+value=json.load(open(sys.argv[1],encoding='utf-8'))
+assert value['status']=='PASS'
+assert value['mode']=='visual-only'
+assert value['pattern']=='map/1'
+assert value['representation_count']==20
+assert value['relation_count']==6
+assert value['console_errors']==[] and value['page_errors']==[] and value['failed_responses']==[]
+assert os.path.getsize(sys.argv[2])>0 and os.path.getsize(sys.argv[3])>0
+PY
 
 api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets?name_contains=$BUCKET&per_page=1000"
 curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" > "$EVIDENCE/r2-buckets.raw.json"
@@ -89,14 +101,11 @@ test -n "$worker_url"
 worker_url="${worker_url%/}"
 printf '%s\n' "$worker_url" > "$EVIDENCE/worker-url.txt"
 
-for attempt in $(seq 1 100); do
-  if curl -fsS -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' "$worker_url/api/meta" >/dev/null; then break; fi
-  sleep .3
-done
-curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
-  -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
-  "$worker_url/api/meta" > "$EVIDENCE/meta.json"
-python3 - "$EVIDENCE/meta.json" "$CANDIDATE_SHA" <<'PY'
+meta_ready=false
+for _ in $(seq 1 120); do
+  if curl -fsS -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
+      "$worker_url/api/meta" > "$EVIDENCE/meta.candidate.json"; then
+    if python3 - "$EVIDENCE/meta.candidate.json" "$CANDIDATE_SHA" <<'PY'
 import json,sys
 meta=json.load(open(sys.argv[1],encoding='utf-8'))
 assert meta['status']=='PASS'
@@ -105,6 +114,16 @@ assert meta['proposal_id']=='adrs318-ui-proposal-oidc-canary-v1'
 assert meta['github_write_credential_in_worker'] is False
 assert meta['relay_auth']=='GitHub Actions OIDC'
 PY
+    then
+      mv "$EVIDENCE/meta.candidate.json" "$EVIDENCE/meta.json"
+      meta_ready=true
+      break
+    fi
+  fi
+  sleep .5
+done
+rm -f "$EVIDENCE/meta.candidate.json"
+test "$meta_ready" = true
 
 for name in index.html connectability.mjs proposal-connect.mjs receipt.json approved-ui-receipt.json; do
   curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/$name" > "$EVIDENCE/$name.remote"
@@ -144,12 +163,12 @@ live=json.load(open(sys.argv[3],encoding='utf-8'))
 status=json.load(open(sys.argv[4],encoding='utf-8'))
 assert build['status']==local['status']==live['status']==status['status']=='PASS'
 assert build['uiCommit']==local['ui_commit']==live['ui_commit']==os.environ['UI_COMMIT']
-assert local['mode']=='visual-only'
-assert live['mode']=='live-provider'
+assert local['mode']=='visual-only' and live['mode']=='live-provider'
+assert local['representation_count']==live['representation_count']==20
+assert local['relation_count']==live['relation_count']==6
 assert local['approved_ui'] is live['approved_ui'] is True
 assert local['retired_fixed_form_present'] is live['retired_fixed_form_present'] is False
-assert live['proposal_state']=='recorded'
-assert status['state']=='recorded'
+assert live['proposal_state']=='recorded' and status['state']=='recorded'
 assert status['exact_comment_readback'] is True
 assert isinstance(status['comment_id'],int) and status['comment_id']>0
 assert status['comment_url'].startswith('https://github.com/roccho-dev/adrs/issues/318#issuecomment-')
@@ -162,6 +181,8 @@ receipt={
   'candidate_sha':os.environ['CANDIDATE_SHA'],
   'ui_commit':os.environ['UI_COMMIT'],
   'ui_pattern':'map/1',
+  'visible_regions':live['representation_count'],
+  'visible_relations':live['relation_count'],
   'worker':{
     'name':os.environ['WORKER'],
     'url':os.environ['WORKER_URL']+'/',
