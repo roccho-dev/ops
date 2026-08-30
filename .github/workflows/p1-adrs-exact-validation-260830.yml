@@ -29,9 +29,9 @@ jobs:
         env:
           EXPECTED_BASE: 91b11acbdec980dad12dad1f9e14363ab12ee9e2
           EXPECTED_COMMIT: 178e35c08440967ba9fa3d81ac5b34eaa0ed7da1
-          EXPECTED_TREE: 3c877a0828660ce97ab0b4bc8a3237179371b8d8
+          EXPECTED_TREE: fbe64e0705a1f9ce5e4bbf7bfbceca0068c2dafe
           EXPECTED_FILE: adr/src/01M18BMZDPXHY9MCV9QNJWNQ6W-evidence-gated-rule-evolution-canon-tdd.cue
-          EXPECTED_FILE_SHA256: 36db20e3effe2f590826320717be27b70fbf0ee8dcd0ec01e8c262398ad3d9ed
+          EXPECTED_BLOB: faea40d1ad8743c9f13ce305ea987306a8eee20d
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
@@ -39,7 +39,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BASE" HEAD
           test "$(git diff --name-only "$EXPECTED_BASE"...HEAD | wc -l)" -eq 1
           test "$(git diff --name-only "$EXPECTED_BASE"...HEAD)" = "$EXPECTED_FILE"
-          test "$(sha256sum "$EXPECTED_FILE" | cut -d' ' -f1)" = "$EXPECTED_FILE_SHA256"
+          test "$(git hash-object "$EXPECTED_FILE")" = "$EXPECTED_BLOB"
           git diff --check "$EXPECTED_BASE"...HEAD
           nix flake check -L
           python3 - <<'PY'
@@ -68,6 +68,7 @@ jobs:
               'repository': 'roccho-dev/adrs',
               'commit': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip(),
               'tree': subprocess.check_output(['git','rev-parse','HEAD^{tree}'], text=True).strip(),
+              'blob': subprocess.check_output(['git','hash-object',str(f)], text=True).strip(),
               'file': str(f),
               'file_sha256': 'sha256:' + hashlib.sha256(f.read_bytes()).hexdigest(),
               'pr': 329,
