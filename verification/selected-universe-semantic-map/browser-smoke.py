@@ -7,7 +7,7 @@ import os
 import pathlib
 from urllib.parse import urlparse
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Route, Request, sync_playwright
 
 
 def canonical(value: object) -> str:
@@ -28,6 +28,12 @@ def main() -> int:
     console_errors: list[str] = []
     failed_responses: list[dict[str, object]] = []
     requests: list[str] = []
+    auxiliary_requests: list[str] = []
+
+    def fulfill_browser_favicon(route: Route, request: Request) -> None:
+        auxiliary_requests.append(request.url)
+        route.fulfill(status=204, content_type="image/x-icon", body="")
+
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             executable_path=chrome,
@@ -35,6 +41,7 @@ def main() -> int:
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
         page = browser.new_page(viewport={"width": 1600, "height": 1100})
+        page.route("**/favicon.ico", fulfill_browser_favicon)
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
         page.on("request", lambda request: requests.append(request.url))
@@ -121,9 +128,10 @@ def main() -> int:
     approved_origin = f"{origin.scheme}://{origin.netloc}"
     external = sorted({url for url in requests if not url.startswith(approved_origin) and not url.startswith("data:")})
     assert not external, external
+    assert all(url.endswith("/favicon.ico") for url in auxiliary_requests), auxiliary_requests
 
     receipt = {
-        "schema": "ops.selectedUniverseSemanticMapBrowserReceipt/2",
+        "schema": "ops.selectedUniverseSemanticMapBrowserReceipt/3",
         "status": "PASS",
         "claim_ceiling": "VISUAL_EVALUATION_ONLY",
         "authority": False,
@@ -142,8 +150,9 @@ def main() -> int:
         "html_visual_evaluation_only": True,
         "page_errors": page_errors,
         "console_errors": console_errors,
-        "failed_responses": failed_responses,
+        "failed_product_responses": failed_responses,
         "external_requests": external,
+        "browser_auxiliary_requests_intercepted": auxiliary_requests,
         "request_count": len(requests),
         "real_chromium": True,
         "production_cutover": False,
