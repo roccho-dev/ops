@@ -1,0 +1,85 @@
+name: P1 ADRS exact validation 260830
+
+on:
+  push:
+    branches:
+      - tmp/p1-astgrep-carry-260830
+    paths:
+      - .github/workflows/p1-adrs-exact-validation-260830.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: roccho-dev/adrs
+          ref: 178e35c08440967ba9fa3d81ac5b34eaa0ed7da1
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Validate exact ADRS source and PR contract
+        shell: bash
+        env:
+          EXPECTED_BASE: 91b11acbdec980dad12dad1f9e14363ab12ee9e2
+          EXPECTED_COMMIT: 178e35c08440967ba9fa3d81ac5b34eaa0ed7da1
+          EXPECTED_TREE: 3c877a0828660ce97ab0b4bc8a3237179371b8d8
+          EXPECTED_FILE: adr/src/01M18BMZDPXHY9MCV9QNJWNQ6W-evidence-gated-rule-evolution-canon-tdd.cue
+          EXPECTED_FILE_SHA256: 36db20e3effe2f590826320717be27b70fbf0ee8dcd0ec01e8c262398ad3d9ed
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_TREE"
+          git merge-base --is-ancestor "$EXPECTED_BASE" HEAD
+          test "$(git diff --name-only "$EXPECTED_BASE"...HEAD | wc -l)" -eq 1
+          test "$(git diff --name-only "$EXPECTED_BASE"...HEAD)" = "$EXPECTED_FILE"
+          test "$(sha256sum "$EXPECTED_FILE" | cut -d' ' -f1)" = "$EXPECTED_FILE_SHA256"
+          git diff --check "$EXPECTED_BASE"...HEAD
+          nix flake check -L
+          python3 - <<'PY'
+          import json, urllib.request
+          url = 'https://api.github.com/repos/roccho-dev/adrs/pulls/329'
+          with urllib.request.urlopen(url) as response:
+              value = json.load(response)
+          assert value['head']['sha'] == '178e35c08440967ba9fa3d81ac5b34eaa0ed7da1'
+          assert value['base']['ref'] == 'proposals'
+          body = value.get('body') or ''
+          for heading in (
+              '## Why', '## Direction', '## Decision', '## Boundary',
+              '## Proof', '## Change Summary', '## Merge Gate',
+          ):
+              assert heading in body, heading
+          assert 'GREEN' in body
+          assert 'P2 upstream monitoring' in body
+          PY
+          mkdir -p "$RUNNER_TEMP/p1-adrs-proof"
+          python3 - <<'PY' > "$RUNNER_TEMP/p1-adrs-proof/receipt.json"
+          import hashlib, json, subprocess
+          from pathlib import Path
+          f = Path('adr/src/01M18BMZDPXHY9MCV9QNJWNQ6W-evidence-gated-rule-evolution-canon-tdd.cue')
+          value = {
+              'kind': 'adrs.p1ExactValidationReceipt.v1',
+              'repository': 'roccho-dev/adrs',
+              'commit': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip(),
+              'tree': subprocess.check_output(['git','rev-parse','HEAD^{tree}'], text=True).strip(),
+              'file': str(f),
+              'file_sha256': 'sha256:' + hashlib.sha256(f.read_bytes()).hexdigest(),
+              'pr': 329,
+              'nix_flake_check_executed': True,
+              'canonical_green_emitted': False,
+              'authority': False,
+          }
+          print(json.dumps(value, sort_keys=True, separators=(',', ':')))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p1-adrs-exact-validation
+          path: ${{ runner.temp }}/p1-adrs-proof/receipt.json
+          if-no-files-found: error
+          retention-days: 7
