@@ -71,7 +71,7 @@ def main() -> None:
         )
         print(json.dumps({"rendered": rendered}, ensure_ascii=False, sort_keys=True))
         assert rendered == {
-            "title": "Semantic Map",
+            "title": "Governance package output — Semantic Map",
             "pattern": "map/1",
             "scene": "map/1",
             "svg": True,
