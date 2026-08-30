@@ -1,0 +1,20 @@
+{"id":"obs:repo:adrs","kind":"repository_observation","repo_id":"repo:adrs","name":"adrs","classification":"authority","active":true,"revision":"sha:adrs-fixture","source":"https://github.com/roccho-dev/adrs"}
+{"id":"obs:repo:governance","kind":"repository_observation","repo_id":"repo:governance","name":"governance","classification":"governance","active":true,"revision":"sha:governance-fixture","source":"https://github.com/roccho-dev/governance"}
+{"id":"obs:repo:ops","kind":"repository_observation","repo_id":"repo:ops","name":"ops","classification":"factory","active":true,"revision":"sha:ops-fixture","source":"https://github.com/roccho-dev/ops"}
+{"id":"obs:repo:ui","kind":"repository_observation","repo_id":"repo:ui","name":"ui","classification":"platform","active":true,"revision":"sha:ui-fixture","source":"https://github.com/roccho-dev/ui"}
+{"id":"obs:repo:product","kind":"repository_observation","repo_id":"repo:product","name":"product-fixture","classification":"product","active":true,"revision":"sha:product-fixture","source":"https://github.com/roccho-dev/product-fixture"}
+{"id":"req:repo:adrs","kind":"repository_requirement","repo_id":"repo:adrs","applicability":"REQUIRED","decision_id":"decision:331"}
+{"id":"req:repo:governance","kind":"repository_requirement","repo_id":"repo:governance","applicability":"REQUIRED","decision_id":"decision:331"}
+{"id":"req:repo:ops","kind":"repository_requirement","repo_id":"repo:ops","applicability":"REQUIRED","decision_id":"decision:331"}
+{"id":"req:repo:ui","kind":"repository_requirement","repo_id":"repo:ui","applicability":"REQUIRED","decision_id":"decision:331"}
+{"id":"req:repo:product","kind":"repository_requirement","repo_id":"repo:product","applicability":"REQUIRED","decision_id":"decision:331"}
+{"id":"decision:331","kind":"decision","repo_id":"repo:adrs","title":"Deploy one complete internal organization Semantic Map","source":"https://github.com/roccho-dev/adrs/issues/331"}
+{"id":"obligation:current-world","kind":"obligation","repo_id":"repo:governance","decision_id":"decision:331","title":"Publish one deterministic current organization JSONL","state":"required"}
+{"id":"proof:builder","kind":"proof","repo_id":"repo:ops","obligation_id":"obligation:current-world","title":"Build and destructively verify organization-map projection","state":"pending"}
+{"id":"package:ui:semantic-map","kind":"package_observation","repo_id":"repo:ui","name":"semantic-map","path":"packages/semantic-map","state":"observed","source":"https://github.com/roccho-dev/ui"}
+{"id":"package:ops:organization-map","kind":"package_requirement","repo_id":"repo:ops","name":"organization-map mechanism","state":"required","decision_id":"decision:331"}
+{"id":"receipt:product","kind":"receipt","repo_id":"repo:product","title":"Product adoption receipt","state":"missing","source":"https://github.com/roccho-dev/product-fixture"}
+{"id":"rel:decision-obligation","kind":"relation","relation":"projects_to","from":"decision:331","to":"obligation:current-world"}
+{"id":"rel:obligation-proof","kind":"relation","relation":"verified_by","from":"obligation:current-world","to":"proof:builder"}
+{"id":"rel:proof-ui-package","kind":"relation","relation":"rendered_by","from":"proof:builder","to":"package:ui:semantic-map"}
+{"id":"rel:proof-product-receipt","kind":"relation","relation":"shipped_to","from":"proof:builder","to":"receipt:product"}
