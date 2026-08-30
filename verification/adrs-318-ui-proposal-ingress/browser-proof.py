@@ -65,7 +65,7 @@ def main() -> int:
 
         page.on("response", record_failure)
         page.goto(base, wait_until="domcontentloaded", timeout=120_000)
-        page.locator("#graph-container svg").wait_for(state="attached", timeout=120_000)
+        page.locator("#graph-container svg").first.wait_for(state="attached", timeout=120_000)
         page.locator("#proposal-connect-button").wait_for(state="visible", timeout=120_000)
 
         snapshot = page.evaluate(
