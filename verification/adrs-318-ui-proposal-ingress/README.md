@@ -1,61 +1,48 @@
-# ADRS #318 UI proposal ingress
+# ADRS #318 approved Semantic Map proposal ingress
 
-This bounded path avoids putting any GitHub write credential in a public Worker.
+The active browser surface is generated from an exact `ui` commit with the repository-owned Semantic Map generator. It opens in `map/1` and shows the nested `adrs / governance / ops → packages → package` sample. The previous fixed-form canary UI is retired and absent from the deployed assets.
 
 ```text
-browser UI
-→ same-origin POST of one fixed non-authority proposal
+exact ui commit
+→ Semantic Map generator
+→ map/1 package map
+→ select pkg.adrs318.canary
+→ UI connectability prepares canonical non-authority proposal
+→ same-origin POST
 → conditional immutable R2 proposal object
-→ ADRS-owned GitHub Actions relay authenticated to Worker with GitHub OIDC
-→ ADRS Issue comment through that repository's own short-lived GITHUB_TOKEN
+→ ADRS-owned GitHub Actions relay authenticated with GitHub OIDC
+→ ADRS Issue comment through the repository's own short-lived GITHUB_TOKEN
 → exact comment readback
 → OIDC acknowledgement
 → conditional immutable R2 recorded receipt
-→ UI status becomes recorded
+→ Semantic Map status becomes recorded
 ```
 
-## Proven canary
+## Active URL
 
 ```text
-Worker:
 https://stg-adrs-ui-proposal-ingress.roccho.workers.dev/
-
-proposal_id:
-adrs318-ui-proposal-oidc-canary-v1
-
-ADRS comment:
-https://github.com/roccho-dev/adrs/issues/318#issuecomment-5462452549
 ```
 
-The Worker, R2 queue, real browser submit, ADRS-owned relay, comment append, exact readback, acknowledgement, recorded status, duplicate suppression and unauthenticated relay rejection have all executed against the real providers.
+The deployment proof must generate the expected UI and pass a real Chromium visual check before `wrangler deploy`. It then byte-compares every deployed static asset, selects the visible canary package in the live map, previews a geometry-free proposal, submits it, and observes exact Issue comment readback.
 
-## Security boundary
+## Ownership boundary
 
-- The Worker accepts only the fixed `adrs318-ui-proposal-oidc-canary-v1` payload in this proof.
-- The Worker has no GitHub token, App private key, PAT or Issues permission.
-- Relay endpoints require a verified GitHub Actions OIDC JWT from the exact `roccho-dev/adrs/.github/workflows/adrs-318-ui-proposal-relay.yml@refs/heads/proposals` workflow.
-- The ADRS workflow writes only to its own fixed Issue `#318` using its own short-lived `GITHUB_TOKEN` with `issues: write`.
-- Proposal and acknowledgement writes are R2 conditional appends with exact readback.
-- Same proposal meaning is idempotent; the same ID with different meaning is rejected.
-- Cross-origin UI submission and relay access without the exact OIDC identity fail closed.
-- `recorded` means GitHub comment append/readback only.
+- `ui/packages/semantic-map/**` owns the map runtime, `map/1` projection and maxGraph renderer.
+- `ui/packages/connectability/**` owns canonical JSON preparation plus same-origin submit/observe.
+- this Ops package owns the fixed proposal adapter, exact UI materialization, Worker ingress, R2 storage and deployment proof.
+- the ADRS repository owns Issue write authority through its own GitHub Actions token.
+- the Worker has no GitHub token, App private key, PAT or Issues permission.
+- `recorded` means Issue append and exact readback only; it does not mean accepted, materialized or current.
 
-## Claim ceiling
+## Bounded canary
 
-```json
-{
-  "claim_ceiling": "UI_TO_ADRS_COMMENT_OIDC_RELAY_PROVEN",
-  "ui_submit": true,
-  "r2_proposal_append": true,
-  "automatic_oidc_relay": true,
-  "adrs_comment_recorded": true,
-  "exact_comment_readback": true,
-  "worker_github_write_credential": false,
-  "gov_materialized": false,
-  "current_changed": false,
-  "authority_changed": false,
-  "cutover": false
-}
+```text
+proposal_id: adrs318-ui-proposal-oidc-canary-v1
+package_id: pkg.adrs318.canary
+target: roccho-dev/adrs#318
+authority: false
+cutover: false
 ```
 
-The final generic editor contract, arbitrary target Issues, human authentication, gov materialization, semantic Release update and reappearance in the decision UI remain outside this bounded canary.
+The Worker accepts only this fixed canary meaning. Same meaning is idempotent; the same ID with different meaning is rejected. Arbitrary package operations, arbitrary repositories or Issues, human authentication, governance materialization, semantic Release update and current-state mutation remain outside this proof.
