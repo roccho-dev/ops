@@ -1,0 +1,10 @@
+{"id":"case:reordered-input","kind":"destructive_case","mutation":"reverse or shuffle all input lines without changing records","expected":"PASS_BYTE_IDENTICAL_OUTPUT"}
+{"id":"case:missing-packet","kind":"destructive_case","mutation":"remove all package records for one observed active repository","expected":"PASS_EXPLICIT_UNKNOWN_GAP","forbidden":"omit repository or report conformant"}
+{"id":"case:required-package-missing","kind":"destructive_case","mutation":"keep a package requirement but remove its observation and receipt","expected":"PASS_EXPLICIT_MISSING_PACKAGE","forbidden":"report conformant"}
+{"id":"case:orphan-package","kind":"destructive_case","mutation":"add a package observation whose repo_id is not observed","expected":"BLOCK_OR_EXPLICIT_ORPHAN","forbidden":"silently attach to root"}
+{"id":"case:duplicate-id","kind":"destructive_case","mutation":"append a second record with an existing id and different meaning","expected":"BLOCK_DUPLICATE_ID"}
+{"id":"case:dangling-relation","kind":"destructive_case","mutation":"change one relation endpoint to an unknown semantic id","expected":"BLOCK_DANGLING_RELATION"}
+{"id":"case:mixed-revision","kind":"destructive_case","mutation":"join current records from two exact revisions for one repository without an explicit supersession relation","expected":"BLOCK_MIXED_REVISION"}
+{"id":"case:contradictory-classification","kind":"destructive_case","mutation":"provide two current classifications for one repository","expected":"BLOCK_CONTRADICTORY_CURRENT_STATE"}
+{"id":"case:selected-only","kind":"destructive_case","mutation":"supply only repositories that emitted packets","expected":"BLOCK_OR_HOLD_SELECTED_UNIVERSE_ONLY","forbidden":"claim all active repositories observed"}
+{"id":"case:sample-as-production","kind":"destructive_case","mutation":"mark the minimal fixture as the production universe","expected":"BLOCK_SAMPLE_AS_AUTHORITY"}
