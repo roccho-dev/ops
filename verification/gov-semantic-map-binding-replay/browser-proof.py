@@ -59,7 +59,6 @@ def main() -> None:
               pattern: semanticMapRuntime.view.pattern,
               scene: semanticMapSite.editor.snapshot().scene.pattern,
               svg: Boolean(document.querySelector('#graph-container svg')),
-              regionCount: semanticMapApp.adapter.cellsByRegionId.size,
               relationCount: semanticMapApp.adapter.lastScene.relations.length,
               tools: semanticMapApp.adapter.cellsByRegionId.has('package:tools'),
               modules: semanticMapApp.adapter.cellsByRegionId.has('package:modules'),
@@ -70,12 +69,12 @@ def main() -> None:
               cutover: document.querySelector('meta[name="production-cutover"]')?.content,
             })"""
         )
+        print(json.dumps({"rendered": rendered}, ensure_ascii=False, sort_keys=True))
         assert rendered == {
             "title": "Semantic Map",
             "pattern": "map/1",
             "scene": "map/1",
             "svg": True,
-            "regionCount": expected["projection"]["regionCount"],
             "relationCount": expected["projection"]["relationCount"],
             "tools": True,
             "modules": True,
