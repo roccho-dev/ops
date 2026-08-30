@@ -1,0 +1,40 @@
+name: Shared Carrier publish verification
+
+on:
+  pull_request:
+    paths:
+      - 'packages/chatgpt-capability/ingress/carrier-publish.mjs'
+      - 'verification/mobile-agent-persistent-carry-bootstrap/**'
+      - '.github/workflows/carrier-publish-verify.yml'
+      - '.github/workflows/mobile-agent-persistent-carry-publish-once.yml'
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Recover exact App and close Carrier locally
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/closure"
+          bash verification/mobile-agent-persistent-carry-bootstrap/verify.sh "$RUNNER_TEMP/closure" \
+            | tee "$RUNNER_TEMP/closure/terminal.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shared-carrier-publish-verification-${{ github.run_id }}
+          path: ${{ runner.temp }}/closure/
+          if-no-files-found: error
+          retention-days: 30
