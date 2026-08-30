@@ -95,6 +95,7 @@ try {
     throw new Error("generated HTML does not contain the expected Semantic Map");
   }
   const metadata = [
+    `<link rel="icon" href="data:,">`,
     `<meta name="governance-meaning-sha256" content="${MEANING_DIGEST}">`,
     `<meta name="governance-source-commit" content="${GOVERNANCE_COMMIT}">`,
     `<meta name="semantic-map-ui-commit" content="${UI_COMMIT}">`,
