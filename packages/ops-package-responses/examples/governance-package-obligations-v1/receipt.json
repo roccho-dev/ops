@@ -12,15 +12,15 @@
     "node": "v22.16.0",
     "real_nix_proven": false
   },
-  "implementation_commit": "c5811bbfb800c66f1a4fdc362eadf112a2b6a748",
-  "implementation_tree": "git-tree-sha1:2a9ace7e25c42b6788eb0ba44869253d698f97ba",
+  "implementation_commit": "ca2f3cb720c311b0c29465088973a3f25afb0e7a",
+  "implementation_tree": "git-tree-sha1:c1edd0322983b221156741be4b2d809b2a6b7efc",
   "input_digests": {
-    "expected.json": "sha256:c725f7e339c9447532de5fcdaf1b118048b1859278bf4238db1682db951a9465",
-    "governance-source.json": "sha256:954ff8f11b5774acc3363e94605aff0e0dc28242955030a45852333d6af14662",
-    "inventory-projection.json": "sha256:6bd7c6245b05ed74cab3760c8964ca64bae0faafe37e3caccdc9925bfbe713ba",
-    "package-obligations-materialization.json": "sha256:f7f8e3293f6ddd6e109747c2958c99166e82e79c5f5829d58d6067d59ad22a6c",
-    "package-obligations.jsonl": "sha256:501450c079029d30172b9da74fb102e26c0069a467a92c232f9993ca6a8baa85",
-    "source-manifest.json": "sha256:2dc03185cdc6182a92bd34d2138524deeb448244604ced339eadadd227fecd9e"
+    "expected.json": "sha256:4ab6c46cd038c2b9a6350e92e8d5539d1191c6b202e0f48ed743da979283caa9",
+    "governance-source.json": "sha256:cbccb8bb692b0ad14e47d9ec41c72646da8d7d09c723b6653ab020f59cef4056",
+    "inventory-projection.json": "sha256:5cde62f0949bd32bedfbfe16e49f21cf56ffea3065ac49551b6636c1c84bbc87",
+    "package-obligations-materialization.json": "sha256:aeb3c746abeb0ffff3eb801ac783a04a190d4c57b3be4aea0baae367c0aaad7e",
+    "package-obligations.jsonl": "sha256:29031ead40de8692bd1e5652e75e91697f6f0eee14e3bfa0ef25813bf62ade52",
+    "source-manifest.json": "sha256:4dec0ca196e3bbf082793dc1f7420f2c3d129bd5b45d738993d1aa6a8133b6d4"
   },
   "kind": "ops.packageObligationGoldenReceipt.v1",
   "observed": {
@@ -30,14 +30,14 @@
     "findings": 0,
     "kind": "ops.packageObligationGoldenExpected.v1",
     "organization_active_minted": false,
-    "out_of_scope": 119,
-    "packages": 122,
+    "out_of_scope": 120,
+    "packages": 123,
     "status": "pass"
   },
-  "observed_at": "2026-08-29T08:20:02Z",
+  "observed_at": "2026-08-29T21:28:06Z",
   "package_id": "ops-package-responses",
-  "package_tree": "git-tree-sha1:8fc892e0f5a11d205c9eea48f7bd262471a4fbe0",
-  "receipt_digest": "sha256:acbcca53fa50bb22e710749bb960d53dad596f3bf0d58376c11c0518c6336b4b",
+  "package_tree": "git-tree-sha1:b3cb988ccb6e43c8af3f7b9406da716e73d88f4d",
+  "receipt_digest": "sha256:5f102cbac71ecec019829d8d5a6426bfeee4bb5963bbdfef22f584e19507d060",
   "status": "pass",
-  "test_blob": "git-blob-sha1:7a08af6e4c6d9013276a2d9a8ad5cf6d16949d11"
+  "test_blob": "git-blob-sha1:7f0a3fee7b8f5926ebfad67c4da910baca591f33"
 }
