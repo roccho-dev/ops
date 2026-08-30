@@ -1,4 +1,4 @@
-name: ADRS 318 UI proposal ingress proof
+name: ADRS 318 approved Semantic Map proposal ingress
 
 on:
   pull_request:
@@ -6,40 +6,54 @@ on:
     paths:
       - '.github/workflows/adrs-318-ui-proposal-ingress.yml'
       - 'verification/adrs-318-ui-proposal-ingress/**'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/adrs-318-ui-proposal-ingress.yml'
+      - 'verification/adrs-318-ui-proposal-ingress/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  proposal-ingress-provider-proof:
+  approved-semantic-map-provider-proof:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: cloudflare-production
     env:
       ROOT: verification/adrs-318-ui-proposal-ingress
-      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      UI_COMMIT: d10a5ece495b5570e30828a4032bbb9ee39f1b4c
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: roccho-dev/ui
+          ref: ${{ env.UI_COMMIT }}
+          path: ui-source
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.16.0'
+          node-version: '24'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Prove UI submit, R2 queue, ADRS-owned OIDC relay and recorded UI state
+      - name: Generate approved UI, prove it locally, deploy exact bytes and verify live behavior
         run: |
           export EVIDENCE="$RUNNER_TEMP/adrs-ui-proposal-evidence"
+          export UI_ROOT="$GITHUB_WORKSPACE/ui-source"
           bash "$ROOT/provider-proof.sh"
       - name: Upload exact non-secret evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: adrs-318-ui-proposal-ingress-${{ github.run_id }}
+          name: adrs-318-approved-semantic-map-${{ github.run_id }}
           path: ${{ runner.temp }}/adrs-ui-proposal-evidence/
           if-no-files-found: error
           retention-days: 30
