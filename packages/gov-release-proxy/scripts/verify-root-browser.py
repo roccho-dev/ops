@@ -8,6 +8,11 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+def optional_int(headers: dict[str, str], name: str) -> int | None:
+    value = headers.get(name)
+    return int(value) if value else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("base_url")
@@ -35,14 +40,15 @@ def main() -> None:
         response = page.goto(base, wait_until="load", timeout=30_000)
         assert response is not None and response.status == 200
         page.wait_for_function(
-            "globalThis.rootJsonlMapProof?.status === 'PASS'", timeout=30_000
+            "Boolean(globalThis.rootJsonlMapProof?.status)", timeout=30_000
         )
         proof = page.evaluate("globalThis.rootJsonlMapProof")
-        assert proof == {"status": "PASS", "records": 1, "nodes": 1}
-        assert page.title() == "Decision JSONL Map"
-        assert page.locator("#map article").count() == 1
-        assert page.locator("#status").inner_text() == "1 records"
         page.screenshot(path=args.screenshot, full_page=True)
+        assert proof["status"] == "PASS", f"browser projection failed: {proof}"
+        assert proof["records"] >= 1
+        assert proof["nodes"] == proof["records"]
+        assert page.title() == "Decision JSONL Map"
+        assert page.locator("#map article").count() == proof["nodes"]
 
         data = page.request.get(
             base,
@@ -51,13 +57,22 @@ def main() -> None:
         )
         assert data.status == 200
         body = data.body()
-        assert len(body) == 942
-        assert data.headers["content-type"].startswith("application/json")
-        assert (
-            "sha256:" + hashlib.sha256(body).hexdigest()
-            == "sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6"
-        )
-        assert data.headers["x-gov-release-upstream-auth"] == "anonymous"
+        assert len(body) > 0
+        headers = data.headers
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        assert digest == headers["x-gov-release-digest"]
+        assert headers["x-gov-release-selector"] == "latest"
+        assert headers["x-gov-release-locator"] in {
+            "github-web-latest",
+            "github-api-latest",
+        }
+        assert headers["x-gov-release-repository"] == "roccho-dev/governance"
+        assert headers["x-gov-release-asset"] == "accepted-decision.json"
+        assert headers["x-gov-release-upstream-auth"] in {"anonymous", "credential"}
+        assert headers["x-gov-release-manifest-digest"].startswith("sha256:")
+        assert headers["x-gov-release-semantic-digest"].startswith("sha256:")
+        assert int(headers["x-gov-release-sequence"]) >= 0
+        assert headers["content-type"].startswith(("application/json", "application/x-ndjson"))
 
         missing = page.request.get(base + "data/manifest")
         assert missing.status == 404
@@ -69,13 +84,25 @@ def main() -> None:
     assert console_errors == []
     screenshot = Path(args.screenshot)
     receipt = {
-        "schema": "ops.rootJsonlMapBrowserProof/1",
+        "schema": "ops.rootJsonlMapBrowserProof/3",
         "status": "PASS",
         "endpoint": "/",
         "html": "PASS",
-        "json": {
-            "bytes": 942,
-            "sha256": "sha256:6c6409f27657eec4b497d5a0da7a6940416a45508fbf5c7032b57e4ab178f1f6",
+        "release": {
+            "repository": headers["x-gov-release-repository"],
+            "locator": headers["x-gov-release-locator"],
+            "releaseId": headers["x-gov-release-id"],
+            "releaseNumericId": optional_int(headers, "x-gov-release-numeric-id"),
+            "tag": headers["x-gov-release-tag"],
+            "sequence": int(headers["x-gov-release-sequence"]),
+            "commit": headers.get("x-gov-release-commit"),
+            "manifestDigest": headers["x-gov-release-manifest-digest"],
+            "asset": headers["x-gov-release-asset"],
+            "assetId": optional_int(headers, "x-gov-release-asset-id"),
+            "bytes": len(body),
+            "sha256": digest,
+            "semanticDigest": headers["x-gov-release-semantic-digest"],
+            "upstreamAuth": headers["x-gov-release-upstream-auth"],
         },
         "projection": proof,
         "otherPathStatus": 404,
@@ -87,6 +114,8 @@ def main() -> None:
             "bytes": screenshot.stat().st_size,
             "sha256": "sha256:" + hashlib.sha256(screenshot.read_bytes()).hexdigest(),
         },
+        "runtimeFixture": False,
+        "fixedReleaseIdentity": False,
         "authority": False,
         "cutover": False,
     }
