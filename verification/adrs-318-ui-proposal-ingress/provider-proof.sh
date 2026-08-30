@@ -4,6 +4,8 @@ set -euo pipefail
 : "${ROOT:?ROOT is required}"
 : "${EVIDENCE:?EVIDENCE is required}"
 : "${CANDIDATE_SHA:?CANDIDATE_SHA is required}"
+: "${UI_ROOT:?UI_ROOT is required}"
+: "${UI_COMMIT:?UI_COMMIT is required}"
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID is required}"
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN is required}"
 
@@ -12,10 +14,49 @@ BUCKET="stg-adrs-ui-proposals"
 WRANGLER_VERSION="4.112.0"
 PROPOSAL_ID="adrs318-ui-proposal-oidc-canary-v1"
 GENERATED_CONFIG="$ROOT/wrangler.proof.json"
+LOCAL_PORT=8765
+local_server_pid=""
 mkdir -p "$EVIDENCE"
-trap 'rm -f "$GENERATED_CONFIG"' EXIT
+cleanup() {
+  if [ -n "$local_server_pid" ]; then kill "$local_server_pid" 2>/dev/null || true; fi
+  rm -f "$GENERATED_CONFIG"
+}
+trap cleanup EXIT
 
 node --test "$ROOT/tests/worker.test.mjs" | tee "$EVIDENCE/node-tests.log"
+python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+test -n "$chrome"
+"$chrome" --version > "$EVIDENCE/chrome-version.txt"
+
+test "$(git -C "$UI_ROOT" rev-parse HEAD)" = "$UI_COMMIT"
+UI_COMMIT="$UI_COMMIT" node "$ROOT/build-approved-ui.mjs" "$UI_ROOT" "$ROOT/public" \
+  | tee "$EVIDENCE/approved-ui-build.log"
+cp "$ROOT/public/approved-ui-receipt.json" "$EVIDENCE/approved-ui-receipt.json"
+python3 - "$EVIDENCE/approved-ui-receipt.json" "$UI_COMMIT" <<'PY'
+import json,sys
+value=json.load(open(sys.argv[1],encoding='utf-8'))
+assert value['status']=='PASS'
+assert value['uiCommit']==sys.argv[2]
+assert value['pattern']=='map/1'
+assert value['retiredFixedFormPresent'] is False
+assert value['requiredRegionIds']==['repo:adrs','repo:governance','repo:ops','pkg.adrs318.canary']
+PY
+! grep -R -F 'ADRS UI Proposal Canary' "$ROOT/public"
+! grep -R -F '固定canary変更' "$ROOT/public"
+
+python3 -m http.server "$LOCAL_PORT" --bind 127.0.0.1 --directory "$ROOT/public" \
+  > "$EVIDENCE/local-server.log" 2>&1 &
+local_server_pid=$!
+for attempt in $(seq 1 100); do
+  if curl -fsS "http://127.0.0.1:$LOCAL_PORT/" >/dev/null; then break; fi
+  sleep .1
+done
+CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
+  "http://127.0.0.1:$LOCAL_PORT/" "$EVIDENCE/local-visual.json" "$EVIDENCE/local-visual.png" --visual-only
+kill "$local_server_pid"
+wait "$local_server_pid" 2>/dev/null || true
+local_server_pid=""
 
 api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets?name_contains=$BUCKET&per_page=1000"
 curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api" > "$EVIDENCE/r2-buckets.raw.json"
@@ -49,11 +90,11 @@ worker_url="${worker_url%/}"
 printf '%s\n' "$worker_url" > "$EVIDENCE/worker-url.txt"
 
 for attempt in $(seq 1 100); do
-  if curl -fsS -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' "$worker_url/api/meta" >/dev/null; then break; fi
+  if curl -fsS -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' "$worker_url/api/meta" >/dev/null; then break; fi
   sleep .3
 done
 curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
-  -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' \
+  -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
   "$worker_url/api/meta" > "$EVIDENCE/meta.json"
 python3 - "$EVIDENCE/meta.json" "$CANDIDATE_SHA" <<'PY'
 import json,sys
@@ -65,23 +106,22 @@ assert meta['github_write_credential_in_worker'] is False
 assert meta['relay_auth']=='GitHub Actions OIDC'
 PY
 
-python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
-test -n "$chrome"
-CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
-  "$worker_url/" "$EVIDENCE/browser-submit.json" "$EVIDENCE/browser-submit.png"
-"$chrome" --version > "$EVIDENCE/chrome-version.txt"
+for name in index.html connectability.mjs proposal-connect.mjs receipt.json approved-ui-receipt.json; do
+  curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/$name" > "$EVIDENCE/$name.remote"
+  cmp "$ROOT/public/$name" "$EVIDENCE/$name.remote"
+done
+sha256sum \
+  "$ROOT/public/index.html" \
+  "$ROOT/public/connectability.mjs" \
+  "$ROOT/public/proposal-connect.mjs" \
+  "$ROOT/public/receipt.json" \
+  "$ROOT/public/approved-ui-receipt.json" > "$EVIDENCE/static-assets.sha256"
 
-curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/" > "$EVIDENCE/index.remote.html"
-curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/app.mjs" > "$EVIDENCE/app.remote.mjs"
-curl --retry 20 --retry-all-errors --retry-delay 1 -fsS "$worker_url/style.css" > "$EVIDENCE/style.remote.css"
-cmp "$ROOT/public/index.html" "$EVIDENCE/index.remote.html"
-cmp "$ROOT/public/app.mjs" "$EVIDENCE/app.remote.mjs"
-cmp "$ROOT/public/style.css" "$EVIDENCE/style.remote.css"
-sha256sum "$ROOT/public/index.html" "$ROOT/public/app.mjs" "$ROOT/public/style.css" > "$EVIDENCE/static-assets.sha256"
+CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
+  "$worker_url/" "$EVIDENCE/live-browser.json" "$EVIDENCE/live-browser.png"
 
 relay_status="$(curl -sS -o "$EVIDENCE/relay-without-token.json" -w '%{http_code}' \
-  -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' \
+  -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
   "$worker_url/api/relay/pending")"
 test "$relay_status" = 401
 python3 - "$EVIDENCE/relay-without-token.json" <<'PY'
@@ -90,43 +130,38 @@ value=json.load(open(sys.argv[1],encoding='utf-8'))
 assert value['code']=='RELAY_AUTH_DENIED'
 PY
 
-recorded=false
-for attempt in $(seq 1 180); do
-  curl --retry 5 --retry-all-errors --retry-delay 1 -fsS \
-    -H 'Accept: application/json' \
-    -H 'User-Agent: roccho-ops-adrs318-ui-proposal-proof/1' \
-    "$worker_url/api/proposals/$PROPOSAL_ID" > "$EVIDENCE/proposal-status.json"
-  state="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$EVIDENCE/proposal-status.json")"
-  if [ "$state" = recorded ]; then
-    recorded=true
-    break
-  fi
-  sleep 2
-done
-test "$recorded" = true
+curl --retry 20 --retry-all-errors --retry-delay 1 -fsS \
+  -H 'Accept: application/json' \
+  -H 'User-Agent: roccho-ops-approved-semantic-map-proof/1' \
+  "$worker_url/api/proposals/$PROPOSAL_ID" > "$EVIDENCE/proposal-status.json"
 
-CHROME_BIN="$chrome" python3 "$ROOT/browser-proof.py" \
-  "$worker_url/" "$EVIDENCE/browser-recorded.json" "$EVIDENCE/browser-recorded.png"
-
-BUCKET_CREATED="$bucket_created" WORKER_URL="$worker_url" WORKER="$WORKER" BUCKET="$BUCKET" \
-python3 - "$EVIDENCE/browser-submit.json" "$EVIDENCE/browser-recorded.json" "$EVIDENCE/proposal-status.json" "$EVIDENCE/provider-proof.json" <<'PY'
+BUCKET_CREATED="$bucket_created" WORKER_URL="$worker_url" WORKER="$WORKER" BUCKET="$BUCKET" UI_COMMIT="$UI_COMMIT" \
+python3 - "$EVIDENCE/approved-ui-receipt.json" "$EVIDENCE/local-visual.json" "$EVIDENCE/live-browser.json" "$EVIDENCE/proposal-status.json" "$EVIDENCE/provider-proof.json" <<'PY'
 import json,os,sys
-submitted=json.load(open(sys.argv[1],encoding='utf-8'))
-recorded_browser=json.load(open(sys.argv[2],encoding='utf-8'))
-status=json.load(open(sys.argv[3],encoding='utf-8'))
-assert submitted['status']==recorded_browser['status']==status['status']=='PASS'
+build=json.load(open(sys.argv[1],encoding='utf-8'))
+local=json.load(open(sys.argv[2],encoding='utf-8'))
+live=json.load(open(sys.argv[3],encoding='utf-8'))
+status=json.load(open(sys.argv[4],encoding='utf-8'))
+assert build['status']==local['status']==live['status']==status['status']=='PASS'
+assert build['uiCommit']==local['ui_commit']==live['ui_commit']==os.environ['UI_COMMIT']
+assert local['mode']=='visual-only'
+assert live['mode']=='live-provider'
+assert local['approved_ui'] is live['approved_ui'] is True
+assert local['retired_fixed_form_present'] is live['retired_fixed_form_present'] is False
+assert live['proposal_state']=='recorded'
 assert status['state']=='recorded'
 assert status['exact_comment_readback'] is True
 assert isinstance(status['comment_id'],int) and status['comment_id']>0
 assert status['comment_url'].startswith('https://github.com/roccho-dev/adrs/issues/318#issuecomment-')
-assert recorded_browser['status_after_submit']['state']=='recorded'
 receipt={
-  'schema':'ops.adrsUiProposalIngressProviderProof/2',
+  'schema':'ops.approvedSemanticMapProviderProof/1',
   'status':'PASS',
-  'claim_ceiling':'UI_TO_ADRS_COMMENT_OIDC_RELAY_PROVEN',
+  'claim_ceiling':'APPROVED_SEMANTIC_MAP_TO_ADRS_COMMENT_RECORDED',
   'authority':False,
   'repository':os.environ['GITHUB_REPOSITORY'],
   'candidate_sha':os.environ['CANDIDATE_SHA'],
+  'ui_commit':os.environ['UI_COMMIT'],
+  'ui_pattern':'map/1',
   'worker':{
     'name':os.environ['WORKER'],
     'url':os.environ['WORKER_URL']+'/',
@@ -141,15 +176,17 @@ receipt={
     'proposal_exact_readback':'PASS',
     'recorded_receipt_exact_readback':'PASS',
   },
+  'expected_ui_generated_before_deploy':True,
+  'local_real_chromium_visual_proof':'PASS',
+  'remote_real_chromium_visual_and_submit_proof':'PASS',
+  'approved_ui':True,
+  'retired_fixed_form_present':False,
   'proposal_id':status['proposal_id'],
   'proposal_digest':status['proposal_digest'],
   'comment_body_sha256':status['comment_body_sha256'],
   'comment_id':status['comment_id'],
   'comment_url':status['comment_url'],
   'state':'recorded',
-  'local_tests':4,
-  'real_chromium_submit':'PASS',
-  'real_chromium_recorded':'PASS',
   'browser_errors':0,
   'external_requests':0,
   'relay_without_oidc':'DENIED',
@@ -161,7 +198,7 @@ receipt={
   'authority_changed':False,
   'cutover':False,
 }
-open(sys.argv[4],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+open(sys.argv[5],'w',encoding='utf-8').write(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
 print(json.dumps(receipt,sort_keys=True))
 PY
 
