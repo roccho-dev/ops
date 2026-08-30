@@ -9,7 +9,9 @@ set -euo pipefail
 : "${CLOUDFLARE_ACCOUNT_ID:?CLOUDFLARE_ACCOUNT_ID required}"
 : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN required}"
 mkdir -p "$DIST" "$EVIDENCE/local-screens" "$EVIDENCE/deployment-screens" "$EVIDENCE/alias-screens"
-python3 "$ROOT/materialize.py" "$ROOT/organization-current.jsonl" "$DIST" | tee "$EVIDENCE/materialize.stdout.json"
+state="$EVIDENCE/organization-current.jsonl"
+python3 "$ROOT/build-state.py" "$state" | tee "$EVIDENCE/build-state.stdout.json"
+python3 "$ROOT/materialize.py" "$state" "$DIST" | tee "$EVIDENCE/materialize.stdout.json"
 
 sudo apt-get update -qq
 sudo apt-get install -y -qq fonts-noto-cjk >/dev/null
