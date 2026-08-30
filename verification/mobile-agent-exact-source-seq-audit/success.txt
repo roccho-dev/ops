@@ -1,0 +1,1 @@
+output exactly the stable seq/1 URL from accepted/public-url-receipt.json after PASS
