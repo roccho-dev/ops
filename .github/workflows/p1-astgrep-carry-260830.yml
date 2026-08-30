@@ -1,0 +1,42 @@
+name: P1 ast-grep exact carry 260830
+
+on:
+  push:
+    branches:
+      - tmp/p1-astgrep-carry-260830
+    paths:
+      - .github/workflows/p1-astgrep-carry-260830.yml
+
+permissions:
+  contents: read
+
+jobs:
+  carry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Acquire and verify pinned ast-grep
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/astgrep-carry"
+          mkdir -p "$out/extract" "$out/artifact"
+          curl --fail --location --retry 3 \
+            --output "$out/app.zip" \
+            https://github.com/ast-grep/ast-grep/releases/download/0.42.1/app-x86_64-unknown-linux-gnu.zip
+          test "$(sha256sum "$out/app.zip" | cut -d' ' -f1)" = 5de8b87cba67fc8dc3e239d54b6484802ad745a7ae3de76be4fe89661dc52657
+          unzip -q "$out/app.zip" -d "$out/extract"
+          binary=$(find "$out/extract" -type f -perm -111 \( -name ast-grep -o -name sg \) -print -quit)
+          test -n "$binary"
+          test "$(sha256sum "$binary" | cut -d' ' -f1)" = eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905
+          install -m 0755 "$binary" "$out/artifact/ast-grep"
+          "$out/artifact/ast-grep" --version > "$out/artifact/version.txt"
+          printf '%s  %s\n' \
+            eb8e7b3da46e0684853da0a6dd2b0aa26ad8bc66cf6a8ca1650c6f924412d905 \
+            ast-grep > "$out/artifact/SHA256SUMS"
+          (cd "$out/artifact" && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p1-astgrep-0.42.1-x86_64-linux
+          path: ${{ runner.temp }}/astgrep-carry/artifact/*
+          if-no-files-found: error
+          retention-days: 1
