@@ -1,0 +1,97 @@
+name: Complete Mobile Agent exact-source Seq audit safely
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-complete-mobile-agent-exact-source-seq-audit.yml'
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  merge-after-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      TARGET_PR: '298'
+      TARGET_BRANCH: proposal/mobile-agent-exact-source-seq-audit-260823
+      SOURCE_COMMIT: 1daa001bf780053f4319e3fb20b4ea9a6e0d0442
+    steps:
+      - name: Wait for exact target head, CI intent, and preflight PASS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          target_sha=''
+          for attempt in $(seq 1 180); do
+            gh api "repos/$repo/pulls/$TARGET_PR" > "$RUNNER_TEMP/pr.json"
+            state="$(jq -r .state "$RUNNER_TEMP/pr.json")"
+            merged="$(jq -r .merged "$RUNNER_TEMP/pr.json")"
+            head_ref="$(jq -r .head.ref "$RUNNER_TEMP/pr.json")"
+            base_ref="$(jq -r .base.ref "$RUNNER_TEMP/pr.json")"
+            observed_sha="$(jq -r .head.sha "$RUNNER_TEMP/pr.json")"
+            test "$head_ref" = "$TARGET_BRANCH"
+            test "$base_ref" = proposals
+            if [ "$merged" = true ]; then
+              echo "target already merged"
+              exit 0
+            fi
+            test "$state" = open
+
+            intent_ok=false
+            if gh api -X GET "repos/$repo/contents/ci.intent.v1.jsonl" -f ref="$TARGET_BRANCH" > "$RUNNER_TEMP/intent.json" 2>/dev/null; then
+              jq -r .content "$RUNNER_TEMP/intent.json" | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/ci.intent.v1.jsonl"
+              if grep -F '"path":".github/workflows/mobile-agent-exact-source-seq-audit.yml"' "$RUNNER_TEMP/ci.intent.v1.jsonl" >/dev/null; then
+                intent_ok=true
+              fi
+            fi
+
+            gh api "repos/$repo/commits/$observed_sha/check-runs?per_page=100" > "$RUNNER_TEMP/checks.json"
+            conclusion="$(jq -r '[.check_runs[] | select(.name == "preflight") | .conclusion] | map(select(. != null)) | last // empty' "$RUNNER_TEMP/checks.json")"
+            if [ "$intent_ok" = true ] && [ "$conclusion" = success ]; then
+              target_sha="$observed_sha"
+              break
+            fi
+            if [ -n "$conclusion" ] && [ "$conclusion" != success ]; then
+              jq -r '.check_runs[] | select(.name == "preflight") | {name,status,conclusion,details_url}' "$RUNNER_TEMP/checks.json" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          test -n "$target_sha"
+
+          gh api "repos/$repo/pulls/$TARGET_PR" > "$RUNNER_TEMP/pr-final.json"
+          test "$(jq -r .head.sha "$RUNNER_TEMP/pr-final.json")" = "$target_sha"
+          test "$(jq -r .state "$RUNNER_TEMP/pr-final.json")" = open
+          test "$(jq -r .mergeable "$RUNNER_TEMP/pr-final.json")" = true
+
+          gh api -X PUT "repos/$repo/pulls/$TARGET_PR/merge" \
+            -f sha="$target_sha" \
+            -f merge_method=squash \
+            -f commit_title='feat: audit exact existing source through public seq/1 URL receipt' \
+            -f commit_message='Run only the existing Mobile Agent verification/build from exact commit/tree, then allow the owner-triggered audited Release, Pages byte readback, real-Chrome proof, canonical receipt, and receipt-only URL report. Refs #286 #242 #233 #279 #293.' \
+            > "$RUNNER_TEMP/merge.json"
+          test "$(jq -r .merged "$RUNNER_TEMP/merge.json")" = true
+          merge_sha="$(jq -r .sha "$RUNNER_TEMP/merge.json")"
+          test -n "$merge_sha"
+
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Exact-source Seq audit preflight and merge — PASS
+
+          - target PR: #$TARGET_PR
+          - exact target head: \`$target_sha\`
+          - preflight check: \`preflight / success\`
+          - CI intent: present
+          - merge commit: \`$merge_sha\`
+          - next owner command: \`/run-exact-source-seq-audit\`
+
+          No public URL is accepted or reported until the owner command completes the canonical PASS receipt on \`accepted/mobile-agent-public-url\`.
+          EOF
+          gh issue comment 286 --repo "$repo" --body-file "$RUNNER_TEMP/comment.md"
