@@ -14,39 +14,60 @@
     "content_type": "application/x-ndjson; charset=utf-8",
     "raw_url": "https://raw.githubusercontent.com/roccho-dev/governance/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl"
   },
-  "ui_source": {
+  "ui": {
     "repository": "roccho-dev/ui",
-    "transport": "exact-git-bundle",
-    "bundle_name": "260829142218.6a8d6f71-cbac-83ee-ad15-566201f495bf.bundle",
-    "bundle_bytes": 1669992,
-    "bundle_sha256": "sha256:e5718c62d37f604e3795552adf8b34b396c497ec6a16c3e82d83a31abd8207cd",
-    "commit": "5b1101daedb6c64261c1fae52f065a51cf0be36f",
-    "tree": "c40e1ad7cd4843b7a7c59a21ed74b153d5644a55",
-    "package": "packages/semantic-map",
-    "capability": "render.semantic-map@1",
-    "build_script": "packages/semantic-map/scripts/build-browser-example.mjs"
+    "renderer_source_commit": "5b1101daedb6c64261c1fae52f065a51cf0be36f",
+    "renderer_source_tree": "c40e1ad7cd4843b7a7c59a21ed74b153d5644a55",
+    "renderer_package": "packages/semantic-map/renderer-maxgraph",
+    "transport_commit": "bde6fb4a92725f1e52162cbcc2ef7fdcc023f469",
+    "transport_tree": "65bd9cfb4a1c9c95b6ae7b161e1b7e2d3f5b0133",
+    "transport_root": "artifacts/selected-universe-semantic-map",
+    "issue": "roccho-dev/ui#183"
   },
-  "artifact": {
-    "archive_path": "site.tar.xz",
-    "archive_bytes": 388564,
-    "archive_sha256": "sha256:884575bbae7a37a7515b5c3c7f2e95a06a12414f0228a77332c707b713432f37",
-    "html_path": "index.html",
-    "html_bytes": 2415246,
-    "html_sha256": "sha256:607fd2082d7bc3ee4dcb6274bc1d74817b8935447226755cbb5fb08dd96e3829",
-    "profile_path": "projection-profile.jsonl",
-    "profile_sha256": "sha256:5f7e68b0957d438062bb0fa9a94d4aad2c8940c9bdf67c1c12421841ecb2cedb",
-    "projection_receipt_path": "projection-receipt.json",
-    "projection_receipt_sha256": "sha256:b10a70e8242c63465ffac224e2a248b8aafd7075d902cf4249db8bf72e621957",
-    "ui_build_receipt_path": "ui-build-receipt.json",
-    "ui_build_receipt_sha256": "sha256:c7c3473d9dbd6f921e1a5aedb4c4f619273c0574410c005bf815fe83d9c7017c",
-    "envelope_path": "semantic-map-envelope.json",
-    "envelope_sha256": "sha256:3f0223806f56feb87ffb070cffc8877717bda1079df5ab935b4d07db6a00367f",
-    "state_path": "semantic-map-state.jsonl",
-    "state_sha256": "sha256:e9df144d8d32e9af55ccb212b914bf7f0dd914e1afcb8aaaaffcf99a66f2e011",
-    "manifest_path": "manifest.json",
-    "manifest_sha256": "sha256:21433466f64c9c844004480f465c25c153a2e19013433b04b0b284063507ad45",
-    "archive_base64_sha256": "sha256:5ac05ee5b1873f482b478622203b350fa6ced893ab594eb86e5811989e8c2ca3",
-    "archive_base64_parts": 6
+  "artifacts": {
+    "html": {
+      "path": "artifacts/selected-universe-semantic-map/index.html",
+      "git_blob_sha1": "268b5dbf5aaeae87a46335102ba9d6f58e60d2c7",
+      "bytes": 15976,
+      "sha256": "sha256:86668cda9f72231c097bf57eabb8952b9a99c58b9466c4ef0148ffc0b3b70a38",
+      "content_type": "text/html; charset=utf-8",
+      "raw_url": "https://raw.githubusercontent.com/roccho-dev/ui/bde6fb4a92725f1e52162cbcc2ef7fdcc023f469/artifacts/selected-universe-semantic-map/index.html"
+    },
+    "profile": {
+      "path": "artifacts/selected-universe-semantic-map/projection-profile.jsonl",
+      "git_blob_sha1": "d954a5789a79d628fe3901270242c951373b8258",
+      "bytes": 897,
+      "sha256": "sha256:135ba5e65d0c939967d953ad39068bd371c46d30393a94a794c2a1f6403ae611",
+      "raw_url": "https://raw.githubusercontent.com/roccho-dev/ui/bde6fb4a92725f1e52162cbcc2ef7fdcc023f469/artifacts/selected-universe-semantic-map/projection-profile.jsonl"
+    },
+    "svg": {
+      "path": "artifacts/selected-universe-semantic-map/semantic-map.svg",
+      "git_blob_sha1": "b3080b596dbde3331010ca5502a03c50b78625f1",
+      "bytes": 4201,
+      "sha256": "sha256:a170306bebeaf7ca9f12de433bc6c169db4c3be3c24a993cea1ffa5b7993e6da",
+      "raw_url": "https://raw.githubusercontent.com/roccho-dev/ui/bde6fb4a92725f1e52162cbcc2ef7fdcc023f469/artifacts/selected-universe-semantic-map/semantic-map.svg"
+    },
+    "projection_receipt": {
+      "path": "artifacts/selected-universe-semantic-map/projection-receipt.json",
+      "git_blob_sha1": "7a522bdbd189a99a92e7b437c2fca4642772651a",
+      "bytes": 842,
+      "sha256": "sha256:cf56a94f5c8a7ed38086b1928ba685981c1b1b394133c0078dbf05dcdca1171f",
+      "raw_url": "https://raw.githubusercontent.com/roccho-dev/ui/bde6fb4a92725f1e52162cbcc2ef7fdcc023f469/artifacts/selected-universe-semantic-map/projection-receipt.json"
+    },
+    "browser_receipt": {
+      "path": "artifacts/selected-universe-semantic-map/browser-render-receipt.json",
+      "git_blob_sha1": "6ad5f77a4f6fa290d13150658d51677dec017f78",
+      "bytes": 1247,
+      "sha256": "sha256:86a2617067dc0c28a6da9a1333366d10ffcc387ff182aa62e930f5326419a040",
+      "raw_url": "https://raw.githubusercontent.com/roccho-dev/ui/bde6fb4a92725f1e52162cbcc2ef7fdcc023f469/artifacts/selected-universe-semantic-map/browser-render-receipt.json"
+    },
+    "meaning_source_receipt": {
+      "path": "artifacts/selected-universe-semantic-map/selected-universe.source.json",
+      "git_blob_sha1": "680e2ee178d9dc325cd2a9d5e5ce1513626ef0d7",
+      "bytes": 309,
+      "sha256": "sha256:ef2a7950c01573c0e42178a8451fe91638c9db203df3ae22c1cafffc0c002d1b",
+      "raw_url": "https://raw.githubusercontent.com/roccho-dev/ui/bde6fb4a92725f1e52162cbcc2ef7fdcc023f469/artifacts/selected-universe-semantic-map/selected-universe.source.json"
+    }
   },
   "expected": {
     "record_kind": "governance.selectedUniverseRepo.v1",
@@ -63,14 +84,15 @@
     "title": "governance selected universe",
     "region_count": 5,
     "relation_count": 0,
-    "state_hash": "sha256:24112aa18d6c0fad5a90d9fa2aeca066e7e56ee3ff1f3afc63eb6a85f03752f3"
+    "state_hash": "sha256:70c0dec23c66140af759a05446049d01efef4c2cfd6d9ea7e2cb711117679c3e"
   },
   "ops": {
     "repository": "roccho-dev/ops",
     "base_commit": "0c07b2d3214ab10f1eb33f3af589670a0b0b179a",
     "base_tree": "55c70e307648913ff57ab9c54afbc443200857ba",
     "package": "packages/gov-release-proxy",
-    "delivery": "one-root-content-negotiation"
+    "delivery": "one-root-content-negotiation",
+    "worker_name": "stg-selected-universe-map-260830"
   },
   "boundary": {
     "html_purpose": "visual-evaluation-only",
