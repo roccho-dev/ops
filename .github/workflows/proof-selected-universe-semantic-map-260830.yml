@@ -1,0 +1,73 @@
+name: Proof selected-universe semantic map 260830
+
+on:
+  push:
+    branches:
+      - proof/selected-universe-semantic-map-260830
+
+permissions:
+  contents: read
+
+concurrency:
+  group: selected-universe-semantic-map-260830
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-readback:
+    runs-on: ubuntu-latest
+    environment: cloudflare-production
+    timeout-minutes: 20
+    env:
+      ROOT: ${{ github.workspace }}/verification/selected-universe-semantic-map
+      DIST: ${{ runner.temp }}/selected-universe-dist
+      EVIDENCE: ${{ runner.temp }}/selected-universe-evidence
+      WORKER_NAME: stg-selected-universe-map-260830
+      CANDIDATE_SHA: ${{ github.sha }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify exact branch and inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "proof/selected-universe-semantic-map-260830"
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test -s "$ROOT/source.json"
+          test -s "$ROOT/selected-universe.jsonl"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Materialize, deploy, and prove exact public page
+        shell: bash
+        run: bash "$ROOT/provider-proof.sh"
+
+      - name: Publish verified URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$EVIDENCE/worker-url.txt"
+          url="$(cat "$EVIDENCE/worker-url.txt")"
+          echo "### Verified Cloudflare URL" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '- HTML purpose: visual evaluation only' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Same root NDJSON: exact governance selected-universe.jsonl' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Remote byte readback: PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Real Chromium: PASS' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload proof evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selected-universe-semantic-map-proof-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/selected-universe-evidence/
+            ${{ runner.temp }}/selected-universe-dist/current.json
+            ${{ runner.temp }}/selected-universe-dist/materialize-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
