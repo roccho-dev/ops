@@ -1,0 +1,12 @@
+{
+  "schema": "ops.mobileAgentSeqCarrierCases/1",
+  "authority": false,
+  "cases": [
+    {
+      "id": "seq",
+      "preset": "seq/1",
+      "fragment": "smap=H4sIAAAAAAAAA61Wy27bRhT9FWPWI2hIyiTFXdosUqAFgmzDLK7JK5kIOTMejtIYghbyIkhQ5AG3QBLEgd3CiyCLrLIInNfH0JGbvygkyvKIMiO26UoA59w55545dzRDkoo-CcgwJEKiAp0InockuDkMSQbypzgkQUhyzIDrJGplIAOphOgFOe60pMIcdUhoSBRGQsXnlUoIPS_cGSCPcIbJo23MYGXDVq5BY9uaYXSiU5xBrmKU5IngGwrvJPjrxtJWeleWqAw1hGREhyHZEgNeKmCUUYsxRjdddouGJIlXxdxOePm11EpDksIWpuupJSjk0-74IE2nXQ2yDNTurBAiLdRGChyL8Suh4oRD-vXo3peTx8Xe_uTZo7Pjk2L8tBgf5rjTtjZ6yV09UJWOFPYTwVd6shl1GLU6jHq20dP2IAO-3NBMRKWjawvYQn71cIw2Jo-fTP68X-ztn356-fXoQzF-Onnw-e_XD4vx82Lvt9N3708__t5c9CWqoT_TsE71lQWsierrSkiRQ1rs7Z_9cTi5_2Sq-_hgcvj-P-hmtMuo5TPqmwlSU-68olxDfrsi_IaBayL9y_GDyYu3pdulQMykUDDdbbjwZum4I0iRx6BKBM612Mx2W8xvWazk0KD0ysKIhmQeTrOaGQVsNGpgU4cx6riX-CTnR7HWqOsmsFE0D16DlMjjYvzmfEy_6dhF1NY4Ztc5ZtU6ZhkFViPH3JpgQRShXJ-rKxewfzkR5QD_P9ly6pxyap2yjQK7kVN-XbbK419v1QWsiVXnWfpZ9IvxO4Pju3PVqXOrU-uWYxQ433Crp0S2ci9d_Nm1lLVsU4Z5Dn2sOGVeO2J1fA3qdPY8qJIvoU12uwn72V8ni2CK6iys5TawJrPThNkcCVGN1mXMt8zvPyoEjb-AnC-sPAtqHjvxPGjtxX2j8Rrk2yVyG-xNNwBkm3bX8ywfnS3PsiNwesjiDnrM73ix5_pbvo8Y97xe5Hax59qRG7ubrtMFrwt-LySjkBO6OJm5qLkmEiwrQn4HUyGx7RBKpu8dEgyJBK1R8Rl2p20ROv2dLsDdJCfBeWoJJX0lBvKHXRKUw0FGo9E_mE7LBVUKAAA",
+      "labels": ["Decision review sequence", "Human", "Agent"]
+    }
+  ]
+}
