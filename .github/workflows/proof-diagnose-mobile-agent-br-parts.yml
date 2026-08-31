@@ -1,0 +1,79 @@
+name: Diagnose Mobile Agent Brotli parts
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-diagnose-mobile-agent-br-parts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SOURCE_REF: projection/mobile-agent-preset-dist-b0af2ab9
+      PART0: projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00
+      PART1: projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01
+    steps:
+      - name: Observe every bounded reconstruction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/parts"
+          for spec in "0=$PART0" "1=$PART1"; do
+            name="${spec%%=*}"; path="${spec#*=}"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/contents/$path" -f ref="$SOURCE_REF" --jq .content \
+              | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/parts/$name"
+          done
+          node - "$RUNNER_TEMP/parts/0" "$RUNNER_TEMP/parts/1" > "$RUNNER_TEMP/report.json" <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+          const [p0,p1] = process.argv.slice(2);
+          const texts = [p0,p1].map((path) => fs.readFileSync(path,'utf8').replace(/\s+/gu,''));
+          const strict = (value) => {
+            if (!/^[A-Za-z0-9+/]*={0,2}$/u.test(value) || value.length % 4 !== 0) throw new Error('not strict base64');
+            return Buffer.from(value,'base64');
+          };
+          const specs = [
+            ['joined', () => strict(texts.join(''))],
+            ['joined-strip-mid-padding', () => strict(texts[0].replace(/=+$/u,'') + texts[1])],
+            ['decoded-parts', () => Buffer.concat(texts.map(strict))],
+            ['part0', () => strict(texts[0])],
+            ['part1', () => strict(texts[1])],
+          ];
+          const report = {
+            text: texts.map((value) => ({length:value.length,first:value.slice(0,12),last:value.slice(-12),padding:(value.match(/=/gu)||[]).length})),
+            candidates: [],
+          };
+          for (const [kind, build] of specs) {
+            const row = {kind};
+            try {
+              const compressed = build();
+              row.compressedBytes = compressed.length;
+              row.compressedSha256 = crypto.createHash('sha256').update(compressed).digest('hex');
+              try {
+                const html = zlib.brotliDecompressSync(compressed);
+                row.decompressed = true;
+                row.htmlBytes = html.length;
+                row.htmlSha256 = crypto.createHash('sha256').update(html).digest('hex');
+                const sample = html.toString('utf8');
+                row.markers = {graph:sample.includes('graph/1'),map:sample.includes('map/1'),seq:sample.includes('seq/1'),maxgraph:sample.toLowerCase().includes('maxgraph')};
+              } catch (error) {
+                row.decompressed = false;
+                row.error = String(error.message || error);
+              }
+            } catch (error) {
+              row.built = false;
+              row.error = String(error.message || error);
+            }
+            report.candidates.push(row);
+          }
+          fs.writeFileSync(1, JSON.stringify(report,null,2));
+          JS
+          cat "$RUNNER_TEMP/report.json"
