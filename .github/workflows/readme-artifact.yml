@@ -11,30 +11,85 @@ permissions:
 
 jobs:
   export:
-    name: build and upload README artifact packet
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v31
         with:
-          extra_nix_config: |
-            extra-experimental-features = nix-command flakes
-      - name: Build README artifact packet
-        run: nix build --show-trace --no-write-lock-file ./packages/ops-readme-artifact
-      - name: Check README artifact packet
+          persist-credentials: false
+
+      - name: Prepare evidence directory
+        shell: bash
         run: |
           set -euo pipefail
-          test -s result/README.md
-          test -s result/manifest.json
-          test -s result/sources.jsonl
-          test -s result/receipt.json
-      - name: Upload README artifact packet
+          out="$RUNNER_TEMP/hq-vim-runtime-carry"
+          mkdir -p "$out"/{bin,lsp,logs}
+          {
+            echo "OUT=$out"
+            echo "HQ_TAG=hq-artifact-3118886f34ac5615e8a7732a6297bd41900e21e1"
+            echo "HQ_COMMIT=3118886f34ac5615e8a7732a6297bd41900e21e1"
+            echo "LSP_COMMIT=989016ae2ae4cbf304a9ca29478f47fec794493f"
+            echo "LSP_TREE=899cd0db6af40e3b1e0039b679541cd062cfa9e7"
+          } >> "$GITHUB_ENV"
+          printf 'prepared\n' > "$out/logs/00-prepare.txt"
+
+      - name: Download exact official Linux assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/roccho-dev/hq/releases/download/$HQ_TAG"
+          curl -fL --retry 3 "$base/hq-linux-amd64" -o "$OUT/bin/hq"
+          curl -fL --retry 3 "$base/hq-worker-linux-amd64" -o "$OUT/bin/hq-worker"
+          curl -fL --retry 3 "$base/manifest-linux-amd64.json" -o "$OUT/manifest-linux-amd64.json"
+          printf 'downloaded\n' > "$OUT/logs/10-release-download.txt"
+
+      - name: Verify exact official Linux assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq -r .source_sha "$OUT/manifest-linux-amd64.json")" = "$HQ_COMMIT"
+          test "$(jq -r .go_version "$OUT/manifest-linux-amd64.json")" = go1.23.12
+          test "$(sha256sum "$OUT/bin/hq" | cut -d' ' -f1)" = "$(jq -r '.artifacts[] | select(.name == "hq-linux-amd64") | .sha256' "$OUT/manifest-linux-amd64.json")"
+          test "$(sha256sum "$OUT/bin/hq-worker" | cut -d' ' -f1)" = "$(jq -r '.artifacts[] | select(.name == "hq-worker-linux-amd64") | .sha256' "$OUT/manifest-linux-amd64.json")"
+          chmod 0555 "$OUT/bin/hq" "$OUT/bin/hq-worker"
+          go version -m "$OUT/bin/hq" > "$OUT/logs/hq.buildinfo.txt"
+          go version -m "$OUT/bin/hq-worker" > "$OUT/logs/hq-worker.buildinfo.txt"
+          grep -F "vcs.revision=$HQ_COMMIT" "$OUT/logs/hq.buildinfo.txt"
+          grep -F "vcs.revision=$HQ_COMMIT" "$OUT/logs/hq-worker.buildinfo.txt"
+          "$OUT/bin/hq" --help > "$OUT/logs/hq.help.txt"
+          "$OUT/bin/hq-worker" --help > "$OUT/logs/hq-worker.help.txt"
+          printf 'verified\n' > "$OUT/logs/20-release-verify.txt"
+
+      - name: Materialize exact pinned LSP runtimepath
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/lsp"
+          git -C "$RUNNER_TEMP/lsp" remote add origin https://github.com/yegappan/lsp.git
+          git -C "$RUNNER_TEMP/lsp" fetch -q --depth=1 origin "$LSP_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/lsp" rev-parse FETCH_HEAD^{commit})" = "$LSP_COMMIT"
+          test "$(git -C "$RUNNER_TEMP/lsp" rev-parse FETCH_HEAD^{tree})" = "$LSP_TREE"
+          git -C "$RUNNER_TEMP/lsp" archive "$LSP_COMMIT" | tar -x -C "$OUT/lsp"
+          test -f "$OUT/lsp/plugin/lsp.vim"
+          test -f "$OUT/lsp/autoload/lsp/lsp.vim"
+          printf '%s\n' "$LSP_COMMIT" > "$OUT/lsp/.pinned-commit"
+          printf '%s\n' "$LSP_TREE" > "$OUT/lsp/.pinned-tree"
+          printf 'materialized\n' > "$OUT/logs/30-lsp.txt"
+
+      - name: Seal checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$OUT" && sha256sum -c SHA256SUMS)
+          printf 'pass\n' > "$OUT/logs/40-seal.txt"
+
+      - name: Upload runtime bytes or partial diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ops-readme-artifact
-          path: |
-            result/README.md
-            result/manifest.json
-            result/sources.jsonl
-            result/receipt.json
-          if-no-files-found: error
+          name: hq-vim-runtime-carry-3118886f-989016ae
+          path: ${{ runner.temp }}/hq-vim-runtime-carry
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
