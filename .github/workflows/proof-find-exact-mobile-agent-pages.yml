@@ -1,0 +1,139 @@
+name: Find exact existing Mobile Agent Pages deployment
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-find-exact-mobile-agent-pages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  find:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: proposal/mobile-agent-preset-static-app-260821
+          path: product
+          persist-credentials: false
+
+      - name: Enumerate Pages deployments and locate exact 54-file App
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          python3 - "$GITHUB_WORKSPACE/product/verification/mobile-agent-preset-app/expected.json" "$RUNNER_TEMP/result.json" <<'PY'
+          import hashlib,json,os,sys,urllib.error,urllib.parse,urllib.request
+
+          expected=json.load(open(sys.argv[1],encoding='utf-8'))
+          output=sys.argv[2]
+          account=os.environ['CLOUDFLARE_ACCOUNT_ID']
+          token=os.environ['CLOUDFLARE_API_TOKEN']
+          api=f'https://api.cloudflare.com/client/v4/accounts/{account}/pages/projects'
+          headers={'Authorization':f'Bearer {token}','Content-Type':'application/json','User-Agent':'ops-mobile-agent-exact-readback/2'}
+
+          def api_get(url):
+              request=urllib.request.Request(url,headers=headers)
+              try:
+                  with urllib.request.urlopen(request,timeout=30) as response:
+                      value=json.load(response)
+              except urllib.error.HTTPError as error:
+                  body=error.read().decode('utf-8','replace')
+                  raise RuntimeError(f'Cloudflare GET {error.code}: {url}: {body}') from error
+              if value.get('success') is not True:
+                  raise RuntimeError(f'Cloudflare GET failed: {url}: {value.get("errors")}')
+              return value
+
+          def pages(url):
+              first=api_get(url)
+              result=list(first.get('result') or [])
+              info=first.get('result_info') or {}
+              total=int(info.get('total_pages') or 1)
+              for page in range(2,total+1):
+                  separator='&' if '?' in url else '?'
+                  value=api_get(f'{url}{separator}page={page}')
+                  result.extend(value.get('result') or [])
+              return result
+
+          def read(url,timeout=20):
+              request=urllib.request.Request(url,headers={'User-Agent':'ops-mobile-agent-exact-readback/2','Cache-Control':'no-cache'})
+              try:
+                  with urllib.request.urlopen(request,timeout=timeout) as response:
+                      return response.read(),response.geturl(),response.status
+              except urllib.error.HTTPError as error:
+                  return error.read(),error.geturl(),error.code
+              except Exception as error:
+                  return b'',str(error),0
+
+          try:
+              projects=pages(api)
+              codec='protocol/v3/codec.mjs'
+              app='app/index.html'
+              sentinel=[codec,app,'.well-known/semantic-map.json']
+              observations=[]
+              match=None
+              for project in projects:
+                  name=project['name']
+                  deployments=pages(f'{api}/{urllib.parse.quote(name,safe="")}/deployments')
+                  for deployment in deployments:
+                      candidates=[]
+                      url=deployment.get('url')
+                      if isinstance(url,str): candidates.append(url)
+                      for alias in deployment.get('aliases') or []:
+                          if isinstance(alias,str): candidates.append(alias if alias.startswith('http') else f'https://{alias}')
+                      for candidate in dict.fromkeys(candidates):
+                          base=candidate.rstrip('/')+'/'
+                          if not base.startswith('https://'): continue
+                          first=expected['files'][codec]
+                          data,observed,status=read(base+codec)
+                          if status!=200 or len(data)!=first['bytes'] or hashlib.sha256(data).hexdigest()!=first['sha256']:
+                              continue
+                          row={'project':name,'deploymentId':deployment.get('id'),'base':base,'environment':deployment.get('environment'),'sentinels':[]}
+                          sentinel_ok=True
+                          for rel in sentinel:
+                              spec=expected['files'][rel]
+                              data,observed,status=read(base+rel)
+                              ok=status==200 and len(data)==spec['bytes'] and hashlib.sha256(data).hexdigest()==spec['sha256']
+                              row['sentinels'].append({'path':rel,'status':status,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'ok':ok,'observed':observed})
+                              if not ok: sentinel_ok=False
+                          observations.append(row)
+                          if not sentinel_ok: continue
+                          files=[]
+                          failed=[]
+                          for rel,spec in sorted(expected['files'].items()):
+                              data,observed,status=read(base+rel)
+                              observed_sha=hashlib.sha256(data).hexdigest()
+                              ok=status==200 and len(data)==spec['bytes'] and observed_sha==spec['sha256']
+                              files.append({'path':rel,'status':status,'bytes':len(data),'sha256':observed_sha,'ok':ok,'observed':observed})
+                              if not ok: failed.append(rel)
+                          row['files']=files
+                          row['failed']=failed
+                          if not failed:
+                              match=row
+                              break
+                      if match: break
+                  if match: break
+              result={'schema':'ops.mobileAgentExactPagesSearch/1','status':'PASS' if match else 'NOT_FOUND','authority':False,'projects':[p['name'] for p in projects],'observations':observations,'match':match}
+          except Exception as error:
+              result={'schema':'ops.mobileAgentExactPagesSearch/1','status':'ERROR','authority':False,'error':str(error),'projects':[],'observations':[],'match':None}
+
+          open(output,'w',encoding='utf-8').write(json.dumps(result,sort_keys=True,separators=(',',':'))+'\n')
+          print(json.dumps({'status':result['status'],'projects':len(result['projects']),'sentinelCandidates':len(result['observations']),'match':None if not result['match'] else {'project':result['match']['project'],'base':result['match']['base'],'files':len(result['match']['files'])},'error':result.get('error')}))
+          PY
+          cat "$RUNNER_TEMP/result.json"
+
+      - name: Upload read-only search receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: exact-mobile-agent-pages-search-${{ github.run_id }}
+          path: ${{ runner.temp }}/result.json
+          if-no-files-found: error
+          retention-days: 14
