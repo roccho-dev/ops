@@ -1,4 +1,4 @@
-name: Mobile Agent preset static host
+name: Mobile Agent preset Carrier and static host
 
 on:
   pull_request:
@@ -12,262 +12,336 @@ on:
       - '.github/workflows/mobile-agent-preset-static-host.yml'
       - 'verification/mobile-agent-preset-app/**'
       - 'ci.intent.v1.jsonl'
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: write
   issues: write
 
 jobs:
-  materialize:
-    if: >-
-      github.event_name == 'pull_request' ||
-      github.event_name == 'push' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.number == 242 &&
-       github.event.comment.user.login == github.repository_owner &&
-       github.event.comment.body == '/mobile-agent-preset-deploy')
+  carrier:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     outputs:
-      archive_name: ${{ steps.contract.outputs.archive_name }}
-      carrier_name: ${{ steps.contract.outputs.carrier_name }}
-      project: ${{ steps.contract.outputs.project }}
-      source_sha: ${{ steps.contract.outputs.source_sha }}
-      tag: ${{ steps.contract.outputs.tag }}
+      archive_name: ${{ steps.identity.outputs.archive_name }}
+      archive_sha: ${{ steps.identity.outputs.archive_sha }}
+      archive_bytes: ${{ steps.identity.outputs.archive_bytes }}
+      project: ${{ steps.identity.outputs.project }}
+      source_sha: ${{ steps.identity.outputs.source_sha }}
+      tag: ${{ steps.identity.outputs.tag }}
+      tree_digest: ${{ steps.identity.outputs.tree_digest }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || 'proposals' }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22.16.0'
 
-      - name: Validate exact closure
-        id: contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import hashlib,json,pathlib
-          root=pathlib.Path('verification/mobile-agent-preset-app')
-          app=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
-          expected=json.loads((root/'expected.json').read_text(encoding='utf-8'))
-          assert app['schema']=='ops.mobileAgentPresetApp/1' and app['authority'] is False
-          assert app['architectureIssue']==233 and app['operationsIssue']==242
-          assert app['source']['externalSourceCommit']=='1daa001bf780053f4319e3fb20b4ea9a6e0d0442'
-          assert app['source']['externalSourceTree']=='59ff130fc7e20a4b5762c21fe97b417fc7a454ad'
-          assert app['source']['fullBundleSha256']=='sha256:208a70f3038896c9f0bd70b31d33244e913489caa7356e7968262ef0dc58bde6'
-          assert app['source']['sourceAuthorityCandidate']['implementationRewritten'] is False
-          assert app['presetContract']['presets']==[
-            {'id':'graph/1','surface':'maxgraph','editable':True},
-            {'id':'map/1','surface':'maxgraph','editable':True},
-            {'id':'seq/1','surface':'maxgraph','editable':True},
-          ]
-          assert app['provider']['project']=='stg-mobile-agent' and app['provider']['rootOwned'] is True
-          assert expected['schema']=='semantic-map-build-artifact/1' and len(expected['files'])==54
-          rows=[{'path':p,'bytes':v['bytes'],'sha256':v['sha256']} for p,v in sorted(expected['files'].items())]
-          canonical=json.dumps(rows,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
-          assert 'sha256:'+hashlib.sha256(canonical).hexdigest()==app['publication']['distTreeDigest']
-          for fixture in app['fixtures']:
-            assert 'sha256:'+hashlib.sha256((root/fixture['path']).read_bytes()).hexdigest()==fixture['sha256']
-          values={
-            'archive_name':app['publication']['archive']['name'],
-            'archive_bytes':app['publication']['archive']['bytes'],
-            'archive_sha':app['publication']['archive']['sha256'][7:],
-            'carrier_name':app['publication']['carrier']['name'],
-            'carrier_bytes':app['publication']['carrier']['bytes'],
-            'carrier_sha':app['publication']['carrier']['sha256'][7:],
-            'project':app['provider']['project'],
-            'tag':app['publication']['tag'],
-            'bootstrap_base':app['bootstrap']['baseUrl'],
-          }
-          for key,value in values.items(): print(f'{key}={value}')
-          PY
-          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Materialize immutable dist bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ARCHIVE_NAME: ${{ steps.contract.outputs.archive_name }}
-          ARCHIVE_BYTES: ${{ steps.contract.outputs.archive_bytes }}
-          ARCHIVE_SHA: ${{ steps.contract.outputs.archive_sha }}
-          CARRIER_NAME: ${{ steps.contract.outputs.carrier_name }}
-          CARRIER_BYTES: ${{ steps.contract.outputs.carrier_bytes }}
-          CARRIER_SHA: ${{ steps.contract.outputs.carrier_sha }}
-          TAG: ${{ steps.contract.outputs.tag }}
-          BOOTSTRAP_BASE: ${{ steps.contract.outputs.bootstrap_base }}
+      - name: Migrate the exact existing public App projection twice
         shell: bash
         run: |
           set -euo pipefail
           root=verification/mobile-agent-preset-app
-          dist="$RUNNER_TEMP/dist"; archive="$RUNNER_TEMP/$ARCHIVE_NAME"; carrier="$RUNNER_TEMP/$CARRIER_NAME"
-          if [ "$GITHUB_EVENT_NAME" = issue_comment ]; then
-            mkdir "$dist"
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARCHIVE_NAME" --pattern "$CARRIER_NAME" --dir "$RUNNER_TEMP"
-            test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
-            test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
-            test "$(wc -c < "$carrier")" -eq "$CARRIER_BYTES"
-            test "$(sha256sum "$carrier" | cut -d' ' -f1)" = "$CARRIER_SHA"
-            base64 --decode "$carrier" | cmp - "$archive"
-            tar -xzf "$archive" -C "$dist"
-          else
-            python3 "$root/bootstrap.py" "$root/expected.json" "$BOOTSTRAP_BASE" "$dist" "$RUNNER_TEMP/bootstrap-receipt.json"
-            (cd "$dist" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
-            test "$(wc -c < "$archive")" -eq "$ARCHIVE_BYTES"
-            test "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA"
-            base64 -w0 "$archive" > "$carrier"
-            test "$(wc -c < "$carrier")" -eq "$CARRIER_BYTES"
-            test "$(sha256sum "$carrier" | cut -d' ' -f1)" = "$CARRIER_SHA"
-          fi
-          python3 - "$dist" "$root/expected.json" <<'PY'
-          import hashlib,json,pathlib,sys
-          root=pathlib.Path(sys.argv[1]); expected=json.load(open(sys.argv[2],encoding='utf-8'))
-          actual=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
-          assert actual==sorted(expected['files'])
-          for rel,spec in expected['files'].items():
-            data=(root/rel).read_bytes(); assert len(data)==spec['bytes']; assert hashlib.sha256(data).hexdigest()==spec['sha256']
-          PY
-          node "$root/generate-urls.mjs" "$dist" "$root/manifest.json" "$BOOTSTRAP_BASE" "$RUNNER_TEMP/bootstrap-urls.json"
+          result="$RUNNER_TEMP/result"
+          mkdir -p "$result"
+          python3 "$root/migrate_projection.py" \
+            "$root/expected.json" \
+            'https://mobile-agent.roccho.workers.dev/' \
+            "$result/dist" \
+            "$result/migrated-manifest.json" \
+            "$result/migration-receipt.json"
 
-      - name: Prove existing preset runtime in Chrome
-        if: github.event_name != 'issue_comment'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
-          CHROME_BIN="$chrome" python3 verification/mobile-agent-preset-app/browser-smoke.py "$RUNNER_TEMP/bootstrap-urls.json" "$RUNNER_TEMP/bootstrap-browser-receipt.json" "$RUNNER_TEMP/bootstrap-shots"
-
-      - name: Publish immutable Release
-        if: github.event_name == 'push'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.contract.outputs.tag }}
-          ARCHIVE_NAME: ${{ steps.contract.outputs.archive_name }}
-          CARRIER_NAME: ${{ steps.contract.outputs.carrier_name }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp verification/mobile-agent-preset-app/manifest.json "$RUNNER_TEMP/mobile-agent-preset.manifest.json"
-          cp verification/mobile-agent-preset-app/expected.json "$RUNNER_TEMP/mobile-agent-preset.expected.json"
-          assets=("$RUNNER_TEMP/$ARCHIVE_NAME" "$RUNNER_TEMP/$CARRIER_NAME" "$RUNNER_TEMP/mobile-agent-preset.manifest.json" "$RUNNER_TEMP/mobile-agent-preset.expected.json" "$RUNNER_TEMP/bootstrap-receipt.json" "$RUNNER_TEMP/bootstrap-browser-receipt.json" "$RUNNER_TEMP/bootstrap-urls.json")
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Mobile Agent existing preset App" --notes "Immutable non-authority projection of existing graph/1, map/1 and seq/1 maxGraph App." "${assets[@]}"
-          else
-            mkdir "$RUNNER_TEMP/release-check"
-            for asset in "${assets[@]}"; do name="$(basename "$asset")"; gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-check"; cmp "$asset" "$RUNNER_TEMP/release-check/$name"; done
-          fi
-
-      - name: Stage one deterministic App artifact
+      - name: Create deterministic immutable Carrier identity
+        id: identity
         shell: bash
         run: |
           set -euo pipefail
           result="$RUNNER_TEMP/result"
-          rm -rf "$result"
-          mkdir -p "$result/dist"
-          cp -a "$RUNNER_TEMP/dist/." "$result/dist/"
-          cp verification/mobile-agent-preset-app/manifest.json "$result/manifest.json"
-          cp verification/mobile-agent-preset-app/expected.json "$result/expected.json"
-          for name in bootstrap-urls.json bootstrap-receipt.json bootstrap-browser-receipt.json; do
-            if [ -f "$RUNNER_TEMP/$name" ]; then cp "$RUNNER_TEMP/$name" "$result/$name"; fi
-          done
+          digest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["distTreeDigest"].removeprefix("sha256:"))' "$result/migrated-manifest.json")"
+          archive_name="mobile-agent-app-carrier.${digest}.tar.gz"
+          archive="$result/$archive_name"
+          (cd "$result/dist" && tar \
+            --sort=name \
+            --mtime='UTC 1970-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --mode='u=rwX,go=rX,go-s' \
+            -cf - .) | gzip -n > "$archive"
+          archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          archive_bytes="$(wc -c < "$archive")"
+          tag="mobile-agent-app-carrier-$digest"
+          python3 - "$result/migrated-manifest.json" "$result/publication.json" "$archive_name" "$archive_sha" "$archive_bytes" "$tag" <<'PY'
+          import json,pathlib,sys
+          manifest=json.load(open(sys.argv[1],encoding='utf-8'))
+          value={
+            'schema':'ops.mobileAgentAppCarrierPublication/1',
+            'authority':False,
+            'distTreeDigest':manifest['distTreeDigest'],
+            'archive':{
+              'name':sys.argv[3],
+              'bytes':int(sys.argv[5]),
+              'sha256':'sha256:'+sys.argv[4],
+            },
+            'tag':sys.argv[6],
+            'project':'stg-mobile-agent',
+            'stableBase':'https://stg-mobile-agent.pages.dev/',
+            'presets':['graph/1','map/1','seq/1'],
+            'sourceCloneUsed':False,
+            'sourceBuildUsed':False,
+            'implementationRewritten':False,
+          }
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          {
+            echo "archive_name=$archive_name"
+            echo "archive_sha=$archive_sha"
+            echo "archive_bytes=$archive_bytes"
+            echo 'project=stg-mobile-agent'
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo "tag=$tag"
+            echo "tree_digest=$digest"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Upload staged App
+      - name: Prove Carrier extraction and URL compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=verification/mobile-agent-preset-app
+          result="$RUNNER_TEMP/result"
+          replay="$RUNNER_TEMP/replay"
+          mkdir -p "$replay/dist"
+          tar -xzf "$result/${{ steps.identity.outputs.archive_name }}" -C "$replay/dist"
+          python3 - "$result/migrated-manifest.json" "$result/dist" "$replay/dist" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest=json.load(open(sys.argv[1],encoding='utf-8'))
+          left=pathlib.Path(sys.argv[2]); right=pathlib.Path(sys.argv[3])
+          for row in manifest['files']:
+            a=(left/row['path']).read_bytes(); b=(right/row['path']).read_bytes()
+            assert a==b
+            assert hashlib.sha256(a).hexdigest()==row['sha256']
+          PY
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$replay/dist" > "$RUNNER_TEMP/http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do
+            if curl -fsS http://127.0.0.1:4173/app/ >/dev/null; then break; fi
+            sleep .2
+          done
+          curl -fsS http://127.0.0.1:4173/app/ >/dev/null
+          node "$root/generate-urls.mjs" \
+            "$replay/dist" \
+            "$root/manifest.json" \
+            'http://127.0.0.1:4173/' \
+            "$result/local-urls.json"
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$root/browser-smoke.py" \
+            "$result/local-urls.json" \
+            "$result/local-browser-receipt.json" \
+            "$result/local-screenshots"
+          "$chrome" --version > "$result/chrome-version.txt"
+
+      - name: Publish immutable GitHub Carrier
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.identity.outputs.tag }}
+          ARCHIVE_NAME: ${{ steps.identity.outputs.archive_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/result"
+          assets=(
+            "$result/$ARCHIVE_NAME"
+            "$result/migrated-manifest.json"
+            "$result/migration-receipt.json"
+            "$result/publication.json"
+            "$result/local-urls.json"
+            "$result/local-browser-receipt.json"
+            "$result/chrome-version.txt"
+          )
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title 'Mobile Agent existing preset App Carrier' \
+              --notes 'Immutable non-authority Carrier for the existing graph/1, map/1 and seq/1 maxGraph App.' \
+              "${assets[@]}"
+          else
+            mkdir "$RUNNER_TEMP/release-readback"
+            for asset in "${assets[@]}"; do
+              name="$(basename "$asset")"
+              gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-readback"
+              cmp "$asset" "$RUNNER_TEMP/release-readback/$name"
+            done
+          fi
+
+      - name: Upload exact Carrier stage
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-agent-preset-site-${{ github.run_id }}
+          name: mobile-agent-app-carrier-${{ github.run_id }}
           path: ${{ runner.temp }}/result/
           if-no-files-found: error
           retention-days: 14
 
   deploy:
-    needs: materialize
-    if: >-
-      github.event_name == 'issue_comment' &&
-      github.event.issue.number == 242 &&
-      github.event.comment.user.login == github.repository_owner &&
-      github.event.comment.body == '/mobile-agent-preset-deploy'
+    needs: carrier
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment: cloudflare-production
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.materialize.outputs.source_sha }}
+          ref: ${{ needs.carrier.outputs.source_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
       - uses: actions/download-artifact@v4
         with:
-          name: mobile-agent-preset-site-${{ github.run_id }}
-          path: ${{ runner.temp }}/staged
+          name: mobile-agent-app-carrier-${{ github.run_id }}
+          path: ${{ runner.temp }}/stage
+
+      - name: Verify downloaded Carrier and exact dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/stage"
+          archive="$stage/${{ needs.carrier.outputs.archive_name }}"
+          test "$(wc -c < "$archive")" -eq "${{ needs.carrier.outputs.archive_bytes }}"
+          test "$(sha256sum "$archive" | cut -d' ' -f1)" = "${{ needs.carrier.outputs.archive_sha }}"
+          python3 - "$stage/migrated-manifest.json" "$stage/dist" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest=json.load(open(sys.argv[1],encoding='utf-8'))
+          root=pathlib.Path(sys.argv[2])
+          actual=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
+          expected=sorted(row['path'] for row in manifest['files'])
+          assert actual==expected
+          for row in manifest['files']:
+            data=(root/row['path']).read_bytes()
+            assert len(data)==row['bytes']
+            assert hashlib.sha256(data).hexdigest()==row['sha256']
+          PY
 
       - name: Create or verify dedicated Pages project
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PROJECT: ${{ needs.materialize.outputs.project }}
+          PROJECT: ${{ needs.carrier.outputs.project }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"; test "$PROJECT" = stg-mobile-agent
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$PROJECT" = stg-mobile-agent
           api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT"
-          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' "$api")"
-          if [ "$code" = 404 ]; then npx --yes wrangler@4.112.0 pages project create "$PROJECT" --production-branch proposals
-          elif [ "$code" = 200 ]; then python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create "$PROJECT" --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
           import json,sys
-          x=json.load(open(sys.argv[1])); assert x['success'] is True; assert x['result']['name']=='stg-mobile-agent'; assert x['result']['production_branch']=='proposals'
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['success'] is True
+          assert value['result']['name']=='stg-mobile-agent'
+          assert value['result']['production_branch']=='proposals'
           PY
-          else cat "$RUNNER_TEMP/project.json" >&2; exit 1; fi
+          else
+            cat "$RUNNER_TEMP/project.json" >&2
+            exit 1
+          fi
 
-      - name: Deploy exact root-owned App
-        id: deploy
+      - name: Deploy exact Carrier dist
+        id: pages
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PROJECT: ${{ needs.materialize.outputs.project }}
-          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}
+          PROJECT: ${{ needs.carrier.outputs.project }}
+          SOURCE_SHA: ${{ needs.carrier.outputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          site="$RUNNER_TEMP/staged/dist"; test -f "$site/app/index.html"; test -f "$site/protocol/v3/codec.mjs"
-          output="$(npx --yes wrangler@4.112.0 pages deploy "$site" --project-name "$PROJECT" --branch proposals --commit-hash "$SOURCE_SHA" --commit-message 'Mobile Agent existing preset App' 2>&1)"
+          site="$RUNNER_TEMP/stage/dist"
+          test -f "$site/app/index.html"
+          test -f "$site/protocol/v3/codec.mjs"
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$site" \
+            --project-name "$PROJECT" \
+            --branch proposals \
+            --commit-hash "$SOURCE_SHA" \
+            --commit-message 'Mobile Agent existing preset App Carrier' 2>&1)"
           printf '%s\n' "$output"
-          urls="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | awk '!seen[$0]++')"
-          deployment="$(printf '%s\n' "$urls" | grep -v -F "https://$PROJECT.pages.dev" | head -n1 || true)"; test -n "$deployment"
+          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | grep -v -F "https://$PROJECT.pages.dev" | head -n1 || true)"
+          test -n "$deployment"
           echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
           echo "stable_base=https://$PROJECT.pages.dev/" >> "$GITHUB_OUTPUT"
 
-      - name: Verify public bytes and interactions
-        env:
-          SOURCE_SHA: ${{ needs.materialize.outputs.source_sha }}
+      - name: Read back stable and immutable bytes and URLs
         shell: bash
         run: |
           set -euo pipefail
-          root=verification/mobile-agent-preset-app; site="$RUNNER_TEMP/staged/dist"
-          READBACK_RECEIPT="$RUNNER_TEMP/readback-immutable.json" python3 "$root/readback.py" "$site" "${{ steps.deploy.outputs.deployment_base }}" "$RUNNER_TEMP/staged/expected.json" "$RUNNER_TEMP/staged/manifest.json" "$SOURCE_SHA"
-          READBACK_RECEIPT="$RUNNER_TEMP/readback-stable.json" python3 "$root/readback.py" "$site" "${{ steps.deploy.outputs.stable_base }}" "$RUNNER_TEMP/staged/expected.json" "$RUNNER_TEMP/staged/manifest.json" "$SOURCE_SHA"
-          node "$root/generate-urls.mjs" "$site" "$RUNNER_TEMP/staged/manifest.json" "${{ steps.deploy.outputs.stable_base }}" "$RUNNER_TEMP/stable-urls.json"
-          node "$root/generate-urls.mjs" "$site" "$RUNNER_TEMP/staged/manifest.json" "${{ steps.deploy.outputs.deployment_base }}" "$RUNNER_TEMP/immutable-urls.json"
+          root=verification/mobile-agent-preset-app
+          stage="$RUNNER_TEMP/stage"
+          python3 "$root/readback_projection.py" \
+            "$stage/dist" \
+            '${{ steps.pages.outputs.stable_base }}' \
+            "$stage/migrated-manifest.json" \
+            "$RUNNER_TEMP/stable-readback.json"
+          python3 "$root/readback_projection.py" \
+            "$stage/dist" \
+            '${{ steps.pages.outputs.deployment_base }}' \
+            "$stage/migrated-manifest.json" \
+            "$RUNNER_TEMP/immutable-readback.json"
+          node "$root/generate-urls.mjs" \
+            "$stage/dist" \
+            "$root/manifest.json" \
+            '${{ steps.pages.outputs.stable_base }}' \
+            "$RUNNER_TEMP/stable-urls.json"
+          node "$root/generate-urls.mjs" \
+            "$stage/dist" \
+            "$root/manifest.json" \
+            '${{ steps.pages.outputs.deployment_base }}' \
+            "$RUNNER_TEMP/immutable-urls.json"
           python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
-          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
-          CHROME_BIN="$chrome" python3 "$root/browser-smoke.py" "$RUNNER_TEMP/stable-urls.json" "$RUNNER_TEMP/browser-receipt.json" "$RUNNER_TEMP/screenshots"
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$root/browser-smoke.py" \
+            "$RUNNER_TEMP/stable-urls.json" \
+            "$RUNNER_TEMP/stable-browser-receipt.json" \
+            "$RUNNER_TEMP/stable-screenshots"
+          CHROME_BIN="$chrome" python3 "$root/browser-smoke.py" \
+            "$RUNNER_TEMP/immutable-urls.json" \
+            "$RUNNER_TEMP/immutable-browser-receipt.json" \
+            "$RUNNER_TEMP/immutable-screenshots"
           "$chrome" --version > "$RUNNER_TEMP/chrome-version.txt"
 
-      - name: Upload and record final proof
+      - name: Upload final URL proof
         id: evidence
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-agent-preset-deployment-${{ github.run_id }}
+          name: mobile-agent-app-public-urls-${{ github.run_id }}
           path: |
-            ${{ runner.temp }}/readback-*.json
-            ${{ runner.temp }}/*-urls.json
-            ${{ runner.temp }}/browser-receipt.json
+            ${{ runner.temp }}/stable-readback.json
+            ${{ runner.temp }}/immutable-readback.json
+            ${{ runner.temp }}/stable-urls.json
+            ${{ runner.temp }}/immutable-urls.json
+            ${{ runner.temp }}/stable-browser-receipt.json
+            ${{ runner.temp }}/immutable-browser-receipt.json
+            ${{ runner.temp }}/stable-screenshots/
+            ${{ runner.temp }}/immutable-screenshots/
             ${{ runner.temp }}/chrome-version.txt
-            ${{ runner.temp }}/screenshots/
+            ${{ runner.temp }}/stage/publication.json
           if-no-files-found: error
           retention-days: 30
 
-      - name: Return exact URLs
+      - name: Record only verified public URLs
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
@@ -278,16 +352,19 @@ jobs:
           set -euo pipefail
           python3 - "$RUNNER_TEMP/stable-urls.json" "$RUNNER_TEMP/immutable-urls.json" > "$RUNNER_TEMP/comment.md" <<'PY'
           import json,os,sys
-          stable={x['id']:x['url'] for x in json.load(open(sys.argv[1]))['cases']}; immutable={x['id']:x['url'] for x in json.load(open(sys.argv[2]))['cases']}
-          print('## Mobile Agent existing preset deployment — PASS\n')
-          print('- public 54/54 byte readback: **PASS** on stable and immutable hosts')
-          print('- existing maxGraph, toolbar, source, handoff, review, Graph drag/undo/redo, Map zoom, Seq edit/undo: **PASS**')
-          for key in ('graph','map','seq'): print(f"- {key.title()}: {stable[key]}")
-          print('- immutable URLs:')
-          for key in ('graph','map','seq'): print(f"  - `{key}`: {immutable[key]}")
+          stable={row['id']:row['url'] for row in json.load(open(sys.argv[1],encoding='utf-8'))['cases']}
+          immutable={row['id']:row['url'] for row in json.load(open(sys.argv[2],encoding='utf-8'))['cases']}
+          print('## Existing preset maxGraph public URLs — PASS\n')
+          print('- stable and deployment-specific byte readback: PASS')
+          print('- real Chrome Graph / Map / Seq readback: 6/6 PASS')
+          print('- existing graph/1, map/1, seq/1, maxGraph, interaction Shell and #smap only')
+          for key in ('graph','map','seq'):
+              print(f'- {key}: {stable[key]}')
+          print('- immutable:')
+          for key in ('graph','map','seq'):
+              print(f'  - {key}: {immutable[key]}')
           print(f"- run: {os.environ['RUN_URL']}")
-          print(f"- evidence: `{os.environ['ARTIFACT_ID']}` / `{os.environ['ARTIFACT_DIGEST']}`")
-          print('\nSource provenance remains authority; Release, Pages, URLs and receipts are projections. #233 remains open until the exact Git source ref is promoted.')
+          print(f"- evidence: {os.environ['ARTIFACT_ID']} / {os.environ['ARTIFACT_DIGEST']}")
           PY
           gh issue comment 242 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
-          gh issue comment 233 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue comment 279 --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
