@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:roccho-dev:ops:semantic-intent:v1",
+  "title": "Semantic intent v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "intent_id", "topic_id", "kind", "body"],
+  "properties": {
+    "schema": { "const": "semantic-intent.v1" },
+    "intent_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "topic_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "kind": { "const": "record" },
+    "body": { "type": "string", "minLength": 1, "pattern": "[^ \\t\\r\\n]", "x-utf8MaxBytes": 16384 },
+    "topic_title": { "type": "string", "minLength": 1, "pattern": "[^ \\t\\r\\n]", "x-utf8MaxBytes": 256 },
+    "target_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" }
+      }
+    }
+  },
+  "x-utf8MaxBytes": 32768
+}
