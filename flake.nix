@@ -137,6 +137,26 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
+          semantic-log-runtime-core =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "semantic-log-runtime-core-check"
+              {
+                nativeBuildInputs = [ pkgs.go ];
+              }
+              ''
+                cp -R ${./packages/ui-raw-loop-runtime} source
+                chmod -R u+w source
+                cd source
+                export HOME="$TMPDIR/home"
+                export GOCACHE="$TMPDIR/go-cache"
+                export GOMODCACHE="$TMPDIR/go-mod-cache"
+                export GOPROXY=off
+                mkdir -p "$HOME" "$GOCACHE" "$GOMODCACHE" "$out"
+                go test ./...
+                touch "$out/ok"
+              '';
           issue-116-shiftleft-proof =
             let
               pkgs = nixpkgs.legacyPackages.${system};
