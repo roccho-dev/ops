@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	IntentSchema   = "semantic-intent.v1"
-	IntentKind     = "record"
-	MaxIDBytes     = 128
-	MaxRefKindBytes = 64
-	MaxTitleChars  = 256
-	MaxBodyChars   = 16 * 1024
+	IntentSchema       = "semantic-intent.v1"
+	IntentKind         = "record"
+	MaxIdentifierBytes = 128
+	MaxTargetKindBytes = 64
+	MaxTopicTitleBytes = 256
+	MaxBodyBytes       = 16 * 1024
+	MaxRequestBytes    = 32 * 1024
 )
 
 var ErrInvalidIntent = errors.New("invalid semantic intent")
@@ -28,8 +29,6 @@ type TargetRef struct {
 	ID   string `json:"id"`
 }
 
-// Intent is the exact browser-owned V1 contract shared with ui#198/ui#199.
-// IntentID is the sole logical/idempotency identity.
 type Intent struct {
 	Schema     string     `json:"schema"`
 	IntentID   string     `json:"intent_id"`
@@ -40,7 +39,13 @@ type Intent struct {
 	TargetRef  *TargetRef `json:"target_ref,omitempty"`
 }
 
+// DecodeIntent accepts only the exact canonical prepared wire bytes shared with
+// the browser client. Equivalent JSON with different spacing/order is rejected
+// so the idempotency digest is unambiguous across UI and OPS.
 func DecodeIntent(data []byte) (Intent, error) {
+	if len(data) > MaxRequestBytes {
+		return Intent{}, fmt.Errorf("%w: request exceeds %d UTF-8 bytes", ErrInvalidIntent, MaxRequestBytes)
+	}
 	if !utf8.Valid(data) {
 		return Intent{}, fmt.Errorf("%w: input is not valid UTF-8", ErrInvalidIntent)
 	}
@@ -50,7 +55,7 @@ func DecodeIntent(data []byte) (Intent, error) {
 	}
 	for _, optional := range []string{"topic_title", "target_ref"} {
 		if raw, present := fields[optional]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-			return Intent{}, fmt.Errorf("%w: %s must not be null", ErrInvalidIntent, optional)
+			return Intent{}, fmt.Errorf("%w: %s must be omitted rather than null", ErrInvalidIntent, optional)
 		}
 	}
 
@@ -66,6 +71,13 @@ func DecodeIntent(data []byte) (Intent, error) {
 	if err := intent.Validate(); err != nil {
 		return Intent{}, err
 	}
+	canonical, err := intent.CanonicalBytes()
+	if err != nil {
+		return Intent{}, err
+	}
+	if !bytes.Equal(data, canonical) {
+		return Intent{}, fmt.Errorf("%w: request is not canonical prepared bytes", ErrInvalidIntent)
+	}
 	return intent, nil
 }
 
@@ -73,53 +85,70 @@ func (intent Intent) Validate() error {
 	if intent.Schema != IntentSchema {
 		return fmt.Errorf("%w: schema must be %q", ErrInvalidIntent, IntentSchema)
 	}
-	if err := validateToken("intent_id", intent.IntentID, MaxIDBytes); err != nil {
+	if err := validateToken("intent_id", intent.IntentID, MaxIdentifierBytes); err != nil {
 		return err
 	}
-	if err := validateToken("topic_id", intent.TopicID, MaxIDBytes); err != nil {
+	if err := validateToken("topic_id", intent.TopicID, MaxIdentifierBytes); err != nil {
 		return err
 	}
 	if intent.Kind != IntentKind {
 		return fmt.Errorf("%w: kind must be %q", ErrInvalidIntent, IntentKind)
 	}
-	if !utf8.ValidString(intent.Body) || !containsSemanticCharacter(intent.Body) {
-		return fmt.Errorf("%w: body must be valid UTF-8 with a non-whitespace character", ErrInvalidIntent)
-	}
-	if utf8.RuneCountInString(intent.Body) > MaxBodyChars {
-		return fmt.Errorf("%w: body exceeds %d characters", ErrInvalidIntent, MaxBodyChars)
+	if err := validateText("body", intent.Body, MaxBodyBytes); err != nil {
+		return err
 	}
 	if intent.TopicTitle != nil {
-		if !utf8.ValidString(*intent.TopicTitle) || !containsSemanticCharacter(*intent.TopicTitle) {
-			return fmt.Errorf("%w: topic_title must contain a non-whitespace character", ErrInvalidIntent)
-		}
-		if utf8.RuneCountInString(*intent.TopicTitle) > MaxTitleChars {
-			return fmt.Errorf("%w: topic_title exceeds %d characters", ErrInvalidIntent, MaxTitleChars)
+		if err := validateText("topic_title", *intent.TopicTitle, MaxTopicTitleBytes); err != nil {
+			return err
 		}
 	}
 	if intent.TargetRef != nil {
-		if err := validateToken("target_ref.kind", intent.TargetRef.Kind, MaxRefKindBytes); err != nil {
+		if err := validateToken("target_ref.kind", intent.TargetRef.Kind, MaxTargetKindBytes); err != nil {
 			return err
 		}
-		if err := validateToken("target_ref.id", intent.TargetRef.ID, MaxIDBytes); err != nil {
+		if err := validateToken("target_ref.id", intent.TargetRef.ID, MaxIdentifierBytes); err != nil {
 			return err
 		}
+	}
+	canonical, err := intent.canonicalBytesUnchecked()
+	if err != nil {
+		return err
+	}
+	if len(canonical) > MaxRequestBytes {
+		return fmt.Errorf("%w: request exceeds %d UTF-8 bytes", ErrInvalidIntent, MaxRequestBytes)
 	}
 	return nil
 }
 
-// CanonicalBytes is the shared serialized byte contract: compact JSON in this
-// fixed field order, with optional fields omitted when absent and no newline.
 func (intent Intent) CanonicalBytes() ([]byte, error) {
 	if err := intent.Validate(); err != nil {
 		return nil, err
 	}
-	var buffer bytes.Buffer
-	encoder := json.NewEncoder(&buffer)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(intent); err != nil {
-		return nil, fmt.Errorf("encode canonical intent: %w", err)
+	return intent.canonicalBytesUnchecked()
+}
+
+func (intent Intent) canonicalBytesUnchecked() ([]byte, error) {
+	if !utf8.ValidString(intent.Body) {
+		return nil, fmt.Errorf("%w: body is not valid UTF-8", ErrInvalidIntent)
 	}
-	return bytes.TrimSuffix(buffer.Bytes(), []byte("\n")), nil
+	var b bytes.Buffer
+	b.WriteByte('{')
+	appendField(&b, "schema", intent.Schema, false)
+	appendField(&b, "intent_id", intent.IntentID, true)
+	appendField(&b, "topic_id", intent.TopicID, true)
+	appendField(&b, "kind", intent.Kind, true)
+	appendField(&b, "body", intent.Body, true)
+	if intent.TopicTitle != nil {
+		appendField(&b, "topic_title", *intent.TopicTitle, true)
+	}
+	if intent.TargetRef != nil {
+		b.WriteString(",\"target_ref\":{")
+		appendField(&b, "kind", intent.TargetRef.Kind, false)
+		appendField(&b, "id", intent.TargetRef.ID, true)
+		b.WriteByte('}')
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
 func (intent Intent) Digest() (string, error) {
@@ -131,21 +160,67 @@ func (intent Intent) Digest() (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func containsSemanticCharacter(value string) bool {
+func appendField(b *bytes.Buffer, key, value string, comma bool) {
+	if comma {
+		b.WriteByte(',')
+	}
+	appendJSONString(b, key)
+	b.WriteByte(':')
+	appendJSONString(b, value)
+}
+
+// appendJSONString follows JSON.stringify string escaping for valid Unicode:
+// quotes, backslashes and C0 controls are escaped; other runes are UTF-8 bytes.
+func appendJSONString(b *bytes.Buffer, value string) {
+	b.WriteByte('"')
 	for _, r := range value {
-		if r != ' ' && r != '\t' && r != '\r' && r != '\n' {
-			return true
+		switch r {
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 0x20 {
+				fmt.Fprintf(b, `\u%04x`, r)
+			} else {
+				b.WriteRune(r)
+			}
 		}
 	}
-	return false
+	b.WriteByte('"')
+}
+
+func validateText(name, value string, maxBytes int) error {
+	if !utf8.ValidString(value) {
+		return fmt.Errorf("%w: %s is not valid UTF-8", ErrInvalidIntent, name)
+	}
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%w: %s must not be blank", ErrInvalidIntent, name)
+	}
+	for _, r := range value {
+		if (r >= 0 && r <= 0x08) || r == 0x0b || r == 0x0c || (r >= 0x0e && r <= 0x1f) || r == 0x7f {
+			return fmt.Errorf("%w: %s contains a forbidden control character", ErrInvalidIntent, name)
+		}
+	}
+	if len([]byte(value)) > maxBytes {
+		return fmt.Errorf("%w: %s exceeds %d UTF-8 bytes", ErrInvalidIntent, name, maxBytes)
+	}
+	return nil
 }
 
 func validateToken(name, value string, maxBytes int) error {
 	if value == "" {
 		return fmt.Errorf("%w: %s is required", ErrInvalidIntent, name)
-	}
-	if value != strings.TrimSpace(value) {
-		return fmt.Errorf("%w: %s must not contain outer whitespace", ErrInvalidIntent, name)
 	}
 	if len(value) > maxBytes {
 		return fmt.Errorf("%w: %s exceeds %d bytes", ErrInvalidIntent, name, maxBytes)

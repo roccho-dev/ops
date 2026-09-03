@@ -157,6 +157,23 @@
                 go test ./...
                 touch "$out/ok"
               '';
+          semantic-log-verified-dist-contract =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "semantic-log-verified-dist-contract-check"
+              {
+                nativeBuildInputs = [ pkgs.python3 ];
+              }
+              ''
+                cp -R ${./packages/ops-portable-runtime-pack} source
+                chmod -R u+w source
+                cd source
+                export HOME="$TMPDIR/home"
+                mkdir -p "$HOME" "$out"
+                ${pkgs.python3}/bin/python tests/test_semantic_log_verified_dist_contract.py
+                touch "$out/ok"
+              '';
           issue-116-shiftleft-proof =
             let
               pkgs = nixpkgs.legacyPackages.${system};
