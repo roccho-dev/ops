@@ -13,28 +13,33 @@ import (
 )
 
 const (
-	IntentSchema  = "semantic.intent.v1"
-	MaxIDBytes    = 128
-	MaxKindBytes  = 64
-	MaxTitleChars = 256
-	MaxBodyChars  = 16 * 1024
+	IntentSchema   = "semantic-intent.v1"
+	IntentKind     = "record"
+	MaxIDBytes     = 128
+	MaxRefKindBytes = 64
+	MaxTitleChars  = 256
+	MaxBodyChars   = 16 * 1024
 )
 
 var ErrInvalidIntent = errors.New("invalid semantic intent")
 
-// Intent is the complete browser-owned V1 contract. EventID is also the sole
-// idempotency identity; no second request or idempotency key exists.
-type Intent struct {
-	Schema  string  `json:"schema"`
-	EventID string  `json:"event_id"`
-	TopicID string  `json:"topic_id"`
-	Kind    string  `json:"kind"`
-	Body    string  `json:"body"`
-	Title   *string `json:"title,omitempty"`
+type TargetRef struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
 }
 
-// DecodeIntent accepts exactly one closed JSON object and rejects malformed
-// UTF-8, duplicate keys, unknown fields, null optionals, and trailing values.
+// Intent is the exact browser-owned V1 contract shared with ui#198/ui#199.
+// IntentID is the sole logical/idempotency identity.
+type Intent struct {
+	Schema     string     `json:"schema"`
+	IntentID   string     `json:"intent_id"`
+	TopicID    string     `json:"topic_id"`
+	Kind       string     `json:"kind"`
+	Body       string     `json:"body"`
+	TopicTitle *string    `json:"topic_title,omitempty"`
+	TargetRef  *TargetRef `json:"target_ref,omitempty"`
+}
+
 func DecodeIntent(data []byte) (Intent, error) {
 	if !utf8.Valid(data) {
 		return Intent{}, fmt.Errorf("%w: input is not valid UTF-8", ErrInvalidIntent)
@@ -43,8 +48,10 @@ func DecodeIntent(data []byte) (Intent, error) {
 	if err != nil {
 		return Intent{}, err
 	}
-	if raw, present := fields["title"]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return Intent{}, fmt.Errorf("%w: title must be a string when present", ErrInvalidIntent)
+	for _, optional := range []string{"topic_title", "target_ref"} {
+		if raw, present := fields[optional]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return Intent{}, fmt.Errorf("%w: %s must not be null", ErrInvalidIntent, optional)
+		}
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -62,45 +69,46 @@ func DecodeIntent(data []byte) (Intent, error) {
 	return intent, nil
 }
 
-// Validate checks the semantic contract without normalizing user-owned bytes.
 func (intent Intent) Validate() error {
 	if intent.Schema != IntentSchema {
 		return fmt.Errorf("%w: schema must be %q", ErrInvalidIntent, IntentSchema)
 	}
-	if err := validateToken("event_id", intent.EventID, MaxIDBytes); err != nil {
+	if err := validateToken("intent_id", intent.IntentID, MaxIDBytes); err != nil {
 		return err
 	}
 	if err := validateToken("topic_id", intent.TopicID, MaxIDBytes); err != nil {
 		return err
 	}
-	if err := validateToken("kind", intent.Kind, MaxKindBytes); err != nil {
-		return err
+	if intent.Kind != IntentKind {
+		return fmt.Errorf("%w: kind must be %q", ErrInvalidIntent, IntentKind)
 	}
-	if !utf8.ValidString(intent.Body) {
-		return fmt.Errorf("%w: body is not valid UTF-8", ErrInvalidIntent)
-	}
-	if !containsSemanticCharacter(intent.Body) {
-		return fmt.Errorf("%w: body must contain a non-whitespace character", ErrInvalidIntent)
+	if !utf8.ValidString(intent.Body) || !containsSemanticCharacter(intent.Body) {
+		return fmt.Errorf("%w: body must be valid UTF-8 with a non-whitespace character", ErrInvalidIntent)
 	}
 	if utf8.RuneCountInString(intent.Body) > MaxBodyChars {
 		return fmt.Errorf("%w: body exceeds %d characters", ErrInvalidIntent, MaxBodyChars)
 	}
-	if intent.Title != nil {
-		if !utf8.ValidString(*intent.Title) {
-			return fmt.Errorf("%w: title is not valid UTF-8", ErrInvalidIntent)
+	if intent.TopicTitle != nil {
+		if !utf8.ValidString(*intent.TopicTitle) || !containsSemanticCharacter(*intent.TopicTitle) {
+			return fmt.Errorf("%w: topic_title must contain a non-whitespace character", ErrInvalidIntent)
 		}
-		if !containsSemanticCharacter(*intent.Title) {
-			return fmt.Errorf("%w: title must contain a non-whitespace character when present", ErrInvalidIntent)
+		if utf8.RuneCountInString(*intent.TopicTitle) > MaxTitleChars {
+			return fmt.Errorf("%w: topic_title exceeds %d characters", ErrInvalidIntent, MaxTitleChars)
 		}
-		if utf8.RuneCountInString(*intent.Title) > MaxTitleChars {
-			return fmt.Errorf("%w: title exceeds %d characters", ErrInvalidIntent, MaxTitleChars)
+	}
+	if intent.TargetRef != nil {
+		if err := validateToken("target_ref.kind", intent.TargetRef.Kind, MaxRefKindBytes); err != nil {
+			return err
+		}
+		if err := validateToken("target_ref.id", intent.TargetRef.ID, MaxIDBytes); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// CanonicalBytes returns deterministic compact JSON in the contract field
-// order. It is the sole input to Digest.
+// CanonicalBytes is the shared serialized byte contract: compact JSON in this
+// fixed field order, with optional fields omitted when absent and no newline.
 func (intent Intent) CanonicalBytes() ([]byte, error) {
 	if err := intent.Validate(); err != nil {
 		return nil, err
@@ -114,7 +122,6 @@ func (intent Intent) CanonicalBytes() ([]byte, error) {
 	return bytes.TrimSuffix(buffer.Bytes(), []byte("\n")), nil
 }
 
-// Digest returns the lowercase SHA-256 digest of CanonicalBytes.
 func (intent Intent) Digest() (string, error) {
 	canonical, err := intent.CanonicalBytes()
 	if err != nil {
@@ -186,12 +193,8 @@ func inspectTopLevelObject(data []byte) (map[string]json.RawMessage, error) {
 		}
 		fields[key] = append(json.RawMessage(nil), raw...)
 	}
-	closing, err := decoder.Token()
-	if err != nil {
+	if _, err := decoder.Token(); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidIntent, err)
-	}
-	if closing != json.Delim('}') {
-		return nil, fmt.Errorf("%w: input must end with an object", ErrInvalidIntent)
 	}
 	if err := requireEOF(decoder); err != nil {
 		return nil, err
