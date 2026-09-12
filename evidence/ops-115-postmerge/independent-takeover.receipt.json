@@ -1,0 +1,71 @@
+{
+  "alternate_host_result": {
+    "bytes": 5599,
+    "provider": "python-local-http",
+    "sha256": "34e768fbf52714a372d92d128cf68da0680725f90317e2ac514442d062f761f4",
+    "status": "PASS"
+  },
+  "chat_history_used": false,
+  "clean_build_result": "PASS",
+  "clean_environment": true,
+  "current_digest_match": true,
+  "dd_packet_result": "PASS",
+  "decision_explanation_result": "PASS",
+  "elapsed_seconds": 3.4016275910000005,
+  "failures": [],
+  "impact_result": {
+    "impactedDecisions": [
+      "d-lease-current"
+    ],
+    "sourceCheckpointUnchanged": true,
+    "status": "PASS"
+  },
+  "input_commit": "f8869d211a98549a5bcea1dee181b43d953084ec",
+  "input_release_tags": [
+    "decision-checkpoint-f6495ff4f7c972d8-f8869d211a98"
+  ],
+  "input_repository": "roccho-dev/ops",
+  "input_tree": "ead57e18d7a70071d9eec9d7578c3ec421972d8d",
+  "limitations": [
+    "operator is independent automation rather than a third-party human; literal human adoption is a separate L2 gate"
+  ],
+  "manual_step_count": 0,
+  "model_memory_used": false,
+  "next_checkpoint_result": "PASS_CANDIDATE_ONLY",
+  "old_checkpoint_replay_result": "PASS",
+  "operator_id": "github-actions-clean-room-v2",
+  "operator_relation_to_owner": "independent hosted automation; no owner memory, Chat history, local files, or secrets",
+  "owner_intervention_count": 0,
+  "owner_local_worktree_used": false,
+  "packet_rebuild_result": "PASS",
+  "release_manifest_file_count": 69,
+  "release_manifest_sha256": "cfd53586a2f7a49ba355cbcbea4d6dcc0ea9ed64b9c504b8fea5da77d0f70dca",
+  "repository_identity_result": {
+    "commit": "f8869d211a98549a5bcea1dee181b43d953084ec",
+    "fsck": "PASS",
+    "trackedWorktreeClean": true,
+    "tree": "ead57e18d7a70071d9eec9d7578c3ec421972d8d"
+  },
+  "repository_post_run_identity_result": {
+    "commit": "f8869d211a98549a5bcea1dee181b43d953084ec",
+    "fsck": "PASS",
+    "trackedWorktreeClean": true,
+    "tree": "ead57e18d7a70071d9eec9d7578c3ec421972d8d"
+  },
+  "restore_result": "PASS",
+  "schema": "ops.independentTakeover.v2",
+  "secret_count": 0,
+  "selected_query_result": {
+    "manifestSha256": "588e96a497037587388d8da9e43182152ba9db4b17262b6a075b535c19ec8f70",
+    "requiredShardOrFileCount": 1,
+    "semanticDigest": "a8283b85ab1723144261edb77856d3caa787e20780a344a4112f13c268c44c52",
+    "status": "PASS"
+  },
+  "sensitive_environment_names": [],
+  "source_checkpoint_unchanged": true,
+  "ssg_rebuild_result": "PASS",
+  "synthetic_fact_admission_result": "PASS_CANDIDATE_ONLY",
+  "undocumented_step_count": 0,
+  "verdict": "PASS_INDEPENDENT_TRANSFER_DD_G10",
+  "verify_result": "PASS"
+}
