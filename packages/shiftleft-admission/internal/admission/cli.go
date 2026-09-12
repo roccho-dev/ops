@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	packagedocs "capforge.local/ops/shiftleft-admission/docs"
 )
 
 type ExitError struct {
@@ -16,6 +18,22 @@ type ExitError struct {
 
 func (e *ExitError) Error() string                   { return e.Msg }
 func AsExitError(err error, target **ExitError) bool { return errors.As(err, target) }
+
+const policyctlUsage = `usage: policyctl <command> [options]
+
+commands:
+  intake            materialize an exact or local policy source
+  run               evaluate one local implementation
+  hash              print a policy bundle hash
+  observe           emit normalized observations
+  admit             apply the existing Gate
+  verify            verify a receipt binding
+  verify-worktree   verify a formal receipt against a Git worktree
+  proof             run the integrated proof
+  runbook nway      print the shiftleft-admission N-way runbook
+
+run "policyctl runbook nway" to print the full package-owned Markdown.
+`
 
 func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
@@ -29,11 +47,37 @@ func required(name, value string) error {
 	return nil
 }
 
+func printNWayRunbook(stdout io.Writer) error {
+	_, err := io.WriteString(stdout, packagedocs.NWayRunbook())
+	return err
+}
+
 func RunCLI(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return &ExitError{Code: 2, Msg: "usage: policyctl <hash|observe|admit|verify|proof>"}
+		return &ExitError{Code: 2, Msg: policyctlUsage}
 	}
 	switch args[0] {
+	case "-h", "--help":
+		if len(args) != 1 {
+			return &ExitError{Code: 2, Msg: "usage: policyctl --help"}
+		}
+		_, err := io.WriteString(stdout, policyctlUsage)
+		return err
+	case "help":
+		switch {
+		case len(args) == 1:
+			_, err := io.WriteString(stdout, policyctlUsage)
+			return err
+		case len(args) == 2 && args[1] == "nway":
+			return printNWayRunbook(stdout)
+		default:
+			return &ExitError{Code: 2, Msg: "usage: policyctl help [nway]"}
+		}
+	case "runbook":
+		if len(args) != 2 || args[1] != "nway" {
+			return &ExitError{Code: 2, Msg: "usage: policyctl runbook nway"}
+		}
+		return printNWayRunbook(stdout)
 	case "hash":
 		fs := newFlagSet("hash", stderr)
 		bundle := fs.String("bundle", "", "policy bundle directory")

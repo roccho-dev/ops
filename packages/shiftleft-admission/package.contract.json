@@ -1,0 +1,98 @@
+{
+  "schema": "package-docs-contract/1",
+  "packageId": "shiftleft-admission",
+  "ownerRoot": "packages/shiftleft-admission",
+  "kind": "cli",
+  "responsibility": "Observe declared evidence, apply the existing admission Gate, and emit receipts without owning Git effects.",
+  "externalContracts": [
+    {
+      "id": "policyctl",
+      "entrypoint": "cmd/policyctl",
+      "input": "Versioned policy, exact refs, and normalized observations",
+      "output": "Deterministic observations and admission receipts",
+      "error": "Non-zero exit with a stable finding or terminal state",
+      "effect": "No authoritative Git write",
+      "compatibility": "CLI commands and receipt schemas are versioned"
+    }
+  ],
+  "internalContracts": [
+    {
+      "id": "provider-gate-effect",
+      "boundary": "Providers observe; the existing Gate decides; c.e owns accepted Git effects.",
+      "invariants": [
+        "Required unobserved evidence never becomes PASS",
+        "Receipts bind policy, observations, base tree, and candidate tree"
+      ],
+      "forbiddenEffects": [
+        "Policy providers must not move authoritative Git refs",
+        "The Gate must not repair candidates"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "id": "package-contract",
+      "kind": "contract-projection",
+      "title": "shiftleft-admission package contract",
+      "path": "docs/package-contract.md",
+      "required": true
+    },
+    {
+      "id": "nway",
+      "kind": "authored",
+      "title": "N-way branch-set runbook",
+      "path": "docs/nway-runbook.md",
+      "required": true
+    }
+  ],
+  "discoverRoutes": [
+    {
+      "id": "policyctl-help",
+      "required": true,
+      "argv": ["go", "run", "./cmd/policyctl", "--help"],
+      "contains": ["policyctl runbook nway"]
+    }
+  ],
+  "contentRoutes": [
+    {
+      "id": "policyctl-nway",
+      "required": true,
+      "argv": ["go", "run", "./cmd/policyctl", "runbook", "nway"],
+      "document": "nway"
+    }
+  ],
+  "projections": [
+    {
+      "id": "nix-package-contract",
+      "required": true,
+      "surface": "nix",
+      "path": "share/doc/shiftleft-admission/package-contract.md",
+      "document": "package-contract"
+    },
+    {
+      "id": "nix-nway",
+      "required": true,
+      "surface": "nix",
+      "path": "share/doc/shiftleft-admission/nway-runbook.md",
+      "document": "nway"
+    },
+    {
+      "id": "carry-package-contract",
+      "required": true,
+      "surface": "carry",
+      "path": "share/doc/shiftleft-admission/package-contract.md",
+      "document": "package-contract"
+    },
+    {
+      "id": "carry-nway",
+      "required": true,
+      "surface": "carry",
+      "path": "share/doc/shiftleft-admission/nway-runbook.md",
+      "document": "nway"
+    }
+  ],
+  "currentConsumers": [
+    "Chat.Pro c.p.merge",
+    "GitHub Actions admission workflow"
+  ]
+}
