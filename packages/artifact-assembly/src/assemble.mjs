@@ -80,70 +80,80 @@ const processNpmTgz = (row, source, stagingRoot, occupied, scratchRoot) => {
   return { export: row.export, id: row.id, kind: row.kind, revision: row.revision ?? null, sha256: digest, shim: row.shim };
 };
 
-const removeIfPresent = (target) => {
-  if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true });
+const assertFreshOutput = (outputRoot) => {
+  // lstat also catches dangling symlinks, unlike existsSync.
+  if (fs.lstatSync(outputRoot, { throwIfNoEntry: false })) {
+    throw new Error(`artifact output path must not exist: ${outputRoot}`);
+  }
 };
 
-const promoteAtomically = (stagingRoot, outputRoot, failAt) => {
-  const parent = path.dirname(outputRoot);
-  const backup = path.join(parent, `.${path.basename(outputRoot)}.previous-${process.pid}-${Date.now()}`);
-  let movedOld = false;
-  try {
-    if (failAt === "before-promote") throw new Error("injected failure before promote");
-    if (fs.existsSync(outputRoot)) {
-      fs.renameSync(outputRoot, backup);
-      movedOld = true;
-    }
-    if (failAt === "after-backup") throw new Error("injected failure after backup");
-    fs.renameSync(stagingRoot, outputRoot);
-    if (movedOld) removeIfPresent(backup);
-  } catch (error) {
-    if (movedOld && !fs.existsSync(outputRoot) && fs.existsSync(backup)) fs.renameSync(backup, outputRoot);
-    throw error;
-  } finally {
-    removeIfPresent(backup);
+// Resolve a not-yet-created workspace through its existing ancestors without writing.
+const physicalPath = (target) => {
+  let current = path.resolve(target);
+  const missing = [];
+  while (!fs.lstatSync(current, { throwIfNoEntry: false })) {
+    missing.unshift(path.basename(current));
+    current = path.dirname(current);
   }
+  return path.resolve(fs.realpathSync(current), ...missing);
+};
+
+const publishFresh = (stagingRoot, outputRoot, expectedDigest, failAt) => {
+  if (failAt === "before-promote") throw new Error("injected failure before promote");
+  // Exclusive mkdir, not check-then-rename: a late empty directory must also win.
+  fs.mkdirSync(outputRoot);
+  copyDirectory(stagingRoot, outputRoot, new Set());
+  if (sha256Tree(outputRoot).sha256 !== expectedDigest) throw new Error("published artifact digest mismatch");
 };
 
 export const assembleArtifact = ({ failAt = null, lockPath, outputDir, requireComplete = true, sources = {} }) => {
   if (!lockPath || !outputDir) throw new Error("lockPath and outputDir are required");
+  if (failAt !== null && failAt !== "before-promote") throw new Error(`unsupported failAt: ${failAt}`);
   const rows = readArtifactLock(lockPath, { requireComplete });
   const outputRoot = path.resolve(outputDir);
+  assertFreshOutput(outputRoot);
   const parent = path.dirname(outputRoot);
+  const workspaceParents = [physicalPath(parent), physicalPath(os.tmpdir())];
+  const bindings = rows.filter((row) => row.required || sources[row.id]).map((row) => {
+    const source = sourceFor(sources, row);
+    if (!fs.existsSync(source)) throw new Error(`lock ${row.id}: source does not exist`);
+    if (row.kind === "directory") {
+      const sourceRoot = fs.realpathSync(source);
+      for (const workspaceParent of workspaceParents) {
+        const relative = path.relative(sourceRoot, workspaceParent);
+        if (relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`))) {
+          throw new Error(`lock ${row.id}: workspace overlaps directory input`);
+        }
+      }
+    }
+    return { row, source };
+  });
   fs.mkdirSync(parent, { recursive: true });
   const stagingRoot = fs.mkdtempSync(path.join(parent, `.${path.basename(outputRoot)}.stage-`));
   const scratchRoot = fs.mkdtempSync(path.join(os.tmpdir(), "artifact-assembly-"));
   const occupied = new Set();
   const inputs = [];
-  try {
-    for (const row of rows) {
-      if (!row.required && !sources[row.id]) continue;
-      const source = sourceFor(sources, row);
-      if (!fs.existsSync(source)) throw new Error(`lock ${row.id}: source does not exist`);
-      if (row.kind === "directory") inputs.push(processDirectory(row, source, stagingRoot, occupied));
-      else if (row.kind === "file") inputs.push(processFile(row, source, stagingRoot, occupied));
-      else inputs.push(processNpmTgz(row, source, stagingRoot, occupied, scratchRoot));
-    }
-    const output = sha256Tree(stagingRoot);
-    const receipt = {
-      authority: false,
-      files: output.files,
-      inputs,
-      locks: rows,
-      outputTreeSha256: output.sha256,
-      schema: "roccho.artifact.assembly-receipt/2",
-      status: "PASS",
-    };
-    promoteAtomically(stagingRoot, outputRoot, failAt);
-    return receipt;
-  } finally {
-    removeIfPresent(stagingRoot);
-    removeIfPresent(scratchRoot);
+  // Retain fresh staging/scratch on success and failure. Never replace or clean another tree.
+  for (const { row, source } of bindings) {
+    if (row.kind === "directory") inputs.push(processDirectory(row, source, stagingRoot, occupied));
+    else if (row.kind === "file") inputs.push(processFile(row, source, stagingRoot, occupied));
+    else inputs.push(processNpmTgz(row, source, stagingRoot, occupied, scratchRoot));
   }
+  const output = sha256Tree(stagingRoot);
+  publishFresh(stagingRoot, outputRoot, output.sha256, failAt);
+  return {
+    authority: false,
+    files: output.files,
+    inputs,
+    locks: rows,
+    outputTreeSha256: output.sha256,
+    schema: "roccho.artifact.assembly-receipt/2",
+    status: "PASS",
+  };
 };
 
 export const writeAssemblyReceipt = (receiptPath, receipt) => {
   assertSafeRelativePath(path.basename(receiptPath), "receipt filename");
   fs.mkdirSync(path.dirname(path.resolve(receiptPath)), { recursive: true });
-  fs.writeFileSync(receiptPath, canonicalJsonText(receipt));
+  fs.writeFileSync(receiptPath, canonicalJsonText(receipt), { flag: "wx" });
 };

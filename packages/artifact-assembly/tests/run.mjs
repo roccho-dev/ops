@@ -30,11 +30,8 @@ const expectThrows = (fn, pattern) => {
 
 const withTemp = (fn) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "artifact-assembly-test-"));
-  try {
-    return fn(root);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
+  // Keep evidence on success and failure; disposal belongs to the enclosing environment.
+  return fn(root);
 };
 
 const writeOctal = (header, offset, length, value) => {
@@ -161,6 +158,8 @@ const runAssembly = () => {
     const receiptPath = path.join(root, "receipts", "assembly.json");
     writeAssemblyReceipt(receiptPath, receipt);
     assert.equal(fs.readFileSync(receiptPath, "utf8"), canonicalJsonText(receipt));
+    expectThrows(() => writeAssemblyReceipt(receiptPath, { status: "CHANGED" }), /EEXIST/);
+    assert.equal(fs.readFileSync(receiptPath, "utf8"), canonicalJsonText(receipt));
     assert.equal(fs.existsSync(path.join(output, "assembly.json")), false);
     counts.assembly += 1;
   });
@@ -181,17 +180,112 @@ const runAssembly = () => {
     const output = path.join(root, "out");
     fs.mkdirSync(output);
     fs.writeFileSync(path.join(output, "old.txt"), "old\n");
-    expectThrows(() => assembleArtifact({ failAt: "before-promote", lockPath: input.lockPath, outputDir: output, sources: input.sources }), /injected failure/);
+    const before = fs.readdirSync(root).sort();
+    expectThrows(() => assembleArtifact({ lockPath: input.lockPath, outputDir: output, sources: input.sources }), /output path must not exist/);
     assert.equal(fs.readFileSync(path.join(output, "old.txt"), "utf8"), "old\n");
-    expectThrows(() => assembleArtifact({ failAt: "after-backup", lockPath: input.lockPath, outputDir: output, sources: input.sources }), /injected failure/);
+    expectThrows(() => assembleArtifact({ failAt: "before-promote", lockPath: input.lockPath, outputDir: output, sources: input.sources }), /output path must not exist/);
     assert.equal(fs.readFileSync(path.join(output, "old.txt"), "utf8"), "old\n");
+    assert.deepEqual(fs.readdirSync(root).sort(), before);
     counts.assembly += 2;
+  });
+
+  for (const kind of ["empty-directory", "file", "symlink", "dangling-symlink"]) withTemp((root) => {
+    const input = positiveInputs(root);
+    const output = path.join(root, "out");
+    if (kind === "empty-directory") fs.mkdirSync(output);
+    else if (kind === "file") fs.writeFileSync(output, "old\n");
+    else fs.symlinkSync(kind === "symlink" ? input.app : path.join(root, "missing"), output);
+    const before = fs.lstatSync(output);
+    const entries = fs.readdirSync(root).sort();
+    expectThrows(() => assembleArtifact({ lockPath: input.lockPath, outputDir: output, sources: input.sources }), /output path must not exist/);
+    assert.equal(fs.lstatSync(output).ino, before.ino);
+    assert.deepEqual(fs.readdirSync(root).sort(), entries);
+    if (kind === "file") assert.equal(fs.readFileSync(output, "utf8"), "old\n");
+    if (kind.endsWith("symlink")) assert.equal(fs.lstatSync(output).isSymbolicLink(), true);
+    assert.equal(sha256Tree(input.app).sha256, input.rows[0].sha256);
+    counts.assembly += 1;
+  });
+
+  withTemp((root) => {
+    const input = positiveInputs(root);
+    const output = path.join(root, "out");
+    expectThrows(() => assembleArtifact({ failAt: "after-backup", lockPath: input.lockPath, outputDir: output, sources: input.sources }), /unsupported failAt/);
+    assert.equal(fs.existsSync(output), false);
+    expectThrows(() => assembleArtifact({ failAt: "before-promote", lockPath: input.lockPath, outputDir: output, sources: input.sources }), /injected failure/);
+    assert.equal(fs.existsSync(output), false);
+    assert.equal(fs.readdirSync(root).some((name) => name.startsWith(".out.stage-")), true);
+    assert.equal(sha256Tree(input.app).sha256, input.rows[0].sha256);
+    counts.assembly += 2;
+  });
+
+  // A destination appearing after the preflight must not be replaced, even when empty.
+  for (const populated of [false, true]) withTemp((root) => {
+    const input = positiveInputs(root);
+    const output = path.join(root, "out");
+    const mkdir = fs.mkdirSync;
+    let inserted = false;
+    let inode;
+    fs.mkdirSync = (target, options) => {
+      if (!inserted && path.resolve(target) === output) {
+        inserted = true;
+        mkdir(output);
+        if (populated) fs.writeFileSync(path.join(output, "competitor.txt"), "keep\n");
+        inode = fs.lstatSync(output).ino;
+      }
+      return mkdir(target, options);
+    };
+    try {
+      expectThrows(() => assembleArtifact({ lockPath: input.lockPath, outputDir: output, sources: input.sources }), /EEXIST/);
+    } finally {
+      fs.mkdirSync = mkdir;
+    }
+    assert.equal(inserted, true);
+    assert.equal(fs.lstatSync(output).ino, inode);
+    assert.deepEqual(fs.readdirSync(output), populated ? ["competitor.txt"] : []);
+    if (populated) assert.equal(fs.readFileSync(path.join(output, "competitor.txt"), "utf8"), "keep\n");
+    counts.assembly += 1;
+  });
+
+  withTemp((root) => {
+    const input = positiveInputs(root);
+    const output = path.join(root, "out");
+    const copy = fs.copyFileSync;
+    let copies = 0;
+    fs.copyFileSync = (source, target, flags) => {
+      if (path.resolve(target).startsWith(`${output}${path.sep}`) && ++copies === 2) throw new Error("injected output copy failure");
+      return copy(source, target, flags);
+    };
+    let receipt;
+    try {
+      expectThrows(() => { receipt = assembleArtifact({ lockPath: input.lockPath, outputDir: output, sources: input.sources }); }, /injected output copy failure/);
+    } finally {
+      fs.copyFileSync = copy;
+    }
+    assert.equal(receipt, undefined);
+    assert.equal(copies, 2);
+    const partial = sha256Tree(output);
+    assert.equal(partial.files.length, 1);
+    expectThrows(() => assembleArtifact({ lockPath: input.lockPath, outputDir: output, sources: input.sources }), /output path must not exist/);
+    assert.deepEqual(sha256Tree(output), partial);
+    assert.equal(sha256Tree(input.app).sha256, input.rows[0].sha256);
+    counts.assembly += 1;
+  });
+
+  withTemp((root) => {
+    const input = positiveInputs(root);
+    const output = path.join(input.app, "not-created", "out");
+    const before = sha256Tree(input.app);
+    expectThrows(() => assembleArtifact({ lockPath: input.lockPath, outputDir: output, sources: input.sources }), /workspace overlaps directory input/);
+    assert.equal(fs.existsSync(path.dirname(output)), false);
+    assert.deepEqual(sha256Tree(input.app), before);
+    counts.assembly += 1;
   });
 
   withTemp((root) => {
     const input = positiveInputs(root);
     const badRows = input.rows.map((item) => item.id === "first" ? { ...item, sha256: "f".repeat(64) } : item);
     expectThrows(() => assembleArtifact({ lockPath: writeLock(root, badRows), outputDir: path.join(root, "out"), sources: input.sources }), /digest mismatch/);
+    assert.equal(fs.existsSync(path.join(root, "out")), false);
     counts.assembly += 1;
   });
 
@@ -305,8 +399,21 @@ const runPurity = () => {
   counts.purity += 1;
 };
 
-if (mode === "all" || mode === "lock") runLock();
-if (mode === "all" || mode === "assembly") runAssembly();
-if (mode === "all" || mode === "purity") runPurity();
 if (!["all", "lock", "assembly", "purity"].includes(mode)) throw new Error(`unknown test mode: ${mode}`);
+// Check before any fixture or assembler execution; an old destructive implementation fails safely.
+for (const file of walkFiles(packageRoot).filter((item) => item.endsWith(".mjs"))) {
+  assert.doesNotMatch(fs.readFileSync(file, "utf8"), /\b(?:rm|rmdir|unlink)(?:Sync)?\s*\(/, `automated deletion is forbidden: ${file}`);
+}
+const deletionCalls = [];
+const deletionMethods = ["rm", "rmSync", "rmdir", "rmdirSync", "unlink", "unlinkSync"];
+const originals = deletionMethods.map((name) => [name, fs[name]]);
+for (const [name] of originals) fs[name] = () => { deletionCalls.push(name); throw new Error(`deletion forbidden: ${name}`); };
+try {
+  if (mode === "all" || mode === "lock") runLock();
+  if (mode === "all" || mode === "assembly") runAssembly();
+  if (mode === "all" || mode === "purity") runPurity();
+  assert.deepEqual(deletionCalls, []);
+} finally {
+  for (const [name, original] of originals) fs[name] = original;
+}
 process.stdout.write(`${JSON.stringify({ counts, mode, status: "artifact-assembly-tests-pass" })}\n`);
