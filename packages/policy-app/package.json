@@ -1,0 +1,15 @@
+{
+  "name": "@roccho/policy-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "node --check server.mjs && node --check file-store.mjs",
+    "test": "node --test test/dependency.test.mjs test/server.test.mjs"
+  },
+  "dependencies": {
+    "@roccho/graph-editor": "file:vendor/roccho-graph-editor-0.1.0.tgz",
+    "@roccho/policy-ui": "file:vendor/roccho-policy-ui-0.1.0.tgz"
+  }
+}

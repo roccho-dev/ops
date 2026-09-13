@@ -1,0 +1,39 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@roccho/graph-editor':
+        specifier: file:vendor/roccho-graph-editor-0.1.0.tgz
+        version: file:vendor/roccho-graph-editor-0.1.0.tgz
+      '@roccho/policy-ui':
+        specifier: file:vendor/roccho-policy-ui-0.1.0.tgz
+        version: file:vendor/roccho-policy-ui-0.1.0.tgz
+
+packages:
+
+  '@maxgraph/core@0.24.0':
+    resolution: {integrity: sha512-OgzCL86pTEa/8MpxbIX44S+xk0qAfmlAu0yZhQ9RFaEB8E5M2rJlPHNWeFpsD/ybWb5J5oPmZYszIcvzG/Kg4g==}
+
+  '@roccho/graph-editor@file:vendor/roccho-graph-editor-0.1.0.tgz':
+    resolution: {integrity: sha512-GIFrqIJ7DelufOg0sw5tT4i2g++r8lA5+VCBIl0CqLJu0qYlV+KCc8CuVVRWUxUWZQhwsKjvCfSB/KALlpIWRA==, tarball: file:vendor/roccho-graph-editor-0.1.0.tgz}
+    version: 0.1.0
+
+  '@roccho/policy-ui@file:vendor/roccho-policy-ui-0.1.0.tgz':
+    resolution: {integrity: sha512-ip50DPvqIWecyxPrbjqxb0+o6uZ7g+4E02les0rJb2P9GlPwG15hyq/AuQBBmLP6fehoe6sYhhllCOlbv7etyQ==, tarball: file:vendor/roccho-policy-ui-0.1.0.tgz}
+    version: 0.1.0
+
+snapshots:
+
+  '@maxgraph/core@0.24.0': {}
+
+  '@roccho/graph-editor@file:vendor/roccho-graph-editor-0.1.0.tgz':
+    dependencies:
+      '@maxgraph/core': 0.24.0
+
+  '@roccho/policy-ui@file:vendor/roccho-policy-ui-0.1.0.tgz': {}
