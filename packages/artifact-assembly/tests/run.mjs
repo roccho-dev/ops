@@ -2,12 +2,15 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
-import {
+// Load the package only after the filesystem guards are installed and self-tested.
+let
   assembleArtifact,
   canonicalJson,
   canonicalJsonText,
@@ -15,14 +18,13 @@ import {
   readArtifactLock,
   sha256File,
   sha256Tree,
-  writeAssemblyReceipt,
-} from "../src/index.mjs";
+  writeAssemblyReceipt;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(packageRoot, "../..");
 const mode = process.argv[2] ?? "all";
-const counts = { assembly: 0, lock: 0, purity: 0 };
+const counts = { assembly: 0, guard: 0, lock: 0, purity: 0 };
 
 const expectThrows = (fn, pattern) => {
   assert.throws(fn, pattern);
@@ -142,6 +144,28 @@ const positiveInputs = (root) => {
 };
 
 const runAssembly = () => {
+  // A fixed receipt can already exist before the first call, as in a fresh checkout.
+  withTemp((root) => {
+    const source = path.join(root, "input.html");
+    fs.writeFileSync(source, "<!doctype html>\n", { flag: "wx" });
+    const fileRow = row({ kind: "file", target: "index.html", export: undefined, shim: undefined, sha256: sha256File(source) });
+    const lockPath = writeLock(root, [fileRow]);
+    const existing = path.join(root, "tracked-receipt.json");
+    fs.writeFileSync(existing, "{\"retained\":true}\n", { flag: "wx" });
+    const oldBytes = fs.readFileSync(existing);
+    const oldInode = fs.lstatSync(existing).ino;
+    const receipt = assembleArtifact({ lockPath, outputDir: path.join(root, "out"), sources: { "module-a": source } });
+    expectThrows(() => writeAssemblyReceipt(existing, receipt), /EEXIST/);
+    assert.deepEqual(fs.readFileSync(existing), oldBytes);
+    assert.equal(fs.lstatSync(existing).ino, oldInode);
+    const fresh = path.join(root, "new-receipt.json");
+    writeAssemblyReceipt(fresh, receipt);
+    assert.equal(fs.readFileSync(fresh, "utf8"), canonicalJsonText(receipt));
+    assert.equal(receipt.status, "PASS");
+    assert.equal(sha256File(path.join(root, "out", "index.html")), fileRow.sha256);
+    counts.assembly += 2;
+  });
+
   withTemp((root) => {
     const input = positiveInputs(root);
     const output = path.join(root, "out");
@@ -400,20 +424,83 @@ const runPurity = () => {
 };
 
 if (!["all", "lock", "assembly", "purity"].includes(mode)) throw new Error(`unknown test mode: ${mode}`);
-// Check before any fixture or assembler execution; an old destructive implementation fails safely.
-for (const file of walkFiles(packageRoot).filter((item) => item.endsWith(".mjs"))) {
-  assert.doesNotMatch(fs.readFileSync(file, "utf8"), /\b(?:rm|rmdir|unlink)(?:Sync)?\s*\(/, `automated deletion is forbidden: ${file}`);
+// This package's implementation uses this one fs import spelling. Reject other
+// import routes before evaluating it; runtime stubs also cover property aliases.
+const assertFsRoutes = (text, label) => {
+  const withoutFsImport = text.replaceAll('import fs from "node:fs";', "");
+  assert.doesNotMatch(withoutFsImport, /["'](?:node:)?fs(?:\/promises)?["']/, `E_FS_ROUTE: ${label}`);
+  assert.doesNotMatch(text, /\b(?:import|require)\s*\(|\b(?:from|import)\s*["'](?:node:)?(?:module|child_process|worker_threads|vm)["']/, `E_FS_ROUTE: ${label}`);
+  assert.doesNotMatch(text, /\b(?:rm|rmdir|unlink)(?:Sync)?\b/, `automated deletion is forbidden: ${label}`);
+};
+
+const forbiddenRoutes = [
+  'import { rmSync as removeTree } from "node:fs"; removeTree(undefined);',
+  'import {\n rmSync as removeTree\n} from "node:fs";',
+  'import fs from "node:fs/promises";',
+  'import { rm as removeTree } from "node:fs/promises";',
+  'import * as filesystem from "node:fs";',
+  'import("node:fs");',
+  'require("fs");',
+  'import { createRequire } from "node:module";',
+];
+for (const text of forbiddenRoutes) {
+  expectThrows(() => assertFsRoutes(text, "in-memory negative"), /E_FS_ROUTE/);
+  counts.guard += 1;
 }
+assertFsRoutes('import fs from "node:fs"; const type = "module"; fs.readFileSync("input");', "positive");
+counts.guard += 1;
+expectThrows(() => assertFsRoutes('import fs from "node:fs"; const removeTree = fs.rmSync;', "property alias"), /automated deletion/);
+counts.guard += 1;
+for (const directory of ["src", "bin"]) {
+  for (const file of walkFiles(path.join(packageRoot, directory))) {
+    if (/\.(mjs|cjs|js)$/.test(file)) assertFsRoutes(fs.readFileSync(file, "utf8"), file);
+  }
+}
+
 const deletionCalls = [];
-const deletionMethods = ["rm", "rmSync", "rmdir", "rmdirSync", "unlink", "unlinkSync"];
-const originals = deletionMethods.map((name) => [name, fs[name]]);
-for (const [name] of originals) fs[name] = () => { deletionCalls.push(name); throw new Error(`deletion forbidden: ${name}`); };
+const guarded = [
+  ...["rm", "rmSync", "rmdir", "rmdirSync", "unlink", "unlinkSync"].map((name) => ({ target: fs, name, async: false })),
+  ...["rm", "rmdir", "unlink"].map((name) => ({ target: fsPromises, name, async: true })),
+];
+for (const entry of guarded) {
+  entry.original = entry.target[entry.name];
+  entry.deny = () => {
+    deletionCalls.push(`${entry.async ? "promises." : ""}${entry.name}`);
+    throw Object.assign(new Error(`deletion forbidden: ${entry.name}`), { code: "E_FS_DELETE" });
+  };
+  entry.stub = entry.async ? async () => entry.deny() : entry.deny;
+  entry.target[entry.name] = entry.stub;
+}
+syncBuiltinESMExports();
 try {
+  // Real ESM named aliases and promises bindings, but only harmless stubs run.
+  const aliases = await import(`data:text/javascript,${encodeURIComponent(
+    'import { rm as a, rmSync as b, rmdir as c, rmdirSync as d, unlink as e, unlinkSync as f } from "node:fs";\n' +
+    'import { rm as g, rmdir as h, unlink as i } from "node:fs/promises";\n' +
+    'export const operations = [a, b, c, d, e, f, g, h, i];'
+  )}`);
+  assert.equal(aliases.operations.length, 9);
+  assert.equal(guarded.length, aliases.operations.length);
+  assert.equal(fs.promises, fsPromises);
+  for (const [index, entry] of guarded.entries()) {
+    const alias = aliases.operations[index];
+    // Never invoke a native function if installation or export synchronization failed.
+    assert.equal(entry.target[entry.name], entry.stub);
+    assert.equal(alias, entry.stub);
+    if (entry.async) await assert.rejects(alias(), { code: "E_FS_DELETE" });
+    else assert.throws(alias, { code: "E_FS_DELETE" });
+    counts.guard += 1;
+  }
+  assert.equal(deletionCalls.length, guarded.length);
+  deletionCalls.length = 0; // Expected self-test interceptions, not package activity.
+  ({ assembleArtifact, canonicalJson, canonicalJsonText, parseArtifactLock, readArtifactLock, sha256File, sha256Tree, writeAssemblyReceipt } = await import("../src/index.mjs"));
+  assert.deepEqual(deletionCalls, []); // Also catches swallowed calls during module evaluation.
   if (mode === "all" || mode === "lock") runLock();
   if (mode === "all" || mode === "assembly") runAssembly();
   if (mode === "all" || mode === "purity") runPurity();
   assert.deepEqual(deletionCalls, []);
 } finally {
-  for (const [name, original] of originals) fs[name] = original;
+  for (const { target, name, original } of guarded) target[name] = original;
+  syncBuiltinESMExports();
 }
 process.stdout.write(`${JSON.stringify({ counts, mode, status: "artifact-assembly-tests-pass" })}\n`);
