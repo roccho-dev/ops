@@ -20,8 +20,8 @@ const criteriaPath = path.join(here, "data/jsonl/criteria.jsonl");
 const statusPath = path.join(here, "data/jsonl/status.jsonl");
 const openGatesPath = path.join(here, "data/jsonl/open-gates.jsonl");
 const proofPath = path.join(here, "evidence/ui-proof-receipt.json");
-const receiptPath = path.join(here, "evidence/assembly-receipt.json");
-const reportPath = path.join(here, "generated/completion-gates.md");
+const trackedReceiptPath = path.join(here, "evidence/assembly-receipt.json");
+const trackedReportPath = path.join(here, "generated/completion-gates.md");
 const invariant = (condition, message) => {
   if (!condition) throw new Error(`presentation-verification: ${message}`);
 };
@@ -70,7 +70,7 @@ const validateRows = () => {
   return { criteria, openGates, statuses };
 };
 
-const validateEvidence = () => {
+const validateEvidence = (assemblyReceiptPath = trackedReceiptPath) => {
   const [lock] = readArtifactLock(lockPath, { requireComplete: true });
   invariant(
     lock.id === "presentation-a2ui-one-html" && lock.kind === "file" && lock.target === "index.html",
@@ -243,7 +243,7 @@ const validateEvidence = () => {
     );
   }
 
-  const receipt = readJson(receiptPath);
+  const receipt = readJson(assemblyReceiptPath);
   invariant(
     receipt.schema === "roccho.artifact.assembly-receipt/2" && receipt.status === "PASS" && receipt.authority === false,
     "assembly receipt is invalid",
@@ -309,40 +309,135 @@ const report = ({ criteria, openGates, statuses }, { browser, build, enterpriseR
   return `${lines.join("\n")}\n`;
 };
 
+const assertFreshOutput = (target, label) => {
+  invariant(typeof target === "string" && target.length > 0, `${label} is required`);
+  const resolved = path.resolve(target);
+  invariant(resolved !== trackedReceiptPath && resolved !== trackedReportPath, `${label} must not be tracked evidence`);
+  invariant(fs.lstatSync(resolved, { throwIfNoEntry: false }) === undefined, `${label} must not exist: ${resolved}`);
+  return resolved;
+};
+
+const writeFreshEvidence = ({ receipt, receiptOutput, reportOutput, rows }) => {
+  const receiptTarget = assertFreshOutput(receiptOutput, "receipt output");
+  const reportTarget = assertFreshOutput(reportOutput, "report output");
+  invariant(receiptTarget !== reportTarget, "receipt and report outputs must differ");
+
+  writeAssemblyReceipt(receiptTarget, receipt);
+  const evidence = validateEvidence(receiptTarget);
+  fs.mkdirSync(path.dirname(reportTarget), { recursive: true });
+  fs.writeFileSync(reportTarget, report(rows, evidence), { flag: "wx" });
+  return { evidence, receiptTarget, reportTarget };
+};
+
 const reproduce = (source) => {
   invariant(typeof source === "string" && source.length > 0, "source index.html is required");
   const [lock] = readArtifactLock(lockPath, { requireComplete: true });
   invariant(sha256File(source) === lock.sha256, "source digest differs from lock");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "presentation-a2ui-assembly-"));
+  return assembleArtifact({ lockPath, outputDir: path.join(root, "out"), sources: { [lock.id]: source } });
+};
+
+const expectRejected = (fn, pattern, label) => {
+  let error = null;
   try {
-    return assembleArtifact({ lockPath, outputDir: path.join(root, "out"), sources: { [lock.id]: source } });
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    fn();
+  } catch (caught) {
+    error = caught;
   }
+  invariant(error instanceof Error && pattern.test(error.message), `${label} was not rejected`);
+};
+
+const checkFreshEvidenceMigration = (rows, trackedEvidence) => {
+  const trackedReceiptBytes = fs.readFileSync(trackedReceiptPath);
+  const trackedReportBytes = fs.readFileSync(trackedReportPath);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "presentation-a2ui-fresh-evidence-"));
+  const freshReceipt = path.join(root, "receipts", "assembly-receipt.json");
+  const freshReport = path.join(root, "reports", "completion-gates.md");
+
+  const written = writeFreshEvidence({
+    receipt: trackedEvidence.receipt,
+    receiptOutput: freshReceipt,
+    reportOutput: freshReport,
+    rows,
+  });
+  invariant(
+    fs.readFileSync(written.receiptTarget, "utf8") === `${canonicalJson(trackedEvidence.receipt)}\n`,
+    "fresh receipt bytes differ",
+  );
+  invariant(
+    fs.readFileSync(written.reportTarget, "utf8") === report(rows, written.evidence),
+    "fresh report bytes differ",
+  );
+
+  const unusedReceipt = path.join(root, "unused-receipt.json");
+  const unusedReport = path.join(root, "unused-report.md");
+  expectRejected(
+    () =>
+      writeFreshEvidence({
+        receipt: trackedEvidence.receipt,
+        receiptOutput: trackedReceiptPath,
+        reportOutput: unusedReport,
+        rows,
+      }),
+    /must not be tracked evidence|must not exist/,
+    "tracked receipt output",
+  );
+  expectRejected(
+    () =>
+      writeFreshEvidence({
+        receipt: trackedEvidence.receipt,
+        receiptOutput: unusedReceipt,
+        reportOutput: trackedReportPath,
+        rows,
+      }),
+    /must not be tracked evidence|must not exist/,
+    "tracked report output",
+  );
+  invariant(fs.existsSync(unusedReceipt) === false && fs.existsSync(unusedReport) === false, "rejected output wrote bytes");
+  invariant(Buffer.compare(fs.readFileSync(trackedReceiptPath), trackedReceiptBytes) === 0, "tracked receipt changed");
+  invariant(Buffer.compare(fs.readFileSync(trackedReportPath), trackedReportBytes) === 0, "tracked report changed");
+
+  return { freshReceipt, freshReport };
 };
 
 const mode = process.argv[2] ?? "check";
 if (mode === "write") {
-  const source = process.argv[3];
+  const [source, receiptOutput, reportOutput] = process.argv.slice(3);
+  const receiptTarget = assertFreshOutput(receiptOutput, "receipt output");
+  const reportTarget = assertFreshOutput(reportOutput, "report output");
+  invariant(receiptTarget !== reportTarget, "receipt and report outputs must differ");
   const receipt = reproduce(source);
-  writeAssemblyReceipt(receiptPath, receipt);
   const rows = validateRows();
-  const evidence = validateEvidence();
-  fs.writeFileSync(reportPath, report(rows, evidence));
+  const written = writeFreshEvidence({ receipt, receiptOutput: receiptTarget, reportOutput: reportTarget, rows });
   process.stdout.write(
-    `${JSON.stringify({ externalOpen: rows.openGates.length, gates: rows.criteria.length, outputTreeSha256: receipt.outputTreeSha256, status: "PASS" })}\n`,
+    `${JSON.stringify({
+      externalOpen: rows.openGates.length,
+      gates: rows.criteria.length,
+      outputTreeSha256: receipt.outputTreeSha256,
+      receipt: written.receiptTarget,
+      report: written.reportTarget,
+      status: "PASS",
+    })}\n`,
   );
 } else if (mode === "check") {
   const rows = validateRows();
   const evidence = validateEvidence();
   const expected = report(rows, evidence);
-  invariant(fs.readFileSync(reportPath, "utf8") === expected, "generated report is stale");
+  invariant(fs.readFileSync(trackedReportPath, "utf8") === expected, "generated report is stale");
+  const migration = checkFreshEvidenceMigration(rows, evidence);
   process.stdout.write(
-    `${JSON.stringify({ externalOpen: rows.openGates.length, gates: rows.criteria.length, outputTreeSha256: evidence.receipt.outputTreeSha256, status: "PASS" })}\n`,
+    `${JSON.stringify({
+      externalOpen: rows.openGates.length,
+      freshReceipt: migration.freshReceipt,
+      freshReport: migration.freshReport,
+      gates: rows.criteria.length,
+      outputTreeSha256: evidence.receipt.outputTreeSha256,
+      status: "PASS",
+    })}\n`,
   );
 } else if (mode === "reproduce") {
   const actual = reproduce(process.argv[3]);
-  const expected = readJson(receiptPath);
+  const expected = readJson(trackedReceiptPath);
   invariant(canonicalJson(actual) === canonicalJson(expected), "reproduced receipt differs");
   process.stdout.write(`${JSON.stringify({ outputTreeSha256: actual.outputTreeSha256, status: "PASS" })}\n`);
 } else {
