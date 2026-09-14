@@ -44,7 +44,16 @@ jobs:
           git -C "$ui" fetch --depth=1 origin "$UI_SHA"
           git -C "$ui" checkout --detach "$UI_SHA"
           test "$(git -C "$ui" rev-parse HEAD)" = "$UI_SHA"
-          (cd "$ui" && npm run check:artifact-runtime)
+          (
+            cd "$ui"
+            node packages/source-compiler/tests/boundary.mjs
+            node packages/url-module/tests/run.mjs
+            node apps/artifact-shell/scripts/build-registry.mjs --check
+            node apps/artifact-shell/tests/publication.mjs
+            node tests/check-semantic-map-migration.mjs
+            node apps/artifact-shell/tests/semantic-map-capability.mjs
+            node tests/check-semantic-map-legacy-source-retirement.mjs
+          )
           (cd "$ui" && node apps/artifact-shell/scripts/build-publication.mjs --out="$publication")
           python3 - "$publication/artifact-manifest.json" "$GITHUB_ENV" <<'PY'
           import json,sys
