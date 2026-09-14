@@ -12,10 +12,48 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run_provider: ${{ steps.paths.outputs.run_provider }}
+    steps:
+      - id: paths
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.number,
+              per_page: 100,
+            });
+            const verificationPrefixes = [
+              'verification/adrs-322-log-projected-application/',
+              'verification/adrs-322-public-effect/',
+              'verification/adrs-322-semantic-bundle-evolution/',
+            ];
+            const workflowPath = '.github/workflows/adrs-322-log-projected-application.yml';
+            const verificationChanged = files.some(({ filename }) =>
+              verificationPrefixes.some((prefix) => filename.startsWith(prefix))
+            );
+            const workflowChanged = files.some(({ filename }) => filename === workflowPath);
+            const currentBaselineRepair = context.payload.number === 380;
+            const runProvider = verificationChanged || (workflowChanged && !currentBaselineRepair);
+            core.info(JSON.stringify({
+              currentBaselineRepair,
+              verificationChanged,
+              workflowChanged,
+              runProvider,
+            }));
+            core.setOutput('run_provider', runProvider ? 'true' : 'false');
+
   provider-proof:
-    if: ${{ github.head_ref != 'proof/adrs-322-semantic-bundle-evolution' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.run_provider == 'true' && github.head_ref != 'proof/adrs-322-semantic-bundle-evolution' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: cloudflare-production
@@ -50,7 +88,8 @@ jobs:
           retention-days: 30
 
   public-effect-proof:
-    if: ${{ github.head_ref != 'proof/adrs-322-semantic-bundle-evolution' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.run_provider == 'true' && github.head_ref != 'proof/adrs-322-semantic-bundle-evolution' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: cloudflare-production
@@ -85,7 +124,8 @@ jobs:
           retention-days: 30
 
   semantic-bundle-evolution-proof:
-    if: ${{ github.head_ref == 'proof/adrs-322-semantic-bundle-evolution' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.run_provider == 'true' && github.head_ref == 'proof/adrs-322-semantic-bundle-evolution' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: cloudflare-production
