@@ -33,4 +33,4 @@
 {"deps":["nodejs","artifact-assembly"],"kind":"check","name":"presentation-a2ui-one-html-completion","script":"verification/presentation-a2ui-one-html/verify.mjs check"}
 {"deps":["nodejs","artifact-assembly"],"kind":"check","name":"accounting-a2ui-lock","script":"verification/accounting-a2ui/check.mjs"}
 {"deps":["nodejs","artifact-assembly"],"kind":"check","name":"all-head-merge-closure","script":"verification/head-merge/check.mjs"}
-{"deps":["nodejs"],"kind":"check","name":"uiops-207-377-exact-tree-set-contract","script":"verification/uiops-207-377-exact-tree-set/contract-selftest.mjs"}
+{"deps":["git","nodejs"],"kind":"check","name":"uiops-207-377-exact-tree-set-contract","script":"verification/uiops-207-377-exact-tree-set/contract-selftest.mjs"}
