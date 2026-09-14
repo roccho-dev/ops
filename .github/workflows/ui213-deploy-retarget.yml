@@ -1,0 +1,33 @@
+name: UI213 deploy retarget
+
+on:
+  push:
+    branches: [proposals]
+    paths:
+      - .github/workflows/ui213-deploy-retarget.yml
+
+permissions:
+  contents: write
+
+jobs:
+  retarget:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Retarget exact deploy and remove this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=.github/workflows/ui213-direct-proof-deploy.yml
+          sed -i 's/ui213-deploy-5bf45bf7/ui213-deploy-80985bd4/g; s/5bf45bf7e2740bec88002f2d6197a4ee2938ef61/80985bd421e88803781487ee351c5df456058648/g' "$f"
+          grep -q '/ui213-deploy-80985bd4' "$f"
+          grep -q 'UI_SHA: 80985bd421e88803781487ee351c5df456058648' "$f"
+          ! grep -q '5bf45bf7e2740bec88002f2d6197a4ee2938ef61' "$f"
+          git rm .github/workflows/ui213-deploy-retarget.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add "$f"
+          git commit -m 'proof: retarget UI213 deploy to registry-fixed head'
+          git push origin HEAD:proposals
