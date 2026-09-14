@@ -64,6 +64,10 @@ const valid = {
 
 assert.deepEqual(validateGateInput(structuredClone(valid)), valid);
 assert.throws(() => validateGateInput({ ...valid, gate: "other/1" }), /gate id mismatch/u);
+assert.throws(() => validateGateInput({
+  ...valid,
+  mobileAgent: { ...valid.mobileAgent, shadow: true },
+}), /mobileAgent fields changed/u);
 assert.throws(() => validateGateInput({ ...valid, ui: { ...valid.ui, artifactDigest: "bad" } }), /sha256 digest/u);
 assert.throws(() => validateGateInput({ ...valid, ops: { ...valid.ops, pr: 0 } }), /positive integer/u);
 assert.throws(() => validateGateInput({ ...valid, verifiers: { gate: valid.verifiers.gate } }), /fields changed/u);
@@ -89,6 +93,11 @@ assert.throws(() => parseCli([
 assert.throws(() => assertExternalFreshWorkRoot("/tmp/ops/work", { ops: "/tmp/ops" }), /outside ops repository/u);
 assert.doesNotThrow(() => assertExternalFreshWorkRoot("/tmp/work", { ops: "/tmp/ops", ui: "/tmp/ui" }));
 
+const gateSource = readFileSync(join(here, "verify.mjs"), "utf8");
+assert.match(gateSource, /gate runner must execute from the exact OPS checkout/u);
+assert.match(gateSource, /executed gate runner bytes differ from the exact OPS blob/u);
+assert.match(gateSource, /repository identity changed during proof/u);
+assert.match(gateSource, /receiptSha256/u);
 for (const source of [
   join(here, "verify.mjs"),
   join(here, "..", "presentation-shared-visual", "verify.mjs"),

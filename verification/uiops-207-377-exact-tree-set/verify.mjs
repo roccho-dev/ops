@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   GATE_ID,
   RECEIPT_BASENAME,
@@ -16,6 +17,13 @@ import {
 const options = parseCli(process.argv.slice(2));
 const inputBytes = readFileSync(options.input);
 const input = validateGateInput(JSON.parse(inputBytes.toString("utf8")));
+const runningVerifier = resolve(fileURLToPath(import.meta.url));
+const expectedRunningVerifier = resolve(options.opsRoot, input.verifiers.gate.path);
+assert.equal(
+  runningVerifier,
+  expectedRunningVerifier,
+  "gate runner must execute from the exact OPS checkout",
+);
 
 const sha256 = (bytes) => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const git = (root, ...args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
@@ -60,6 +68,11 @@ for (const [name, verifier] of Object.entries(input.verifiers)) {
     `${name} verifier blob mismatch`,
   );
 }
+assert.equal(
+  git(options.opsRoot, "hash-object", runningVerifier),
+  input.verifiers.gate.blob,
+  "executed gate runner bytes differ from the exact OPS blob",
+);
 
 const uiArtifactBytes = readFileSync(options.uiArtifact);
 const opsReceiptBytes = readFileSync(options.opsReceipt);
@@ -76,8 +89,20 @@ execFileSync(process.execPath, [
   "--work-root", presentationWorkRoot,
 ], { cwd: options.opsRoot, stdio: "pipe" });
 const presentationReceiptPath = join(presentationWorkRoot, "presentation-shared-visual.receipt.json");
-const presentationReceipt = JSON.parse(readFileSync(presentationReceiptPath, "utf8"));
+const presentationReceiptBytes = readFileSync(presentationReceiptPath);
+const presentationReceipt = JSON.parse(presentationReceiptBytes.toString("utf8"));
 assert.equal(presentationReceipt.status, "PASS", "presentation shared visual proof failed");
+assert.equal(presentationReceipt.repositories.mobileAgent.head, input.mobileAgent.head);
+assert.equal(presentationReceipt.repositories.mobileAgent.tree, input.mobileAgent.tree);
+assert.equal(presentationReceipt.repositories.ui.head, input.ui.head);
+assert.equal(presentationReceipt.repositories.ui.tree, input.ui.tree);
+
+const observedAfterProof = {
+  mobileAgent: assertRepository(options.mobileAgentRoot, input.mobileAgent, "mobileAgent after proof"),
+  ops: assertRepository(options.opsRoot, input.ops, "ops after proof"),
+  ui: assertRepository(options.uiRoot, input.ui, "ui after proof"),
+};
+assert.deepEqual(observedAfterProof, observed, "repository identity changed during proof");
 
 const receipt = {
   schema: RECEIPT_SCHEMA,
@@ -100,6 +125,8 @@ const receipt = {
       schema: presentationReceipt.schema,
       status: presentationReceipt.status,
       receiptPath: "presentation-shared-visual/presentation-shared-visual.receipt.json",
+      receiptSha256: sha256(presentationReceiptBytes),
+      receiptBytes: presentationReceiptBytes.length,
     },
   },
   invalidation: "any input, head, tree, artifact, receipt, check identity, contract version, or verifier blob change requires a new full run",

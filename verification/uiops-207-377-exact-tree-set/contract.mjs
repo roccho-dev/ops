@@ -80,6 +80,7 @@ export function validateGateInput(value) {
     label: "mobileAgent",
     repository: "roccho-dev/mobile-agent",
   });
+  exactKeys(input.mobileAgent, ["checkIdentity", "head", "repository", "tree"], "mobileAgent");
 
   validateRepo(input.ops, {
     label: "ops",

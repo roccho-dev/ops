@@ -13,9 +13,11 @@ It is evidence, not authority, and cannot replace either Issue, PR review, or Us
 
 The canonical input schema is `uiops-207-377-exact-tree-set.input/1`. It requires exact UI, OPS, and mobile-agent repository identities; UI and OPS PR/base/head/tree values; check identities; UI artifact and OPS consumer-receipt digests; UI core-port and adapter contract versions; the OPS policy-app contract version; and exact blobs for both verifier files.
 
-The input does not hard-code an unaccepted UI candidate. The final UI values must come from the accepted UI PR handoff. Any missing or mismatched field is Red.
+The input does not hard-code an unaccepted UI candidate. The final UI values must come from the accepted UI PR handoff. Any missing, extra, or mismatched field is Red.
 
 ## Invocation
+
+The runner itself must be executed from the exact OPS checkout named by the input. A copied or shadow runner is Red even when it points at an otherwise exact checkout.
 
 ```text
 node verification/uiops-207-377-exact-tree-set/verify.mjs \
@@ -28,7 +30,9 @@ node verification/uiops-207-377-exact-tree-set/verify.mjs \
   --work-root <nonexistent-path-outside-all-repositories>
 ```
 
-The runner verifies clean checkouts, origin repository identities, exact heads and trees, base ancestry, verifier blobs, artifact bytes, receipt bytes, and the delegated presentation proof. It creates the work root exclusively and never removes it. Partial or failed evidence is retained for the caller to inspect and dispose of outside the reusable verifier.
+The runner verifies clean checkouts, origin repository identities, exact heads and trees, base ancestry, its own path and bytes, delegated verifier blobs, artifact bytes, receipt bytes, and the delegated presentation proof. It rechecks all repositories after the proof and rejects any dirty or changed checkout. It creates the work root exclusively and never removes it. Partial or failed evidence is retained for the caller to inspect and dispose of outside the reusable verifier.
+
+The final receipt binds the canonical input digest, exact tree set, consumed artifact and receipt bytes, verifier identities, and the delegated proof receipt digest and byte count.
 
 ## Green and invalidation
 
