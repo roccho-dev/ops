@@ -18,9 +18,40 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      require_receipt: ${{ steps.paths.outputs.require_receipt }}
+    steps:
+      - id: paths
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.number,
+              per_page: 100,
+            });
+            const productPrefixes = [
+              'verification/mobile-agent-preset-app/',
+              'verification/mobile-agent-preset-url-dod/',
+              'verification/mobile-agent-live-bootstrap/',
+              'verification/mobile-agent-seq-carrier/',
+            ];
+            const productChanged = files.some(({ filename }) =>
+              productPrefixes.some((prefix) => filename.startsWith(prefix))
+            );
+            core.info(JSON.stringify({ productChanged }));
+            core.setOutput('require_receipt', productChanged ? 'true' : 'false');
+
   gate:
+    needs: changes
+    if: ${{ needs.changes.outputs.require_receipt == 'true' }}
     name: gate
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -45,21 +76,25 @@ jobs:
         run: |
           set -euo pipefail
           remote="https://github.com/$GITHUB_REPOSITORY.git"
+          accepted="$RUNNER_TEMP/accepted"
+          test ! -e "$accepted"
+          mkdir "$accepted"
+          git -C "$accepted" init --quiet
+          git -C "$accepted" remote add origin "$remote"
           for attempt in $(seq 1 120); do
-            rm -rf "$RUNNER_TEMP/accepted"
-            if git clone --quiet --depth=1 --branch accepted/mobile-agent-public-url \
-              "$remote" "$RUNNER_TEMP/accepted" 2>/dev/null; then
-              receipt="$RUNNER_TEMP/accepted/accepted/public-url-receipt.json"
-              if [ -f "$receipt" ]; then
-                receipt_sha="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["candidateSha"])' "$receipt")"
-                if [ "$receipt_sha" = "$CANDIDATE_SHA" ]; then
-                  python3 trusted/tools/check-mobile-agent-public-url.py check \
-                    --contract trusted/verification/mobile-agent-public-url/contract.json \
-                    --receipt "$receipt" \
-                    --candidate-sha "$CANDIDATE_SHA" \
-                    --out "$RUNNER_TEMP/required-public-url-receipt.json"
-                  exit 0
-                fi
+            receipt="$RUNNER_TEMP/public-url-receipt-$attempt.json"
+            if git -C "$accepted" fetch --quiet --depth=1 origin \
+              refs/heads/accepted/mobile-agent-public-url 2>/dev/null &&
+              git -C "$accepted" show FETCH_HEAD:accepted/public-url-receipt.json \
+                > "$receipt" 2>/dev/null; then
+              receipt_sha="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["candidateSha"])' "$receipt")"
+              if [ "$receipt_sha" = "$CANDIDATE_SHA" ]; then
+                python3 trusted/tools/check-mobile-agent-public-url.py check \
+                  --contract trusted/verification/mobile-agent-public-url/contract.json \
+                  --receipt "$receipt" \
+                  --candidate-sha "$CANDIDATE_SHA" \
+                  --out "$RUNNER_TEMP/required-public-url-receipt.json"
+                exit 0
               fi
             fi
             sleep 10

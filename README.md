@@ -22,6 +22,10 @@ receipts before product repositories adopt the same contract.
 - `ops` executes package obligations and emits non-authority evidence.
 - package receipts, GitHub workflows, generated artifacts, and this README do not
   mint accepted meaning or `organization-active` admission.
+- README.md is a checked artifact; its checked text separates handwritten repository
+  documentation from generated evidence and projections.
+- README.md is not an independent authority; accepted meaning remains in ADRS and
+  the exact governance release identified by repository inputs.
 
 ## Inputs
 

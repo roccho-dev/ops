@@ -5,11 +5,29 @@ on:
   push:
     branches: [proposals]
 
+permissions:
+  contents: read
+
 jobs:
   flake-check:
     runs-on: ubuntu-24.04
+    env:
+      EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind exact Git head and historical fixture provenance
+        run: |
+          set -euo pipefail
+          actual_head="$(git rev-parse HEAD)"
+          actual_tree="$(git rev-parse HEAD^{tree})"
+          test "$actual_head" = "$EXPECTED_HEAD"
+          node packages/ops-package-responses/tests/historical-provenance.mjs | tee historical-git-provenance.json
+          printf '{"actualHead":"%s","actualTree":"%s","expectedHead":"%s","status":"PASS"}\n' \
+            "$actual_head" "$actual_tree" "$EXPECTED_HEAD" | tee exact-head-receipt.json
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
@@ -23,10 +41,13 @@ jobs:
             exit 1
           fi
           tail -n 80 "$log"
-      - name: Upload flake check log
+      - name: Upload flake check evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nix-flake-check-log
-          path: nix-flake-check.log
+          name: nix-flake-check-evidence
+          path: |
+            exact-head-receipt.json
+            historical-git-provenance.json
+            nix-flake-check.log
           if-no-files-found: ignore
