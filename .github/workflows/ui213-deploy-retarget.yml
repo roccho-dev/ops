@@ -31,3 +31,4 @@ jobs:
           git add "$f"
           git commit -m 'proof: retarget UI213 deploy to registry-fixed head'
           git push origin HEAD:proposals
+# trigger: 80985bd4
