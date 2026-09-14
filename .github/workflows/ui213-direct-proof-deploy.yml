@@ -55,14 +55,20 @@ jobs:
             node tests/check-semantic-map-legacy-source-retirement.mjs
           )
           (cd "$ui" && node apps/artifact-shell/scripts/build-publication.mjs --out="$publication")
-          python3 - "$publication/artifact-manifest.json" "$GITHUB_ENV" <<'PY'
+          mapfile -t meta < <(python3 - "$publication/artifact-manifest.json" <<'PY'
           import json,sys
           m=json.load(open(sys.argv[1],encoding='utf-8'))
           assert m['schema']=='artifact-shell-publication-artifact/2'
-          tree=m['treeDigest']; tree_id=tree.removeprefix('sha256:')
-          with open(sys.argv[2],'a',encoding='utf-8') as out:
-              out.write(f"TREE_DIGEST={tree}\nTREE_ID={tree_id}\nEXPECTED_FILES={len(m['files'])}\n")
+          tree=m['treeDigest']
+          print(tree)
+          print(tree.removeprefix('sha256:'))
+          print(len(m['files']))
           PY
+          )
+          TREE_DIGEST="${meta[0]}"
+          TREE_ID="${meta[1]}"
+          EXPECTED_FILES="${meta[2]}"
+          printf 'TREE_DIGEST=%s\nTREE_ID=%s\nEXPECTED_FILES=%s\n' "$TREE_DIGEST" "$TREE_ID" "$EXPECTED_FILES" >> "$GITHUB_ENV"
           mkdir -p "$site/releases/$TREE_ID"
           cp -a "$publication/." "$site/releases/$TREE_ID/"
 
