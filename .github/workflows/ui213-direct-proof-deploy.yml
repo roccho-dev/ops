@@ -13,14 +13,14 @@ jobs:
     if: >-
       github.event.issue.number == 230 &&
       github.event.comment.user.login == github.repository_owner &&
-      github.event.comment.body == '/ui213-deploy-5bf45bf7'
+      github.event.comment.body == '/ui213-deploy-80985bd4'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
       name: cloudflare-production
     env:
       UI_REPO: roccho-dev/ui
-      UI_SHA: 5bf45bf7e2740bec88002f2d6197a4ee2938ef61
+      UI_SHA: 80985bd421e88803781487ee351c5df456058648
       PROJECT: stg-artifact-runtime
     steps:
       - uses: actions/checkout@v4
@@ -133,7 +133,7 @@ jobs:
               assert len(data)==item['bytes'], item['path']
               assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256'], item['path']
               checked+=1
-          receipt={'schema':'ui213-public-readback/1','status':'PASS','uiSha':'5bf45bf7e2740bec88002f2d6197a4ee2938ef61','treeDigest':m['treeDigest'],'files':checked,'rootUrl':root}
+          receipt={'schema':'ui213-public-readback/1','status':'PASS','uiSha':'80985bd421e88803781487ee351c5df456058648','treeDigest':m['treeDigest'],'files':checked,'rootUrl':root}
           Path(out).write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
           print(json.dumps(receipt,sort_keys=True,separators=(',',':')))
           PY
@@ -199,7 +199,7 @@ jobs:
                   receipts.append({'feature':feature,'pattern':expected[feature],'records':proof['mounted']['records'],'url':page.url,'iframe':0,'svgVisible':True})
                   page.close()
               context.close(); browser.close()
-          receipt={'schema':'ui213-public-browser-proof/1','status':'PASS','uiSha':'5bf45bf7e2740bec88002f2d6197a4ee2938ef61','transport':'#data','features':receipts}
+          receipt={'schema':'ui213-public-browser-proof/1','status':'PASS','uiSha':'80985bd421e88803781487ee351c5df456058648','transport':'#data','features':receipts}
           out.write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
           print(json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(',',':')))
           PY
