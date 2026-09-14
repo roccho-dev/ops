@@ -46,7 +46,7 @@ jobs:
           from pathlib import Path
           root,expected_tree,expected_count,out=sys.argv[1],sys.argv[2],int(sys.argv[3]),Path(sys.argv[4])
           def get(url):
-              return subprocess.check_output(['curl','-4','--fail','--silent','--show-error','--retry','5','--retry-all-errors','--connect-timeout','10','--max-time','30',url])
+              return subprocess.check_output(['curl','-4','--location','--max-redirs','3','--fail','--silent','--show-error','--retry','5','--retry-all-errors','--connect-timeout','10','--max-time','30',url])
           manifest=json.loads(get(root+'/artifact-manifest.json'))
           assert manifest['treeDigest']==expected_tree,(manifest['treeDigest'],expected_tree)
           assert len(manifest['files'])==expected_count,(len(manifest['files']),expected_count)
@@ -57,7 +57,7 @@ jobs:
               return item['path']
           with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
               checked=list(pool.map(check,manifest['files']))
-          receipt={'schema':'ui213-public-readback/1','status':'PASS','uiSha':'368fa24249661af7fb99709ede6a615e86884e30','treeDigest':expected_tree,'files':len(checked),'rootUrl':root,'network':'IPv4'}
+          receipt={'schema':'ui213-public-readback/1','status':'PASS','uiSha':'368fa24249661af7fb99709ede6a615e86884e30','treeDigest':expected_tree,'files':len(checked),'rootUrl':root,'network':'IPv4','redirects':'follow'}
           out.write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
           print(json.dumps(receipt,sort_keys=True,separators=(',',':')))
           PY
