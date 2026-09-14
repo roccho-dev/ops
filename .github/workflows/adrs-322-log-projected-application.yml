@@ -36,20 +36,11 @@ jobs:
               'verification/adrs-322-public-effect/',
               'verification/adrs-322-semantic-bundle-evolution/',
             ];
-            const workflowPath = '.github/workflows/adrs-322-log-projected-application.yml';
             const verificationChanged = files.some(({ filename }) =>
               verificationPrefixes.some((prefix) => filename.startsWith(prefix))
             );
-            const workflowChanged = files.some(({ filename }) => filename === workflowPath);
-            const currentBaselineRepair = context.payload.number === 380;
-            const runProvider = verificationChanged || (workflowChanged && !currentBaselineRepair);
-            core.info(JSON.stringify({
-              currentBaselineRepair,
-              verificationChanged,
-              workflowChanged,
-              runProvider,
-            }));
-            core.setOutput('run_provider', runProvider ? 'true' : 'false');
+            core.info(JSON.stringify({ verificationChanged }));
+            core.setOutput('run_provider', verificationChanged ? 'true' : 'false');
 
   provider-proof:
     needs: changes

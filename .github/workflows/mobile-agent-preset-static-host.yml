@@ -3,15 +3,11 @@ name: Mobile Agent preset static host
 on:
   pull_request:
     paths:
-      - '.github/workflows/mobile-agent-preset-static-host.yml'
       - 'verification/mobile-agent-preset-app/**'
-      - 'ci.intent.v1.jsonl'
   push:
     branches: [proposals]
     paths:
-      - '.github/workflows/mobile-agent-preset-static-host.yml'
       - 'verification/mobile-agent-preset-app/**'
-      - 'ci.intent.v1.jsonl'
   issue_comment:
     types: [created]
 
