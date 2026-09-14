@@ -65,3 +65,95 @@ jobs:
           if (result.error) throw result.error;
           process.exit(typeof result.status === 'number' ? result.status : 1);
           NODE
+
+      - name: Temporary approved Workers cleanup
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          node <<'NODE'
+          const targets = [
+            'stg-cap',
+            'stg-cap02',
+            'stg-log-projected-semantic-d7d7d21e7d',
+            'stg-mobile-agent',
+            'stg-waku-init',
+            'lazarv-rsc-app',
+            'react-ssr-worker-reference',
+            'rsc-flows-demo',
+            'vite-rsc-app',
+            'vite-rsc-cloudflare-poc',
+            'vite-rsc-official',
+            'vite-rsc-ssr-app',
+            'waku-init',
+            'waku-init-app',
+            'waku-init-prod',
+            'waku-init-stg',
+            'waku-project',
+            'pglite-inmemory-prod',
+            'pglite-inmemory-stg',
+            'poc-redwoodsdk-duckdb',
+            'redwoodsdk-duckdb',
+            'redwoodsdk-init-stg',
+            'ancient-dust-ddfd',
+            'console-test-worker',
+            'core',
+            'gpt_plugin_api',
+            'oauth-test',
+            'opennext-stg',
+            'pages',
+            'shiorin-diary-stg',
+            'src',
+            'todo',
+            'trip',
+            'wyz13055',
+            'youtube',
+          ];
+
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          if (!account || !token) throw new Error('Cloudflare credentials are required');
+          const base = `https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts`;
+          const headers = { Authorization: `Bearer ${token}` };
+
+          const readWorkers = async () => {
+            const response = await fetch(base, { headers });
+            const body = await response.json();
+            if (!response.ok || body.success !== true || !Array.isArray(body.result)) {
+              throw new Error(`Workers list failed: HTTP ${response.status} ${JSON.stringify(body)}`);
+            }
+            return body.result.map(({ id, created_on, modified_on }) => ({ id, created_on, modified_on }));
+          };
+
+          (async () => {
+            const before = await readWorkers();
+            const beforeIds = new Set(before.map((worker) => worker.id));
+            const missing = targets.filter((id) => !beforeIds.has(id));
+            if (missing.length) throw new Error(`Approved targets missing before delete: ${JSON.stringify(missing)}`);
+            console.log(`WORKERS_DELETE_TARGETS ${JSON.stringify(targets)}`);
+
+            for (const id of targets) {
+              const response = await fetch(`${base}/${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+                headers,
+              });
+              const text = await response.text();
+              let body = null;
+              if (text) {
+                try { body = JSON.parse(text); } catch { body = text; }
+              }
+              if (!response.ok || (body && typeof body === 'object' && body.success === false)) {
+                throw new Error(`Worker delete failed: ${id} HTTP ${response.status} ${JSON.stringify(body)}`);
+              }
+              console.log(`DELETED ${id}`);
+            }
+
+            const after = await readWorkers();
+            const afterIds = new Set(after.map((worker) => worker.id));
+            const survivors = targets.filter((id) => afterIds.has(id));
+            if (survivors.length) throw new Error(`Deleted targets still present: ${JSON.stringify(survivors)}`);
+            console.log(`WORKERS_AFTER ${JSON.stringify(after)}`);
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
