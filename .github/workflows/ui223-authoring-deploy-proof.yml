@@ -1,0 +1,260 @@
+name: UI223 direct authoring deploy proof
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-proof:
+    if: >-
+      github.event.issue.number == 230 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == '/ui223-authoring-deploy-a18bc724'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: cloudflare-production
+    env:
+      UI_REPO: roccho-dev/ui
+      UI_SHA: a18bc7245eae09c29d4e14765d299c556f638a36
+      PROJECT: stg-artifact-runtime
+      ALIAS_URL: https://stg-artifact-runtime.pages.dev
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Materialize and prove exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          publication="$RUNNER_TEMP/publication"
+          site="$RUNNER_TEMP/site"
+          git clone --filter=blob:none --no-checkout "https://github.com/$UI_REPO.git" "$ui"
+          git -C "$ui" fetch --depth=1 origin "$UI_SHA"
+          git -C "$ui" checkout --detach "$UI_SHA"
+          test "$(git -C "$ui" rev-parse HEAD)" = "$UI_SHA"
+          (
+            cd "$ui"
+            node packages/source-compiler/tests/boundary.mjs
+            node packages/url-module/tests/run.mjs
+            node packages/semantic-map/tests/run.mjs
+            node apps/artifact-shell/scripts/build-registry.mjs --check
+            node apps/artifact-shell/tests/publication.mjs
+            node tests/check-semantic-map-migration.mjs
+            node apps/artifact-shell/tests/semantic-map-capability.mjs
+            node tests/check-semantic-map-legacy-source-retirement.mjs
+            node apps/artifact-shell/scripts/build-publication.mjs --out="$publication"
+          )
+          python3 - "$publication/artifact-manifest.json" "$GITHUB_ENV" <<'PY'
+          import json,sys
+          m=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert m['schema']=='artifact-shell-publication-artifact/2'
+          tree=m['treeDigest']; tree_id=tree.removeprefix('sha256:')
+          with open(sys.argv[2],'a',encoding='utf-8') as out:
+              out.write(f'TREE_DIGEST={tree}\nTREE_ID={tree_id}\nEXPECTED_FILES={len(m["files"])}\n')
+          PY
+          mkdir -p "$site/releases/${TREE_ID:-placeholder}"
+          tree_id="$(python3 -c 'import json; print(json.load(open("'$publication'/artifact-manifest.json"))["treeDigest"].removeprefix("sha256:"))')"
+          rm -rf "$site/releases"
+          mkdir -p "$site/releases/$tree_id"
+          cp -a "$publication/." "$site/releases/$tree_id/"
+          printf '/ /releases/%s/ 302\n' "$tree_id" > "$site/_redirects"
+
+      - name: Validate Cloudflare project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT"
+          code="$(curl --silent --show-error --output "$RUNNER_TEMP/project.json" --write-out '%{http_code}' --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api")"
+          test "$code" = 200
+          python3 - "$RUNNER_TEMP/project.json" "$PROJECT" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert x.get('success') is True
+          assert x['result']['name']==sys.argv[2]
+          assert x['result']['production_branch']=='proposals'
+          PY
+
+      - name: Deploy exact candidate
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/site" --project-name "$PROJECT" --branch proposals --commit-hash "$UI_SHA" --commit-message "UI #223 direct authoring $TREE_ID" 2>&1)"
+          printf '%s\n' "$output"
+          urls="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | awk '!seen[$0]++')"
+          deployment_url="$(printf '%s\n' "$urls" | grep -v -F "https://$PROJECT.pages.dev" | head -n1 || true)"
+          if [ -z "$deployment_url" ]; then deployment_url="$(printf '%s\n' "$urls" | head -n1)"; fi
+          test -n "$deployment_url"
+          echo "DEPLOYMENT_URL=$deployment_url" >> "$GITHUB_ENV"
+          echo "ROOT_URL=$deployment_url/releases/$TREE_ID" >> "$GITHUB_ENV"
+          printf '%s\n' "$deployment_url" > "$RUNNER_TEMP/deployment-url.txt"
+
+      - name: Public root and all-file readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/publication" "$DEPLOYMENT_URL" "$ALIAS_URL" "$TREE_ID" "$RUNNER_TEMP/readback.json" <<'PY'
+          import concurrent.futures,hashlib,json,subprocess,sys,time
+          from pathlib import Path
+          local,deployment,alias,tree_id,out=Path(sys.argv[1]),sys.argv[2].rstrip('/'),sys.argv[3].rstrip('/'),sys.argv[4],Path(sys.argv[5])
+          release=f'{deployment}/releases/{tree_id}'
+          expected=f'/releases/{tree_id}/'
+          def curl(args): return subprocess.check_output(['curl','-4','--silent','--show-error','--connect-timeout','10','--max-time','30',*args])
+          def ready(base):
+              last=None
+              for _ in range(20):
+                  try:
+                      text=curl(['--output','/dev/null','--write-out','%{http_code}\t%{redirect_url}',base+'/']).decode()
+                      code,target=text.split('\t',1)
+                      if code=='302' and target.endswith(expected): return {'status':302,'redirect':target}
+                      last=(code,target)
+                  except Exception as exc: last=repr(exc)
+                  time.sleep(1)
+              raise AssertionError((base,last))
+          roots={'deployment':ready(deployment),'alias':ready(alias)}
+          manifest=json.loads((local/'artifact-manifest.json').read_text(encoding='utf-8'))
+          remote=json.loads(curl(['--location','--fail','--retry','5','--retry-all-errors',release+'/artifact-manifest.json']))
+          assert remote==manifest
+          def check(item):
+              data=curl(['--location','--max-redirs','3','--fail','--retry','5','--retry-all-errors',release+'/'+item['path']])
+              assert len(data)==item['bytes'],item['path']
+              assert 'sha256:'+hashlib.sha256(data).hexdigest()==item['sha256'],item['path']
+              return item['path']
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool: checked=list(pool.map(check,manifest['files']))
+          receipt={'schema':'ui223-public-readback/1','status':'PASS','uiSha':sys.argv[0] if False else 'a18bc7245eae09c29d4e14765d299c556f638a36','treeDigest':manifest['treeDigest'],'files':len(checked),'roots':roots,'deploymentUrl':deployment,'aliasUrl':alias}
+          out.write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          print(json.dumps(receipt,sort_keys=True,separators=(',',':')))
+          PY
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-cache-dir 'playwright==1.57.0'
+          python3 -m playwright install --with-deps chromium
+
+      - name: Prove direct hydration and authoring in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          ui="$RUNNER_TEMP/ui"
+          node --input-type=module - "$ui" "$ROOT_URL" "$RUNNER_TEMP/urls.json" <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          const [ui,root,out]=process.argv.slice(2);
+          const { createUrlModuleUrl }=await import(pathToFileURL(path.join(ui,'packages/url-module/src/index.mjs')).href);
+          const urls={};
+          for (const id of ['graph','map','seq']) {
+            const text=fs.readFileSync(path.join(ui,'examples',id,'example.jsonl'),'utf8');
+            urls[id]=await createUrlModuleUrl({base:`${root}/adapters/${id}/`,fragment:'data',value:text});
+          }
+          fs.writeFileSync(out,JSON.stringify(urls));
+          NODE
+          python3 - "$ROOT_URL" "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/browser-proof.json" "$RUNNER_TEMP" <<'PY'
+          import json,socket,subprocess,sys,time
+          from pathlib import Path
+          from urllib.parse import urlparse
+          from playwright.sync_api import sync_playwright
+          root,urls_path,out_path,temp=sys.argv[1],Path(sys.argv[2]),Path(sys.argv[3]),Path(sys.argv[4])
+          urls=json.loads(urls_path.read_text(encoding='utf-8'))
+          expected_records={'graph':11,'map':9,'seq':17}; expected_pattern={'graph':'graph/1','map':'map/1','seq':'seq/1'}
+          host=urlparse(root).hostname; ip=socket.gethostbyname(host)
+          def poll(read, accept, message, timeout=20):
+              deadline=time.monotonic()+timeout; last=None
+              while time.monotonic()<deadline:
+                  last=read()
+                  if accept(last): return last
+                  time.sleep(.05)
+              raise AssertionError((message,last))
+          def drag(page,start,end):
+              page.mouse.move(start['x'],start['y']); page.mouse.down(); page.mouse.move(end['x'],end['y'],steps=12); page.mouse.up()
+          receipts=[]
+          with sync_playwright() as p:
+              browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage',f'--host-resolver-rules=MAP {host} {ip}'])
+              context=browser.new_context(viewport={'width':1280,'height':900})
+              for feature,url in urls.items():
+                  source=subprocess.check_output(['curl','-4','--location','--fail','--silent',url.split('#',1)[0]]).decode('utf-8')
+                  assert '<main id="feature"></main>' in source and '<svg' not in source,(feature,'not empty CSR host')
+                  page=context.new_page(); errors=[]; failures=[]; bad=[]
+                  page.on('pageerror',lambda e,b=errors:b.append(str(e)))
+                  page.on('requestfailed',lambda r,b=failures:b.append((r.url,r.failure)))
+                  page.on('response',lambda r,b=bad:b.append((r.url,r.status)) if r.status>=400 else None)
+                  response=page.goto(url,wait_until='networkidle',timeout=30000); page.wait_for_timeout(1000)
+                  assert response and response.ok
+                  assert page.locator('html').get_attribute('data-status')=='pass',(feature,errors,failures,bad)
+                  proof=page.evaluate('() => globalThis.uiFeatureProof')
+                  assert proof['feature']['id']==feature and proof['mounted']['pattern']==expected_pattern[feature]
+                  assert proof['mounted']['records']==expected_records[feature] and proof['mounted']['authoring'] is True
+                  assert page.evaluate('() => globalThis.semanticMapSite?.ready') is True
+                  active=page.evaluate('() => semanticMapSite.editor.adapter.activeList.snapshot()')
+                  assert active['visible'] is True and len(active['items'])>0
+                  active_root=page.locator('[data-maxgraph-active-list]'); box=active_root.bounding_box(); assert box and box['width']>0 and box['height']>0
+                  button=active_root.locator("button[data-active-key^='region:']").first; button.wait_for(state='visible')
+                  key=button.get_attribute('data-active-key'); region_id=key.split(':',1)[1]; button.click()
+                  poll(lambda:page.evaluate('() => semanticMapSite.editor.adapter.selectionSnapshot().regionIds'),lambda ids:region_id in ids,'active-list selection')
+                  assert page.locator('iframe').count()==0
+                  svg=page.locator('.semantic-map-feature-canvas svg').first; assert svg.count()==1
+                  sbox=svg.bounding_box(); assert sbox and sbox['width']>0 and sbox['height']>0
+                  assert '#data=' in page.url and '#smap' not in page.url and 'smap-ref' not in page.url
+                  assert errors==[] and failures==[] and bad==[],(feature,errors,failures,bad)
+                  page.screenshot(path=str(temp/f'ui223-{feature}.png'),full_page=True)
+                  receipts.append({'surface':feature,'status':'PASS','pattern':expected_pattern[feature],'records':expected_records[feature],'activeItems':len(active['items']),'selectionFromList':True,'iframe':0,'ssg':False,'svgVisible':True,'httpFailures':0})
+                  if feature=='graph':
+                      def point(region):
+                          return page.evaluate("""regionId => { const a=semanticMapSite.editor.adapter; const c=a.cellsByRegionId.get(regionId); const s=a.graph.getView().getState(c); const r=a.container.getBoundingClientRect(); if(!c||!s) return null; return {x:r.left+s.x+s.width/2,y:r.top+s.y+s.height/2}; }""",region)
+                      source_point=point('request'); build=point('build'); proof_point=point('proof'); assert source_point and build and proof_point
+                      page.mouse.move(source_point['x'],source_point['y'])
+                      poll(lambda:page.evaluate("() => semanticMapSite.editor.adapter.graph.getPlugin('ConnectionHandler')?.icons?.length ?? 0"),lambda n:n>0,'connect icon')
+                      icon=poll(lambda:page.evaluate("""() => { const a=semanticMapSite.editor.adapter; const i=a.graph.getPlugin('ConnectionHandler')?.icons?.[0]; const r=a.container.getBoundingClientRect(); return i?.bounds ? {x:r.left+i.bounds.x+i.bounds.width/2,y:r.top+i.bounds.y+i.bounds.height/2}:null; }"""),lambda v:isinstance(v,dict),'icon bounds')
+                      baseline=page.evaluate('() => semanticMapSite.editor.snapshot().domain.relations.length')
+                      drag(page,icon,build)
+                      created=poll(lambda:page.evaluate("""() => semanticMapSite.editor.snapshot().domain.relations.find(r => r.from==='request' && r.to==='build' && r.kind==='relates') ?? null"""),lambda v:isinstance(v,dict),'connect relation')
+                      relation_id=created['id']; assert page.evaluate('() => semanticMapSite.editor.snapshot().domain.relations.length')==baseline+1
+                      assert page.evaluate("() => semanticMapSite.editor.store.draftSnapshot().operations.at(-1).type")=='ConnectRegions'
+                      page.evaluate('() => semanticMapSite.editor.undo()')
+                      poll(lambda:page.evaluate('(id) => semanticMapSite.editor.snapshot().domain.relations.some(r => r.id===id)',relation_id),lambda v:v is False,'connect undo')
+                      page.evaluate('() => semanticMapSite.editor.redo()')
+                      poll(lambda:page.evaluate('(id) => semanticMapSite.editor.snapshot().domain.relations.some(r => r.id===id)',relation_id),lambda v:v is True,'connect redo')
+                      bend=poll(lambda:page.evaluate("""id => { const a=semanticMapSite.editor.adapter; const e=a.edgeByRelationId.get(id); if(!e)return null; a.graph.setSelectionCell(e); const h=a.graph.getPlugin('SelectionCellsHandler')?.getHandler(e); const b=h?.bends?.at(-1); const r=a.container.getBoundingClientRect(); return b?.bounds ? {x:r.left+b.bounds.x+b.bounds.width/2,y:r.top+b.bounds.y+b.bounds.height/2}:null; }""",relation_id),lambda v:isinstance(v,dict),'reconnect bend')
+                      drag(page,bend,proof_point)
+                      poll(lambda:page.evaluate('(id) => semanticMapSite.editor.snapshot().domain.relations.find(r=>r.id===id)?.to ?? null',relation_id),lambda v:v=='proof','reconnect')
+                      assert page.evaluate("() => semanticMapSite.editor.store.draftSnapshot().operations.at(-1).type")=='ReconnectRelation'
+                      page.evaluate('() => semanticMapSite.editor.undo()')
+                      poll(lambda:page.evaluate('(id) => semanticMapSite.editor.snapshot().domain.relations.find(r=>r.id===id)?.to ?? null',relation_id),lambda v:v=='build','reconnect undo')
+                      page.evaluate('() => semanticMapSite.editor.redo()')
+                      poll(lambda:page.evaluate('(id) => semanticMapSite.editor.snapshot().domain.relations.find(r=>r.id===id)?.to ?? null',relation_id),lambda v:v=='proof','reconnect redo')
+                      receipts[-1].update({'pointerConnect':True,'pointerReconnect':True,'connectUndoRedo':True,'reconnectUndoRedo':True})
+                  page.close()
+              context.close(); browser.close()
+          receipt={'schema':'ui223-direct-authoring-browser-proof/1','status':'PASS','uiSha':'a18bc7245eae09c29d4e14765d299c556f638a36','transport':'#data','surfaces':receipts}
+          out_path.write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          print(json.dumps(receipt,ensure_ascii=False,sort_keys=True,separators=(',',':')))
+          PY
+
+      - name: Upload proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui223-direct-authoring-proof-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/deployment-url.txt
+            ${{ runner.temp }}/readback.json
+            ${{ runner.temp }}/browser-proof.json
+            ${{ runner.temp }}/ui223-graph.png
+            ${{ runner.temp }}/ui223-map.png
+            ${{ runner.temp }}/ui223-seq.png
+          if-no-files-found: error
+          retention-days: 30
