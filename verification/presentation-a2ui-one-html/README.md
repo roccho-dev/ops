@@ -8,10 +8,23 @@ The locked proof additionally covers a pre-overwrite source-to-generated-output 
 - `evidence/ui-proof-receipt.json`: non-authority UI build/browser facts.
 - `evidence/publication-fixtures.json`: signed-policy and inline/reference URL fixtures.
 - `evidence/enterprise-value-example.*`: signed runtime-consumable customer publication proof.
-- `evidence/assembly-receipt.json`: generic assembly receipt.
+- `evidence/assembly-receipt.json`: tracked generic assembly receipt; read-only verification input.
+- `generated/completion-gates.md`: tracked generated report; read-only verification input.
 - `data/jsonl/criteria.jsonl` and `status.jsonl`: blocking repository gates and current projection.
 - `data/jsonl/open-gates.jsonl`: external infrastructure and compatibility gates that remain explicitly open.
-- `verify.mjs check`: fail-closed internal consistency and stale report check.
-- `verify.mjs reproduce <index.html>`: rebuild in a temporary directory and compare the receipt.
+
+## Commands
+
+```text
+node verification/presentation-a2ui-one-html/verify.mjs check
+node verification/presentation-a2ui-one-html/verify.mjs reproduce <absolute-index.html>
+node verification/presentation-a2ui-one-html/verify.mjs write <absolute-index.html> <fresh-receipt.json> <fresh-report.md>
+```
+
+`check` validates the accepted tracked assembly receipt and report, then uses that valid consumer input to exercise the migration with fresh receipt/report destinations. It proves that the tracked receipt/report bytes remain unchanged and that attempts to use either tracked path as an output fail before writing.
+
+`reproduce` assembles into a fresh retained temporary directory and compares the resulting receipt with the tracked receipt. It performs no cleanup; disposal belongs to a separately authorized enclosing environment.
+
+`write` requires explicit receipt and report paths that do not already exist and are not the tracked evidence paths. It never overwrites, deletes, or cleans tracked evidence. Retry with new output paths after any failure.
 
 `46 / 46 PASS` means the repository-scoped proposal is internally complete. It does **not** claim product completion while the external gates remain `OPEN`.
