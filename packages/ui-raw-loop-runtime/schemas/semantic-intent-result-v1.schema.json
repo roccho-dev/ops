@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:roccho-dev:ops:semantic-intent-result:v1",
+  "title": "Semantic intent result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "intent_id", "local_state", "github_state"],
+  "properties": {
+    "schema": { "const": "semantic-intent.result.v1" },
+    "intent_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "local_state": { "enum": ["accepted", "no_change", "rejected", "failed", "unknown"] },
+    "github_state": { "enum": ["not_started", "pending", "applied", "unknown", "permanent_failure"] },
+    "issue_number": { "type": "integer", "minimum": 1 },
+    "comment_id": { "type": "integer", "minimum": 1 },
+    "receipt_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" }
+  }
+}
