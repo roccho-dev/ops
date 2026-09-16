@@ -23,6 +23,10 @@
       url = "git+https://github.com/nodejs/node?ref=refs/tags/v26.3.0&rev=b7e6a5d37e7a14ef0f2cc95214b95d66c4081415";
       flake = false;
     };
+    controlUi = {
+      url = "github:roccho-dev/ui/11f59ce617a1b9382c49f1de444a6b938ebb687e";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -34,6 +38,7 @@
       conventionGovernance,
       ops-build-defs,
       nodejs-src,
+      controlUi,
       ...
     }:
     let
@@ -60,6 +65,10 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          control-ui-dist = import ./packages/control-ui-dist {
+            pkgs = nixpkgs.legacyPackages.${system};
+            uiControl = controlUi.packages.${system}.control-ui;
+          };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -137,6 +146,33 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
+          control-ui-dist =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+              dist = packages.${system}.control-ui-dist;
+            in
+            pkgs.runCommand "control-ui-dist-check"
+              {
+                nativeBuildInputs = [ pkgs.caddy ];
+              }
+              ''
+                set -euo pipefail
+                mkdir -p "$TMPDIR/state"
+                export CONTROL_STATE_DIR="$TMPDIR/state"
+                export CONTROL_UI_ROOT="${dist}/share/control-ui"
+                caddy validate --config ${dist}/config/Caddyfile --adapter caddyfile
+                test -x ${dist}/bin/caddy
+                test -x ${dist}/bin/cloudflared
+                test -x ${dist}/bin/control-ui-serve
+                test -s ${dist}/share/control-ui/index.html
+                test -s ${dist}/share/control-ui/design.json
+                test -s ${dist}/manifest.json
+                grep -q '/data/control.jsonl' ${dist}/config/Caddyfile
+                grep -q '/data/claims.jsonl' ${dist}/config/Caddyfile
+                test ! -e ${dist}/share/control-ui/data/control.jsonl
+                test ! -e ${dist}/share/control-ui/data/claims.jsonl
+                touch "$out"
+              '';
           semantic-log-runtime-core =
             let
               pkgs = nixpkgs.legacyPackages.${system};
