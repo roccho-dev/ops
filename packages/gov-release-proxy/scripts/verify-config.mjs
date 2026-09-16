@@ -1,57 +1,45 @@
 import assert from "node:assert/strict";
 import {
   CONFIG,
+  PRIVATE_FIXTURE_BINDING,
   PRIVATE_FIXTURE_ROOT_ASSET,
-  PRIVATE_FIXTURE_RELEASE,
-  PUBLIC_RELEASE,
+  PUBLIC_BINDING,
   PUBLIC_ROOT_ASSET,
   configFor,
 } from "../src/assets.mjs";
+import { validateBinding } from "../src/binding.mjs";
 
-assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/3");
-assert.equal(CONFIG.authority, false);
-assert.equal(CONFIG.deliveryModel, "one-root");
-assert.equal(CONFIG.endpoint, "/");
-assert.equal(CONFIG.browserDirectGitHubFetch, false);
-
-assert.equal(PUBLIC_RELEASE.sourceKind, "git-raw");
-assert.equal(PUBLIC_RELEASE.repository, "roccho-dev/governance");
-assert.equal(PUBLIC_RELEASE.visibility, "public");
-assert.match(PUBLIC_RELEASE.targetCommit, /^[0-9a-f]{40}$/u);
-assert.equal(PUBLIC_ROOT_ASSET.requiresCredential, false);
-assert.equal(PUBLIC_ROOT_ASSET.assetId, null);
-assert.equal(PUBLIC_ROOT_ASSET.releaseId, null);
-assert.equal(PUBLIC_ROOT_ASSET.path, "docs/final-scope-purpose-join/selected-universe.jsonl");
-assert.match(
-  PUBLIC_ROOT_ASSET.downloadUrl,
-  /^https:\/\/raw\.githubusercontent\.com\/roccho-dev\/governance\/[0-9a-f]{40}\/docs\/final-scope-purpose-join\/selected-universe\.jsonl$/u,
-);
-
-assert.equal(PRIVATE_FIXTURE_RELEASE.sourceKind, "github-release-asset");
-assert.equal(PRIVATE_FIXTURE_RELEASE.repository, "roccho-dev/adrs");
-assert.equal(PRIVATE_FIXTURE_RELEASE.visibility, "private");
-assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.requiresCredential, true);
-assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.downloadUrl, null);
-assert.ok(Number.isSafeInteger(PRIVATE_FIXTURE_ROOT_ASSET.releaseId) && PRIVATE_FIXTURE_ROOT_ASSET.releaseId > 0);
-assert.ok(Number.isSafeInteger(PRIVATE_FIXTURE_ROOT_ASSET.assetId) && PRIVATE_FIXTURE_ROOT_ASSET.assetId > 0);
-
-for (const asset of [PUBLIC_ROOT_ASSET, PRIVATE_FIXTURE_ROOT_ASSET]) {
-  assert.match(asset.repository, /^[^/]+\/[^/]+$/u);
-  assert.ok(Number.isSafeInteger(asset.bytes) && asset.bytes > 0);
-  assert.match(asset.digest, /^sha256:[0-9a-f]{64}$/u);
-  assert.match(asset.contentType, /^application\/(json|x-ndjson)/u);
-  assert.equal(asset.requiresCredential, asset.visibility === "private");
+for (const binding of [PUBLIC_BINDING, PRIVATE_FIXTURE_BINDING]) {
+  assert.equal(validateBinding(binding).bindingId, binding.bindingId);
+  assert.equal(binding.authority, false);
+  assert.equal(binding.productionCutover, false);
+  assert.equal(binding.endpoint, "/");
+  assert.equal(binding.deliveryModel, "one-root");
+  assert.equal(binding.browserDirectGitHubFetch, false);
 }
 
-assert.equal(configFor().asset, PUBLIC_ROOT_ASSET);
+assert.equal(CONFIG.schema, "ops.govReleaseProxyConfig/4");
+assert.equal(CONFIG.bindingId, PUBLIC_BINDING.bindingId);
+assert.equal(CONFIG.authority, false);
+assert.equal(CONFIG.claimCeiling, "VISUAL_EVALUATION_ONLY");
+assert.equal(CONFIG.productionCutover, false);
+assert.equal(CONFIG.asset, PUBLIC_ROOT_ASSET);
+assert.equal(CONFIG.ui.meaningDigest, CONFIG.asset.digest);
+
+assert.equal(PUBLIC_ROOT_ASSET.sourceKind, "git-raw");
+assert.equal(PUBLIC_ROOT_ASSET.requiresCredential, false);
+assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.sourceKind, "github-release-asset");
+assert.equal(PRIVATE_FIXTURE_ROOT_ASSET.requiresCredential, true);
 assert.equal(configFor({ privateFixtureEnabled: true }).asset, PRIVATE_FIXTURE_ROOT_ASSET);
+
 console.log(JSON.stringify({
   schema: "check-receipt/1",
-  checkId: "ops.gov-release-proxy.config",
+  checkId: "ops.gov-release-proxy.binding",
   status: "PASS",
+  bindingSchema: PUBLIC_BINDING.schema,
+  defaultBindingId: PUBLIC_BINDING.bindingId,
+  localBindingInput: "GOV_RELEASE_BINDING_JSON",
   endpoint: "/",
-  publicUpstream: "exact-git-raw",
-  privateUpstream: "authenticated-release-asset-api",
-  publicAsset: PUBLIC_ROOT_ASSET.name,
-  privateFixtureAsset: PRIVATE_FIXTURE_ROOT_ASSET.name,
+  htmlNdjsonMeaningIdentity: "BOUND",
+  productionCutover: false,
 }));

@@ -1,25 +1,34 @@
-name: Proof selected-universe semantic map 260830
+name: Proof Governance Semantic Map binding replay
 
 on:
   push:
     branches:
-      - proof/selected-universe-semantic-map-260830
+      - refactor/gov-semantic-map-binding-replay-363
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: selected-universe-semantic-map-260830
+  group: gov-semantic-map-binding-replay-363
   cancel-in-progress: false
 
 jobs:
   deploy-and-readback:
     runs-on: ubuntu-24.04
     environment: cloudflare-production
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: roccho-dev/ui
+          ref: 7ea789ebae6c2c4452087b97c898b679603a6ade
+          path: ui-source
           fetch-depth: 1
           persist-credentials: false
 
@@ -31,7 +40,7 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Verify exact branch and inputs
+      - name: Verify exact inputs
         shell: bash
         env:
           CANDIDATE_SHA: ${{ github.sha }}
@@ -39,20 +48,19 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF_NAME" = "proof/selected-universe-semantic-map-260830"
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
-          test -s verification/selected-universe-semantic-map/source.json
-          test -s verification/selected-universe-semantic-map/selected-universe.jsonl
+          test "$(git -C ui-source rev-parse HEAD)" = "7ea789ebae6c2c4452087b97c898b679603a6ade"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$CLOUDFLARE_API_TOKEN"
 
-      - name: Materialize, deploy, and prove exact public page
+      - name: Build, deploy, and prove the exact page
         shell: bash
         env:
-          ROOT: ${{ github.workspace }}/verification/selected-universe-semantic-map
-          DIST: ${{ runner.temp }}/selected-universe-dist
-          EVIDENCE: ${{ runner.temp }}/selected-universe-evidence
-          WORKER_NAME: stg-selected-universe-map-260830
+          ROOT: ${{ github.workspace }}/verification/gov-semantic-map-binding-replay
+          UI_ROOT: ${{ github.workspace }}/ui-source
+          PACKAGE_ROOT: ${{ github.workspace }}/packages/gov-release-proxy
+          EVIDENCE: ${{ runner.temp }}/gov-semantic-map-binding-evidence
+          WORKER_NAME: stg-governance-semantic-map-363
           CANDIDATE_SHA: ${{ github.sha }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -61,28 +69,25 @@ jobs:
       - name: Publish verified URL
         shell: bash
         env:
-          EVIDENCE: ${{ runner.temp }}/selected-universe-evidence
+          EVIDENCE: ${{ runner.temp }}/gov-semantic-map-binding-evidence
         run: |
           set -euo pipefail
-          test -s "$EVIDENCE/worker-url.txt"
           url="$(cat "$EVIDENCE/worker-url.txt")"
-          echo "### Verified Cloudflare URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Verified Governance Semantic Map URL" >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
           echo "$url" >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
-          echo '- HTML purpose: visual evaluation only' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Same root NDJSON: exact governance selected-universe.jsonl' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Remote byte readback: PASS' >> "$GITHUB_STEP_SUMMARY"
-          echo '- Real Chromium: PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo "- exact govPackageRow.v1 JSONL: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- same-root HTML / NDJSON byte readback: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- real Chromium: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "- authority: false" >> "$GITHUB_STEP_SUMMARY"
+          echo "- production cutover: false" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload proof evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: selected-universe-semantic-map-proof-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/selected-universe-evidence/
-            ${{ runner.temp }}/selected-universe-dist/current.json
-            ${{ runner.temp }}/selected-universe-dist/materialize-receipt.json
+          name: gov-semantic-map-binding-proof-${{ github.sha }}
+          path: ${{ runner.temp }}/gov-semantic-map-binding-evidence/
           if-no-files-found: warn
           retention-days: 14

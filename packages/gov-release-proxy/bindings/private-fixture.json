@@ -1,0 +1,29 @@
+{
+  "schema": "ops.govReleaseProxyBinding/1",
+  "bindingId": "adrs.private-release-fixture/1",
+  "authority": false,
+  "claimCeiling": "PRIVATE_FIXTURE_ONLY",
+  "productionCutover": false,
+  "endpoint": "/",
+  "deliveryModel": "one-root",
+  "browserDirectGitHubFetch": false,
+  "release": {
+    "sourceKind": "github-release-asset",
+    "repository": "roccho-dev/adrs",
+    "releaseId": 351310910,
+    "tag": "decision-live-jsonl-dump-20260709-054012-f9f67b1",
+    "targetCommit": null,
+    "visibility": "private"
+  },
+  "asset": {
+    "assetId": 471043875,
+    "name": "decision-jsonl-dump-20260709-054012.000001.jsonl",
+    "path": null,
+    "bytes": 1439,
+    "digest": "sha256:4dd299b514f2f4a8fa15f6c1a343429c3c62c79860db87d397756e1a5190aa7e",
+    "contentType": "application/x-ndjson; charset=utf-8",
+    "downloadUrl": null,
+    "requiresCredential": true
+  },
+  "ui": null
+}

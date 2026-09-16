@@ -1,0 +1,44 @@
+{
+  "schema": "ops.govReleaseProxyBinding/1",
+  "bindingId": "governance.selected-universe.semantic-map/1",
+  "authority": false,
+  "claimCeiling": "VISUAL_EVALUATION_ONLY",
+  "productionCutover": false,
+  "endpoint": "/",
+  "deliveryModel": "one-root",
+  "browserDirectGitHubFetch": false,
+  "release": {
+    "sourceKind": "git-raw",
+    "repository": "roccho-dev/governance",
+    "releaseId": null,
+    "tag": "git/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl",
+    "targetCommit": "6b20ba62e5b84de7549cc1df801af453dec03a38",
+    "visibility": "public"
+  },
+  "asset": {
+    "assetId": null,
+    "name": "selected-universe.jsonl",
+    "path": "docs/final-scope-purpose-join/selected-universe.jsonl",
+    "bytes": 1378,
+    "digest": "sha256:d29c4cbee8e3c38fc9a29e9dbe2d39e0a6989a62ba2771302b85711025c9ebc3",
+    "contentType": "application/x-ndjson; charset=utf-8",
+    "downloadUrl": "https://raw.githubusercontent.com/roccho-dev/governance/6b20ba62e5b84de7549cc1df801af453dec03a38/docs/final-scope-purpose-join/selected-universe.jsonl",
+    "requiresCredential": false
+  },
+  "ui": {
+    "repository": "roccho-dev/ui",
+    "rendererSourceCommit": "5b1101daedb6c64261c1fae52f065a51cf0be36f",
+    "rendererSourceTree": "c40e1ad7cd4843b7a7c59a21ed74b153d5644a55",
+    "rendererPackage": "packages/semantic-map/renderer-maxgraph",
+    "artifactCommit": "bde6fb4a92725f1e52162cbcc2ef7fdcc023f469",
+    "artifactTree": "65bd9cfb4a1c9c95b6ae7b161e1b7e2d3f5b0133",
+    "artifactRoot": "artifacts/selected-universe-semantic-map",
+    "profileId": "governance.selectedUniverseRepo.v1/map/1",
+    "profileDigest": "sha256:135ba5e65d0c939967d953ad39068bd371c46d30393a94a794c2a1f6403ae611",
+    "htmlBytes": 15976,
+    "htmlDigest": "sha256:86668cda9f72231c097bf57eabb8952b9a99c58b9466c4ef0148ffc0b3b70a38",
+    "svgDigest": "sha256:a170306bebeaf7ca9f12de433bc6c169db4c3be3c24a993cea1ffa5b7993e6da",
+    "meaningDigest": "sha256:d29c4cbee8e3c38fc9a29e9dbe2d39e0a6989a62ba2771302b85711025c9ebc3",
+    "purpose": "visual-evaluation-only"
+  }
+}

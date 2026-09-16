@@ -1,13 +1,19 @@
 import {
   CONFIG,
+  PRIVATE_FIXTURE_BINDING,
   PRIVATE_FIXTURE_ROOT_ASSET,
+  PUBLIC_BINDING,
   PUBLIC_ROOT_ASSET,
+  assetForBinding,
+  bindingFromEnv,
   configFor,
+  privateFixtureEnabled,
   rootAssetFor,
 } from "./assets.mjs";
+import { BindingError } from "./binding.mjs";
 
 const GITHUB_API = "https://api.github.com";
-const USER_AGENT = "roccho-dev-ops-gov-release-proxy/3";
+const USER_AGENT = "roccho-dev-ops-gov-release-proxy/4";
 const SAFE_METHODS = new Set(["GET", "HEAD"]);
 
 export class ProxyError extends Error {
@@ -22,7 +28,6 @@ export class ProxyError extends Error {
 const fail = (condition, code, status, message) => {
   if (!condition) throw new ProxyError(code, status, message);
 };
-const enabled = value => value === true || value === "true" || value === "1";
 const hex = bytes => [...bytes].map(value => value.toString(16).padStart(2, "0")).join("");
 const digestBytes = async (bytes, cryptoScope = globalThis.crypto) => {
   const result = await cryptoScope.subtle.digest("SHA-256", bytes);
@@ -39,9 +44,9 @@ const json = (value, status = 200, headers = {}) => new Response(`${JSON.stringi
   },
 });
 
-export const privateFixtureEnabled = env => enabled(env.ENABLE_PRIVATE_FIXTURE);
+export const selectedBinding = env => bindingFromEnv(env);
 export const githubAuthRequired = asset => asset.requiresCredential;
-export const selectedRootAsset = env => rootAssetFor({ privateFixtureEnabled: privateFixtureEnabled(env) });
+export const selectedRootAsset = env => assetForBinding(selectedBinding(env));
 export const availableAssets = env => Object.freeze({ "/": selectedRootAsset(env) });
 export const resolveAsset = (pathname, env = {}) => pathname === "/" ? selectedRootAsset(env) : null;
 export const upstreamUrl = asset => asset.requiresCredential
@@ -85,7 +90,19 @@ export const fetchAsset = async ({
   return { bytes, observedDigest, credentialUsed: credentialRequired };
 };
 
-const assetHeaders = (asset, credentialUsed) => ({
+const bindingHeaders = binding => ({
+  "x-gov-map-binding": binding.bindingId,
+  "x-gov-claim-ceiling": binding.claimCeiling,
+  "x-gov-production-cutover": "false",
+  ...(binding.ui === null ? {} : {
+    "x-gov-ui-commit": binding.ui.artifactCommit,
+    "x-gov-ui-profile": binding.ui.profileId,
+    "x-gov-ui-html-digest": binding.ui.htmlDigest,
+    "x-gov-ui-meaning-digest": binding.ui.meaningDigest,
+  }),
+});
+
+const assetHeaders = (asset, credentialUsed, binding) => ({
   "content-type": asset.contentType,
   "content-length": String(asset.bytes),
   "cache-control": "private, no-store",
@@ -98,16 +115,36 @@ const assetHeaders = (asset, credentialUsed) => ({
   "x-gov-release-asset": asset.name,
   "x-gov-release-digest": asset.digest,
   "x-gov-release-upstream-auth": credentialUsed ? "credential" : "anonymous",
+  ...bindingHeaders(binding),
 });
 
-const serveUi = async (request, env) => {
+const serveUi = async (request, env, binding, cryptoScope = globalThis.crypto) => {
   fail(env.ASSETS && typeof env.ASSETS.fetch === "function", "UI_NOT_CONFIGURED", 503, "UI assets are not configured");
   const response = await env.ASSETS.fetch(request);
+  fail(response.ok, "UI_HTTP", 502, `UI asset fetch failed: ${response.status}`);
   const headers = new Headers(response.headers);
   headers.set("cache-control", "public, max-age=300");
   headers.set("vary", "Accept");
   headers.set("x-content-type-options", "nosniff");
-  return new Response(request.method === "HEAD" ? null : response.body, {
+  for (const [name, value] of Object.entries(bindingHeaders(binding))) headers.set(name, value);
+
+  if (request.method === "HEAD" || binding.ui === null) {
+    return new Response(request.method === "HEAD" ? null : response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
+
+  fail(/^text\/html(?:;|$)/iu.test(headers.get("content-type") ?? ""), "UI_CONTENT_TYPE", 502, "UI asset content type mismatch");
+  const bytes = await response.arrayBuffer();
+  fail(bytes.byteLength === binding.ui.htmlBytes, "UI_BYTES", 502, `UI asset bytes mismatch: ${bytes.byteLength}`);
+  const observedDigest = await digestBytes(bytes, cryptoScope);
+  fail(observedDigest === binding.ui.htmlDigest, "UI_DIGEST", 502, `UI asset digest mismatch: ${observedDigest}`);
+  const text = new TextDecoder().decode(bytes);
+  fail(text.includes(binding.ui.meaningDigest), "UI_MEANING_IDENTITY", 502, "UI asset does not contain the bound meaning digest");
+  headers.set("content-length", String(bytes.byteLength));
+  return new Response(bytes, {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -120,13 +157,14 @@ export const handleRequest = async (request, env = {}, context = {}) => {
   fail(url.pathname === "/", "NOT_FOUND", 404, "Only the root endpoint exists");
   fail(url.search === "" && url.hash === "", "URL_UNSAFE", 400, "Query and fragment are not accepted");
 
-  if (!wantsData(request)) return serveUi(request, env);
+  const binding = selectedBinding(env);
+  if (!wantsData(request)) return serveUi(request, env, binding, context.cryptoScope ?? globalThis.crypto);
 
-  const asset = selectedRootAsset(env);
+  const asset = assetForBinding(binding);
   if (request.method === "HEAD") {
     return new Response(null, {
       status: 200,
-      headers: assetHeaders(asset, githubAuthRequired(asset)),
+      headers: assetHeaders(asset, githubAuthRequired(asset), binding),
     });
   }
   const loaded = await fetchAsset({
@@ -137,7 +175,7 @@ export const handleRequest = async (request, env = {}, context = {}) => {
   });
   return new Response(loaded.bytes, {
     status: 200,
-    headers: assetHeaders(asset, loaded.credentialUsed),
+    headers: assetHeaders(asset, loaded.credentialUsed, binding),
   });
 };
 
@@ -146,7 +184,7 @@ const worker = {
     try {
       return await handleRequest(request, env, { executionContext: ctx });
     } catch (error) {
-      if (error instanceof ProxyError) {
+      if (error instanceof ProxyError || error instanceof BindingError) {
         return json({
           schema: "ops.govReleaseProxyError/1",
           status: "FAIL",
@@ -163,5 +201,14 @@ const worker = {
   },
 };
 
-export { CONFIG, PRIVATE_FIXTURE_ROOT_ASSET, PUBLIC_ROOT_ASSET, configFor };
+export {
+  CONFIG,
+  PRIVATE_FIXTURE_BINDING,
+  PRIVATE_FIXTURE_ROOT_ASSET,
+  PUBLIC_BINDING,
+  PUBLIC_ROOT_ASSET,
+  configFor,
+  privateFixtureEnabled,
+  rootAssetFor,
+};
 export default worker;
