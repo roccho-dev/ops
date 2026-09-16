@@ -23,6 +23,10 @@
       url = "git+https://github.com/nodejs/node?ref=refs/tags/v26.3.0&rev=b7e6a5d37e7a14ef0f2cc95214b95d66c4081415";
       flake = false;
     };
+    controlUi = {
+      url = "github:roccho-dev/ui/11f59ce617a1b9382c49f1de444a6b938ebb687e";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -34,6 +38,7 @@
       conventionGovernance,
       ops-build-defs,
       nodejs-src,
+      controlUi,
       ...
     }:
     let
@@ -60,6 +65,10 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          control-ui-dist = import ./packages/control-ui-dist {
+            pkgs = nixpkgs.legacyPackages.${system};
+            uiControl = controlUi.packages.${system}.control-ui;
+          };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -137,6 +146,20 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
+          control-ui-dist =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "control-ui-dist-check"
+              {
+                nativeBuildInputs = [ pkgs.bash pkgs.curl ];
+              }
+              ''
+                DIST=${packages.${system}.control-ui-dist} \
+                CURL=${pkgs.curl}/bin/curl \
+                  ${pkgs.bash}/bin/bash ${./packages/control-ui-dist/tests/e2e.sh}
+                touch "$out"
+              '';
           semantic-log-runtime-core =
             let
               pkgs = nixpkgs.legacyPackages.${system};
