@@ -1,0 +1,125 @@
+ta.get("nixCheck"), "PASS")
++        self.assertEqual(data.get("outputReadback"), "PASS")
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_preexisting_ops_regressions_skips_and_waivers_are_zero(self) -> None:
++        data = load("preexisting-regression.json")
++        self.assertGreater(data.get("suites", 0), 0)
++        self.assertEqual(data.get("failedSuites"), 0)
++        self.assertEqual(data.get("skips"), 0)
++        self.assertEqual(data.get("waivers"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/proofs/issue-355/run-lane.sh b/proofs/issue-355/run-lane.sh
+new file mode 100755
+index 0000000..dabf134
+--- /dev/null
++++ b/proofs/issue-355/run-lane.sh
+@@ -0,0 +1,9 @@
++#!/usr/bin/env bash
++set -euo pipefail
++mode=${1:?usage: run-lane.sh --expect-red|--expect-green lane-dir [result-file]}
++lane=${2:?usage: run-lane.sh --expect-red|--expect-green lane-dir [result-file]}
++result=${3:-}
++args=("$lane" "$mode")
++if [[ -n "$result" ]]; then args+=(--result "$result"); fi
++export PYTHONDONTWRITEBYTECODE=1
++exec python3 "$(dirname "$0")/canon_runner.py" "${args[@]}"
+-- 
+2.47.3
+
+
+From 7f81e6acb6c9b27e638bcd8548f5f6fcc86c962f Mon Sep 17 00:00:00 2001
+From: OpenAI <noreply@openai.com>
+Date: Sun, 30 Aug 2026 03:00:14 +0000
+Subject: [PATCH 2/2] feat: materialize exact ops operation catalog
+
+---
+ build/packages.jsonl                          |   1 +
+ flake.nix                                     |   5 +
+ packages/ops-operation-catalog/README.md      |  12 ++
+ .../bin/ops-operation-catalog.mjs             |  20 ++
+ packages/ops-operation-catalog/default.nix    |  22 ++
+ packages/ops-operation-catalog/lib/core.mjs   | 195 ++++++++++++++++++
+ .../ops-operation-catalog/lib/selftest.mjs    | 130 ++++++++++++
+ .../source/obligations.jsonl                  |   2 +
+ .../source/operations.jsonl                   |  13 ++
+ .../ops-operation-catalog/source/release.json |  67 ++++++
+ packages/ops-operation-catalog/tests/e2e.mjs  |  21 ++
+ proofs/issue-355/canon_runner.py              |   2 +-
+ 12 files changed, 489 insertions(+), 1 deletion(-)
+ create mode 100644 packages/ops-operation-catalog/README.md
+ create mode 100755 packages/ops-operation-catalog/bin/ops-operation-catalog.mjs
+ create mode 100644 packages/ops-operation-catalog/default.nix
+ create mode 100644 packages/ops-operation-catalog/lib/core.mjs
+ create mode 100644 packages/ops-operation-catalog/lib/selftest.mjs
+ create mode 100644 packages/ops-operation-catalog/source/obligations.jsonl
+ create mode 100644 packages/ops-operation-catalog/source/operations.jsonl
+ create mode 100644 packages/ops-operation-catalog/source/release.json
+ create mode 100755 packages/ops-operation-catalog/tests/e2e.mjs
+
+diff --git a/build/packages.jsonl b/build/packages.jsonl
+index dc577d4..19224a1 100644
+--- a/build/packages.jsonl
++++ b/build/packages.jsonl
+@@ -36,3 +36,4 @@
+ {"bin":"ops-decision-closure","deps":["python"],"entry":"packages/ops-decision-closure/bin/query.py","env":[],"kind":"package","name":"ops-decision-closure","runtime":"python"}
+ {"bin":"ops-task-runtime","deps":["node"],"entry":"packages/ops-task-runtime/bin/ops-task-runtime.mjs","env":[],"kind":"package","name":"ops-task-runtime","runtime":"node"}
+ {"bin":"artifact-assembly","deps":["node"],"entry":"packages/artifact-assembly/bin/artifact-assembly.mjs","env":[],"kind":"package","name":"artifact-assembly","runtime":"node"}
++{"bin":"ops-operation-catalog","deps":["node"],"entry":"packages/ops-operation-catalog/bin/ops-operation-catalog.mjs","env":[],"kind":"package","name":"ops-operation-catalog","runtime":"node"}
+diff --git a/flake.nix b/flake.nix
+index 9184a23..746ba39 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -72,6 +72,10 @@
+             ];
+             doCheck = true;
+           };
++          ops-operation-catalog = nixpkgs.legacyPackages.${system}.callPackage ./packages/ops-operation-catalog/default.nix {
++            sourceCommit = self.rev or (throw "ops-operation-catalog requires a clean Git revision");
++            sourceSnapshotNarHash = self.narHash;
++          };
+           hq-modeling-runtime = nixpkgs.legacyPackages.${system}.buildGoModule {
+             pname = "hq-modeling-runtime";
+             version = "1.0.0";
+@@ -136,6 +140,7 @@
+           ops-thread-fsm = existing.ops-thread-fsm;
+           ops-refs-vault = existing.ops-refs-vault;
+           ops-cdp-core = existing.ops-cdp-core;
++          ops-operation-catalog = packages.${system}.ops-operation-catalog;
+           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
+           issue-116-shiftleft-proof =
+             let
+diff --git a/packages/ops-operation-catalog/README.md b/packages/ops-operation-catalog/README.md
+new file mode 100644
+index 0000000..6cca6b0
+--- /dev/null
++++ b/packages/ops-operation-catalog/README.md
+@@ -0,0 +1,12 @@
++# ops-operation-catalog
++
++Compiles package-owned finite operation declarations into one deterministic,
++non-authority catalog for operator consoles such as `edits`.
++
++The package validates exact selection, package/obligation references, closed schemas,
++and output digests. It performs no work activation, worker execution, retry, cancel,
++canonical result write, provider discovery, shell execution, or mutable repository read.
++
++## Source identity
++
++The emitted manifest binds the clean Git commit and the Nix flake source NAR hash. The exact Git tree is recorded by the independent clean-clone build receipt; the derivation never inserts a fabricated tree SHA.
+diff --git a/packages/ops-operation-catalog/bin/ops-operation-catalog.mjs b/packages/ops-operation-catalog/bin/ops-operation-catalog.mjs
+new file mode 100755
+index 0000000..6dfb124
+--- /dev/null
++++ b/packages/ops-operation-catalog/bin/ops-operation-catalog.mjs
+@@ -0,0 +1,20 @@
++#!/usr/bin/env node
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++import process from "node:process";
++import { compileC

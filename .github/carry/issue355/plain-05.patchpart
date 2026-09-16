@@ -1,0 +1,98 @@
+${key}`);
++  exactKeys(row.command, ["name","aliases","keywords","description"], "command");
++  string(row.command.name, "command:name"); string(row.command.description, "command:description");
++  strings(row.command.aliases, "command:aliases"); strings(row.command.keywords, "command:keywords");
++  exactKeys(row.intent, ["queueKind","effectClass","op"], "intent");
++  if (!["hq.modelCommitQueued.v1","hq.agentTaskQueued.v1"].includes(row.intent.queueKind)) throw Error("intent:unknown-queue-kind");
++  if (!["model_commit","agent_task"].includes(row.intent.effectClass)) throw Error("intent:unknown-effect-class");
++  if (row.intent.effectClass === "model_commit") string(row.intent.op, "intent:op");
++  if (row.intent.effectClass === "agent_task" && row.intent.op !== null) throw Error("intent:agent-op-must-be-null");
++  exactKeys(row.target, ["required","kinds"], "target");
++  if (typeof row.target.required !== "boolean") throw Error("target:required-boolean");
++  strings(row.target.kinds, "target:kinds");
++  exactKeys(row.contracts, ["input","result"], "contracts");
++  string(row.contracts.input, "contracts:input"); string(row.contracts.result, "contracts:result");
++  exactKeys(row.risk, ["class","approval"], "risk"); string(row.risk.class, "risk:class"); string(row.risk.approval, "risk:approval");
++  return row;
++}
++export function validateRelease(release) {
++  exactKeys(release, ["kind","releaseId","selected","authority"], "release");
++  if (release.kind !== "ops.operationRelease.v1" || release.authority !== false) throw Error("release:boundary");
++  string(release.releaseId, "release:id");
++  if (!Array.isArray(release.selected) || !release.selected.length) throw Error("release:selected-required");
++  const keys = new Set();
++  for (const ref of release.selected) {
++    exactKeys(ref, ["operationId","operationVersion","contentDigest"], "release-ref");
++    string(ref.operationId, "release-ref:id"); string(ref.operationVersion, "release-ref:version");
++    if (!/^[0-9a-f]{64}$/.test(ref.contentDigest)) throw Error("release-ref:digest");
++    const key = `${ref.operationId}@${ref.operationVersion}`;
++    if (keys.has(key)) throw Error(`release-ref:duplicate:${key}`);
++    keys.add(key);
++  }
++  return release;
++}
++export function packageInventory(repoRoot) {
++  const rows = readJsonl(path.join(repoRoot, "build", "packages.jsonl"));
++  const out = new Map();
++  for (const row of rows) {
++    if (row.kind !== "package" || typeof row.name !== "string") continue;
++    if (out.has(row.name)) throw Error(`package-inventory:duplicate:${row.name}`);
++    out.set(row.name, row);
++  }
++  return out;
++}
++export function compileCatalog({ repoRoot, sourceDir, outDir, sourceCommit = "unknown", sourceSnapshotNarHash = "unknown" }) {
++  const operations = readJsonl(path.join(sourceDir, "operations.jsonl")).map(validateOperation);
++  const obligations = readJsonl(path.join(sourceDir, "obligations.jsonl")).map(validateObligation);
++  const release = validateRelease(readJson(path.join(sourceDir, "release.json")));
++  const packages = packageInventory(repoRoot);
++  const byOperation = new Map();
++  const commandNames = new Set();
++  for (const row of operations) {
++    const key = `${row.operationId}@${row.operationVersion}`;
++    if (byOperation.has(key)) throw Error(`operation:duplicate:${key}`);
++    if (commandNames.has(row.command.name)) throw Error(`command:duplicate:${row.command.name}`);
++    byOperation.set(key, row); commandNames.add(row.command.name);
++  }
++  const obligationById = new Map();
++  for (const row of obligations) {
++    if (obligationById.has(row.obligationId)) throw Error(`obligation:duplicate:${row.obligationId}`);
++    obligationById.set(row.obligationId, row);
++  }
++  const selected = release.selected.map((ref) => {
++    const key = `${ref.operationId}@${ref.operationVersion}`;
++    const row = byOperation.get(key);
++    if (!row) throw Error(`release-ref:missing-operation:${key}`);
++    if (objectDigest(row) !== ref.contentDigest) throw Error(`release-ref:digest-drift:${key}`);
++    if (!packages.has(row.packageId)) throw Error(`operation:missing-package:${row.packageId}`);
++    const obligation = obligationById.get(row.obligationId);
++    if (!obligation) throw Error(`operation:missing-obligation:${row.obligationId}`);
++    if (obligation.packageId !== row.packageId) throw Error(`operation:obligation-package-drift:${key}`);
++    return row;
++  }).sort((a, b) => a.operationId.localeCompare(b.operationId) || a.operationVersion.localeCompare(b.operationVersion));
++  const catalog = selected.map((row) => ({ ...row, contentDigest: objectDigest(row) }));
++  const catalogBytes = Buffer.from(catalog.map((row) => JSON.stringify(sortValue(row))).join("\n") + "\n");
++  const manifestBase = {
++    kind: MANIFEST_KIND,
++    releaseId: release.releaseId,
++    sourceCommit,
++    sourceSnapshotNarHash,
++    declarationsDigest: digestBytes(fs.readFileSync(path.join(sourceDir, "operations.jsonl"))),
++    obligationsDigest: digestBytes(fs.readFileSync(path.join(sourceDir, "obligations.jsonl"))),
++    releaseDigest: objectDigest(release),
++    catalogDigest: digestBytes(catalogBytes),
++    rowCount: catalog.length,
++    authority: false,
++  };
++  const manifest = { ...manifestBase, manifestDigest: objectDigest(manifestBase) };
++  fs.mkdirSync(outDir, { recursive: true });
++  fs.writeFileSync(path.join(outDir, "operation-catalog.jsonl"), catalogBytes);
++  writeJson(path.join(outDir, "manifest.json"), manifest);
++  return { catalog, manifest, unselectedCount: operations.length - selected.length };
++}
++export function validateOutput(outDir) {
++  const catalog = readJsonl(path.join(outDir, "operation-catalog.jsonl"));
++  const manifest = readJson(path.join(outDir, "manifest.json"));
++  if (manifest.kind !== MANIFEST_KIND || manifest.authority !== false) throw Error("manifest:boundary");
++  if (!/^[0-9a-f]{40}$/.test(manifest.sourceCommit)) throw Error("manifest:source-commit");
++  if (typeof manifest.sourc

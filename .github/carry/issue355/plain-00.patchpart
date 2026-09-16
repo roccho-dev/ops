@@ -1,0 +1,171 @@
+From 91792402537de5dd36e8a106db13089eabab7afd Mon Sep 17 00:00:00 2001
+From: OpenAI <noreply@openai.com>
+Date: Sun, 30 Aug 2026 02:50:51 +0000
+Subject: [PATCH 1/2] test(ops): add issue 355 operation catalog Canon TDD RED
+
+---
+ proofs/issue-355/canon_runner.py              | 203 ++++++++++++++++++
+ proofs/issue-355/operation-catalog/CANON.md   |  15 ++
+ .../issue-355/operation-catalog/SPEC.sha256   |   5 +
+ .../issue-355/operation-catalog/TEST_LIST.md  |  14 ++
+ proofs/issue-355/operation-catalog/canon.json |  23 ++
+ .../operation-catalog/tests/__init__.py       |   0
+ .../tests/test_operation_catalog_producer.py  | 107 +++++++++
+ proofs/issue-355/run-lane.sh                  |   9 +
+ 8 files changed, 376 insertions(+)
+ create mode 100755 proofs/issue-355/canon_runner.py
+ create mode 100644 proofs/issue-355/operation-catalog/CANON.md
+ create mode 100644 proofs/issue-355/operation-catalog/SPEC.sha256
+ create mode 100644 proofs/issue-355/operation-catalog/TEST_LIST.md
+ create mode 100644 proofs/issue-355/operation-catalog/canon.json
+ create mode 100644 proofs/issue-355/operation-catalog/tests/__init__.py
+ create mode 100644 proofs/issue-355/operation-catalog/tests/test_operation_catalog_producer.py
+ create mode 100755 proofs/issue-355/run-lane.sh
+
+diff --git a/proofs/issue-355/canon_runner.py b/proofs/issue-355/canon_runner.py
+new file mode 100755
+index 0000000..cf43157
+--- /dev/null
++++ b/proofs/issue-355/canon_runner.py
+@@ -0,0 +1,203 @@
++#!/usr/bin/env python3
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++import unittest
++from typing import Iterable
++
++SCHEMA = "ops.issue355.canonTdd.v1"
++
++
++def sha256(path: Path) -> str:
++    h = hashlib.sha256()
++    with path.open("rb") as f:
++        for chunk in iter(lambda: f.read(1024 * 1024), b""):
++            h.update(chunk)
++    return h.hexdigest()
++
++
++def load_json(path: Path) -> dict:
++    with path.open("r", encoding="utf-8") as f:
++        return json.load(f)
++
++
++def validate_spec(spec: dict) -> None:
++    required = {
++        "schema",
++        "issue",
++        "lane",
++        "baseCommit",
++        "purpose",
++        "mergeCondition",
++        "requiredTests",
++        "forbiddenGreenMechanisms",
++    }
++    missing = sorted(required - spec.keys())
++    if missing:
++        raise ValueError(f"missing canon fields: {missing}")
++    if spec["schema"] != SCHEMA:
++        raise ValueError(f"unexpected schema: {spec['schema']!r}")
++    if spec["issue"] != "roccho-dev/ops#355":
++        raise ValueError(f"unexpected issue: {spec['issue']!r}")
++    tests = spec["requiredTests"]
++    if not isinstance(tests, list) or not tests or len(tests) != len(set(tests)):
++        raise ValueError("requiredTests must be a non-empty unique list")
++    forbidden = set(spec["forbiddenGreenMechanisms"])
++    expected_forbidden = {
++        "skip",
++        "xfail",
++        "waiver",
++        "delete-test",
++        "weaken-assertion",
++        "change-expected-output",
++    }
++    if not expected_forbidden.issubset(forbidden):
++        raise ValueError("forbiddenGreenMechanisms is incomplete")
++
++
++def verify_lock(lane_dir: Path) -> list[str]:
++    lock = lane_dir / "SPEC.sha256"
++    if not lock.is_file():
++        return ["missing SPEC.sha256"]
++    errors: list[str] = []
++    for line in lock.read_text(encoding="utf-8").splitlines():
++        if not line.strip():
++            continue
++        try:
++            expected, rel = line.split("  ", 1)
++        except ValueError:
++            errors.append(f"malformed lock line: {line!r}")
++            continue
++        path = lane_dir / rel
++        if not path.is_file():
++            errors.append(f"missing locked file: {rel}")
++            continue
++        actual = sha256(path)
++        if actual != expected:
++            errors.append(f"digest mismatch: {rel}: expected {expected}, got {actual}")
++    return errors
++
++
++def git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
++    return subprocess.run(
++        ["git", "-C", str(repo), *args],
++        text=True,
++        stdout=subprocess.PIPE,
++        stderr=subprocess.PIPE,
++        check=False,
++    )
++
++
++def flatten(suite: unittest.TestSuite) -> Iterable[unittest.TestCase]:
++    for item in suite:
++        if isinstance(item, unittest.TestSuite):
++            yield from flatten(item)
++        else:
++            yield item
++
++
++def short_id(test_id: str) -> str:
++    parts = test_id.split(".")
++    return ".".join(parts[-2:])
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("lane_dir", type=Path)
++    mode = parser.add_mutually_exclusive_group(required=True)
++    mode.add_argument("--expect-red", action="store_true")
++    mode.add_argument("--expect-green", action="store_true")
++    parser.add_argument("--result", type=Path)
++    args = parser.parse_args()
++
++    lane_dir = args.lane_dir.resolve()
++    repo = lane_dir.parents[2]
++    spec = load_json(lane_dir / "canon.json")
++    validate_spec(spec)
++
++    lock_errors = verify_lock(lane_dir)
++    base = spec["baseCommit"]
++    ancestor = git(repo, "merge-base", "--is-ancestor", base, "HEAD")
++    ancestor_ok = ancestor.returncode == 0
++
++    suite = unittest.defaultTestLoader.discover(
++        str(lane_dir / "tests"), pattern="test_*.py", top_level_dir=str(lane_dir)
++    )
++    discovered = sorted(short_id(t.id()) for t in flatten(suite))
++    declared = sorted(spec["requiredTests"])
++    missing_declared = sorted(set(declared) - set(discovered))
++    undeclared = sorted(set(discovered) - set(declared))
++
++    stream = unittest.runner._WritelnDecorator(sys.stderr)
++    result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
++    failed = sorted(short_id(t.id()) for t, _ in result.failures)
++    errored = sorted(short_id(t.id()) for t, _ in result.errors)
++    skipped = sorted(short_id(t.id()) for t, _ in result.skipped)

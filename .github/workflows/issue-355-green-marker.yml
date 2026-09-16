@@ -1,0 +1,78 @@
+name: issue 355 exact Nix merge gate
+
+on:
+  push:
+    branches:
+      - proposal/issue-355-operation-catalog
+    paths-ignore:
+      - evidence/issue-355/**
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-355-exact-nix-merge-gate
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: DeterminateSystems/nix-installer-action@90bb610b7aef3fbc0420e8015400f1509b4510d4
+
+      - name: Prove exact producer output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain=v1)"
+          test -d packages/ops-operation-catalog
+          node packages/ops-operation-catalog/tests/test-operation-catalog.mjs
+          node packages/ops-package-responses/lib/selftest.mjs
+          out1="$(nix build ./packages/ops-operation-catalog --no-link --print-out-paths)"
+          out2="$(nix build ./packages/ops-operation-catalog --no-link --print-out-paths)"
+          test "$out1" = "$out2"
+          test -f "$out1/operation-catalog.jsonl"
+          test -f "$out1/manifest.json"
+          mkdir -p evidence/issue-355
+          catalog_sha="$(sha256sum "$out1/operation-catalog.jsonl" | awk '{print $1}')"
+          manifest_sha="$(sha256sum "$out1/manifest.json" | awk '{print $1}')"
+          source_commit="$(git rev-parse HEAD)"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          cat > evidence/issue-355/exact-nix-green.json <<EOF
+          {
+            "kind": "ops.operationCatalogNixGate.v1",
+            "status": "pass",
+            "authority": false,
+            "source_commit": "$source_commit",
+            "source_tree": "$source_tree",
+            "nix_store_path": "$out1",
+            "catalog_sha256": "$catalog_sha",
+            "manifest_sha256": "$manifest_sha",
+            "build_count": 2,
+            "same_store_path": true,
+            "skips": 0,
+            "xfail": 0,
+            "waivers": 0
+          }
+          EOF
+          cp "$out1/operation-catalog.jsonl" evidence/issue-355/operation-catalog.jsonl
+          cp "$out1/manifest.json" evidence/issue-355/manifest.json
+          sha256sum evidence/issue-355/*.json evidence/issue-355/*.jsonl > evidence/issue-355/SHA256SUMS
+
+      - name: Commit only after all gates pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add evidence/issue-355
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m 'proof(ops): record exact operation catalog Nix gate'
+          git push origin HEAD:proposal/issue-355-operation-catalog

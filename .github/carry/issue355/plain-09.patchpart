@@ -1,0 +1,82 @@
+ "ops.model.addProjection",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "8078ad7cc6dc12a54ae7b9ebde333a84e8a91cc0af776df22e3c78512d16f160",
++      "operationId": "ops.model.changeLodRule",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "30ecbd0f358d10df9404e9c7e81d48aaf8f3965b61908c704054aee5274e5a20",
++      "operationId": "ops.agent.inspect",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "15565fbbc0f05091b699fa769a70e5fdf91c488e54721c4e105e3d7617810e45",
++      "operationId": "ops.agent.proposeModel",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "2880b83d35917f92aaaecc6592f267e5c777c7ccb2a2e637cbbf801ca22c9433",
++      "operationId": "ops.agent.fixProjection",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "1edde9cfbd2fa5f44c5523dbef57203f644642550c428c65a1a95c2479682e34",
++      "operationId": "ops.agent.addTest",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "6077e543b1976908591e475bad063c34b7816bd9b3d7842b1e673e2e0a2d684e",
++      "operationId": "ops.agent.explainEdge",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "937a1a1a9b631b5f95be14fc9449ca7fd8fdd9062daaee487bd59bc5b9f3c621",
++      "operationId": "ops.agent.findEvidence",
++      "operationVersion": "1"
++    }
++  ]
++}
+diff --git a/packages/ops-operation-catalog/tests/e2e.mjs b/packages/ops-operation-catalog/tests/e2e.mjs
+new file mode 100755
+index 0000000..cc61033
+--- /dev/null
++++ b/packages/ops-operation-catalog/tests/e2e.mjs
+@@ -0,0 +1,21 @@
++#!/usr/bin/env node
++import assert from "node:assert/strict";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++import { runSelftest } from "../lib/selftest.mjs";
++
++const here = path.dirname(fileURLToPath(import.meta.url));
++const packageRoot = path.resolve(here, "..");
++const repoRoot = path.resolve(packageRoot, "../..");
++const result = runSelftest({ repoRoot, packageRoot });
++assert.equal(result.ok, true);
++assert.equal(result.selectedOperations, 12);
++assert.equal(result.unselectedOperations, 1);
++for (const name of ["malformed","duplicate","orphan","unknown-kind","missing-package","missing-obligation","digest-drift"]) assert.equal(result.negative[name], true, name);
++assert.equal(result.deterministicCatalog, true);
++assert.equal(result.deterministicManifest, true);
++assert.equal(result.unselectedCatalogStable, true);
++assert.equal(result.selectedExtensionDelta, 1);
++assert.equal(result.editsProjectionRows, 12);
++assert.equal(result.editsRejectedRows, 0);
++process.stdout.write("ops-operation-catalog: strict deterministic non-authority catalog PASS\n");
+diff --git a/proofs/issue-355/canon_runner.py b/proofs/issue-355/canon_runner.py
+index cf43157..c4cbdcb 100755
+--- a/proofs/issue-355/canon_runner.py
++++ b/proofs/issue-355/canon_runner.py
+@@ -170,7 +170,7 @@ def main() -> int:
+         assertion = "all declared tests pass"
+ 
+     payload = {
+-        "schema": "edits.issue118.canonTddResult.v1",
++        "schema": "ops.issue355.canonTddResult.v1",
+         "issue": spec["issue"],
+         "lane": spec["lane"],
+         "mode": "red" if args.expect_red else "green",
+-- 
+2.47.3
