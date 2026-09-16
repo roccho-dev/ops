@@ -22,5 +22,10 @@ jobs:
             extra-experimental-features = nix-command flakes
       - name: Build exact dist
         run: nix build .#control-ui-dist --no-write-lock-file --print-build-logs
-      - name: Prove exact dist
+      - name: Check package and Caddy config
         run: nix build .#checks.x86_64-linux.control-ui-dist --no-write-lock-file --print-build-logs
+      - name: Prove runtime HTTP boundary
+        run: |
+          set -euo pipefail
+          dist="$(nix build .#control-ui-dist --no-link --print-out-paths --no-write-lock-file)"
+          DIST="$dist" CURL=/usr/bin/curl bash packages/control-ui-dist/tests/e2e.sh
