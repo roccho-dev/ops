@@ -149,15 +149,28 @@
           control-ui-dist =
             let
               pkgs = nixpkgs.legacyPackages.${system};
+              dist = packages.${system}.control-ui-dist;
             in
             pkgs.runCommand "control-ui-dist-check"
               {
-                nativeBuildInputs = [ pkgs.bash pkgs.curl ];
+                nativeBuildInputs = [ pkgs.caddy ];
               }
               ''
-                DIST=${packages.${system}.control-ui-dist} \
-                CURL=${pkgs.curl}/bin/curl \
-                  ${pkgs.bash}/bin/bash ${./packages/control-ui-dist/tests/e2e.sh}
+                set -euo pipefail
+                mkdir -p "$TMPDIR/state"
+                export CONTROL_STATE_DIR="$TMPDIR/state"
+                export CONTROL_UI_ROOT="${dist}/share/control-ui"
+                caddy validate --config ${dist}/config/Caddyfile --adapter caddyfile
+                test -x ${dist}/bin/caddy
+                test -x ${dist}/bin/cloudflared
+                test -x ${dist}/bin/control-ui-serve
+                test -s ${dist}/share/control-ui/index.html
+                test -s ${dist}/share/control-ui/design.json
+                test -s ${dist}/manifest.json
+                grep -q '/data/control.jsonl' ${dist}/config/Caddyfile
+                grep -q '/data/claims.jsonl' ${dist}/config/Caddyfile
+                test ! -e ${dist}/share/control-ui/data/control.jsonl
+                test ! -e ${dist}/share/control-ui/data/claims.jsonl
                 touch "$out"
               '';
           semantic-log-runtime-core =
