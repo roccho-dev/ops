@@ -275,6 +275,10 @@
             mkdir -p "$out/share/skills/find-packages"
             cp ${./packages/find-packages/skill/SKILL.md} "$out/share/skills/find-packages/SKILL.md"
           '';
+          gosh-skill = pkgs.runCommand "gosh-skill" { } ''
+            mkdir -p "$out/share/skills/gosh"
+            cp -R ${./packages/gosh/skill}/. "$out/share/skills/gosh/"
+          '';
           find-packages-lib = pkgs.runCommand "find-packages-lib" { } ''
             mkdir -p "$out/share/find-packages/lib"
             cp ${./packages/find-packages/lib/find-packages-core.mjs} "$out/share/find-packages/lib/find-packages-core.mjs"
