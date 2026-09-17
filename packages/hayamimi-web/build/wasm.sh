@@ -16,7 +16,7 @@ build_one() {
   if [[ "$kind" == primary ]]; then
     tar -xjf "$DL/sherpa-onnx-zipformer-ja-en-reazonspeech-2025-01-17.tar.bz2" -C "$tmp"
     cp "$(find "$tmp" -name 'encoder-*.int8.onnx' -print -quit)" "$SHERPA/wasm/vad-asr/assets/transducer-encoder.onnx"
-    cp "$(find "$tmp" -name 'decoder-*.onnx' ! -name '*.int8.onnx' -print -quit)" "$SHERPA/wasm/vad-asr/assets/transducer-decoder.onnx"
+    cp "$(find "$tmp" -name 'decoder-*.int8.onnx' -print -quit)" "$SHERPA/wasm/vad-asr/assets/transducer-decoder.onnx"
     cp "$(find "$tmp" -name 'joiner-*.int8.onnx' -print -quit)" "$SHERPA/wasm/vad-asr/assets/transducer-joiner.onnx"
     cp "$(find "$tmp" -name tokens.txt -print -quit)" "$SHERPA/wasm/vad-asr/assets/tokens.txt"
   else
