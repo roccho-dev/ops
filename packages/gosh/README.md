@@ -20,7 +20,7 @@ The Nix package `gosh-skill` copies the complete directory to `share/skills/gosh
 4. an explicit `$gosh` request loads the skill and can resolve the referenced repository knowledge;
 5. the proof records only behavior actually observed on the current host.
 
-The current local proof established the same discovery mechanism with the prototype skill name `wslc-storage-reclaim`. Renaming/materializing it as `gosh` requires a following-turn readback before claiming item 3 or 4 for the final name.
+The current local proof first established the discovery mechanism with the prototype skill name `wslc-storage-reclaim`, then confirmed on the following turn that the final `gosh` name was listed and loaded without an app restart.
 
 This package implements the v0 scope owned by `roccho-dev/ops#82`. It is not a shell, workflow daemon, HQ endpoint, queue, admission gate, accepted ledger, or decision authority.
 

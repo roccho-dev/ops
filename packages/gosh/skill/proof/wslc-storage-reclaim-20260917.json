@@ -15,8 +15,9 @@
     "target": "%USERPROFILE%\\.codex\\skills\\gosh",
     "repositoryTreeMatchedAfterCopy": true,
     "prototypeMovedOutsideSkillsRoot": true,
-    "finalNameListedByCodex": "pending-following-turn-readback",
-    "explicitGoshInvocationLoaded": "pending-following-turn-readback"
+    "finalNameListedByCodex": true,
+    "explicitGoshInvocationLoaded": true,
+    "followingTurnReadbackAt": "2026-09-18T06:14:29+09:00"
   },
   "validation": {
     "skillCreatorQuickValidate": "pass",
