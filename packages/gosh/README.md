@@ -1,5 +1,7 @@
 # gosh v0
 
+`gosh` is a local executable-capability graph: logical capabilities are indexed, connected by explicit contracts, resolved to exact executables, and executed with bounded evidence. It does not mean a remote or distributed execution network.
+
 `gosh` is a bin-first, shell-never local operation runtime. It reads append-only JSONL intent, reduces it deterministically in physical line order, builds an in-memory plan, resolves tools to validated absolute executables, runs them directly with `argv[]`, and appends bounded execution evidence.
 
 This package implements the v0 scope owned by `roccho-dev/ops#82`. It is not a shell, workflow daemon, HQ endpoint, queue, admission gate, accepted ledger, or decision authority.
