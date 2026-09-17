@@ -1,0 +1,73 @@
+name: hayamimi web release
+on:
+  pull_request:
+    paths:
+      - 'packages/hayamimi-web/**'
+      - '.github/workflows/hayamimi-web-release.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+permissions:
+  contents: write
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Dependencies
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check playwright
+          python3 -m playwright install --with-deps chromium
+          git clone --depth 1 --branch 4.0.23 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install 4.0.23
+          "$RUNNER_TEMP/emsdk/emsdk" activate 4.0.23
+      - name: Fetch and verify pinned sources
+        run: |
+          set -euo pipefail
+          python3 packages/hayamimi-web/build/fetch.py --root packages/hayamimi-web --work "$RUNNER_TEMP/hayamimi"
+          python3 packages/hayamimi-web/build/verify-sources.py --root packages/hayamimi-web --work "$RUNNER_TEMP/hayamimi"
+      - name: Build WebAssembly
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          bash packages/hayamimi-web/build/wasm.sh "$RUNNER_TEMP/hayamimi"
+      - name: Assemble and verify dist
+        run: |
+          set -euo pipefail
+          python3 packages/hayamimi-web/build/assemble.py --root packages/hayamimi-web --work "$RUNNER_TEMP/hayamimi" --out dist/hayamimi-web
+          python3 packages/hayamimi-web/build/verify-dist.py dist/hayamimi-web
+      - name: Fetch pinned browser fixture
+        run: |
+          set -euo pipefail
+          curl -fL -o "$RUNNER_TEMP/ja.wav" https://raw.githubusercontent.com/oboroge0/hayamimi/09c8081420c7c88374eb24ae533ea470de794203/tests/golden/ja/ja_014.wav
+          echo '638d54e8eb6dcde05e1725eaef62ab0e542db7cd11893241632b55226ed10fd5  '"$RUNNER_TEMP/ja.wav" | sha256sum -c -
+      - name: Browser checks
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4173 --directory dist/hayamimi-web >"$RUNNER_TEMP/http.log" 2>&1 &
+          server=$!; trap 'kill $server || true' EXIT
+          python3 packages/hayamimi-web/tests/browser-ui.py http://127.0.0.1:4173/
+          python3 packages/hayamimi-web/tests/browser-asr.py http://127.0.0.1:4173/ "$RUNNER_TEMP/ja.wav"
+      - name: Package
+        run: |
+          set -euo pipefail
+          (cd dist && zip -qr hayamimi-web.zip hayamimi-web)
+          sha256sum dist/hayamimi-web.zip > dist/hayamimi-web.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hayamimi-web
+          path: |
+            dist/hayamimi-web.zip
+            dist/hayamimi-web.zip.sha256
+      - name: Publish GitHub Release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "hayamimi-web-${GITHUB_SHA::12}" dist/hayamimi-web.zip dist/hayamimi-web.zip.sha256 --generate-notes --target "$GITHUB_SHA"
