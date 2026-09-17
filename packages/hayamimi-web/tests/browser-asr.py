@@ -18,11 +18,11 @@ def lev(a, b):
         prev = cur
     return prev[-1]
 
-def golden_reference(path, wav_name):
+def golden_case(path, wav_name):
     data = json.loads(Path(path).read_text())
     for clip in data['clips']:
         if clip['wav'] == wav_name:
-            return clip['reference']
+            return clip['reference'], float(data['_cer_tolerance'])
     raise SystemExit(f'golden fixture not found: {wav_name}')
 
 ap = argparse.ArgumentParser()
@@ -31,7 +31,8 @@ ap.add_argument('wav')
 ap.add_argument('golden')
 a = ap.parse_args()
 wav = str(Path(a.wav).resolve())
-expected = norm(golden_reference(a.golden, Path(wav).name))
+reference, tolerance = golden_case(a.golden, Path(wav).name)
+expected = norm(reference)
 
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True, args=[
@@ -51,7 +52,7 @@ with sync_playwright() as p:
     page.click('#mic')
     actual = norm(text)
     cer = lev(actual, expected) / max(1, len(expected))
-    assert cer <= 0.15, f'CER {cer:.4f} > 0.15: {text}'
+    assert cer <= tolerance, f'CER {cer:.4f} > {tolerance:.4f}: {text}'
     assert not errors, errors
     b.close()
-print(f'browser-asr: PASS cer={cer:.4f} text={text}')
+print(f'browser-asr: PASS cer={cer:.4f} tolerance={tolerance:.4f} text={text}')
