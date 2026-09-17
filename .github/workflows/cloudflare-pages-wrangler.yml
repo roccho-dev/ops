@@ -65,3 +65,49 @@ jobs:
           if (result.error) throw result.error;
           process.exit(typeof result.status === 'number' ? result.status : 1);
           NODE
+
+      - name: Temporary approved UI Pages cleanup
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { spawnSync } = require('node:child_process');
+          const targets = ['ui-graph-218', 'stg-artifact-runtime'];
+          const keep = ['ui-runtime', 'stg-gov-json-reduce'];
+
+          const run = (argv, capture = false) => {
+            const result = spawnSync('npx', ['--yes', 'wrangler@4.112.0', ...argv], {
+              env: process.env,
+              encoding: capture ? 'utf8' : undefined,
+              stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
+            });
+            if (result.error) throw result.error;
+            if (result.status !== 0) throw new Error(`wrangler failed (${result.status}): ${JSON.stringify(argv)}`);
+            return capture ? result.stdout : '';
+          };
+
+          const list = () => {
+            const rows = JSON.parse(run(['pages', 'project', 'list', '--json'], true));
+            return new Set(rows.map(row => row['Project Name']));
+          };
+
+          const before = list();
+          const missingTargets = targets.filter(name => !before.has(name));
+          const missingKeep = keep.filter(name => !before.has(name));
+          if (missingTargets.length || missingKeep.length) {
+            throw new Error(`Pages precondition failed targets=${JSON.stringify(missingTargets)} keep=${JSON.stringify(missingKeep)}`);
+          }
+
+          for (const name of targets) {
+            console.log(`DELETE ${name}`);
+            run(['pages', 'project', 'delete', name, '--yes']);
+          }
+
+          const after = list();
+          const survivors = targets.filter(name => after.has(name));
+          const lostKeep = keep.filter(name => !after.has(name));
+          if (survivors.length || lostKeep.length) {
+            throw new Error(`Pages postcondition failed survivors=${JSON.stringify(survivors)} lostKeep=${JSON.stringify(lostKeep)}`);
+          }
+          console.log(`PAGES_AFTER ${JSON.stringify([...after].sort())}`);
+          NODE
