@@ -10,6 +10,14 @@ Recover physical Windows disk space without deleting persistent development stat
 - Never run broad prune, Nix GC, zero-fill, filesystem repair, VHD conversion/recreation, or `Optimize-VHD` under this runbook.
 - Existing authorization is target- and attempt-specific. Reconfirm before a new deletion set, session shutdown, or elevated compact attempt.
 
+## Per-attempt inputs have no defaults
+
+Historical proof is evidence only. Never copy a device, mountpoint, VHDX path, container set, size, or timestamp from this runbook or its proof into a new operation.
+
+Before rendering any state-changing command, discover and record the current values for `CURRENT_VHDX`, `PROVEN_BACKING_DEVICE`, `PROVEN_TRIM_MOUNT`, and `ENTRY_RUNNING_CONTAINERS`. Each value must come from the current host and current WSLC session. An unresolved, stale, or ambiguous value is a stop condition.
+
+Angle-bracket tokens are deliberately non-executable placeholders. Do not run a command while any token remains. Fixed tool paths in this document identify tools, not operation targets, and still require the stated verification.
+
 ## Cleanup workflow
 
 1. Distinguish Windows files, the WSLC VHDX physical size, live filesystem use, and reclaimable deleted blocks.
@@ -33,13 +41,13 @@ Old Terraform/OpenTofu providers and old test fixtures can be candidates, but na
 
 ## Proven WSLC VHDX compaction
 
-Discover current identities; the historical values below are evidence, not defaults.
+Discover every target identity from the current host and session. Do not obtain operation inputs from historical proof.
 
 ### Baseline
 
 Record C: free bytes, VHDX physical bytes, every running WSLC container and process tree, named volumes, relevant repo HEAD/status, container mountinfo, and the session-host mount/device/filesystem/discard identity.
 
-Require one unambiguous ext4 backing device with discard support. Historical mapping was `storage.vhdx` -> `/dev/sdc` -> `/var/lib/docker`; re-prove it every time. Active builds, tests, editors, provider operations, or unexplained writes are blockers.
+Require one unambiguous relation from the current VHDX to an ext4 backing device with discard support and its current trim mountpoint. Active builds, tests, editors, provider operations, or unexplained writes are blockers.
 
 ### Exact order
 
@@ -48,7 +56,7 @@ Require one unambiguous ext4 backing device with discard support. Historical map
 3. Verify `/usr/sbin/fstrim` is the expected regular ELF. Invoke it once on the proven mountpoint through a PTY and `/bin/sh -lc`, capturing discard counters before and after. The proven shape is:
 
    ```text
-   wslc system session run /bin/sh -lc 'sync; echo BEFORE; cat /sys/class/block/<device>/stat; /usr/sbin/fstrim -v <mountpoint>; rc=$?; echo FSTRIM_RC=$rc; echo AFTER; cat /sys/class/block/<device>/stat; exit $rc'
+   wslc system session run /bin/sh -lc 'sync; echo BEFORE; cat /sys/class/block/<PROVEN_BACKING_DEVICE>/stat; /usr/sbin/fstrim -v <PROVEN_TRIM_MOUNT>; rc=$?; echo FSTRIM_RC=$rc; echo AFTER; cat /sys/class/block/<PROVEN_BACKING_DEVICE>/stat; exit $rc'
    ```
 
    With Codex host execution, set `tty: true`. A direct non-PTY call produced `ERROR_INVALID_HANDLE` with unchanged discard counters on 2026-09-17. Do not mistake it for successful trim or automatically repeat a genuinely executed or ambiguous trim.
@@ -57,7 +65,7 @@ Require one unambiguous ext4 backing device with discard support. Historical map
 6. Create a temporary DiskPart command file containing exactly:
 
    ```text
-   select vdisk file="<exact-current-storage.vhdx>"
+   select vdisk file="<CURRENT_VHDX>"
    compact vdisk
    exit
    ```
@@ -79,9 +87,8 @@ Require one unambiguous ext4 backing device with discard support. Historical map
 - If invocation fails before trim is established and counters are unchanged, restore the original container state, diagnose the invocation surface, and obtain or confirm authority for a fresh attempt.
 - Restore the exact entry-running set when safe after any failed gate.
 
-### Proven outcomes
+### Historical evidence
 
-- 2026-08-21: VHDX `131,841,654,784` -> `98,499,035,136` bytes; C: free `3,676,639,232` -> `37,066,301,440` bytes; trim reported `986,078,838,784` bytes.
-- 2026-09-17: VHDX `123,191,951,360` -> `92,506,423,296` bytes; C: free `812,359,680` -> `31,493,349,376` bytes; trim reported `336,076,800` bytes.
+Observed identities and outcomes live only in [the bounded proof](../proof/wslc-storage-reclaim-20260917.json). They demonstrate that the procedure worked for that attempt; they are never defaults or execution inputs for another attempt.
 
 Trim output and physical recovery need not match one-for-one because compaction returns already-discarded sparse extents to Windows.

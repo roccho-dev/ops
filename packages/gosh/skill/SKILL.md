@@ -22,5 +22,6 @@ Do not treat the reference as an admitted executable entry in `capabilities/inde
 
 - Do not invent `gosh query`, `ensure`, materialization, index authority, or generic schema behavior that the current repository does not implement.
 - Do not search the web, install approximate packages, use `latest`, or resolve an executable through ambient `PATH` on behalf of a capability.
+- Treat identities, paths, sizes, timestamps, and container sets in proof files as historical evidence only, never as defaults or execution inputs. Rediscover current values for every attempt.
 - State-changing work still requires the capability's own current authorization and safety gates.
 - If repository source, installed copy, or proof identity differs, report the mismatch instead of silently choosing one.

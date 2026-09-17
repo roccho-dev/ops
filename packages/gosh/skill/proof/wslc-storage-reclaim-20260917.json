@@ -3,6 +3,7 @@
   "observedAt": "2026-09-18T05:57:10+09:00",
   "repositorySource": "packages/gosh/skill/SKILL.md",
   "capabilityReference": "packages/gosh/skill/references/wslc-storage-reclaim.md",
+  "executionInputPolicy": "Evidence only. No identity, path, size, timestamp, or container set in this proof is a default or execution input for another attempt.",
   "prototypeMaterialization": "%USERPROFILE%\\.codex\\skills\\wslc-storage-reclaim",
   "skillDiscovery": {
     "listedByCodexOnFollowingTurn": true,
