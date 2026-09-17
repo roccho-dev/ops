@@ -28,6 +28,7 @@ jobs:
           python3 -m pip install --disable-pip-version-check playwright==1.63.0
           python3 -m playwright install --with-deps chromium
           git clone --depth 1 --branch 4.0.23 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          test "$(git -C "$RUNNER_TEMP/emsdk" rev-parse HEAD)" = c0bb220cb6e6f4e0fabb6f6db9efd53390ef5e56
           "$RUNNER_TEMP/emsdk/emsdk" install 4.0.23
           "$RUNNER_TEMP/emsdk/emsdk" activate 4.0.23
       - name: Fetch and verify pinned sources

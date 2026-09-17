@@ -19,6 +19,15 @@ build_one() {
     cp "$(find "$tmp" -name 'decoder-*.int8.onnx' -print -quit)" "$SHERPA/wasm/vad-asr/assets/transducer-decoder.onnx"
     cp "$(find "$tmp" -name 'joiner-*.int8.onnx' -print -quit)" "$SHERPA/wasm/vad-asr/assets/transducer-joiner.onnx"
     cp "$(find "$tmp" -name tokens.txt -print -quit)" "$SHERPA/wasm/vad-asr/assets/tokens.txt"
+    (
+      cd "$SHERPA/wasm/vad-asr/assets"
+      cat <<'EOF' | sha256sum -c -
+ead1579e118b821a767242a8eb9272634b0e63ba16f8dfc4d126732406eae268  transducer-encoder.onnx
+d0179db78a2e65445c5c3dc41e94c62068fc539fe4e45060e32f438cca76432f  transducer-decoder.onnx
+c7f4ba40a8ae307a6c30b5c06e2570add04466bcb45bab62699f0ec5d00ed495  transducer-joiner.onnx
+144f8a4f639373a1bdf7eabb2437482ef64b0cc5db24ad27cce65f293e4faa24  tokens.txt
+EOF
+    )
   else
     tar -xjf "$DL/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8.tar.bz2" -C "$tmp"
     cp "$(find "$tmp" -name model.int8.onnx -print -quit)" "$SHERPA/wasm/vad-asr/assets/nemo-ctc.onnx"
