@@ -1,11 +1,6 @@
 name: materialize exact Vim Nix runtime
 
 on:
-  push:
-    branches:
-      - proposals
-    paths:
-      - "verification/vim-nix-current-runtime/request.json"
   workflow_dispatch:
 
 permissions:
