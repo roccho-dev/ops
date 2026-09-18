@@ -103,14 +103,9 @@ jobs:
           if-no-files-found: error
 
   exact-release-package-receipts:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.governance_release_tag != ''
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.governance_release_tag != '' }}
     needs: contract-selftest
     runs-on: ubuntu-24.04
-    env:
-      RELEASE_DIR: ${{ runner.temp }}/exact-gov-release
-      RECEIPT_DIR: ${{ runner.temp }}/ops-gov-package-output
-      RESULT_JSON: ${{ runner.temp }}/ops-gov-package-output.result.json
-      VALIDATION_JSON: ${{ runner.temp }}/ops-gov-package-output.validation.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,6 +114,15 @@ jobs:
         with:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
+      - name: Set exact-release paths
+        shell: bash
+        run: |
+          {
+            echo "RELEASE_DIR=$RUNNER_TEMP/exact-gov-release"
+            echo "RECEIPT_DIR=$RUNNER_TEMP/ops-gov-package-output"
+            echo "RESULT_JSON=$RUNNER_TEMP/ops-gov-package-output.result.json"
+            echo "VALIDATION_JSON=$RUNNER_TEMP/ops-gov-package-output.validation.json"
+          } >> "$GITHUB_ENV"
       - name: Download exact gov release inputs
         env:
           GH_TOKEN: ${{ github.token }}
