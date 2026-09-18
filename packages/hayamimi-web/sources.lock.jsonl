@@ -1,0 +1,5 @@
+{"id":"hayamimi","kind":"git","repo":"https://github.com/oboroge0/hayamimi.git","revision":"09c8081420c7c88374eb24ae533ea470de794203"}
+{"id":"sherpa-onnx","kind":"git","repo":"https://github.com/k2-fsa/sherpa-onnx.git","revision":"a5b4a944c5186a68bcdc0ac3011e4c541781ac84"}
+{"id":"reazonspeech-ja","kind":"github-release-asset","repo":"k2-fsa/sherpa-onnx","tag":"asr-models","assetId":221786251,"name":"sherpa-onnx-zipformer-ja-en-reazonspeech-2025-01-17.tar.bz2","bytes":437969761}
+{"id":"silero-vad","kind":"github-release-asset","repo":"k2-fsa/sherpa-onnx","tag":"asr-models","assetId":271935959,"name":"silero_vad.onnx","bytes":643854,"sha256":"9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"}
+{"id":"parakeet-ja","kind":"github-release-asset","repo":"k2-fsa/sherpa-onnx","tag":"asr-models","assetId":271243108,"name":"sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8.tar.bz2","bytes":489389564,"sha256":"4b0a800ef29f4f4c8667339bf6f60d5bfdc2852ddc9dc5741aea65b6f8d1306b"}
