@@ -46,10 +46,13 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto(a.url)
     page.context.grant_permissions(['microphone'], origin=a.url.rstrip('/'))
-    page.click('#mic')
-    page.wait_for_function("document.querySelector('#box').value.trim().length > 8", timeout=120000)
-    text = page.input_value('#box')
-    page.click('#mic')
+    page.wait_for_function("window.hayamimi && window.hayamimiTexts")
+    assert page.locator('button,textarea,input,canvas,svg').count() == 0
+    assert page.locator('body').inner_text().strip() == ''
+    page.evaluate("() => window.hayamimi.start()")
+    page.wait_for_function("window.hayamimiTexts.join('\\n').trim().length > 8", timeout=120000)
+    text = page.evaluate("() => window.hayamimiTexts.join('\\n')")
+    page.evaluate("() => window.hayamimi.stop()")
     actual = norm(text)
     cer = lev(actual, expected) / max(1, len(expected))
     assert cer <= tolerance, f'CER {cer:.4f} > {tolerance:.4f}: {text}'
