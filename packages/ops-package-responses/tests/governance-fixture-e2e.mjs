@@ -106,9 +106,12 @@ function validateCheckedInExample() {
   delete receiptBase.receipt_digest;
   assert.equal(objectDigest(receiptBase), receipt.receipt_digest);
   for (const [name, digest] of Object.entries(receipt.input_digests)) assert.equal(sha256File(path.join(exampleRoot, name)), digest);
-  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}^{tree}`), receipt.implementation_tree.slice("git-tree-sha1:".length));
-  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses`), receipt.package_tree.slice("git-tree-sha1:".length));
-  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses/tests/governance-fixture-e2e.mjs`), receipt.test_blob.slice("git-blob-sha1:".length));
+  const historyAvailable = fs.existsSync(path.join(repoRoot, ".git"));
+  if (historyAvailable) {
+    assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}^{tree}`), receipt.implementation_tree.slice("git-tree-sha1:".length));
+    assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses`), receipt.package_tree.slice("git-tree-sha1:".length));
+    assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses/tests/governance-fixture-e2e.mjs`), receipt.test_blob.slice("git-blob-sha1:".length));
+  }
 
   for (const input of manifest.inventory_inputs) {
     const observed = input.path === "packages/<directory-name-set>"
@@ -117,7 +120,16 @@ function validateCheckedInExample() {
     assert.equal(observed, input.sha256, `inventory source drift: ${input.path}`);
   }
   assert.deepEqual(sortedDirectories(path.join(repoRoot, "packages")), projection.source_directory_ids);
-  return { manifest, projection, obligations, source, materialization, expected, receipt };
+  return {
+    manifest,
+    projection,
+    obligations,
+    source,
+    materialization,
+    expected,
+    receipt,
+    historyBinding: historyAvailable ? "PASS" : "NOT_RUN_SOURCE_SNAPSHOT",
+  };
 }
 
 function writeFakeNix(file, fakeRoot, projection) {
@@ -293,6 +305,7 @@ export function runGovernanceFixtureE2E() {
       organization_active_minted: false,
       authority: false,
       fixture_source_sha256: example.manifest.source_sha256,
+      history_binding: example.historyBinding,
     };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
