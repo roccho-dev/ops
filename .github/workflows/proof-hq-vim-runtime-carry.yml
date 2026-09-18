@@ -1,18 +1,7 @@
 name: Proof HQ Vim runtime Carry
 
 on:
-  push:
-    branches:
-      - proof/hq-vim-runtime-carry-20260821
-    paths:
-      - .github/workflows/proof-hq-vim-runtime-carry.yml
-      - verification/hq-vim-runtime-carry/request.json
-  pull_request:
-    branches:
-      - proposals
-    paths:
-      - .github/workflows/proof-hq-vim-runtime-carry.yml
-      - verification/hq-vim-runtime-carry/request.json
+  workflow_dispatch:
 
 permissions:
   contents: read
