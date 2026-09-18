@@ -22,6 +22,7 @@ receipts before product repositories adopt the same contract.
 - `ops` executes package obligations and emits non-authority evidence.
 - package receipts, GitHub workflows, generated artifacts, and this README do not
   mint accepted meaning or `organization-active` admission.
+- This README is documentation only and is not an independent authority.
 
 ## Inputs
 
