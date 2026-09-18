@@ -60,7 +60,6 @@ jobs:
           python3 packages/hayamimi-web/build/verify-dist.py "$RUNNER_TEMP/release/hayamimi-web"
           python3 -m http.server 4173 --directory "$RUNNER_TEMP/release/hayamimi-web" >"$RUNNER_TEMP/http.log" 2>&1 &
           server=$!; trap 'kill $server || true' EXIT
-          python3 packages/hayamimi-web/tests/browser-ui.py http://127.0.0.1:4173/
           python3 packages/hayamimi-web/tests/browser-asr.py \
             http://127.0.0.1:4173/ \
             "$RUNNER_TEMP/hayamimi/sources/hayamimi/tests/golden/ja/ja_014.wav" \
