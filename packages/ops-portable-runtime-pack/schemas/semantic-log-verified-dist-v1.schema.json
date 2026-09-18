@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:roccho-dev:ops:semantic-log-verified-dist:v1",
+  "title": "Semantic log verified dist handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "release", "source", "workflow", "assets", "runtime", "data_layout", "health", "credentials", "proofs"],
+  "properties": {
+    "kind": { "const": "ops.semantic-log.verified-dist.v1" },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tag"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "tag": { "type": "string", "minLength": 1 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit", "tree"],
+      "properties": {
+        "repository": { "const": "roccho-dev/ops" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "run_id", "run_url", "attestation_digest"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "integer", "minimum": 1 },
+        "run_url": { "type": "string", "format": "uri" },
+        "attestation_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/asset" }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["caddy_modules", "request_schema", "result_schema", "config_template"],
+      "properties": {
+        "caddy_modules": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "request_schema": { "const": "semantic-intent.v1" },
+        "result_schema": { "const": "semantic-intent.result.v1" },
+        "config_template": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "listen"],
+          "properties": {
+            "path": { "const": "config/Caddyfile" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "listen": { "type": "string", "pattern": "^127\\.0\\.0\\.1:[0-9]{1,5}$" }
+          }
+        }
+      }
+    },
+    "data_layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "authoring_intent", "projection_receipt", "backward_read", "rollback_read"],
+      "properties": {
+        "schema": { "const": "semantic-log.data-layout.v1" },
+        "authoring_intent": { "const": "authoring-intent.jsonl" },
+        "projection_receipt": { "const": "projection-receipt.jsonl" },
+        "backward_read": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
+        "rollback_read": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "expected_status"],
+      "properties": {
+        "path": { "const": "/healthz" },
+        "expected_status": { "const": 200 }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["github", "tunnel"],
+      "properties": {
+        "github": { "$ref": "#/$defs/credential" },
+        "tunnel": { "$ref": "#/$defs/credential" }
+      }
+    },
+    "proofs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packaged_dist_run_id", "loopback_only", "static_refresh", "intent_route", "append_before_github", "restart_recovery", "ambiguous_effect_reconcile", "secret_scan_zero"],
+      "properties": {
+        "packaged_dist_run_id": { "type": "integer", "minimum": 1 },
+        "loopback_only": { "const": true },
+        "static_refresh": { "const": true },
+        "intent_route": { "const": true },
+        "append_before_github": { "const": true },
+        "restart_recovery": { "const": true },
+        "ambiguous_effect_reconcile": { "const": true },
+        "secret_scan_zero": { "const": true }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "delivery", "file_name"],
+      "properties": {
+        "capability": { "type": "string", "minLength": 1 },
+        "delivery": { "const": "file" },
+        "file_name": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "mode"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "type": "integer", "minimum": 1 },
+        "mode": { "type": "string", "pattern": "^[0-7]{4}$" }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["arch", "asset_id", "asset_name", "asset_url", "asset_sha256", "asset_bytes", "payload"],
+      "properties": {
+        "arch": { "enum": ["amd64", "arm64"] },
+        "asset_id": { "type": "integer", "minimum": 1 },
+        "asset_name": { "type": "string", "minLength": 1 },
+        "asset_url": { "type": "string", "format": "uri" },
+        "asset_sha256": { "$ref": "#/$defs/sha256" },
+        "asset_bytes": { "type": "integer", "minimum": 1 },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["caddy", "cloudflared", "files"],
+          "properties": {
+            "caddy": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "version", "sha256", "modules"],
+              "properties": {
+                "path": { "const": "bin/caddy" },
+                "version": { "type": "string", "minLength": 1 },
+                "sha256": { "$ref": "#/$defs/sha256" },
+                "modules": { "type": "array", "items": { "type": "string" }, "minItems": 2, "uniqueItems": true }
+              }
+            },
+            "cloudflared": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "version", "source_url", "sha256"],
+              "properties": {
+                "path": { "const": "bin/cloudflared" },
+                "version": { "type": "string", "minLength": 1 },
+                "source_url": { "type": "string", "format": "uri" },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            },
+            "files": { "type": "array", "minItems": 7, "items": { "$ref": "#/$defs/file" } }
+          }
+        }
+      }
+    }
+  }
+}

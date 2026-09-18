@@ -1,0 +1,125 @@
+{
+  "kind": "ops.semantic-log.verified-dist.v1",
+  "release": {
+    "id": 1,
+    "tag": "semantic-log-runtime-contract-fixture"
+  },
+  "source": {
+    "repository": "roccho-dev/ops",
+    "commit": "1111111111111111111111111111111111111111",
+    "tree": "2222222222222222222222222222222222222222"
+  },
+  "workflow": {
+    "name": "semantic-log-runtime-release",
+    "run_id": 1,
+    "run_url": "https://github.com/roccho-dev/ops/actions/runs/1",
+    "attestation_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "assets": [
+    {
+      "arch": "amd64",
+      "asset_id": 1,
+      "asset_name": "semantic-log-runtime-linux-amd64.tar.gz",
+      "asset_url": "https://github.com/roccho-dev/ops/releases/download/semantic-log-runtime-contract-fixture/semantic-log-runtime-linux-amd64.tar.gz",
+      "asset_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "asset_bytes": 1,
+      "payload": {
+        "caddy": {
+          "path": "bin/caddy",
+          "version": "fixture",
+          "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "modules": ["http.handlers.file_server", "http.handlers.semantic_log"]
+        },
+        "cloudflared": {
+          "path": "bin/cloudflared",
+          "version": "fixture",
+          "source_url": "https://github.com/cloudflare/cloudflared/releases/tag/fixture",
+          "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+        },
+        "files": [
+          {"path": "bin/caddy", "sha256": "5555555555555555555555555555555555555555555555555555555555555555", "bytes": 1, "mode": "0755"},
+          {"path": "bin/cloudflared", "sha256": "6666666666666666666666666666666666666666666666666666666666666666", "bytes": 1, "mode": "0755"},
+          {"path": "config/Caddyfile", "sha256": "7777777777777777777777777777777777777777777777777777777777777777", "bytes": 1, "mode": "0644"},
+          {"path": "schemas/semantic-intent-v1.schema.json", "sha256": "8888888888888888888888888888888888888888888888888888888888888888", "bytes": 1, "mode": "0644"},
+          {"path": "schemas/semantic-intent-result-v1.schema.json", "sha256": "9999999999999999999999999999999999999999999999999999999999999999", "bytes": 1, "mode": "0644"},
+          {"path": "manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bytes": 1, "mode": "0644"},
+          {"path": "SHA256SUMS", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "bytes": 1, "mode": "0644"}
+        ]
+      }
+    },
+    {
+      "arch": "arm64",
+      "asset_id": 2,
+      "asset_name": "semantic-log-runtime-linux-arm64.tar.gz",
+      "asset_url": "https://github.com/roccho-dev/ops/releases/download/semantic-log-runtime-contract-fixture/semantic-log-runtime-linux-arm64.tar.gz",
+      "asset_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "asset_bytes": 1,
+      "payload": {
+        "caddy": {
+          "path": "bin/caddy",
+          "version": "fixture",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "modules": ["http.handlers.file_server", "http.handlers.semantic_log"]
+        },
+        "cloudflared": {
+          "path": "bin/cloudflared",
+          "version": "fixture",
+          "source_url": "https://github.com/cloudflare/cloudflared/releases/tag/fixture",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "files": [
+          {"path": "bin/caddy", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "bytes": 1, "mode": "0755"},
+          {"path": "bin/cloudflared", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bytes": 1, "mode": "0755"},
+          {"path": "config/Caddyfile", "sha256": "7777777777777777777777777777777777777777777777777777777777777777", "bytes": 1, "mode": "0644"},
+          {"path": "schemas/semantic-intent-v1.schema.json", "sha256": "8888888888888888888888888888888888888888888888888888888888888888", "bytes": 1, "mode": "0644"},
+          {"path": "schemas/semantic-intent-result-v1.schema.json", "sha256": "9999999999999999999999999999999999999999999999999999999999999999", "bytes": 1, "mode": "0644"},
+          {"path": "manifest.json", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "bytes": 1, "mode": "0644"},
+          {"path": "SHA256SUMS", "sha256": "1212121212121212121212121212121212121212121212121212121212121212", "bytes": 1, "mode": "0644"}
+        ]
+      }
+    }
+  ],
+  "runtime": {
+    "caddy_modules": ["http.handlers.file_server", "http.handlers.semantic_log"],
+    "request_schema": "semantic-intent.v1",
+    "result_schema": "semantic-intent.result.v1",
+    "config_template": {
+      "path": "config/Caddyfile",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "listen": "127.0.0.1:8080"
+    }
+  },
+  "data_layout": {
+    "schema": "semantic-log.data-layout.v1",
+    "authoring_intent": "authoring-intent.jsonl",
+    "projection_receipt": "projection-receipt.jsonl",
+    "backward_read": ["semantic-log.data-layout.v1"],
+    "rollback_read": ["semantic-log.data-layout.v1"]
+  },
+  "health": {
+    "path": "/healthz",
+    "expected_status": 200
+  },
+  "credentials": {
+    "github": {
+      "capability": "fixed-repository issues read-write",
+      "delivery": "file",
+      "file_name": "github-credential"
+    },
+    "tunnel": {
+      "capability": "named tunnel connect",
+      "delivery": "file",
+      "file_name": "tunnel-credential"
+    }
+  },
+  "proofs": {
+    "packaged_dist_run_id": 1,
+    "loopback_only": true,
+    "static_refresh": true,
+    "intent_route": true,
+    "append_before_github": true,
+    "restart_recovery": true,
+    "ambiguous_effect_reconcile": true,
+    "secret_scan_zero": true
+  }
+}
