@@ -4,7 +4,6 @@ on:
   pull_request:
     branches: [proposals]
     paths:
-      - '.github/workflows/mobile-agent-preset-static-host.yml'
       - '.github/workflows/mobile-agent-preset-url-dod.yml'
       - '.github/workflows/mobile-agent-live-bootstrap-deploy.yml'
       - '.github/workflows/mobile-agent-seq-carrier.yml'

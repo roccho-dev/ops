@@ -53,10 +53,10 @@ any package receipt is blocked.
 
 ## Package-owned governance fixture
 
-`examples/governance-package-obligations-v1/` is the golden input for the
-current Ops package universe. It contains all 123 package obligations from the
+`examples/governance-package-obligations-v1/` is the golden input for its exact
+Git-bound Ops target universe. It contains all 123 package obligations from the
 Governance merge train, with three selected package checks and 120 explicit
-out-of-scope rows. The E2E test verifies the source inventory digests, replays the
+out-of-scope rows. The Git-aware E2E verifies inventory bytes at the recorded target commit; the Nix source-snapshot replay verifies the closed fixture internally. Both replay the
 real package entrypoint through a deterministic Nix adapter, and requires:
 
 ```text

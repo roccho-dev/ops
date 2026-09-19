@@ -56,23 +56,29 @@ jobs:
           pages=json.load(open(sys.argv[1],encoding='utf-8'))
           comments=[comment for page in pages for comment in page]
           owner=os.environ['GITHUB_REPOSITORY_OWNER']
-          prefix=re.escape(os.environ['CHUNK_PREFIX'])
+          prefix=os.environ['CHUNK_PREFIX']
           total=int(os.environ['CHUNK_COUNT'])
-          pattern=re.compile(rf'^{prefix} ([0-9]{{2}})/{total:02d}\n([A-Za-z0-9+/=]+)$')
+          header=re.compile(rf'^{re.escape(prefix)} ([0-9]{{2}})/{total:02d}$')
           chunks={}
           for comment in comments:
               if comment.get('user',{}).get('login') != owner:
                   continue
-              match=pattern.fullmatch(str(comment.get('body','')))
+              body=str(comment.get('body','')).replace('\\r\\n','\\n').strip()
+              first,separator,rest=body.partition('\\n')
+              if not separator:
+                  continue
+              match=header.fullmatch(first.strip())
               if not match:
                   continue
+              payload=re.sub(r'\\s+','',rest)
+              assert re.fullmatch(r'[A-Za-z0-9+/=]+',payload),match.group(1)
               index=int(match.group(1))
               assert 0 <= index < total
-              assert index not in chunks, f'duplicate chunk {index}'
-              chunks[index]=match.group(2)
-          assert sorted(chunks)==list(range(total)), sorted(chunks)
+              assert index not in chunks,f'duplicate chunk {index}'
+              chunks[index]=payload
+          assert sorted(chunks)==list(range(total)),sorted(chunks)
           joined=''.join(chunks[index] for index in range(total))
-          assert len(joined)==int(os.environ['BASE64_BYTES'])
+          assert len(joined)==int(os.environ['BASE64_BYTES']),len(joined)
           assert hashlib.sha256(joined.encode()).hexdigest()==os.environ['BASE64_SHA256']
           pathlib.Path(sys.argv[2]).write_text(joined,encoding='ascii')
           print(json.dumps({'status':'PASS','chunks':total,'base64Bytes':len(joined)}))

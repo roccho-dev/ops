@@ -1,10 +1,7 @@
 name: materialize exact Vim HQ source carry
 
 on:
-  pull_request_target:
-    branches: [proposals]
-    paths:
-      - verification/vim-hq-complete-carry/request.json
+  workflow_dispatch:
 
 permissions:
   contents: read
