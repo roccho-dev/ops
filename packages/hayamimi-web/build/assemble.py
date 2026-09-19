@@ -11,7 +11,7 @@ def main():
     root=pathlib.Path(a.root).resolve(); work=pathlib.Path(a.work).resolve(); out=pathlib.Path(a.out).resolve()
     if out.exists(): shutil.rmtree(out)
     out.mkdir(parents=True)
-    for f in ('index.html','chat.mjs','chat.css'): shutil.copy2(root/'web'/f,out/f)
+    shutil.copy2(root/'web'/'index.html',out/'index.html')
     cp_tree(root/'src',out/'runtime')
     cp_tree(work/'generated'/'sherpa',out/'sherpa'); cp_tree(work/'generated'/'sherpa-pja',out/'sherpa-pja')
     shutil.copy2(root/'THIRD_PARTY_NOTICES.md',out/'THIRD_PARTY_NOTICES.md')
