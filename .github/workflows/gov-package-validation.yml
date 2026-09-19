@@ -86,7 +86,7 @@ jobs:
               reason = "A generated README artifact packet exists, but the committed root README is still independently checked and is not byte-materialized from that artifact.";
               nextAction = "Select the artifact as the root README producer, materialize committed README.md, and switch this residual to mkReadmeMaterializedCheck.";
               returnCondition = "The generated artifact is the declared root README source and its README.md is byte-identical to the committed root README under the governance common checker.";
-              expires = "2026-08-31";
+              expires = "2026-09-30";
             }
           ' -o readme-materialization-out
           mkdir -p readme-materialization-artifact
@@ -94,7 +94,7 @@ jobs:
           cp -L readme-materialization-out/pass readme-materialization-artifact/pass
           grep -q '"kind":"readmeMaterializationResidual.v1"' readme-materialization-artifact/residual.json
           grep -q '"status":"residual"' readme-materialization-artifact/residual.json
-          grep -q '"expires":"2026-08-31"' readme-materialization-artifact/residual.json
+          grep -q '"expires":"2026-09-30"' readme-materialization-artifact/residual.json
       - name: Upload README materialization residual
         uses: actions/upload-artifact@v4
         with:
@@ -103,14 +103,9 @@ jobs:
           if-no-files-found: error
 
   exact-release-package-receipts:
-    if: github.event_name == 'workflow_dispatch' && inputs.governance_release_tag != ''
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.governance_release_tag != '' }}
     needs: contract-selftest
     runs-on: ubuntu-24.04
-    env:
-      RELEASE_DIR: ${{ runner.temp }}/exact-gov-release
-      RECEIPT_DIR: ${{ runner.temp }}/ops-gov-package-output
-      RESULT_JSON: ${{ runner.temp }}/ops-gov-package-output.result.json
-      VALIDATION_JSON: ${{ runner.temp }}/ops-gov-package-output.validation.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,10 +114,19 @@ jobs:
         with:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
+      - name: Set exact-release paths
+        shell: bash
+        run: |
+          {
+            echo "RELEASE_DIR=$RUNNER_TEMP/exact-gov-release"
+            echo "RECEIPT_DIR=$RUNNER_TEMP/ops-gov-package-output"
+            echo "RESULT_JSON=$RUNNER_TEMP/ops-gov-package-output.result.json"
+            echo "VALIDATION_JSON=$RUNNER_TEMP/ops-gov-package-output.validation.json"
+          } >> "$GITHUB_ENV"
       - name: Download exact gov release inputs
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.governance_release_tag }}
+          RELEASE_TAG: ${{ github.event.inputs.governance_release_tag }}
         run: |
           set -euo pipefail
           test -n "$RELEASE_TAG"

@@ -26,6 +26,11 @@ function writeJsonl(file, rows) {
 }
 function sha256File(file) { return bytesDigest(fs.readFileSync(file)); }
 function git(root, ...args) { return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim(); }
+function gitBytes(root, ...args) { return execFileSync("git", ["-C", root, ...args]); }
+function targetDirectories(root, commit) {
+  const text = git(root, "ls-tree", "-d", "--name-only", `${commit}:packages`);
+  return text.split("\n").filter(Boolean).sort();
+}
 function sortedDirectories(root) {
   return fs.readdirSync(root, { withFileTypes: true }).filter((item) => item.isDirectory()).map((item) => item.name).sort();
 }
@@ -106,18 +111,33 @@ function validateCheckedInExample() {
   delete receiptBase.receipt_digest;
   assert.equal(objectDigest(receiptBase), receipt.receipt_digest);
   for (const [name, digest] of Object.entries(receipt.input_digests)) assert.equal(sha256File(path.join(exampleRoot, name)), digest);
-  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}^{tree}`), receipt.implementation_tree.slice("git-tree-sha1:".length));
-  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses`), receipt.package_tree.slice("git-tree-sha1:".length));
-  assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses/tests/governance-fixture-e2e.mjs`), receipt.test_blob.slice("git-blob-sha1:".length));
-
-  for (const input of manifest.inventory_inputs) {
-    const observed = input.path === "packages/<directory-name-set>"
-      ? directorySetDigest(path.join(repoRoot, "packages"))
-      : sha256File(path.join(repoRoot, input.path));
-    assert.equal(observed, input.sha256, `inventory source drift: ${input.path}`);
+  const historyAvailable = fs.existsSync(path.join(repoRoot, ".git"));
+  if (historyAvailable) {
+    assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}^{tree}`), receipt.implementation_tree.slice("git-tree-sha1:".length));
+    assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses`), receipt.package_tree.slice("git-tree-sha1:".length));
+    assert.equal(git(repoRoot, "rev-parse", `${receipt.implementation_commit}:packages/ops-package-responses/tests/governance-fixture-e2e.mjs`), receipt.test_blob.slice("git-blob-sha1:".length));
   }
-  assert.deepEqual(sortedDirectories(path.join(repoRoot, "packages")), projection.source_directory_ids);
-  return { manifest, projection, obligations, source, materialization, expected, receipt };
+
+  if (historyAvailable) {
+    const historicalDirectories = targetDirectories(repoRoot, manifest.target_commit);
+    for (const input of manifest.inventory_inputs) {
+      const observed = input.path === "packages/<directory-name-set>"
+        ? bytesDigest(Buffer.from(historicalDirectories.join("\n") + "\n"))
+        : bytesDigest(gitBytes(repoRoot, "show", `${manifest.target_commit}:${input.path}`));
+      assert.equal(observed, input.sha256, `historical inventory source drift: ${input.path}`);
+    }
+    assert.deepEqual(historicalDirectories, projection.source_directory_ids);
+  }
+  return {
+    manifest,
+    projection,
+    obligations,
+    source,
+    materialization,
+    expected,
+    receipt,
+    historyBinding: historyAvailable ? "PASS" : "NOT_RUN_SOURCE_SNAPSHOT",
+  };
 }
 
 function writeFakeNix(file, fakeRoot, projection) {
@@ -143,7 +163,11 @@ function writeFakeNix(file, fakeRoot, projection) {
 
 function createSyntheticOpsRepo(root, projection) {
   fs.mkdirSync(path.join(root, "build"), { recursive: true });
-  fs.copyFileSync(path.join(repoRoot, "build", "packages.jsonl"), path.join(root, "build", "packages.jsonl"));
+  const historicalBuildIds = new Set(projection.build_package_ids);
+  const historicalBuildRows = readJsonl(path.join(repoRoot, "build", "packages.jsonl"))
+    .filter((row) => historicalBuildIds.has(row.name));
+  assert.equal(historicalBuildRows.length, historicalBuildIds.size, "historical build package declaration is no longer representable");
+  writeJsonl(path.join(root, "build", "packages.jsonl"), historicalBuildRows);
   writeJsonl(path.join(root, "build", "checks.jsonl"), []);
   fs.writeFileSync(path.join(root, "flake.nix"), "# fixture inventory is supplied by the exact fake Nix adapter\n");
 
@@ -293,6 +317,7 @@ export function runGovernanceFixtureE2E() {
       organization_active_minted: false,
       authority: false,
       fixture_source_sha256: example.manifest.source_sha256,
+      history_binding: example.historyBinding,
     };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

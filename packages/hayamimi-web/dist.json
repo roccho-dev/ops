@@ -1,1 +1,0 @@
-{"artifacts":[{"aliases":["hayamimi-web"],"executor":"browser-esm","indexed":true,"name":"hayamimi-web","path":"dist/hayamimi-web/runtime/api/hayamimi.mjs"}],"kind":"ops.distDeclaration.v1"}

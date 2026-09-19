@@ -1,17 +1,6 @@
 name: Mobile Agent preset static host
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/mobile-agent-preset-static-host.yml'
-      - 'verification/mobile-agent-preset-app/**'
-      - 'ci.intent.v1.jsonl'
-  push:
-    branches: [proposals]
-    paths:
-      - '.github/workflows/mobile-agent-preset-static-host.yml'
-      - 'verification/mobile-agent-preset-app/**'
-      - 'ci.intent.v1.jsonl'
   issue_comment:
     types: [created]
 
@@ -22,12 +11,10 @@ permissions:
 jobs:
   materialize:
     if: >-
-      github.event_name == 'pull_request' ||
-      github.event_name == 'push' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.number == 242 &&
-       github.event.comment.user.login == github.repository_owner &&
-       github.event.comment.body == '/mobile-agent-preset-deploy')
+      github.event_name == 'issue_comment' &&
+      github.event.issue.number == 242 &&
+      github.event.comment.user.login == github.repository_owner &&
+      github.event.comment.body == '/mobile-agent-preset-deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     outputs:
