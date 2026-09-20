@@ -56,6 +56,7 @@ stdenvNoCC.mkDerivation {
     work="$TMPDIR/hayamimi"
     python3 "$packageRoot/build/fetch.py" --root "$packageRoot" --work "$work"
     python3 "$packageRoot/build/verify-sources.py" --root "$packageRoot" --work "$work"
+    patchShebangs "$work/sources/sherpa-onnx"
     bash "$packageRoot/build/wasm.sh" "$work"
     runHook postBuild
   '';
