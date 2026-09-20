@@ -1,1 +1,6 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>hayamimi</title><link rel="stylesheet" href="./chat.css"></head><body><main><div id="messages" aria-live="polite"></div><div id="composer"><textarea id="box" aria-label="text"></textarea><button id="mic" aria-label="voice">●</button><button id="send" aria-label="send">↑</button></div></main><script type="module" src="./chat.mjs"></script></body></html>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>hayamimi runtime</title></head><body><script type="module">
+import {createHayamimi} from './runtime/api/hayamimi.mjs'
+globalThis.hayamimiTexts=[]
+globalThis.hayamimi=createHayamimi()
+globalThis.hayamimi.onText=text=>globalThis.hayamimiTexts.push(text)
+</script></body></html>

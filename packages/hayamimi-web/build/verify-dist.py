@@ -2,7 +2,7 @@
 import argparse, hashlib, json, pathlib
 
 ALLOW = {
-    'index.html', 'chat.mjs', 'chat.css',
+    'index.html',
     'runtime/api/hayamimi.mjs',
     'runtime/audio/history.js', 'runtime/audio/microphone.mjs', 'runtime/audio/pcm.worklet.mjs',
     'runtime/asr/client.mjs', 'runtime/asr/primary.worker.js', 'runtime/asr/second.worker.js',
