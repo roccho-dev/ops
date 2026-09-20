@@ -123,7 +123,7 @@ jobs:
             echo "RESULT_JSON=$RUNNER_TEMP/ops-gov-package-output.result.json"
             echo "VALIDATION_JSON=$RUNNER_TEMP/ops-gov-package-output.validation.json"
           } >> "$GITHUB_ENV"
-      - name: Resolve compatible canonical gov release
+      - name: Resolve canonical gov release
         env:
           GH_TOKEN: ${{ github.token }}
           REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.governance_release_tag || '' }}
@@ -139,33 +139,15 @@ jobs:
             gov-package-output.tar.gz.sha256
           )
           if test -n "$REQUESTED_TAG"; then
-            candidates=("$REQUESTED_TAG")
+            selected="$REQUESTED_TAG"
           else
-            mapfile -t candidates < <(
-              gh release list                 --repo roccho-dev/governance                 --limit 100                 --json tagName,isDraft,isPrerelease,publishedAt                 --jq 'sort_by(.publishedAt) | reverse | .[] | select(.isDraft == false and .isPrerelease == false) | .tagName'
-            )
+            selected="$(
+              gh release list                 --repo roccho-dev/governance                 --limit 100                 --json tagName,isDraft,isPrerelease,publishedAt                 --jq 'sort_by(.publishedAt) | reverse | map(select(.isDraft == false and .isPrerelease == false and (.tagName | startswith("gov-release/")))) | .[0].tagName // empty'
+            )"
           fi
 
-          selected=''
-          for tag in "${candidates[@]}"; do
-            rm -rf "$RUNNER_TEMP/gov-release-candidate"
-            mkdir -p "$RUNNER_TEMP/gov-release-candidate"
-            compatible=true
-            for asset in "${required_assets[@]}"; do
-              if ! gh release download "$tag"                 --repo roccho-dev/governance                 --pattern "$asset"                 --dir "$RUNNER_TEMP/gov-release-candidate" >/dev/null 2>&1
-              then
-                compatible=false
-                break
-              fi
-            done
-            if test "$compatible" = true; then
-              selected="$tag"
-              break
-            fi
-          done
-
           test -n "$selected" || {
-            echo "compatible-governance-release-not-found" >&2
+            echo "canonical-governance-release-not-found" >&2
             exit 1
           }
           RELEASE_TAG="$selected" python3 - <<'PY'
@@ -174,6 +156,16 @@ jobs:
           if not re.fullmatch(r'gov-release/[^/]+/[0-9a-f]{64}', tag):
               raise SystemExit('release tag must be exact gov-release/<id>/<64-lowercase-hex-digest>')
           PY
+
+          mapfile -t published_assets < <(
+            gh release view "$selected"               --repo roccho-dev/governance               --json assets               --jq '.assets[].name'
+          )
+          for required in "${required_assets[@]}"; do
+            if ! printf '%s\n' "${published_assets[@]}" | grep -Fxq "$required"; then
+              echo "canonical-governance-release-incompatible:missing-$required" >&2
+              exit 1
+            fi
+          done
           printf 'RELEASE_TAG=%s\n' "$selected" >> "$GITHUB_ENV"
       - name: Download exact gov release inputs
         env:
