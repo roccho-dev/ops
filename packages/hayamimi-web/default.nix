@@ -44,7 +44,7 @@ stdenvNoCC.mkDerivation {
   # the resulting browser dist tree is content-addressed and immutable.
   outputHashMode = "recursive";
   outputHashAlgo = "sha256";
-  outputHash = lib.fakeHash;
+  outputHash = "sha256-JaLB0VMzOl/SLlmeilWwD5XLUwkGkhn98l8AFJsvfpU=";
 
   buildPhase = ''
     runHook preBuild
