@@ -1,0 +1,35 @@
+{
+	admin off
+	auto_https off
+}
+
+http://127.0.0.1:8080 {
+	@unsupported {
+		not method GET HEAD
+	}
+	respond @unsupported 405
+
+	handle /data/control.jsonl {
+		root * {$CONTROL_STATE_DIR}
+		rewrite * /control.jsonl
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	handle /data/claims.jsonl {
+		root * {$CONTROL_STATE_DIR}
+		rewrite * /claims.jsonl
+		header Cache-Control "no-store"
+		file_server
+	}
+
+	handle /data/* {
+		respond 404
+	}
+
+	handle {
+		root * {$CONTROL_UI_ROOT}
+		try_files {path} /index.html
+		file_server
+	}
+}
