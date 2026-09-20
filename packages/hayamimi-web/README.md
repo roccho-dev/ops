@@ -8,4 +8,15 @@ The default live path intentionally keeps Hayamimi's minimum Japanese route: 16 
 
 The repository contains build/test sources only. `dist/` is generated. The published ZIP contains no Python, Node, Dart, or Flutter runtime: only the browser harness, runtime JavaScript, WebAssembly, model data, manifest, and notices.
 
+## Consumer boundary
+
+```text
+nix build .#hayamimi-web
+
+result/
+  = the verified browser dist tree itself
+  = directly static-distributable
+```
+
+`packages.${system}.hayamimi-web` is the external package boundary. Consumers pin the exact ops revision and use only this Nix output; `hayamimi-web-build`, repository paths, build scripts, locks, and model acquisition remain provider internals.
 Flow: `sources.lock.jsonl -> fetch -> verify sources -> build WASM -> assemble -> verify dist -> ZIP/SHA256 -> unpack exact ZIP -> verify dist -> real Chromium ASR -> GitHub Release`.
