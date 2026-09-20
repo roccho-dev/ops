@@ -57,10 +57,11 @@ package is blocked.
 
 `ops-gov-package-output` projects those exact receipts without claiming final
 admission. `.github/workflows/gov-package-validation.yml` runs contract selftests and
-then, on every PR/push, requires a compatible published content-addressed gov
-release, executes every exact package obligation against the exact candidate SHA,
+then, on every PR/push, requires the newest canonical published content-addressed gov
+release to be compatible, executes every exact package obligation against the exact candidate SHA,
 and strictly validates the resulting receipts. An explicit `workflow_dispatch`
-may pin a specific exact release tag; absence of a compatible release is blocking.
+may pin a specific exact release tag; absence or incompatibility of the canonical
+release is blocking, with no fallback to an older compatible release.
 
 GitHub workflows are replaceable compute/effect adapters, not authority.
 
