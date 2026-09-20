@@ -56,9 +56,11 @@ Structural validation preserves blocked packets; strict validation fails when an
 package is blocked.
 
 `ops-gov-package-output` projects those exact receipts without claiming final
-admission. `.github/workflows/gov-package-validation.yml` runs contract selftests on
-ordinary changes and executes a real exact release only through an explicit
-content-addressed `workflow_dispatch` input.
+admission. `.github/workflows/gov-package-validation.yml` runs contract selftests and
+then, on every PR/push, requires a compatible published content-addressed gov
+release, executes every exact package obligation against the exact candidate SHA,
+and strictly validates the resulting receipts. An explicit `workflow_dispatch`
+may pin a specific exact release tag; absence of a compatible release is blocking.
 
 GitHub workflows are replaceable compute/effect adapters, not authority.
 
