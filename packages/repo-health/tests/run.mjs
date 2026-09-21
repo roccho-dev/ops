@@ -39,7 +39,7 @@ const {questions,mapping}=makeQuestions(observation,rules);
 assert.equal(Object.keys(questions).length,2);
 assert.ok(validateJevBudget(observation, questions).stateBytes > 0);
 assert.throws(
-  () => validateJevBudget({...observation, root:{...observation.root, purpose:'x'.repeat(25000)}}, questions),
+  () => validateJevBudget({...observation, root:{...observation.root, purpose:'x'.repeat(40000)}}, questions),
   /state budget exceeded/u,
 );
 const response={model:'jev-test',answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.95}]))};
