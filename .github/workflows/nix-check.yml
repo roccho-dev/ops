@@ -16,16 +16,26 @@ jobs:
         with:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
+      - name: Verify portable complete lock
+        run: |
+          set -euo pipefail
+          ! grep -Eq 'file:///home/|ssh://100\.' flake.lock
+          before="$(sha256sum flake.lock | cut -d' ' -f1)"
+          nix flake metadata --json >/dev/null
+          after="$(sha256sum flake.lock | cut -d' ' -f1)"
+          test "$before" = "$after"
+          git diff --exit-code -- flake.lock
       - name: Verify Git-bound governance golden fixture
         run: node packages/ops-package-responses/tests/governance-fixture-e2e.mjs --json
       - name: Run flake check
         run: |
           set -euo pipefail
           log="nix-flake-check.log"
-          if ! nix flake check --show-trace --no-write-lock-file >"$log" 2>&1; then
+          if ! nix flake check --show-trace >"$log" 2>&1; then
             tail -n 220 "$log" >&2
             exit 1
           fi
+          git diff --exit-code -- flake.lock
           tail -n 80 "$log"
       - name: Upload flake check log
         if: always()

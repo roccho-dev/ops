@@ -37,11 +37,24 @@ jobs:
       - name: Build consumer-ready Nix artifact
         run: |
           set -euo pipefail
+          before="$(sha256sum flake.lock | cut -d' ' -f1)"
           nix build -L .#hayamimi-web --out-link result-hayamimi-web
+          after="$(sha256sum flake.lock | cut -d' ' -f1)"
+          test "$before" = "$after"
+          git diff --exit-code -- flake.lock
           python3 packages/hayamimi-web/build/verify-dist.py result-hayamimi-web
           mkdir -p dist/hayamimi-web
           cp -aL result-hayamimi-web/. dist/hayamimi-web/
           python3 packages/hayamimi-web/build/verify-dist.py dist/hayamimi-web
+      - name: Prove exact public revision from empty directory
+        env:
+          EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          proof_root="$(mktemp -d)"
+          cd "$proof_root"
+          nix build -L "github:roccho-dev/ops/$EXACT_SHA#hayamimi-web" --out-link result
+          python3 "$GITHUB_WORKSPACE/packages/hayamimi-web/build/verify-dist.py" "$proof_root/result"
       - name: Fetch pinned browser fixture
         run: |
           set -euo pipefail
