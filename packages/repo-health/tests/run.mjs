@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, makeQuestions,
-  parseJsonl, sha256, unknownEvaluation, validateObservation, validateRules, validateScope,
+  parseJsonl, sha256, unknownEvaluation, validateJevBudget, validateObservation, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
 
@@ -37,6 +37,11 @@ assert.throws(() => validateObservation({...observation, packages:[{id:'x',path:
 assert.equal(classifyNoul(.9,rules[0]),'PASS'); assert.equal(classifyNoul(.1,rules[0]),'FAIL'); assert.equal(classifyNoul(.5,rules[0]),'UNKNOWN');
 const {questions,mapping}=makeQuestions(observation,rules);
 assert.equal(Object.keys(questions).length,2);
+assert.ok(validateJevBudget(observation, questions).stateBytes > 0);
+assert.throws(
+  () => validateJevBudget({...observation, root:{...observation.root, purpose:'x'.repeat(25000)}}, questions),
+  /state budget exceeded/u,
+);
 const response={model:'jev-test',answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.95}]))};
 const evaluated=evaluateObservation({observation,rules,response,mapping});
 assert.equal(evaluated.repo.status,'PASS'); assert.equal(evaluated.packages[0].status,'PASS');
