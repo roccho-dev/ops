@@ -54,9 +54,9 @@ export function validateJevBudget(state, questions) {
   // Conservative byte budgets below Jev 1.13's documented token limits:
   // 32k for state + longest question, 64k for the whole request.
   // Any over-budget observation becomes UNKNOWN before network I/O.
-  if (stateBytes > 24000) throw new Error(`Jev state budget exceeded: ${stateBytes} bytes`);
-  if (stateBytes + longestQuestionBytes > 30000) throw new Error(`Jev state+question budget exceeded: ${stateBytes + longestQuestionBytes} bytes`);
-  if (stateBytes + allQuestionsBytes > 56000) throw new Error(`Jev request budget exceeded: ${stateBytes + allQuestionsBytes} bytes`);
+  if (stateBytes > 28000) throw new Error(`Jev state budget exceeded: ${stateBytes} bytes`);
+  if (stateBytes + longestQuestionBytes > 31000) throw new Error(`Jev state+question budget exceeded: ${stateBytes + longestQuestionBytes} bytes`);
+  if (stateBytes + allQuestionsBytes > 60000) throw new Error(`Jev request budget exceeded: ${stateBytes + allQuestionsBytes} bytes`);
   return { stateBytes, longestQuestionBytes, allQuestionsBytes };
 }
 
