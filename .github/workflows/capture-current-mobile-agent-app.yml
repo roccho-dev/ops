@@ -1,0 +1,35 @@
+name: Capture current Mobile Agent public App
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/capture-current-mobile-agent-app.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Capture every currently available root-owned App document
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/current"
+          mkdir -p "$root/app/example" "$root/help" "$root/.well-known"
+          curl --fail --location --retry 4 --retry-all-errors --silent --show-error https://mobile-agent.roccho.workers.dev/ -o "$root/index.html"
+          curl --fail --location --retry 4 --retry-all-errors --silent --show-error https://mobile-agent.roccho.workers.dev/app/ -o "$root/app/index.html"
+          curl --fail --location --retry 4 --retry-all-errors --silent --show-error https://mobile-agent.roccho.workers.dev/app/example/ -o "$root/app/example/index.html"
+          curl --fail --location --retry 4 --retry-all-errors --silent --show-error https://mobile-agent.roccho.workers.dev/help/ -o "$root/help/index.html"
+          curl --fail --location --retry 4 --retry-all-errors --silent --show-error https://mobile-agent.roccho.workers.dev/.well-known/semantic-map.json -o "$root/.well-known/semantic-map.json"
+          (cd "$root" && find . -type f -print0 | sort -z | xargs -0 sha256sum) | tee "$RUNNER_TEMP/SHA256SUMS"
+          cp "$RUNNER_TEMP/SHA256SUMS" "$root/SHA256SUMS.capture-only"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-mobile-agent-app-${{ github.run_id }}
+          path: ${{ runner.temp }}/current/
+          if-no-files-found: error
+          retention-days: 7
