@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, makeQuestions,
+  EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, makeQuestions,
   parseJsonl, sha256, unknownEvaluation, validateObservation, validateRules, validateScope,
 } from '../lib/core.mjs';
 
@@ -21,6 +21,10 @@ const rules = [
 const observation = { kind:'repoHealth.observation.v1', repoId:'ops', repository:'roccho-dev/ops', revision:'a'.repeat(40), tree:'b'.repeat(40), dirty:false, root:{purpose:'Operations packages.', files:['README.md']}, packages:[{id:'repo-health',path:'packages/repo-health',purpose:'health',evidence:{tests:['tests/run.mjs'],checks:['repo-health']}}] };
 
 validateScope(scope); validateRules(rules); validateObservation(observation);
+assert.deepEqual(flakePackageNames({packages:{'x86_64-linux':{dataset:{type:'derivation'},'codex-cli':{type:'derivation'}},'aarch64-linux':{dataset:{type:'derivation'}}}}), ['codex-cli','dataset']);
+assert.deepEqual(flakePackageNames({checks:{}}), []);
+assert.throws(() => flakePackageNames({packages:[]}), /invalid Nix packages surface/u);
+validateObservation({...observation, packages:[{id:'dataset',path:'flake.nix#packages.*.dataset',purpose:'Declared Nix package output dataset.'}]});
 assert.throws(() => validateScope(scope.slice(0,6)), /exactly 7/u);
 assert.throws(() => validateScope([...scope.slice(0,6), {...scope[6], repository:'roccho-dev/governance'}]), /duplicate repository/u);
 assert.throws(() => validateRules([{...rules[0], passAt:undefined}]), /explicit valid/u);
