@@ -1,0 +1,50 @@
+name: Mobile Agent preset URL diagnostic
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-preset-url-diagnostic.yml'
+      - 'verification/mobile-agent-preset-url-dod/**'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Fetch fixed App and observe local dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/result/dist/app" "$RUNNER_TEMP/result/diagnostic"
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error -H 'Cache-Control: no-cache' \
+            'https://mobile-agent.roccho.workers.dev/app/' -o "$RUNNER_TEMP/result/dist/app/index.html"
+          test "$(wc -c < "$RUNNER_TEMP/result/dist/app/index.html")" -eq 2026821
+          test "$(sha256sum "$RUNNER_TEMP/result/dist/app/index.html" | cut -d' ' -f1)" = c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4
+          cp verification/mobile-agent-preset-url-dod/cases.json "$RUNNER_TEMP/result/cases.json"
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/result/dist" > "$RUNNER_TEMP/result/http.log" 2>&1 &
+          server=$!; trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 50); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          set +e
+          node verification/mobile-agent-preset-url-dod/smoke.mjs "$RUNNER_TEMP/result/cases.json" http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/result/diagnostic"
+          rc=$?
+          set -e
+          printf '%s\n' "$rc" > "$RUNNER_TEMP/result/smoke-exit-code.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-agent-preset-url-diagnostic-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
