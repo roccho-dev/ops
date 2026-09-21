@@ -1,0 +1,73 @@
+name: Transport exact-source Seq audit CI intent
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-mobile-agent-exact-source-seq-audit-intent.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_BRANCH: proposal/mobile-agent-exact-source-seq-audit-260823
+      WORKFLOW_PATH: .github/workflows/mobile-agent-exact-source-seq-audit.yml
+    steps:
+      - name: Append exactly one CI intent row to the bounded target branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          git clone --quiet --depth=1 --branch "$TARGET_BRANCH" "$remote" product
+          git -C product fetch --quiet --depth=1 origin proposals
+          mapfile -t changed < <(git -C product diff --name-only FETCH_HEAD...HEAD)
+          test "${#changed[@]}" -gt 0
+          for path in "${changed[@]}"; do
+            case "$path" in
+              "$WORKFLOW_PATH"|verification/mobile-agent-exact-source-seq-audit/*) ;;
+              *) echo "unexpected target path: $path" >&2; exit 1 ;;
+            esac
+          done
+          python3 - product/ci.intent.v1.jsonl <<'PY'
+          import json,pathlib,sys
+          path=pathlib.Path(sys.argv[1])
+          rows=[json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+          target='.github/workflows/mobile-agent-exact-source-seq-audit.yml'
+          assert not any(row.get('path')==target for row in rows)
+          rows.append({
+            'kind':'ci.intent.v1',
+            'path':target,
+            'provider':'github-actions',
+            'role':'bootstrap_exception',
+            'entrypoint':'PR exact-source identity/build/local-Chrome preflight; owner issue command -> immutable Release -> same dist to stg-mobile-agent -> stable+immutable 54-file readback and Chrome -> canonical PASS receipt -> accepted ref -> receipt-only URL report',
+            'source':'exact Git source commit/tree plus existing verify/build, trusted seq smoke, and public URL validator',
+            'authority':False,
+            'dispatch':['pull_request','issue_comment'],
+            'generation_mode':'checked_in',
+            'workflow_definition':'checked_in',
+            'artifact_source':'exact-source dist, immutable Release readback, Cloudflare stable/immutable byte and browser evidence, canonical accepted receipt',
+            'artifact_generation':'generated',
+            'final_role':'static_mobile_agent_exact_source_seq_public_url_acceptance',
+            'all_repositories_enforced':False,
+            'exception':{
+              'owner':'ops#293',
+              'reason':'bounded exact-source recovery and public URL acceptance adapter; no product runtime implementation is added',
+              'expiry':'2027-08-23',
+              'return_condition':'retain source/build/receipt contracts and replace only the provider-specific Actions effect when a provider-neutral admission surface exists',
+            },
+          })
+          path.write_text('\n'.join(json.dumps(row,sort_keys=True,separators=(',',':'),ensure_ascii=False) for row in rows)+'\n',encoding='utf-8')
+          PY
+          git -C product diff --check
+          test "$(git -C product diff --name-only)" = ci.intent.v1.jsonl
+          git -C product config user.name github-actions[bot]
+          git -C product config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C product add ci.intent.v1.jsonl
+          git -C product commit --quiet -m 'chore: register exact-source Seq audit CI intent'
+          git -C product push --quiet origin "$TARGET_BRANCH"
