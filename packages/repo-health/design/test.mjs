@@ -4,11 +4,11 @@ import { JEV_MODEL, parseJsonl } from '../lib/core.mjs';
 import { askJev } from '../lib/jev.mjs';
 import { BUILTIN_THEMES, review, structural } from './lint.mjs';
 
-const cases = parseJsonl(fs.readFileSync(new URL('cases.jsonl', import.meta.url), 'utf8'));
+const cases=parseJsonl(fs.readFileSync(new URL('cases.jsonl',import.meta.url),'utf8'));
 assert.equal(cases.length,20);
-const base = cases[0].design;
-const alter = (fn) => { const d=structuredClone(base); fn(d); return d; };
-const hardCases = [
+const base=cases[0].design;
+const alter=(fn)=>{const d=structuredClone(base);fn(d);return d;};
+const hardCases=[
   [null,'INVALID_DESIGN'],
   [alter((d)=>d.units.push(structuredClone(d.units[0]))),'DUPLICATE_ID'],
   [alter((d)=>d.units[0].in=['missing']),'MISSING_INPUT'],
@@ -32,7 +32,7 @@ await assert.rejects(()=>review(base,{topK:5,themes:[]},null),/INVALID_THEMES/);
 await assert.rejects(()=>review(base,{topK:5,themes:[{id:'x',scope:'unknown',concern:'x'}]},null),/INVALID_THEMES/);
 await assert.rejects(()=>review(alter((d)=>d.purpose='x'.repeat(40000)),{topK:5},async()=>{}),/budget exceeded/);
 
-const questions={q:{type:'noul',instructions:'Is there a concern?'}}, payload={model:JEV_MODEL,answers:{q:{type:'noul',noul:.5}}};
+const questions={q:{type:'noul',instructions:'Is there a concern?'}},payload={model:JEV_MODEL,answers:{q:{type:'noul',noul:.5}}};
 const options={key:'fixture-only',endpoint:'https://example.invalid',timeoutMs:1000};
 const mock=(body,ok=true)=>({...options,fetchImpl:async()=>({ok,status:503,json:async()=>body})});
 for (const body of [{...payload,model:'other'},{...payload,answers:{}},{...payload,answers:{q:{type:'noul',noul:2}}},{...payload,answers:{q:{type:'choice',noul:1}}}]) await assert.rejects(()=>askJev(base,questions,mock(body)));
@@ -42,10 +42,12 @@ await assert.rejects(()=>askJev(base,questions,{...options,fetchImpl:async()=>{t
 await assert.rejects(()=>askJev(base,questions,{...options,fetchImpl:async()=>({ok:true,json:async()=>{throw new Error('bad');}})}),/INVALID_JEV_JSON/);
 
 const multi=structuredClone(cases.find((x)=>x.id==='classify-a').design);
-const unitTheme={id:'domain-risk',scope:'unit',concern:'This unit may be risky.'};
-const ranked=await review(multi,{topK:2,themes:[unitTheme]},async(state,qs)=>({answers:{'domain-risk':{type:'noul',noul:state.unit.id==='audit'?.9:state.unit.id==='ui'?.6:.1}}}));
+const theme={id:'domain-risk',scope:'unit',concern:'This unit may be risky.'};
+const ranked=await review(multi,{topK:2,themes:[theme]},async(state,qs)=>({
+  answers:Object.fromEntries(Object.entries(qs).map(([key,q])=>[key,{type:'noul',noul:q.instructions.includes('"audit"')?.9:q.instructions.includes('"ui"')?.6:.1}]))
+}));
 assert.deepEqual(ranked.ranked[0].findings.map((x)=>x.subject),['unit:audit','unit:ui']);
 assert.equal(ranked.ranked[0].findings.length,2);
-assert.equal(ranked.calls,3);
+assert.equal(ranked.calls,1);
 assert.equal(Object.keys(BUILTIN_THEMES).includes('threshold'),false);
-console.log(JSON.stringify({designContract:'PASS',cases:cases.length,hardCounterexamples:hardCases.length,mechanicalJevCalls:calls,thresholds:0,live:false}));
+console.log(JSON.stringify({designContract:'PASS',cases:cases.length,hardCounterexamples:hardCases.length,mechanicalJevCalls:calls,thresholds:0,semanticRequestsPerDesign:1,live:false}));

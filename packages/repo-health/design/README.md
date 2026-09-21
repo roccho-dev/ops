@@ -55,7 +55,7 @@ Built-in themes:
 - scope → each unit
 - acceptance → whole design
 
-`topK` is the only ranking-size policy. Semantic findings do not fail CI or authorize repair/merge.
+All semantic questions for one design are evaluated in **one Jev request against the same small design state**. `topK` controls only how many ranked findings are returned per theme; it does not pretend that unreturned items were evaluated as safe.
 
 ### Domain-specific themes
 
@@ -65,7 +65,7 @@ Pass the same reusable theme shape:
 { id, scope: design | unit | edge | pair, concern }
 ```
 
-For example, an order domain may add concerns for concurrent arrival, post-effect failure, retry safety and readback. Jev only ranks concerns in the **declared design**; it does not prove exactly-once behavior. Mechanical concurrency/proof remains separate.
+Standard use can omit `themes`. Domain use can pass `[...BUILTIN_THEMES, ...domainThemes]`. For example, an order domain may add concerns for concurrent arrival, post-effect failure, retry safety and readback. Jev only ranks concerns in the **declared design**; it does not prove exactly-once behavior. Mechanical concurrency/proof remains separate.
 
 ## CI UX
 
