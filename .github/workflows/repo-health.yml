@@ -35,14 +35,17 @@ jobs:
         run: |
           set -euo pipefail
           nix build --no-link .#repo-health
-          nix build --no-link .#checks.x86_64-linux.repo-health
-          node packages/repo-health/tests/run.mjs > repo-health-contract.json
+          check_out="$(nix build --no-link --print-out-paths .#checks.x86_64-linux.repo-health)"
+          test -f "$check_out/ok"
+          rm -rf repo-health-contract
+          mkdir -p repo-health-contract
+          cp "$check_out/ok" repo-health-contract/ok
 
       - name: Upload contract evidence
         uses: actions/upload-artifact@v4
         with:
           name: repo-health-contract-${{ env.OPS_SHA }}
-          path: repo-health-contract.json
+          path: repo-health-contract
           if-no-files-found: error
           retention-days: 14
 
