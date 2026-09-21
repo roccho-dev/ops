@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, makeQuestions,
+  EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions,
   parseJsonl, sha256, unknownEvaluation, validateJevBudget, validateObservation, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
@@ -13,6 +13,10 @@ import { materializeBareScope } from '../lib/source.mjs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const artifact = parseJsonl(fs.readFileSync(path.join(here, '..', 'artifact.jsonl'), 'utf8'));
 assert.deepEqual(artifact, [{artifact:'repo-health',kind:'artifact.auth.v1',requiredCapabilities:['jev-api']}]);
+assert.equal(isSafeSemanticPath('README.md'), true);
+assert.equal(isSafeSemanticPath('secrets/jev-api-key.sops.yaml'), false);
+assert.equal(isSafeSemanticPath('package/.env.local'), false);
+assert.equal(isSafeSemanticPath('keys/id_ed25519'), false);
 const destructive = parseJsonl(fs.readFileSync(path.join(here, 'destructive.jsonl'), 'utf8'));
 assert.equal(destructive.length, 18);
 assert.equal(new Set(destructive.map((row) => row.id)).size, 18);
