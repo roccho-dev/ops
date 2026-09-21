@@ -1,0 +1,41 @@
+name: Verify exact Mobile Agent bz2 payload
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-mobile-agent-bz2-payload.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SOURCE_REF: transport/mobile-agent-preset-app-release-v7-260821
+      SOURCE_PATH: .github/transport/mobile-agent-preset-app.html.bz2.b64.part00
+      EXPECTED_HTML_BYTES: '2412388'
+      EXPECTED_HTML_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+    steps:
+      - name: Fetch, decode, decompress and verify exact App
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -X GET "repos/$GITHUB_REPOSITORY/contents/$SOURCE_PATH" -f ref="$SOURCE_REF" --jq .content \
+            | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/payload.b64"
+          tr -d '\r\n\t ' < "$RUNNER_TEMP/payload.b64" > "$RUNNER_TEMP/payload.clean.b64"
+          base64 --decode "$RUNNER_TEMP/payload.clean.b64" > "$RUNNER_TEMP/app.html.bz2"
+          bzip2 -t "$RUNNER_TEMP/app.html.bz2"
+          bzip2 -dc "$RUNNER_TEMP/app.html.bz2" > "$RUNNER_TEMP/app.html"
+          test "$(wc -c < "$RUNNER_TEMP/app.html")" -eq "$EXPECTED_HTML_BYTES"
+          test "$(sha256sum "$RUNNER_TEMP/app.html" | cut -d' ' -f1)" = "$EXPECTED_HTML_SHA256"
+          grep -F 'graph/1' "$RUNNER_TEMP/app.html" >/dev/null
+          grep -F 'map/1' "$RUNNER_TEMP/app.html" >/dev/null
+          grep -F 'seq/1' "$RUNNER_TEMP/app.html" >/dev/null
+          grep -Fi 'maxgraph' "$RUNNER_TEMP/app.html" >/dev/null
+          gh pr comment "$GITHUB_EVENT_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Exact bz2 payload verified: \`$EXPECTED_HTML_BYTES\` bytes / \`$EXPECTED_HTML_SHA256\`; existing graph/1, map/1, seq/1 and maxGraph markers present."

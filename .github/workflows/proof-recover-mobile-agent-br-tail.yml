@@ -1,0 +1,94 @@
+name: Recover exact Mobile Agent Brotli tail
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-recover-mobile-agent-br-tail.yml'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TARGET_REF: projection/mobile-agent-preset-dist-b0af2ab9
+      EXPECTED_HEAD: 30009fa3d5a4ec1de50f449761cd080ca0f68c83
+      PART0: projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00
+      PART1: projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01
+      EXPECTED_HTML_BYTES: '2412388'
+      EXPECTED_HTML_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+      EXPECTED_B64_BYTES: '30024'
+    steps:
+      - name: Recover only the missing two base64 characters and read back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          test "$(git ls-remote "$remote" "refs/heads/$TARGET_REF" | awk 'NR==1 {print $1}')" = "$EXPECTED_HEAD"
+          git clone --quiet --depth=1 --branch "$TARGET_REF" "$remote" projection
+
+          node - "$PART0" "$PART1" "$EXPECTED_HTML_BYTES" "$EXPECTED_HTML_SHA256" "$EXPECTED_B64_BYTES" > "$RUNNER_TEMP/recovery.json" <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+          const [part0,part1,expectedBytesText,expectedSha,expectedLengthText] = process.argv.slice(2);
+          const p0 = `projection/${part0}`;
+          const p1 = `projection/${part1}`;
+          const left = fs.readFileSync(p0,'utf8').replace(/\s+/gu,'');
+          const right = fs.readFileSync(p1,'utf8').replace(/\s+/gu,'');
+          const joined = left + right;
+          const expectedBytes = Number(expectedBytesText);
+          const expectedLength = Number(expectedLengthText);
+          if (joined.length !== expectedLength - 2) throw new Error(`unexpected missing length: ${joined.length}`);
+          const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+          let match = null;
+          for (const a of alphabet) {
+            for (const b of alphabet) {
+              const text = joined + a + b;
+              const compressed = Buffer.from(text,'base64');
+              try {
+                const html = zlib.brotliDecompressSync(compressed);
+                if (html.length !== expectedBytes) continue;
+                const sha = crypto.createHash('sha256').update(html).digest('hex');
+                if (sha !== expectedSha) continue;
+                match = {suffix:a+b,text,compressed,html,sha};
+                break;
+              } catch (_) {}
+            }
+            if (match) break;
+          }
+          if (!match) throw new Error('no two-character suffix reconstructs the exact App');
+          fs.writeFileSync(p0, match.text.slice(0,left.length));
+          fs.writeFileSync(p1, match.text.slice(left.length));
+          process.stdout.write(JSON.stringify({status:'PASS',suffix:match.suffix,base64Bytes:match.text.length,brotliBytes:match.compressed.length,htmlBytes:match.html.length,htmlSha256:match.sha}));
+          JS
+          cat "$RUNNER_TEMP/recovery.json"
+
+          git -C projection diff --check
+          test "$(git -C projection diff --name-only)" = "$PART1"
+          test "$(cat "projection/$PART0" "projection/$PART1" | wc -c)" -eq "$EXPECTED_B64_BYTES"
+          git -C projection config user.name github-actions[bot]
+          git -C projection config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C projection add "$PART1"
+          git -C projection commit --quiet -m 'fix: restore exact existing App Carrier tail'
+          git -C projection push --quiet origin "$TARGET_REF"
+          new_head="$(git -C projection rev-parse HEAD)"
+
+          git clone --quiet --depth=1 --branch "$TARGET_REF" "$remote" readback
+          test "$(git -C readback rev-parse HEAD)" = "$new_head"
+          cat "readback/$PART0" "readback/$PART1" | base64 --decode > "$RUNNER_TEMP/app.br"
+          node - "$RUNNER_TEMP/app.br" "$EXPECTED_HTML_BYTES" "$EXPECTED_HTML_SHA256" <<'JS'
+          const fs=require('node:fs'),crypto=require('node:crypto'),zlib=require('node:zlib');
+          const [path,bytesText,shaExpected]=process.argv.slice(2);
+          const html=zlib.brotliDecompressSync(fs.readFileSync(path));
+          const sha=crypto.createHash('sha256').update(html).digest('hex');
+          if(html.length!==Number(bytesText)||sha!==shaExpected) throw new Error('readback identity mismatch');
+          console.log(JSON.stringify({status:'PASS',htmlBytes:html.length,htmlSha256:sha}));
+          JS
+          gh pr comment "$GITHUB_EVENT_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Exact Carrier tail recovered and read back at \`$new_head\`; App remains \`$EXPECTED_HTML_BYTES\` bytes / \`$EXPECTED_HTML_SHA256\`. Only \`$PART1\` changed."
