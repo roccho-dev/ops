@@ -1,0 +1,20 @@
+{
+  "accepted_commit": "f8869d211a98549a5bcea1dee181b43d953084ec",
+  "accepted_tree": "ead57e18d7a70071d9eec9d7578c3ec421972d8d",
+  "artifact_manifest_sha256": "cfd53586a2f7a49ba355cbcbea4d6dcc0ea9ed64b9c504b8fea5da77d0f70dca",
+  "assets": [
+    "decision-proof.tar.gz",
+    "decision-proof.tar.gz.sha256",
+    "release.receipt.json"
+  ],
+  "authority_root_digest": "f6495ff4f7c972d8f0009482127e0d930961b75955c12bbc4c4d059824f03cfb",
+  "latest_used": false,
+  "literal_independent_human_review": "PENDING",
+  "production_cutover_authorized": false,
+  "proof_archive_sha256": "b819b6f44aed2ac4311d24ee02e3cb80d6e06ff746c77be5a19f263109d9c66b",
+  "query_count": 8,
+  "schema": "ops.decisionProofRelease.v1",
+  "selected_engine": "sqlite-shards",
+  "status": "PASS_BUILT",
+  "tag": "decision-checkpoint-f6495ff4f7c972d8-f8869d211a98"
+}
