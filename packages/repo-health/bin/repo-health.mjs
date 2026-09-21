@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   buildOutputs, evaluateObservation, flakePackageNames, makeQuestions, parseJsonl, unknownEvaluation,
-  validateRules, validateScope,
+  validateJevBudget, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
 
@@ -32,7 +32,7 @@ function git(repo, ...argv) {
   return execFileSync('git', ['-C', repo, ...argv], { encoding:'utf8', stdio:['ignore','pipe','pipe'], maxBuffer:32*1024*1024 }).trim();
 }
 
-function excerpt(file, limit = 6000) {
+function excerpt(file, limit = 600) {
   try { return fs.readFileSync(file, 'utf8').slice(0, limit); } catch { return ''; }
 }
 
@@ -73,10 +73,10 @@ function discoverPackages(repo, files) {
     const sourcePackage = packagePath.startsWith('packages/');
     const base = sourcePackage ? path.join(repo, packagePath) : repo;
     const packageFiles = sourcePackage ? files.filter((file) => file === packagePath || file.startsWith(`${packagePath}/`)) : ['flake.nix'];
-    const tests = packageFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)).slice(0,80);
+    const tests = packageFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)).slice(0,24);
     const checkRows = (() => {
       try { return parseJsonl(fs.readFileSync(path.join(repo, 'build/checks.jsonl'),'utf8')); } catch { return []; }
-    })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name).slice(0,80);
+    })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name).slice(0,24);
     const implementation = packageFiles.find((file) =>
       !/(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)
       && /\.(mjs|js|ts|py|go|nix|md|json|jsonl)$/iu.test(file)
@@ -100,7 +100,7 @@ function observe(scopeRow, root) {
   return {
     kind:'repoHealth.observation.v1', repoId:scopeRow.id, repository:scopeRow.repository,
     revision, tree, dirty:false,
-    root:{ purpose:excerpt(path.join(repo,'README.md')), flake:excerpt(path.join(repo,'flake.nix'),12000), files:files.slice(0,160), trackedFiles:files.length },
+    root:{ purpose:excerpt(path.join(repo,'README.md'),3000), flake:excerpt(path.join(repo,'flake.nix'),3000), files:files.slice(0,80), trackedFiles:files.length },
     packages:discoverPackages(repo, files),
   };
 }
@@ -109,6 +109,7 @@ async function jev(observation, rules) {
   const key = process.env.JEV_API_KEY;
   if (!key) throw new Error('JEV_API_KEY is required');
   const { questions, mapping } = makeQuestions(observation, rules);
+  validateJevBudget(observation, questions);
   const endpoint = process.env.REPO_HEALTH_JEV_URL || 'https://api.typesafe.ai/v1/systemone';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Number(process.env.REPO_HEALTH_JEV_TIMEOUT_MS || '15000'));
