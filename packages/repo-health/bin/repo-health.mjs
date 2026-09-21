@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  buildOutputs, evaluateObservation, flakePackageNames, makeQuestions, parseJsonl, unknownEvaluation,
+  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions, parseJsonl, unknownEvaluation,
   validateJevBudget, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
@@ -73,13 +73,14 @@ function discoverPackages(repo, files) {
     const sourcePackage = packagePath.startsWith('packages/');
     const base = sourcePackage ? path.join(repo, packagePath) : repo;
     const packageFiles = sourcePackage ? files.filter((file) => file === packagePath || file.startsWith(`${packagePath}/`)) : ['flake.nix'];
-    const allTests = packageFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file));
+    const semanticFiles = packageFiles.filter(isSafeSemanticPath);
+    const allTests = semanticFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file));
     const allChecks = (() => {
       try { return parseJsonl(fs.readFileSync(path.join(repo, 'build/checks.jsonl'),'utf8')); } catch { return []; }
     })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name);
     const tests = allTests.slice(0,2);
     const checkRows = allChecks.slice(0,2);
-    const implementation = packageFiles.find((file) =>
+    const implementation = semanticFiles.find((file) =>
       !/(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)
       && /\.(mjs|js|ts|py|go|nix|md|json|jsonl)$/iu.test(file)
     );
@@ -108,7 +109,7 @@ function observe(scopeRow, root) {
   return {
     kind:'repoHealth.observation.v1', repoId:scopeRow.id, repository:scopeRow.repository,
     revision, tree, dirty:false,
-    root:{ purpose:excerpt(path.join(repo,'README.md'),1200), flake:excerpt(path.join(repo,'flake.nix'),1200), files:files.slice(0,20), trackedFiles:files.length },
+    root:{ purpose:excerpt(path.join(repo,'README.md'),1200), flake:excerpt(path.join(repo,'flake.nix'),1200), files:files.filter(isSafeSemanticPath).slice(0,20), trackedFiles:files.length },
     packages:discoverPackages(repo, files),
   };
 }
