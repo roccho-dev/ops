@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-
-export const JEV_MODEL = 'jev-1.13.0';
+import { JEV_MODEL, validateJevBudget } from '../../jev-review/core.mjs';
+export { JEV_MODEL, validateJevBudget };
 
 export const EXPECTED_REPOSITORIES = [
   'roccho-dev/adrs',
@@ -55,22 +55,6 @@ export function isSafeSemanticPath(value) {
   if (/(?:^|[-_.])(credential|credentials|private[-_.]?key|id_rsa|id_ed25519)(?:[-_.]|$)/iu.test(base)) return false;
   if (/\.(?:pem|key|p12|pfx)$/iu.test(base)) return false;
   return true;
-}
-
-export function validateJevBudget(state, questions) {
-  const stateBytes = Buffer.byteLength(JSON.stringify(state), 'utf8');
-  const questionValues = Object.values(questions ?? {});
-  const questionBytes = questionValues.map((question) => Buffer.byteLength(JSON.stringify(question), 'utf8'));
-  const longestQuestionBytes = questionBytes.length === 0 ? 0 : Math.max(...questionBytes);
-  const allQuestionsBytes = questionBytes.reduce((sum, value) => sum + value, 0);
-
-  // Conservative byte budgets below Jev 1.13's documented token limits:
-  // 32k for state + longest question, 64k for the whole request.
-  // Any over-budget observation becomes UNKNOWN before network I/O.
-  if (stateBytes > 28000) throw new Error(`Jev state budget exceeded: ${stateBytes} bytes`);
-  if (stateBytes + longestQuestionBytes > 31000) throw new Error(`Jev state+question budget exceeded: ${stateBytes + longestQuestionBytes} bytes`);
-  if (stateBytes + allQuestionsBytes > 60000) throw new Error(`Jev request budget exceeded: ${stateBytes + allQuestionsBytes} bytes`);
-  return { stateBytes, longestQuestionBytes, allQuestionsBytes };
 }
 
 export function validateScope(rows) {
