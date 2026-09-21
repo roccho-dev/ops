@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions,
+  EXPECTED_REPOSITORIES, JEV_MODEL, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions,
   parseJsonl, sha256, unknownEvaluation, validateJevBudget, validateObservation, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
@@ -46,22 +46,23 @@ assert.throws(
   () => validateJevBudget({...observation, root:{...observation.root, purpose:'x'.repeat(40000)}}, questions),
   /state budget exceeded/u,
 );
-const response={model:'jev-test',answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.95}]))};
+const response={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.95}]))};
 const evaluated=evaluateObservation({observation,rules,response,mapping});
 assert.equal(evaluated.repo.status,'PASS'); assert.equal(evaluated.packages[0].status,'PASS');
+assert.equal(evaluated.judgments[0].model,JEV_MODEL); assert.throws(()=>evaluateObservation({observation,rules,response:{...response,model:'jev-other'},mapping}),/unexpected Jev model/u);
 assert.match(evaluated.judgments[0].subjectDigest, /^sha256:[0-9a-f]{64}$/u);
-assert.throws(()=>evaluateObservation({observation,rules,response:{model:'jev-test',answers:{}},mapping}),/answer set mismatch/u);
-const middle={model:'jev-test',answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.5}]))};
+assert.throws(()=>evaluateObservation({observation,rules,response:{model:JEV_MODEL,answers:{}},mapping}),/answer set mismatch/u);
+const middle={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.5}]))};
 assert.equal(evaluateObservation({observation,rules,response:middle,mapping}).repo.status,'UNKNOWN');
-const bad={model:'jev-test',answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'choice',noul:.9}]))};
+const bad={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'choice',noul:.9}]))};
 assert.throws(()=>evaluateObservation({observation,rules,response:bad,mapping}),/invalid Noul/u);
-const failAnswers={model:'jev-test',answers:Object.fromEntries(Object.keys(questions).map((id,i)=>[id,{type:'noul',noul:i===1?.05:.95}]))};
+const failAnswers={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id,i)=>[id,{type:'noul',noul:i===1?.05:.95}]))};
 const failed=evaluateObservation({observation,rules,response:failAnswers,mapping});
 assert.equal(failed.packages[0].status,'FAIL'); assert.equal(failed.repo.status,'FAIL');
 const evaluations=scope.map((s)=>s.id==='ops'?evaluated:unknownEvaluation({scopeRow:s,rules,reason:'fixture unavailable'}));
 const outputs=buildOutputs({scope,rules,evaluations});
 assert.throws(()=>buildOutputs({scope,rules,evaluations:[evaluated,evaluated]}),/duplicate evaluation repository/u);
-assert.equal(outputs.summary.expected,7); assert.equal(outputs.summary.observed,1); assert.equal(outputs.summary.unknown,6); assert.equal(outputs.receipt.complete,false);
+assert.equal(outputs.summary.expected,7); assert.equal(outputs.summary.observed,1); assert.equal(outputs.summary.unknown,6); assert.equal(outputs.receipt.complete,false); assert.equal(outputs.receipt.model,JEV_MODEL);
 assert.match(outputs.html,/Major Repo Health/u); assert.match(outputs.html,/authority=false/u); assert.doesNotMatch(outputs.html,/fixture-secret/u);
 assert.equal(parseJsonl('{"a":1}\n')[0].a,1); assert.throws(()=>parseJsonl('{bad}\n'),/line 1/u);
 assert.match(sha256('x'),/^sha256:[0-9a-f]{64}$/u);
