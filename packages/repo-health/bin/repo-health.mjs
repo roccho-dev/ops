@@ -32,7 +32,7 @@ function git(repo, ...argv) {
   return execFileSync('git', ['-C', repo, ...argv], { encoding:'utf8', stdio:['ignore','pipe','pipe'], maxBuffer:32*1024*1024 }).trim();
 }
 
-function excerpt(file, limit = 600) {
+function excerpt(file, limit = 280) {
   try { return fs.readFileSync(file, 'utf8').slice(0, limit); } catch { return ''; }
 }
 
@@ -73,19 +73,27 @@ function discoverPackages(repo, files) {
     const sourcePackage = packagePath.startsWith('packages/');
     const base = sourcePackage ? path.join(repo, packagePath) : repo;
     const packageFiles = sourcePackage ? files.filter((file) => file === packagePath || file.startsWith(`${packagePath}/`)) : ['flake.nix'];
-    const tests = packageFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)).slice(0,24);
-    const checkRows = (() => {
+    const allTests = packageFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file));
+    const allChecks = (() => {
       try { return parseJsonl(fs.readFileSync(path.join(repo, 'build/checks.jsonl'),'utf8')); } catch { return []; }
-    })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name).slice(0,24);
+    })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name);
+    const tests = allTests.slice(0,2);
+    const checkRows = allChecks.slice(0,2);
     const implementation = packageFiles.find((file) =>
       !/(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)
       && /\.(mjs|js|ts|py|go|nix|md|json|jsonl)$/iu.test(file)
     );
     const purpose = sourcePackage
-      ? (excerpt(path.join(base, 'README.md')) || excerpt(path.join(base, 'package.json')) || excerpt(path.join(base, 'default.nix'))
-        || (implementation ? `Declared source package ${id}.\n${excerpt(path.join(repo, implementation), 3000)}` : ''))
-      : `Declared Nix package output ${id}.\n${excerpt(path.join(repo, 'flake.nix'), 3000)}`;
-    return { id, path: packagePath, purpose, evidence: { tests, checks: checkRows }, trackedFiles: packageFiles.length };
+      ? (excerpt(path.join(base, 'README.md'), 280) || excerpt(path.join(base, 'package.json'), 280) || excerpt(path.join(base, 'default.nix'), 280)
+        || (implementation ? `Declared source package ${id}.\n${excerpt(path.join(repo, implementation), 280)}` : ''))
+      : `Declared Nix package output ${id} from flake.nix.`;
+    return {
+      id,
+      path: packagePath,
+      purpose,
+      evidence: { testCount: allTests.length, checkCount: allChecks.length, tests, checks: checkRows },
+      trackedFiles: packageFiles.length,
+    };
   });
 }
 
@@ -100,7 +108,7 @@ function observe(scopeRow, root) {
   return {
     kind:'repoHealth.observation.v1', repoId:scopeRow.id, repository:scopeRow.repository,
     revision, tree, dirty:false,
-    root:{ purpose:excerpt(path.join(repo,'README.md'),3000), flake:excerpt(path.join(repo,'flake.nix'),3000), files:files.slice(0,80), trackedFiles:files.length },
+    root:{ purpose:excerpt(path.join(repo,'README.md'),1200), flake:excerpt(path.join(repo,'flake.nix'),1200), files:files.slice(0,20), trackedFiles:files.length },
     packages:discoverPackages(repo, files),
   };
 }
