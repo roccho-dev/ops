@@ -142,16 +142,14 @@
             let
               pkgs = nixpkgs.legacyPackages.${system};
             in
-            pkgs.runCommand "deploy-adapter-contract-check"
-              { nativeBuildInputs = [ pkgs.nodejs ]; }
-              ''
-                cp -R ${./packages/deploy-adapter} source
-                chmod -R u+w source
-                cd source
-                node tests/run.mjs
-                mkdir -p "$out"
-                touch "$out/ok"
-              '';
+            pkgs.runCommand "deploy-adapter-contract-check" { nativeBuildInputs = [ pkgs.nodejs ]; } ''
+              cp -R ${./packages/deploy-adapter} source
+              chmod -R u+w source
+              cd source
+              node tests/run.mjs
+              mkdir -p "$out"
+              touch "$out/ok"
+            '';
           issue-116-shiftleft-proof =
             let
               pkgs = nixpkgs.legacyPackages.${system};
