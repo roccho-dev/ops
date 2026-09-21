@@ -1,45 +1,84 @@
-# Jev design-lint contribution probe
+# Jev design review signal
 
 Refs: roccho-dev/adrs#392, roccho-dev/ops#396/#397.
 
-Question: does Jev add useful **semantic** findings to the existing deterministic boundary, before code is implemented?
-This is one experiment inside repo-health, not another linter framework, registry, service, code parser, or scheduler.
+Purpose: surface semantic design concerns **before implementation** without turning a probabilistic judgment into merge authority.
 
-## Contract
+## Input contract
 
-Input: a small **declared closed design** with purpose, acceptance, external inputs, required results, and units with id/kind/role/input/output/behavior.
-Port IDs derive the dependency graph. Public outputs are explicitly listed as results, so absence of an internal caller does not make an API unused.
-Package, directory, file, public function and shared-function examples use the same record shape. Containment is not duplicated as a second responsibility.
+The library receives one small declared design cut. Existing source can be projected into this shape mechanically; before implementation an LLM or human can produce it directly. This object is input/projection, not a second authority.
 
-Output: structural findings, or typed per-rule PASS/FAIL/UNKNOWN with Noul probability and usage. Nothing is merged, deleted, dispatched or accepted by this tool.
+```text
+Design
+├─ purpose: string
+├─ acceptance: string[]
+├─ constraints: string[]
+├─ in: string[]                         # external boundary inputs
+├─ out: string[]                        # required boundary results
+└─ units[]
+   ├─ id: string
+   ├─ kind: string                      # package / dir / file / public-function / shared-function / ...
+   ├─ responsibility: string            # what this unit owns
+   ├─ in: string[]
+   ├─ out: string[]
+   └─ design: string                    # how it is planned to fulfill the responsibility
+```
 
-| Owner | Responsibility |
-|---|---|
-| Ordinary code | IDs, producers, required inputs/results, cycles, unused outputs/units in the declared graph; no Jev call on a hard failure |
-| Jev | Purpose, responsibility fulfillment, semantic input/output compatibility, responsibility duplication, scope, acceptance relevance |
-| Caller | Thresholds, error handling, interpretation and any later authority |
-| envs | Supply the existing Jev credential; no lint rules or expected labels |
+Boundary and unit use the same `in/out` vocabulary. `responsibility` and `design` stay separate so the review can detect a plan that does not fulfill its own declared responsibility. `constraints` prevents legitimate cross-cutting requirements from being mislabeled as purpose leakage.
 
-`askJev` is shared with the existing repo-health CLI. It uses the existing exact model and request-budget rules. Live evaluation has an immutable official endpoint, no retry and no model fallback.
+Hard structure remains ordinary code: identity, producer uniqueness, missing inputs/results, unused boundary/input/output/unit and cycles. A hard error makes zero Jev calls.
 
-## Frozen experiment
+## Semantic output
 
-20 fixtures: 16 semantic cases (8 valid / 8 defective, including Japanese), 4 structural negatives. Gold labels and case IDs are never supplied to Jev. Each case specifies the relevant atomic criterion; this is not a benchmark of discovering which criterion to ask.
+There are **no semantic thresholds and no semantic PASS/FAIL/UNKNOWN**. Every theme is phrased as a possible concern, returns raw Noul, and is sorted descending **within that theme**. Cross-theme global ordering is deliberately avoided because different questions need not be equally calibrated.
 
-The structural baseline is **UNKNOWN about semantics**, not proof of a good design. All 16 semantic cases pass that structural baseline. Eight deliberately introduced defects test extra detection; eight valid cases test false alarms.
+The public review contract is conceptually:
 
-Thresholds are fixed before the first live run: <=0.2 FAIL, >=0.8 PASS, middle UNKNOWN. A bounded PoC PASS requires all six semantic families to add a correct detection, zero false positives, zero false negatives, zero UNKNOWN, all four structural defects found, and zero Jev calls for those four cases. These strict fixture gates are not a population accuracy guarantee.
+```text
+review(design, {
+  topK,                               # required integer; 0 disables semantic calls
+  themes?                             # omit => built-in themes
+}, askJev)
+→ {
+    hard: string[],
+    ranked: [{ theme, findings:[{subject,noul}] }],
+    calls,
+    usage
+  }
+```
 
-A failed model benchmark is a valid experimental result: retain it, do not relabel cases or relax thresholds to turn it green. Any later change requires a new version and a fresh evaluation set.
+Built-in themes:
+- purpose → whole design
+- responsibility → each unit
+- closure → each declared producer→consumer edge
+- duplicate → unit pairs
+- scope → each unit
+- acceptance → whole design
 
-Run offline: `node packages/repo-health/design/test.mjs`.
-Run live through envs credential injection: `node packages/repo-health/design/run.mjs OUTPUT_JSONL`.
-The live runner makes at most 16 requests, each bounded at 15 seconds. It writes a manifest, every result and the final summary; no key, arbitrary provider response or private key is logged.
+`topK` is the only ranking-size policy. Semantic findings do not fail CI or authorize repair/merge.
 
-## Evidence limits
+### Domain-specific themes
 
-Synthetic fixtures and author-assigned labels demonstrate only bounded feasibility. This does not establish independent-review accuracy, coverage of real repositories, unobserved dependencies/effects, universal closure, a globally minimal PR cut, parallel development throughput, or cost savings. These require separate evidence; do not count this small suite as those results.
+Pass the same reusable theme shape:
 
-## Smallness
+```text
+{ id, scope: design | unit | edge | pair, concern }
+```
 
-No new dependencies or package registration. Reuse the existing auth declaration, model pin, JSONL/digest, probability classification, budget validation, Nix check and report package. No HTML, database, AST adapters, generated code or LLM orchestration is added for the experiment.
+For example, an order domain may add concerns for concurrent arrival, post-effect failure, retry safety and readback. Jev only ranks concerns in the **declared design**; it does not prove exactly-once behavior. Mechanical concurrency/proof remains separate.
+
+## CI UX
+
+```text
+hard design error → RED
+semantic review completed → CI may remain Green + ranked report
+Jev/auth/transport malformed → execution error
+```
+
+A normal design can therefore ignore low-ranked findings. There is no Boolean false-positive that blocks a valid design. Ranking noise can still exist: a benign subject can appear high. Measure `precision@K / useful@K` on real reviews before promoting any semantic theme to authority.
+
+## Frozen first experiment
+
+The historical first experiment used thresholds and is preserved in PR evidence. The current code removes them rather than tuning them after observing UNKNOWNs. The same 20 fixed fixtures remain for continuity, but semantic evaluation now measures **pairwise ranking**: for each valid/defect pair under the same theme, the defect should rank as more concerning. This is evidence of bounded ranking behavior, not production accuracy.
+
+No new package, registry, DB, renderer, parser, agent or service is introduced.
