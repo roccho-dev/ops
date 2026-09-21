@@ -20,7 +20,7 @@ export async function rankReview(state, options, ask) {
   if (!list(themes) || !themes.length || !themes.every(text) || !unique(themes)) throw new Error('INVALID_REVIEW_THEMES');
   if (!list(items) || items.some((item) => !exact(item, ['theme', 'subject', 'concern'])
     || !text(item.theme) || !list(item.subject) || !item.subject.length || !item.subject.every(text)
-    || !text(item.concern) || !themes.includes(item.theme)) throw new Error('INVALID_REVIEW_ITEMS');
+    || !text(item.concern) || !themes.includes(item.theme))) throw new Error('INVALID_REVIEW_ITEMS');
   const refs = items.map((item) => `${item.theme}\0${JSON.stringify(item.subject)}`);
   if (!unique(refs)) throw new Error('DUPLICATE_REVIEW_ITEM');
 
