@@ -53,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Detect Vercel proof changes
@@ -83,7 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           go test ./...
-          go build .
+          go build -o "$RUNNER_TEMP/vercel-go-native" .
 
       - name: Require bounded Vercel target
         if: steps.changed.outputs.active == 'true'
