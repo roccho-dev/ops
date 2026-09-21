@@ -1,0 +1,36 @@
+name: Fetch historical stg-mobile App bytes
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-fetch-stg-mobile-base-app.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Fetch and verify historical public App
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/app.html"
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error \
+            -H 'Cache-Control: no-cache' \
+            'https://ea18b86d.stg-mobile.pages.dev/app/' -o "$out"
+          test "$(wc -c < "$out")" -eq 2270089
+          test "$(sha256sum "$out" | cut -d' ' -f1)" = f4d5adb624bf906c02c7592bc96792099cee3289507a8c8f6531417dd5e84585
+          printf '%s\n' 'ea18b86d.stg-mobile.pages.dev' > "$RUNNER_TEMP/source.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: historical-stg-mobile-app-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/app.html
+            ${{ runner.temp }}/source.txt
+          if-no-files-found: error
+          retention-days: 7
