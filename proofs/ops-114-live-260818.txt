@@ -1,0 +1,5 @@
+schema: ops.git-write-live-proof/1
+request_id: ops-114-object-live-260818-001
+issue: 114
+base_sha: 59457a5667488da34d4ba977fa32c3a101a4a38e
+purpose: prove explicit Connector blob/tree/commit/ref/draft-PR/readback closure
