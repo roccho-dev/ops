@@ -37,4 +37,4 @@
 {"bin":"ops-task-runtime","deps":["node","python"],"entry":"packages/ops-task-runtime/bin/ops-task-runtime.mjs","env":[],"kind":"package","name":"ops-task-runtime","runtime":"node"}
 {"bin":"artifact-assembly","deps":["node"],"entry":"packages/artifact-assembly/bin/artifact-assembly.mjs","env":[],"kind":"package","name":"artifact-assembly","runtime":"node"}
 {"bin":"hayamimi-web-build","deps":["python"],"entry":"packages/hayamimi-web/build/assemble.py","env":[],"kind":"package","name":"hayamimi-web-build","runtime":"python"}
-{"bin":"repo-health","deps":["git","node"],"entry":"packages/repo-health/bin/repo-health.mjs","env":[],"kind":"package","name":"repo-health","runtime":"node"}
+{"bin":"repo-health","deps":["git","nix","node"],"entry":"packages/repo-health/bin/repo-health.mjs","env":[],"kind":"package","name":"repo-health","runtime":"node"}
