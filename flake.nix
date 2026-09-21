@@ -150,6 +150,20 @@
               mkdir -p "$out"
               touch "$out/ok"
             '';
+          vercel-go-native-local =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "vercel-go-native-local-check" { nativeBuildInputs = [ pkgs.go pkgs.nodejs ]; } ''
+              cp -R ${./verification/vercel-go-native} app
+              chmod -R u+w app
+              cd app
+              go test ./...
+              go build .
+              node --check ${./packages/deploy-adapter/providers/vercel/deploy.mjs}
+              mkdir -p "$out"
+              touch "$out/ok"
+            '';
           issue-116-shiftleft-proof =
             let
               pkgs = nixpkgs.legacyPackages.${system};
