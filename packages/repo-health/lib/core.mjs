@@ -44,6 +44,17 @@ export function flakePackageNames(show) {
   return [...names].sort();
 }
 
+export function isSafeSemanticPath(value) {
+  const file = String(value ?? '').replaceAll('\\\\', '/');
+  const parts = file.split('/');
+  const base = parts.at(-1) ?? '';
+  if (parts.includes('secrets') || parts.includes('.secrets')) return false;
+  if (/^\.env(?:\.|$)/u.test(base)) return false;
+  if (/(?:^|[-_.])(credential|credentials|private[-_.]?key|id_rsa|id_ed25519)(?:[-_.]|$)/iu.test(base)) return false;
+  if (/\.(?:pem|key|p12|pfx)$/iu.test(base)) return false;
+  return true;
+}
+
 export function validateJevBudget(state, questions) {
   const stateBytes = Buffer.byteLength(JSON.stringify(state), 'utf8');
   const questionValues = Object.values(questions ?? {});
