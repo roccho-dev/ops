@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   EXPECTED_REPOSITORIES, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, makeQuestions,
   parseJsonl, sha256, unknownEvaluation, validateObservation, validateRules, validateScope,
 } from '../lib/core.mjs';
+import { materializeBareScope } from '../lib/source.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const artifact = parseJsonl(fs.readFileSync(path.join(here, '..', 'artifact.jsonl'), 'utf8'));
@@ -53,4 +56,55 @@ assert.equal(outputs.summary.expected,7); assert.equal(outputs.summary.observed,
 assert.match(outputs.html,/Major Repo Health/u); assert.match(outputs.html,/authority=false/u); assert.doesNotMatch(outputs.html,/fixture-secret/u);
 assert.equal(parseJsonl('{"a":1}\n')[0].a,1); assert.throws(()=>parseJsonl('{bad}\n'),/line 1/u);
 assert.match(sha256('x'),/^sha256:[0-9a-f]{64}$/u);
+
+function git(cwd, ...argv) {
+  return execFileSync('git', ['-C', cwd, ...argv], { encoding:'utf8', stdio:['ignore','pipe','pipe'] }).trim();
+}
+
+const bareFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-health-bare-fixture-'));
+try {
+  const source = path.join(bareFixture, 'source');
+  const bareRoot = path.join(bareFixture, 'bare');
+  fs.mkdirSync(source, { recursive:true });
+  fs.mkdirSync(bareRoot, { recursive:true });
+  execFileSync('git', ['init', '--quiet', source]);
+  git(source, 'config', 'user.email', 'repo-health@example.invalid');
+  git(source, 'config', 'user.name', 'repo-health fixture');
+  fs.writeFileSync(path.join(source, 'README.md'), '# fixture\n');
+  fs.mkdirSync(path.join(source, 'packages', 'fixture'), { recursive:true });
+  fs.writeFileSync(path.join(source, 'packages', 'fixture', 'README.md'), '# package fixture\n');
+  git(source, 'add', '.');
+  git(source, 'commit', '--quiet', '-m', 'fixture');
+  const revision = git(source, 'rev-parse', 'HEAD');
+  const tree = git(source, 'rev-parse', 'HEAD^{tree}');
+  execFileSync('git', ['init', '--quiet', '--bare', path.join(bareRoot, 'ops.git')]);
+  git(source, 'push', '--quiet', path.join(bareRoot, 'ops.git'), 'HEAD:refs/remotes/github/proposals');
+
+  const snapshot = materializeBareScope(
+    [{ kind:'repoHealth.scope.v1', id:'ops', repository:'roccho-dev/ops', path:'ops' }],
+    bareRoot,
+  );
+  try {
+    assert.equal(snapshot.refs.length, 1);
+    assert.equal(snapshot.refs[0].revision, revision);
+    assert.equal(snapshot.refs[0].tree, tree);
+    assert.equal(git(path.join(snapshot.root, 'ops'), 'rev-parse', 'HEAD'), revision);
+    assert.equal(git(path.join(snapshot.root, 'ops'), 'status', '--porcelain=v1'), '');
+  } finally {
+    const snapshotRoot = snapshot.root;
+    snapshot.cleanup();
+    assert.equal(fs.existsSync(snapshotRoot), false);
+  }
+
+  assert.throws(
+    () => materializeBareScope(
+      [{ kind:'repoHealth.scope.v1', id:'missing', repository:'roccho-dev/ops', path:'missing' }],
+      bareRoot,
+    ),
+    /bare repository missing/u,
+  );
+} finally {
+  fs.rmSync(bareFixture, { recursive:true, force:true });
+}
+
 console.log(JSON.stringify({status:'PASS', destructive:destructive.length, scope:7}));
