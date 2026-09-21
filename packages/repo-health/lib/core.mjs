@@ -87,7 +87,7 @@ export function validateObservation(row) {
   for (const pkg of row.packages) {
     if (typeof pkg.id !== 'string' || pkg.id === '' || ids.has(pkg.id)) throw new Error(`duplicate/invalid package id in ${row.repository}: ${pkg?.id}`);
     if (typeof pkg.path !== 'string' || !(pkg.path.startsWith('packages/') || pkg.path.startsWith('flake.nix#packages.'))) throw new Error(`invalid package path in ${row.repository}: ${pkg?.path}`);
-    if (typeof pkg.purpose !== 'string') throw new Error(`package subject missing in ${row.repository}: ${pkg.id}`);
+    if (typeof pkg.purpose !== 'string' || pkg.purpose.trim() === '') throw new Error(`package subject missing in ${row.repository}: ${pkg.id}`);
     ids.add(pkg.id);
   }
   return row;
