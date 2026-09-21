@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 
+export const JEV_MODEL = 'jev-1.13.0';
+
 export const EXPECTED_REPOSITORIES = [
   'roccho-dev/adrs',
   'roccho-dev/governance',
@@ -156,6 +158,7 @@ function aggregate(statuses) {
 export function evaluateObservation({ observation, rules, response, mapping }) {
   validateObservation(observation); validateRules(rules);
   if (!response || typeof response !== 'object' || typeof response.model !== 'string' || !response.answers || typeof response.answers !== 'object') throw new Error('invalid Jev response envelope');
+  if (response.model !== JEV_MODEL) throw new Error(`unexpected Jev model: ${response.model}`);
   const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
   const expectedIds = Object.keys(mapping).sort();
   const answerIds = Object.keys(response.answers).sort();
@@ -177,7 +180,7 @@ export function evaluateObservation({ observation, rules, response, mapping }) {
       ruleId: rule.id,
       noul: answer.noul,
       status: classifyNoul(answer.noul, rule),
-      blocking: rule.blocking, subjectDigest,
+      blocking: rule.blocking, subjectDigest, model: response.model,
     });
   }
   const targets = new Map();
@@ -243,7 +246,7 @@ export function buildOutputs({ scope, rules, evaluations }) {
   for (const value of ordered) reportRows.push(value.repo, ...value.packages, ...value.judgments);
   const reportText = reportRows.map((row) => stableJson(row)).join('\n') + '\n';
   const receipt = {
-    kind: 'repoHealth.receipt.v1', authority: false, summary,
+    kind: 'repoHealth.receipt.v1', authority: false, model: JEV_MODEL, summary,
     scopeDigest: sha256(scope), ruleDigest: sha256(rules), reportDigest: sha256(reportText),
     complete: summary.observed === summary.expected && summary.fail === 0 && summary.unknown === 0,
   };
