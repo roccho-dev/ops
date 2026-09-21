@@ -93,9 +93,15 @@ jobs:
           VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
         run: |
           set -euo pipefail
-          test -n "$VERCEL_TOKEN"
-          test -n "$VERCEL_ORG_ID"
-          test -n "$VERCEL_PROJECT_ID"
+          : > "$RUNNER_TEMP/vercel-blocker.txt"
+          missing=0
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "missing $name" | tee -a "$RUNNER_TEMP/vercel-blocker.txt" >&2
+              missing=1
+            fi
+          done
+          test "$missing" -eq 0
 
       - name: Deploy exact PR source and public readback
         if: steps.changed.outputs.active == 'true'
@@ -123,6 +129,7 @@ jobs:
         with:
           name: vercel-go-native-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/vercel-blocker.txt
             ${{ runner.temp }}/vercel-deploy-receipt.jsonl
             ${{ runner.temp }}/vercel-health.json
           if-no-files-found: error
