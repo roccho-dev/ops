@@ -6,6 +6,8 @@ import { validateCorpus, summarize } from '../proof.mjs';
 
 const rows = fs.readFileSync(new URL('cases.jsonl', import.meta.url), 'utf8')
   .trim().split(/\r?\n/u).map(JSON.parse);
+const authRows = fs.readFileSync(new URL('../artifact.jsonl', import.meta.url), 'utf8').trim().split(/\r?\n/u).filter(Boolean).map(JSON.parse);
+assert.deepEqual(authRows, [{artifact:'parallel-development-jev-proof',kind:'artifact.auth.v1',requiredCapabilities:['jev-api']}]);
 validateCorpus(rows);
 assert.deepEqual(rows.map((row) => row.phase), ['cut','pr','join']);
 assert.equal(Object.values(PHASES).flat().length, 18);
