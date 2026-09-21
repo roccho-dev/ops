@@ -1,0 +1,299 @@
+name: Mobile Agent Seq artifact recovery
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-seq-artifact-recovery.yml'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-seq-artifact-recovery.yml'
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+
+jobs:
+  recover-prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      app_sha: ${{ steps.identity.outputs.app_sha }}
+      app_bytes: ${{ steps.identity.outputs.app_bytes }}
+      release_tag: ${{ steps.identity.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Obtain the existing Seq case and smoke proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin proposal/mobile-agent-seq-carrier-260822
+          mkdir -p "$RUNNER_TEMP/support"
+          git show FETCH_HEAD:verification/mobile-agent-seq-carrier/case.json > "$RUNNER_TEMP/support/case.json"
+          git show FETCH_HEAD:verification/mobile-agent-seq-carrier/smoke.mjs > "$RUNNER_TEMP/support/smoke.mjs"
+          python3 - "$RUNNER_TEMP/support/case.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['schema']=='ops.mobileAgentSeqCarrierCase/1'
+          case=value['case']
+          assert case['id']=='seq' and case['preset']=='seq/1'
+          assert case['fragment'].startswith('smap=')
+          PY
+
+      - name: Search immutable GitHub artifacts and releases for the exact App
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_BYTES: '2412388'
+          EXPECTED_SHA: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/recovery"
+          mkdir -p "$root/downloads" "$root/result/dist/app"
+          : > "$root/artifacts.tsv"
+          for page in $(seq 1 20); do
+            page_json="$root/artifacts-$page.json"
+            gh api -X GET "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100&page=$page" > "$page_json"
+            count="$(jq '.artifacts | length' "$page_json")"
+            jq -r '.artifacts[] | select(.expired==false and (.name|ascii_downcase|contains("mobile-agent"))) | [.id,.name,.created_at] | @tsv' "$page_json" >> "$root/artifacts.tsv"
+            [ "$count" -lt 100 ] && break
+          done
+          python3 - "$root/artifacts.tsv" "$root/artifacts.sorted.tsv" <<'PY'
+          import pathlib,sys
+          rows=[]
+          for line in pathlib.Path(sys.argv[1]).read_text(encoding='utf-8').splitlines():
+            if not line.strip(): continue
+            ident,name,created=line.split('\t',2)
+            lower=name.lower()
+            score=sum(token in lower for token in ('carrier','site','preset','source','url'))
+            rows.append((-score,created,ident,name))
+          rows.sort()
+          pathlib.Path(sys.argv[2]).write_text(''.join(f'{ident}\t{name}\n' for _,_,ident,name in rows[:150]),encoding='utf-8')
+          PY
+          while IFS=$'\t' read -r id name; do
+            [ -n "$id" ] || continue
+            file="$root/downloads/artifact-$id.zip"
+            if gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$file" 2>/dev/null; then
+              printf '%s\t%s\t%s\n' "$file" "$id" "$name" >> "$root/downloads/index.tsv"
+            fi
+          done < "$root/artifacts.sorted.tsv"
+          python3 - "$root" "$EXPECTED_BYTES" "$EXPECTED_SHA" <<'PY'
+          import bz2,gzip,hashlib,io,json,lzma,pathlib,sys,tarfile,zipfile
+          root=pathlib.Path(sys.argv[1]); expected_bytes=int(sys.argv[2]); expected_sha=sys.argv[3]
+          output=root/'result/dist/app/index.html'; source_receipt=root/'result/source.json'
+          seen=0
+          def digest(data): return hashlib.sha256(data).hexdigest()
+          def accept(data, origin):
+            nonlocal_output = output
+            if len(data)==expected_bytes and digest(data)==expected_sha:
+              nonlocal_output.write_bytes(data)
+              source_receipt.write_text(json.dumps({'schema':'ops.mobileAgentRecoveredApp/1','status':'PASS','authority':False,'origin':origin,'bytes':len(data),'sha256':'sha256:'+digest(data)},sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+              return True
+            return False
+          def inspect(data, origin, depth=0):
+            global seen
+            if depth>3 or len(data)>100_000_000: return False
+            seen += 1
+            if accept(data,origin): return True
+            for label,fn in [('gzip',gzip.decompress),('xz',lzma.decompress),('bz2',bz2.decompress)]:
+              try:
+                decoded=fn(data)
+              except Exception:
+                continue
+              if decoded!=data and inspect(decoded,origin+'::'+label,depth+1): return True
+            try:
+              with zipfile.ZipFile(io.BytesIO(data)) as z:
+                for info in z.infolist():
+                  if info.is_dir() or info.file_size>100_000_000: continue
+                  if inspect(z.read(info),origin+'::zip:'+info.filename,depth+1): return True
+            except Exception:
+              pass
+            try:
+              with tarfile.open(fileobj=io.BytesIO(data),mode='r:*') as t:
+                for member in t.getmembers():
+                  if not member.isfile() or member.size>100_000_000: continue
+                  f=t.extractfile(member)
+                  if f and inspect(f.read(),origin+'::tar:'+member.name,depth+1): return True
+            except Exception:
+              pass
+            return False
+          index=root/'downloads/index.tsv'
+          if index.exists():
+            for line in index.read_text(encoding='utf-8').splitlines():
+              file,ident,name=line.split('\t',2)
+              if inspect(pathlib.Path(file).read_bytes(),f'artifact:{ident}:{name}'):
+                break
+          if not output.exists():
+            raise SystemExit(f'exact App not found after inspecting {seen} payloads')
+          text=output.read_text(encoding='utf-8')
+          for marker in ('seq/1','maxgraph'):
+            assert marker.lower() in text.lower(),marker
+          print(source_receipt.read_text())
+          PY
+          cp "$RUNNER_TEMP/support/case.json" "$root/result/case.json"
+          cp "$RUNNER_TEMP/support/smoke.mjs" "$root/result/smoke.mjs"
+          echo "app_sha=$EXPECTED_SHA" >> "$GITHUB_OUTPUT"
+          echo "app_bytes=$EXPECTED_BYTES" >> "$GITHUB_OUTPUT"
+          echo "release_tag=mobile-agent-seq-recovered-$EXPECTED_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Prove existing seq/1 and maxGraph locally in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/recovery/result"
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$root/dist" > "$root/http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          curl -fsS http://127.0.0.1:4173/app/ >/dev/null
+          node "$root/smoke.mjs" "$root/case.json" http://127.0.0.1:4173/ "$chrome" "$root/local-proof"
+          "$chrome" --version > "$root/chrome-version.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-seq-recovered-${{ github.run_id }}
+          path: ${{ runner.temp }}/recovery/result/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-deploy:
+    needs: recover-prove
+    if: github.event_name == 'push' && github.ref == 'refs/heads/proposals'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-agent-seq-recovered-${{ github.run_id }}
+          path: ${{ runner.temp }}/result
+
+      - name: Publish immutable recovered Seq App
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.recover-prove.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          app_name="mobile-agent-seq-app.${{ needs.recover-prove.outputs.app_sha }}.html"
+          cp "$root/dist/app/index.html" "$root/$app_name"
+          assets=("$root/$app_name" "$root/case.json" "$root/source.json" "$root/local-proof/receipt.json")
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Recovered existing seq/1 App' --notes 'Exact existing seq/1 maxGraph App recovered from immutable GitHub evidence.' "${assets[@]}"
+          else
+            mkdir "$RUNNER_TEMP/release-readback"
+            for asset in "${assets[@]}"; do name="$(basename "$asset")"; gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-readback"; cmp "$asset" "$RUNNER_TEMP/release-readback/$name"; done
+          fi
+
+      - name: Create or verify stg-mobile-agent Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/stg-mobile-agent"
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create stg-mobile-agent --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['success'] is True
+          assert value['result']['name']=='stg-mobile-agent'
+          assert value['result']['production_branch']=='proposals'
+          PY
+          else
+            cat "$RUNNER_TEMP/project.json" >&2; exit 1
+          fi
+
+      - name: Deploy exact recovered App
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/result/dist" --project-name stg-mobile-agent --branch proposals --commit-hash "$GITHUB_SHA" --commit-message 'Recovered existing seq/1 App' 2>&1)"
+          printf '%s\n' "$output"
+          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | grep -v '^https://stg-mobile-agent\.pages\.dev$' | head -n1 || true)"
+          test -n "$deployment"
+          echo 'stable_base=https://stg-mobile-agent.pages.dev/' >> "$GITHUB_OUTPUT"
+          echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
+
+      - name: Read back bytes and Chrome-prove public Seq URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          for entry in stable=${{ steps.deploy.outputs.stable_base }} immutable=${{ steps.deploy.outputs.deployment_base }}; do
+            name="${entry%%=*}"; base="${entry#*=}"
+            for attempt in $(seq 1 90); do
+              if curl --fail-with-body --location --silent --show-error -H 'Cache-Control: no-cache' "${base}app/" -o "$root/${name}-app.html"; then
+                if [ "$(wc -c < "$root/${name}-app.html")" -eq "${{ needs.recover-prove.outputs.app_bytes }}" ] && [ "$(sha256sum "$root/${name}-app.html" | cut -d' ' -f1)" = "${{ needs.recover-prove.outputs.app_sha }}" ]; then break; fi
+              fi
+              sleep 2
+            done
+            test "$(wc -c < "$root/${name}-app.html")" -eq "${{ needs.recover-prove.outputs.app_bytes }}"
+            test "$(sha256sum "$root/${name}-app.html" | cut -d' ' -f1)" = "${{ needs.recover-prove.outputs.app_sha }}"
+          done
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
+          node "$root/smoke.mjs" "$root/case.json" "${{ steps.deploy.outputs.stable_base }}" "$chrome" "$root/stable-proof"
+          node "$root/smoke.mjs" "$root/case.json" "${{ steps.deploy.outputs.deployment_base }}" "$chrome" "$root/immutable-proof"
+
+      - uses: actions/upload-artifact@v4
+        id: evidence
+        with:
+          name: mobile-agent-seq-public-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/result/stable-proof/
+            ${{ runner.temp }}/result/immutable-proof/
+            ${{ runner.temp }}/result/source.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record only the verified stable Seq URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(cat "$RUNNER_TEMP/result/stable-proof/url.txt")"
+          immutable="$(cat "$RUNNER_TEMP/result/immutable-proof/url.txt")"
+          cat > "$RUNNER_TEMP/comment.md" <<EOF
+          ## Existing seq/1 maxGraph public URL — PASS
+
+          - Seq: $url
+          - immutable: $immutable
+          - exact App byte readback: PASS on both hosts
+          - existing seq/1, maxGraph, edit→undo, Source, handoff and review: PASS
+          - browser errors / failed product responses: 0 / 0
+          - run: $RUN_URL
+          - evidence: $ARTIFACT_ID / $ARTIFACT_DIGEST
+          EOF
+          for issue in 286 242 233; do gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"; done
