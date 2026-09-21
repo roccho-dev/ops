@@ -117,4 +117,5 @@ try {
   fs.rmSync(bareFixture, { recursive:true, force:true });
 }
 
+await import('../design/test.mjs');
 console.log(JSON.stringify({status:'PASS', destructive:destructive.length, scope:7}));
