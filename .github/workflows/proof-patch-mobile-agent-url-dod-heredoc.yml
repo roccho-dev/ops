@@ -1,0 +1,48 @@
+name: Patch Mobile Agent URL DoD heredoc only
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-patch-mobile-agent-url-dod-heredoc.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_BRANCH: proposal/mobile-agent-preset-url-dod-260821
+      EXPECTED_HEAD: fe99af36785d8ea904e0ba7d9036a2b69068a664
+      TARGET_PATH: .github/workflows/mobile-agent-preset-url-dod.yml
+    steps:
+      - name: Patch exactly one syntax block on exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          observed="$(git ls-remote "$remote" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')"
+          test "$observed" = "$EXPECTED_HEAD"
+          git clone --quiet --depth=1 --branch "$TARGET_BRANCH" "$remote" product
+          python3 - product/$TARGET_PATH <<'PY'
+          from pathlib import Path
+          import sys
+          path=Path(sys.argv[1])
+          source=path.read_text(encoding='utf-8')
+          old='''            node - "$RUNNER_TEMP/app-index.br" "$result/dist/app/index.html" <<'JS'\n            const fs=require('node:fs'); const zlib=require('node:zlib');\n            fs.writeFileSync(process.argv[3],zlib.brotliDecompressSync(fs.readFileSync(process.argv[2])));\n            JS\n'''
+          new='''            node -e 'const fs=require("node:fs"),zlib=require("node:zlib");fs.writeFileSync(process.argv[2],zlib.brotliDecompressSync(fs.readFileSync(process.argv[1])));' "$RUNNER_TEMP/app-index.br" "$result/dist/app/index.html"\n'''
+          assert source.count(old)==1, source.count(old)
+          path.write_text(source.replace(old,new),encoding='utf-8')
+          PY
+          git -C product diff --check
+          test "$(git -C product diff --name-only)" = "$TARGET_PATH"
+          test "$(git -C product diff --numstat | awk '{print $1, $2}')" = "1 4"
+          git -C product config user.name github-actions[bot]
+          git -C product config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C product add "$TARGET_PATH"
+          git -C product commit --quiet -m 'fix: materialize projected App without nested heredoc'
+          git -C product push --quiet origin "$TARGET_BRANCH"
