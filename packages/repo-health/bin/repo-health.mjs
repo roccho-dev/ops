@@ -75,8 +75,13 @@ function discoverPackages(repo, files) {
     const checkRows = (() => {
       try { return parseJsonl(fs.readFileSync(path.join(repo, 'build/checks.jsonl'),'utf8')); } catch { return []; }
     })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name).slice(0,80);
+    const implementation = packageFiles.find((file) =>
+      !/(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)
+      && /\.(mjs|js|ts|py|go|nix|md|json|jsonl)$/iu.test(file)
+    );
     const purpose = sourcePackage
-      ? (excerpt(path.join(base, 'README.md')) || excerpt(path.join(base, 'package.json')) || excerpt(path.join(base, 'default.nix')))
+      ? (excerpt(path.join(base, 'README.md')) || excerpt(path.join(base, 'package.json')) || excerpt(path.join(base, 'default.nix'))
+        || (implementation ? `Declared source package ${id}.\n${excerpt(path.join(repo, implementation), 3000)}` : ''))
       : `Declared Nix package output ${id}.\n${excerpt(path.join(repo, 'flake.nix'), 3000)}`;
     return { id, path: packagePath, purpose, evidence: { tests, checks: checkRows }, trackedFiles: packageFiles.length };
   });
