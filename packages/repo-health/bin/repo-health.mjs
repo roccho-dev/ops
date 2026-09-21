@@ -4,10 +4,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  JEV_MODEL, buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions, parseJsonl, unknownEvaluation,
-  validateJevBudget, validateRules, validateScope,
+  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions, parseJsonl, unknownEvaluation,
+  validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
+import { askJev } from '../lib/jev.mjs';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -115,24 +116,13 @@ function observe(scopeRow, root) {
 }
 
 async function jev(observation, rules) {
-  const key = process.env.JEV_API_KEY;
-  if (!key) throw new Error('JEV_API_KEY is required');
   const { questions, mapping } = makeQuestions(observation, rules);
-  validateJevBudget(observation, questions);
-  const endpoint = process.env.REPO_HEALTH_JEV_URL || 'https://api.typesafe.ai/v1/systemone';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number(process.env.REPO_HEALTH_JEV_TIMEOUT_MS || '15000'));
-  try {
-    const response = await fetch(endpoint, {
-      method:'POST', signal:controller.signal,
-      headers:{ authorization:`Bearer ${key}`, 'content-type':'application/json' },
-      body:JSON.stringify({ state:observation, model:JEV_MODEL, questions }),
-    });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`Jev HTTP ${response.status}`);
-    let payload; try { payload = JSON.parse(text); } catch { throw new Error('Jev response is not JSON'); }
-    return evaluateObservation({ observation, rules, response:payload, mapping });
-  } finally { clearTimeout(timeout); }
+  const response = await askJev(observation, questions, {
+    key: process.env.JEV_API_KEY,
+    endpoint: process.env.REPO_HEALTH_JEV_URL || 'https://api.typesafe.ai/v1/systemone',
+    timeoutMs: Number(process.env.REPO_HEALTH_JEV_TIMEOUT_MS || '15000'),
+  });
+  return evaluateObservation({ observation, rules, response, mapping });
 }
 
 async function main() {
