@@ -60,6 +60,7 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";

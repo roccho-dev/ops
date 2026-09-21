@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'packages/hayamimi-web/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'ci.intent.v1.jsonl'
       - '.github/workflows/hayamimi-web-release.yml'
   workflow_dispatch:
     inputs:
@@ -22,30 +25,33 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Dependencies
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Browser test dependencies
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check playwright==1.63.0
           python3 -m playwright install --with-deps chromium
-          git clone --depth 1 --branch 4.0.23 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
-          test "$(git -C "$RUNNER_TEMP/emsdk" rev-parse HEAD)" = c0bb220cb6e6f4e0fabb6f6db9efd53390ef5e56
-          "$RUNNER_TEMP/emsdk/emsdk" install 4.0.23
-          "$RUNNER_TEMP/emsdk/emsdk" activate 4.0.23
-      - name: Fetch and verify pinned sources
+      - name: Build consumer-ready Nix artifact
         run: |
           set -euo pipefail
-          python3 packages/hayamimi-web/build/fetch.py --root packages/hayamimi-web --work "$RUNNER_TEMP/hayamimi"
-          python3 packages/hayamimi-web/build/verify-sources.py --root packages/hayamimi-web --work "$RUNNER_TEMP/hayamimi"
-      - name: Build WebAssembly
-        run: |
-          set -euo pipefail
-          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
-          bash packages/hayamimi-web/build/wasm.sh "$RUNNER_TEMP/hayamimi"
-      - name: Assemble and verify dist
-        run: |
-          set -euo pipefail
-          python3 packages/hayamimi-web/build/assemble.py --root packages/hayamimi-web --work "$RUNNER_TEMP/hayamimi" --out dist/hayamimi-web
+          nix build -L .#hayamimi-web --out-link result-hayamimi-web
+          python3 packages/hayamimi-web/build/verify-dist.py result-hayamimi-web
+          mkdir -p dist/hayamimi-web
+          cp -aL result-hayamimi-web/. dist/hayamimi-web/
           python3 packages/hayamimi-web/build/verify-dist.py dist/hayamimi-web
+      - name: Fetch pinned browser fixture
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/hayamimi-fixture"
+          rev="$(python3 -c 'import json; print(next(json.loads(x)["revision"] for x in open("packages/hayamimi-web/sources.lock.jsonl") if json.loads(x)["id"] == "hayamimi"))')"
+          git init "$fixture"
+          git -C "$fixture" remote add origin https://github.com/oboroge0/hayamimi.git
+          git -C "$fixture" fetch --depth 1 origin "$rev"
+          git -C "$fixture" checkout --detach FETCH_HEAD
+          test "$(git -C "$fixture" rev-parse HEAD)" = "$rev"
       - name: Package
         run: |
           set -euo pipefail
@@ -62,8 +68,8 @@ jobs:
           server=$!; trap 'kill $server || true' EXIT
           python3 packages/hayamimi-web/tests/browser-asr.py \
             http://127.0.0.1:4173/ \
-            "$RUNNER_TEMP/hayamimi/sources/hayamimi/tests/golden/ja/ja_014.wav" \
-            "$RUNNER_TEMP/hayamimi/sources/hayamimi/tests/golden/ja/golden.json"
+            "$RUNNER_TEMP/hayamimi-fixture/tests/golden/ja/ja_014.wav" \
+            "$RUNNER_TEMP/hayamimi-fixture/tests/golden/ja/golden.json"
       - uses: actions/upload-artifact@v4
         with:
           name: hayamimi-web
