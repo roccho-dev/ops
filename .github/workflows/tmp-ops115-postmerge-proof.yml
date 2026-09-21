@@ -1,0 +1,318 @@
+name: Temporary Issue 115 postmerge proof
+
+on:
+  pull_request:
+    branches:
+      - proposals
+    paths:
+      - .github/workflows/tmp-ops115-postmerge-proof.yml
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+
+concurrency:
+  group: ops115-postmerge-f8869d211a98
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ACCEPTED_COMMIT: f8869d211a98549a5bcea1dee181b43d953084ec
+      ACCEPTED_TREE: ead57e18d7a70071d9eec9d7578c3ec421972d8d
+      DUCKDB_TAG: duckdb-carrier-v1.5.5-3d33b1df037c
+      DUCKDB_ASSET: carrier.native.linux-amd64.3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788.b64.txt
+      DUCKDB_SHA256: 3d33b1df037cb049155c393778df7853fafb23e9d49d7c9cacdde4dd67155788
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: f8869d211a98549a5bcea1dee181b43d953084ec
+          fetch-depth: 0
+
+      - name: Verify accepted Git identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ACCEPTED_COMMIT"
+          test "$(git rev-parse HEAD^{tree})" = "$ACCEPTED_TREE"
+          test -z "$(git status --porcelain=v1 --untracked-files=no)"
+          git fsck --no-dangling
+
+      - name: Materialize exact DuckDB comparator
+        id: duckdb
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/duckdb"
+          mkdir -p "$root"
+          carrier="$root/$DUCKDB_ASSET"
+          curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$DUCKDB_TAG/$DUCKDB_ASSET" \
+            -o "$carrier"
+          python3 - "$carrier" "$DUCKDB_SHA256" "$root/duckdb" <<'PY'
+          import base64, hashlib, pathlib, sys
+          source, expected, target = pathlib.Path(sys.argv[1]), sys.argv[2], pathlib.Path(sys.argv[3])
+          text = source.read_text(encoding='ascii')
+          if not text or any(ch.isspace() for ch in text): raise SystemExit('carrier whitespace or empty')
+          raw = base64.b64decode(text, validate=True)
+          if base64.b64encode(raw).decode('ascii') != text: raise SystemExit('noncanonical Base64')
+          if hashlib.sha256(raw).hexdigest() != expected: raise SystemExit('DuckDB payload identity mismatch')
+          target.write_bytes(raw)
+          PY
+          chmod 0555 "$root/duckdb"
+          test "$("$root/duckdb" --version | grep -o 'v1\.5\.5' | head -n1)" = v1.5.5
+          echo "path=$root/duckdb" >> "$GITHUB_OUTPUT"
+
+      - name: Build exact proof projection
+        id: build
+        env:
+          DUCKDB: ${{ steps.duckdb.outputs.path }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          proof="$RUNNER_TEMP/decision-proof"
+          mkdir -p "$proof"
+          python3 packages/ops-decision-closure/bin/final-proof.py \
+            --out-dir "$proof" \
+            --duckdb "$DUCKDB" \
+            --source-commit "$ACCEPTED_COMMIT" \
+            --source-tree "$ACCEPTED_TREE" \
+            | tee "$RUNNER_TEMP/final-proof.stdout.json"
+          python3 - "$proof" "$ACCEPTED_COMMIT" "$ACCEPTED_TREE" <<'PY'
+          import hashlib, json, pathlib, sys
+          root, commit, tree = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+          receipt = json.load(open(root/'final-closure-receipt.json'))
+          human = json.load(open(root/'human-adoption-answerability.json'))
+          parity = json.load(open(root/'bounded/engine-parity.json'))
+          assert receipt['status'] == 'PASS_IMPLEMENTATION_READY_FOR_RELEASE'
+          assert receipt['authority']['commit'] == commit and receipt['authority']['tree'] == tree
+          assert receipt['selectedEngine'] == 'sqlite-shards'
+          assert receipt['semanticMismatchCount'] == 0 and receipt['failClosedMismatchCount'] == 0
+          assert receipt['decisionEconomics']['status'] == 'PASS_DECISION_ECONOMICS_G9'
+          assert receipt['humanAI']['literalIndependentHumanReview'] == 'REQUIRED_BEFORE_ISSUE_CLOSE'
+          assert human['mandatoryQuestionCount'] == 9 and human['mandatoryQuestionAccuracy'] == 1.0
+          assert all(row['visible'] for row in human['results'])
+          assert len(parity['queries']) == 8 and parity['semanticMismatchCount'] == 0
+          manifest = root/'artifact-manifest.json'
+          assert manifest.is_file()
+          print(json.dumps({'root': receipt['authority']['rootDigest'], 'manifest': hashlib.sha256(manifest.read_bytes()).hexdigest()}))
+          PY
+          root_digest="$(python3 -c 'import json;print(json.load(open("'"$proof"'/final-closure-receipt.json"))["authority"]["rootDigest"])')"
+          manifest_sha="$(sha256sum "$proof/artifact-manifest.json" | cut -d' ' -f1)"
+          tag="decision-checkpoint-${root_digest:0:16}-${ACCEPTED_COMMIT:0:12}"
+          archive="$RUNNER_TEMP/decision-proof.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C "$proof" -cf - . | gzip -n > "$archive"
+          archive_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          printf '%s  %s\n' "$archive_sha" decision-proof.tar.gz > "$RUNNER_TEMP/decision-proof.tar.gz.sha256"
+          python3 - "$RUNNER_TEMP/release.receipt.json" "$ACCEPTED_COMMIT" "$ACCEPTED_TREE" "$root_digest" "$tag" "$manifest_sha" "$archive_sha" <<'PY'
+          import json, pathlib, sys
+          out, commit, tree, root, tag, manifest_sha, archive_sha = sys.argv[1:]
+          value = {
+            'schema':'ops.decisionProofRelease.v1','status':'PASS_BUILT','accepted_commit':commit,
+            'accepted_tree':tree,'authority_root_digest':root,'tag':tag,'latest_used':False,
+            'selected_engine':'sqlite-shards','query_count':8,
+            'artifact_manifest_sha256':manifest_sha,'proof_archive_sha256':archive_sha,
+            'assets':['decision-proof.tar.gz','decision-proof.tar.gz.sha256','release.receipt.json'],
+            'literal_independent_human_review':'PENDING',
+            'production_cutover_authorized':False,
+          }
+          pathlib.Path(out).write_text(json.dumps(value,sort_keys=True,indent=2)+'\n')
+          PY
+          echo "proof=$proof" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "root=$root_digest" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha=$manifest_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Publish exact Release
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exact Release already exists; verifying without mutation"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$ACCEPTED_COMMIT" \
+              --title "Decision checkpoint $TAG" \
+              --notes "Issue #115 exact read-only proof checkpoint. Git JSONL remains Authority. No production cutover." \
+              "$RUNNER_TEMP/decision-proof.tar.gz" \
+              "$RUNNER_TEMP/decision-proof.tar.gz.sha256" \
+              "$RUNNER_TEMP/release.receipt.json"
+          fi
+          mapfile -t assets < <(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | sort)
+          expected=(decision-proof.tar.gz decision-proof.tar.gz.sha256 release.receipt.json)
+          test "${assets[*]}" = "${expected[*]}"
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')"
+          test "$tag_sha" = "$ACCEPTED_COMMIT"
+
+      - name: Public exact readback and eight-query replay
+        id: readback
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+          ROOT_DIGEST: ${{ steps.build.outputs.root }}
+          ARTIFACT_MANIFEST_SHA: ${{ steps.build.outputs.manifest_sha }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rb="$RUNNER_TEMP/public-readback"
+          mkdir -p "$rb/download" "$rb/extracted"
+          for name in decision-proof.tar.gz decision-proof.tar.gz.sha256 release.receipt.json; do
+            curl --fail --location --retry 5 --retry-all-errors --silent --show-error \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$name" \
+              -o "$rb/download/$name"
+          done
+          (cd "$rb/download" && sha256sum -c decision-proof.tar.gz.sha256)
+          python3 - "$rb/download/decision-proof.tar.gz" "$rb/extracted" <<'PY'
+          import pathlib, sys, tarfile
+          source, target = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          seen=set(); total=0
+          with tarfile.open(source,'r:gz') as tf:
+              members=tf.getmembers()
+              if len(members)>2000: raise SystemExit('too many archive entries')
+              for m in members:
+                  p=pathlib.PurePosixPath(m.name)
+                  if p.is_absolute() or '..' in p.parts or m.name in seen: raise SystemExit('unsafe archive path')
+                  if m.issym() or m.islnk() or m.isdev(): raise SystemExit('unsafe archive member type')
+                  seen.add(m.name); total += max(m.size,0)
+              if total > 256*1024*1024: raise SystemExit('archive expansion exceeds bound')
+              tf.extractall(target, filter='data')
+          PY
+          python3 - "$rb/extracted" "$ARTIFACT_MANIFEST_SHA" "$ACCEPTED_COMMIT" "$ACCEPTED_TREE" "$ROOT_DIGEST" "$TAG" <<'PY'
+          import hashlib,json,pathlib,subprocess,sys
+          root, manifest_sha, commit, tree, authority_root, tag = pathlib.Path(sys.argv[1]), *sys.argv[2:]
+          manifest_path=root/'artifact-manifest.json'
+          assert hashlib.sha256(manifest_path.read_bytes()).hexdigest()==manifest_sha
+          manifest=json.load(open(manifest_path)); assert manifest['schema']=='ops.proofArtifactManifest.v1'
+          expected={row['path']:row for row in manifest['files']}
+          actual={str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() and p.name!='artifact-manifest.json'}
+          assert actual==set(expected)
+          for rel,row in expected.items():
+              p=root/rel; assert p.stat().st_size==row['bytes']; assert hashlib.sha256(p.read_bytes()).hexdigest()==row['sha256']
+          receipt=json.load(open(root/'final-closure-receipt.json'))
+          assert receipt['authority']['commit']==commit and receipt['authority']['tree']==tree
+          assert receipt['authority']['rootDigest']==authority_root and receipt['selectedEngine']=='sqlite-shards'
+          parity=json.load(open(root/'bounded/engine-parity.json'))
+          projection=root/'checkpoint-selected'; projection_manifest=projection/'manifest.json'
+          projection_manifest_sha=hashlib.sha256(projection_manifest.read_bytes()).hexdigest()
+          query_cli=pathlib.Path('packages/ops-decision-closure/bin/query.py').resolve()
+          results=[]
+          for row in parity['queries']:
+              cp=subprocess.run([sys.executable,str(query_cli),'--projection',str(projection),'--manifest-sha256',projection_manifest_sha,'--query',row['queryId'],'--params-json',json.dumps(row['params'],sort_keys=True,separators=(',',':'))],text=True,capture_output=True)
+              if cp.returncode!=0: raise SystemExit(cp.stdout+'\n'+cp.stderr)
+              result=json.loads(cp.stdout)
+              assert result['status']=='PASS' and result['semanticDigest']==row['semanticDigest']
+              assert result['authorityRootDigest']==authority_root
+              results.append({'query_id':row['queryId'],'semantic_digest':result['semanticDigest'],'status':'PASS'})
+          assert len(results)==8
+          out={'schema':'ops.decisionPublicReadback.v1','status':'PASS','accepted_commit':commit,'accepted_tree':tree,'authority_root_digest':authority_root,'tag':tag,'latest_used':False,'checkpoint_mixing':False,'query_count':len(results),'semantic_mismatch_count':0,'results':results,'artifact_manifest_sha256':manifest_sha}
+          pathlib.Path(sys.argv[1]).joinpath('public-readback.receipt.json').write_text(json.dumps(out,sort_keys=True,indent=2)+'\n')
+          PY
+          cp "$rb/extracted/public-readback.receipt.json" "$RUNNER_TEMP/public-readback.receipt.json"
+          echo "extracted=$rb/extracted" >> "$GITHUB_OUTPUT"
+
+      - name: Independent clean-room takeover
+        id: takeover
+        env:
+          DUCKDB: ${{ steps.duckdb.outputs.path }}
+          TAG: ${{ steps.build.outputs.tag }}
+          RELEASE_DIR: ${{ steps.readback.outputs.extracted }}
+          ARTIFACT_MANIFEST_SHA: ${{ steps.build.outputs.manifest_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          clean="$RUNNER_TEMP/clean-room"
+          repo="$clean/repo"; out="$clean/out"; home="$clean/home"; tmp="$clean/tmp"
+          mkdir -p "$clean" "$home" "$tmp"
+          git clone --quiet --no-local "$GITHUB_WORKSPACE" "$repo"
+          git -C "$repo" checkout --quiet --detach "$ACCEPTED_COMMIT"
+          test "$(git -C "$repo" rev-parse HEAD)" = "$ACCEPTED_COMMIT"
+          test "$(git -C "$repo" rev-parse HEAD^{tree})" = "$ACCEPTED_TREE"
+          python_bin="$(command -v python3)"
+          clean_path="$(dirname "$python_bin"):$(dirname "$(command -v git)"):$(dirname "$DUCKDB"):/usr/bin:/bin"
+          env -i PATH="$clean_path" HOME="$home" TMPDIR="$tmp" LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 \
+            "$python_bin" "$repo/packages/ops-decision-closure/bin/clean-room.py" \
+              --repo-root "$repo" \
+              --release-proof-dir "$RELEASE_DIR" \
+              --release-manifest-sha256 "$ARTIFACT_MANIFEST_SHA" \
+              --out-dir "$out" \
+              --duckdb "$DUCKDB" \
+              --exact-commit "$ACCEPTED_COMMIT" \
+              --exact-tree "$ACCEPTED_TREE" \
+              --release-tag "$TAG" \
+              --operator-id github-actions-clean-room \
+            | tee "$RUNNER_TEMP/clean-room.stdout.json"
+          python3 - "$out/independent-takeover.receipt.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert x['verdict']=='PASS_INDEPENDENT_TRANSFER_DD_G10'
+          assert x['secret_count']==0 and x['owner_intervention_count']==0 and x['undocumented_step_count']==0
+          assert x['chat_history_used'] is False and x['model_memory_used'] is False and x['owner_local_worktree_used'] is False
+          assert x['restore_result']=='PASS' and x['clean_build_result']=='PASS'
+          assert x['old_checkpoint_replay_result']=='PASS' and x['decision_explanation_result']=='PASS'
+          assert x['alternate_host_result']['status']=='PASS' and x['impact_result']['status']=='PASS'
+          assert x['source_checkpoint_unchanged'] is True
+          PY
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare bounded human review request
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+          ROOT_DIGEST: ${{ steps.build.outputs.root }}
+          RELEASE_DIR: ${{ steps.readback.outputs.extracted }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          packet_digest="$(python3 -c 'import json,os;print(json.load(open(os.environ["RELEASE_DIR"]+"/decision-packet.json"))["packet_digest"])')"
+          cat > "$RUNNER_TEMP/human-review-request.md" <<EOF
+          # Issue #115 literal independent human review
+
+          Exact accepted commit: \`$ACCEPTED_COMMIT\`
+          Exact tree: \`$ACCEPTED_TREE\`
+          Release tag: \`$TAG\`
+          Authority root: \`$ROOT_DIGEST\`
+          Decision Packet digest: \`$packet_digest\`
+
+          A reviewer independent of the owner and originating automation must read \`decision-room.html\` or \`decision-packet.json\` from the exact Release and answer, without SQL or direct JSONL inspection:
+
+          1. What question is being decided?
+          2. What is the recommendation?
+          3. What supports it?
+          4. What argues against it?
+          5. What alternatives were rejected?
+          6. What gaps remain?
+          7. What is the next action?
+          8. What are the success and stop conditions?
+          9. What outcomes are already recorded?
+
+          The reviewer must record identity/class, elapsed review time, answers, 9/9 score, and ADOPT/HOLD/REJECT. Machine output or owner self-review is not accepted.
+          EOF
+
+      - name: Upload technical closure receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-115-postmerge-proof-${{ env.ACCEPTED_COMMIT }}
+          retention-days: 90
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/release.receipt.json
+            ${{ runner.temp }}/public-readback.receipt.json
+            ${{ steps.takeover.outputs.out }}/independent-takeover.receipt.json
+            ${{ steps.takeover.outputs.out }}/decision-explanation.json
+            ${{ steps.takeover.outputs.out }}/next-checkpoint-candidate.json
+            ${{ runner.temp }}/human-review-request.md
+            ${{ runner.temp }}/final-proof.stdout.json
+            ${{ runner.temp }}/clean-room.stdout.json
+
+      - name: Record technical gates without closing Issue
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh issue comment 115 --repo "$GITHUB_REPOSITORY" --body "## Post-merge technical proof: PASS\n\nAccepted commit: \`$ACCEPTED_COMMIT\`\nAccepted tree: \`$ACCEPTED_TREE\`\nExact public Release: \`$TAG\`\nWorkflow run: \`$GITHUB_RUN_ID\`\n\n- public exact asset readback: PASS\n- eight-query replay: PASS, mismatch 0\n- checkpoint mixing: 0\n- clean-room takeover: PASS_INDEPENDENT_TRANSFER_DD_G10\n- secret / owner intervention / undocumented steps: 0\n- literal independent human review: **PENDING**\n\nIssue #115 remains open until the separate human receipt is admitted."
