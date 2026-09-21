@@ -29,6 +29,21 @@ export function sha256(value) {
   return `sha256:${crypto.createHash('sha256').update(typeof value === 'string' ? value : stableJson(value)).digest('hex')}`;
 }
 
+export function flakePackageNames(show) {
+  if (show == null || typeof show !== 'object' || Array.isArray(show)) throw new Error('invalid Nix flake show payload');
+  if (show.packages == null) return [];
+  if (typeof show.packages !== 'object' || Array.isArray(show.packages)) throw new Error('invalid Nix packages surface');
+  const names = new Set();
+  for (const [system, values] of Object.entries(show.packages)) {
+    if (values == null || typeof values !== 'object' || Array.isArray(values)) throw new Error(`invalid Nix packages surface for ${system}`);
+    for (const name of Object.keys(values)) {
+      if (!/^[A-Za-z0-9._+-]+$/u.test(name)) throw new Error(`invalid Nix package name: ${name}`);
+      names.add(name);
+    }
+  }
+  return [...names].sort();
+}
+
 export function validateScope(rows) {
   if (!Array.isArray(rows) || rows.length !== EXPECTED_REPOSITORIES.length) throw new Error('scope must contain exactly 7 repositories');
   const ids = new Set();
@@ -71,7 +86,7 @@ export function validateObservation(row) {
   const ids = new Set();
   for (const pkg of row.packages) {
     if (typeof pkg.id !== 'string' || pkg.id === '' || ids.has(pkg.id)) throw new Error(`duplicate/invalid package id in ${row.repository}: ${pkg?.id}`);
-    if (typeof pkg.path !== 'string' || !pkg.path.startsWith('packages/')) throw new Error(`invalid package path in ${row.repository}: ${pkg?.path}`);
+    if (typeof pkg.path !== 'string' || !(pkg.path.startsWith('packages/') || pkg.path.startsWith('flake.nix#packages.'))) throw new Error(`invalid package path in ${row.repository}: ${pkg?.path}`);
     if (typeof pkg.purpose !== 'string') throw new Error(`package subject missing in ${row.repository}: ${pkg.id}`);
     ids.add(pkg.id);
   }
