@@ -138,6 +138,20 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
+          deploy-adapter-contract =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "deploy-adapter-contract-check"
+              { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                cp -R ${./packages/deploy-adapter} source
+                chmod -R u+w source
+                cd source
+                python3 tests/run.py
+                mkdir -p "$out"
+                touch "$out/ok"
+              '';
           issue-116-shiftleft-proof =
             let
               pkgs = nixpkgs.legacyPackages.${system};
