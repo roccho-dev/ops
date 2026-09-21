@@ -1,0 +1,33 @@
+{
+  "schema": "ops.mobileAgentExactSourceSeqAudit/1",
+  "authority": false,
+  "source": {
+    "ref": "proof/mobile-agent-exact-source-object-260823",
+    "commit": "1daa001bf780053f4319e3fb20b4ea9a6e0d0442",
+    "tree": "59ff130fc7e20a4b5762c21fe97b417fc7a454ad"
+  },
+  "app": {
+    "files": 54,
+    "path": "dist/app/index.html",
+    "bytes": 2412388,
+    "sha256": "sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+  },
+  "runtime": {
+    "preset": "seq/1",
+    "renderer": "existing renderer-maxgraph",
+    "interactionShell": "existing",
+    "codec": "existing protocol-v3 #smap"
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "project": "stg-mobile-agent",
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "acceptance": {
+    "releaseReadback": true,
+    "stableAndImmutable54FileReadback": true,
+    "stableAndImmutableChrome": true,
+    "acceptedRef": "accepted/mobile-agent-public-url",
+    "receiptOnlyReporting": true
+  }
+}

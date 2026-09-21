@@ -1,0 +1,1 @@
+Git source commit/tree are authority; Release, Pages, URLs, screenshots, and receipts are non-authority projections.
