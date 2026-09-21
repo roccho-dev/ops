@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  buildOutputs, evaluateObservation, makeQuestions, parseJsonl, unknownEvaluation,
+  buildOutputs, evaluateObservation, flakePackageNames, makeQuestions, parseJsonl, unknownEvaluation,
   validateRules, validateScope,
 } from '../lib/core.mjs';
 
@@ -42,6 +42,16 @@ function packageRows(repo) {
   try { return parseJsonl(fs.readFileSync(path.join(repo, 'build/packages.jsonl'), 'utf8')); } catch { return []; }
 }
 
+function nixPackageNames(repo) {
+  if (!fs.existsSync(path.join(repo, 'flake.nix'))) return [];
+  const raw = execFileSync('nix', ['flake', 'show', '--json', '--no-write-lock-file', `path:${repo}`], {
+    encoding:'utf8', stdio:['ignore','pipe','pipe'], maxBuffer:32*1024*1024,
+  });
+  let show;
+  try { show = JSON.parse(raw); } catch (error) { throw new Error(`invalid nix flake show JSON: ${error.message}`); }
+  return flakePackageNames(show);
+}
+
 function discoverPackages(repo, files) {
   const found = new Map();
   for (const file of files) {
@@ -54,14 +64,20 @@ function discoverPackages(repo, files) {
     const match = entry.match(/^(packages\/[^/]+)/u);
     found.set(row.name, match?.[1] ?? `packages/${row.name}`);
   }
+  for (const name of nixPackageNames(repo)) {
+    if (!found.has(name)) found.set(name, `flake.nix#packages.*.${name}`);
+  }
   return [...found].sort(([a],[b]) => a.localeCompare(b)).map(([id, packagePath]) => {
-    const base = path.join(repo, packagePath);
-    const packageFiles = files.filter((file) => file === packagePath || file.startsWith(`${packagePath}/`));
+    const sourcePackage = packagePath.startsWith('packages/');
+    const base = sourcePackage ? path.join(repo, packagePath) : repo;
+    const packageFiles = sourcePackage ? files.filter((file) => file === packagePath || file.startsWith(`${packagePath}/`)) : ['flake.nix'];
     const tests = packageFiles.filter((file) => /(^|\/)(test|tests|spec|specs)(\/|\.|$)|\.(test|spec)\./iu.test(file)).slice(0,80);
     const checkRows = (() => {
       try { return parseJsonl(fs.readFileSync(path.join(repo, 'build/checks.jsonl'),'utf8')); } catch { return []; }
     })().filter((row) => typeof row.script === 'string' && row.script.startsWith(`${packagePath}/`)).map((row) => row.name).slice(0,80);
-    const purpose = excerpt(path.join(base, 'README.md')) || excerpt(path.join(base, 'package.json')) || excerpt(path.join(base, 'default.nix'));
+    const purpose = sourcePackage
+      ? (excerpt(path.join(base, 'README.md')) || excerpt(path.join(base, 'package.json')) || excerpt(path.join(base, 'default.nix')))
+      : `Declared Nix package output ${id}.\n${excerpt(path.join(repo, 'flake.nix'), 3000)}`;
     return { id, path: packagePath, purpose, evidence: { tests, checks: checkRows }, trackedFiles: packageFiles.length };
   });
 }
@@ -77,7 +93,7 @@ function observe(scopeRow, root) {
   return {
     kind:'repoHealth.observation.v1', repoId:scopeRow.id, repository:scopeRow.repository,
     revision, tree, dirty:false,
-    root:{ purpose:excerpt(path.join(repo,'README.md')), files:files.slice(0,160), trackedFiles:files.length },
+    root:{ purpose:excerpt(path.join(repo,'README.md')), flake:excerpt(path.join(repo,'flake.nix'),12000), files:files.slice(0,160), trackedFiles:files.length },
     packages:discoverPackages(repo, files),
   };
 }
