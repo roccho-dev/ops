@@ -125,7 +125,7 @@ async function jev(observation, rules) {
     const response = await fetch(endpoint, {
       method:'POST', signal:controller.signal,
       headers:{ authorization:`Bearer ${key}`, 'content-type':'application/json' },
-      body:JSON.stringify({ state:observation, model:'jev-latest', questions }),
+      body:JSON.stringify({ state:observation, model:'jev-1.13.0', questions }),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Jev HTTP ${response.status}`);
