@@ -1,9 +1,21 @@
 import { JEV_MODEL, validateJevBudget } from './core.mjs';
 
-// Shared HTTP boundary. Never log credentials or untrusted response bodies.
+// One response contract for HTTP consumers and injected design-review callers.
+export function validateJevResponse(data, questions) {
+  if (data?.model !== JEV_MODEL) throw new Error('JEV_MODEL_MISMATCH');
+  const answers = data.answers;
+  if (!answers || Array.isArray(answers) || typeof answers !== 'object'
+    || JSON.stringify(Object.keys(answers).sort()) !== JSON.stringify(Object.keys(questions).sort())
+    || Object.values(answers).some((a) => a?.type !== 'noul' || !Number.isFinite(a.noul) || a.noul < 0 || a.noul > 1)) throw new Error('INVALID_JEV_ANSWERS');
+  const usage = Object.fromEntries(Object.entries(data.usage ?? {}).filter(([, v]) => Number.isFinite(v) && v >= 0));
+  return { model: data.model, answers, usage };
+}
+
+// Never log credentials or untrusted response bodies.
 export async function askJev(state, questions, { key, endpoint, timeoutMs, fetchImpl = fetch }) {
   if (typeof key !== 'string' || !key.trim()) throw new Error('JEV_API_KEY_REQUIRED');
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error('INVALID_TIMEOUT');
+  if (!questions || !Object.keys(questions).length) throw new Error('EMPTY_JEV_QUESTIONS');
   validateJevBudget(state, questions);
   const response = await fetchImpl(endpoint, {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
@@ -13,11 +25,5 @@ export async function askJev(state, questions, { key, endpoint, timeoutMs, fetch
   if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
   let data;
   try { data = await response.json(); } catch { throw new Error('INVALID_JEV_JSON'); }
-  if (data?.model !== JEV_MODEL) throw new Error('JEV_MODEL_MISMATCH');
-  const answers = data.answers;
-  if (!answers || Array.isArray(answers) || typeof answers !== 'object'
-    || JSON.stringify(Object.keys(answers).sort()) !== JSON.stringify(Object.keys(questions).sort())
-    || Object.values(answers).some((a) => a?.type !== 'noul' || !Number.isFinite(a.noul) || a.noul < 0 || a.noul > 1)) throw new Error('INVALID_JEV_ANSWERS');
-  const usage = Object.fromEntries(Object.entries(data.usage ?? {}).filter(([, v]) => Number.isFinite(v) && v >= 0));
-  return { model: data.model, answers, usage };
+  return validateJevResponse(data, questions);
 }
