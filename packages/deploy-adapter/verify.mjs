@@ -26,7 +26,7 @@ export function loadOne(text) {
 export function verifyReceipt(receipt) {
   const required = [
     "schema", "authority", "status", "provider", "target",
-    "sourceRevision", "providerDeploymentId", "deploymentUrl", "probe",
+    "sourceRevision", "deploymentUrl", "probe",
   ];
   const missing = required.filter((key) => !(key in receipt));
   if (missing.length) fail(`missing fields: ${missing.sort().join(",")}`);
@@ -35,7 +35,7 @@ export function verifyReceipt(receipt) {
   if (receipt.status !== "PASS") fail("success receipt must be PASS");
   if (!TARGETS.has(receipt.target)) fail("target must be preview or production");
 
-  for (const key of ["provider", "sourceRevision", "providerDeploymentId"]) {
+  for (const key of ["provider", "sourceRevision"]) {
     if (typeof receipt[key] !== "string" || !receipt[key].trim()) {
       fail(`${key} must be a non-empty string`);
     }

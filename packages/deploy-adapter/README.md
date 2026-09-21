@@ -44,7 +44,7 @@ Logs belong on stderr so stdout remains machine-readable.
 
 ## Receipt
 
-The success receipt is intentionally small:
+The success receipt is intentionally small and contains only directly observed facts:
 
 - schema = ops.deploy-effect.receipt/1
 - authority = false
@@ -52,7 +52,6 @@ The success receipt is intentionally small:
 - provider
 - target
 - sourceRevision
-- providerDeploymentId
 - deploymentUrl
 - probe.path
 - probe.status

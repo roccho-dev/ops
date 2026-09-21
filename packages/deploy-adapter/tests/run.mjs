@@ -8,7 +8,6 @@ const good = {
   provider: "example",
   target: "preview",
   sourceRevision: "deadbeef",
-  providerDeploymentId: "dep_1",
   deploymentUrl: "https://example.invalid",
   probe: { path: "/health", status: 200 },
 };
