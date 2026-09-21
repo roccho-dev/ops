@@ -40,11 +40,16 @@ export function materializeBareScope(scope, bareRoot) {
       }
       const tree = gitDir(gitdir, 'rev-parse', `${revision}^{tree}`);
       const target = path.join(root, row.path);
-      execFileSync('git', ['clone', '--quiet', '--no-local', '--no-checkout', gitdir, target], {
+      execFileSync('git', ['init', '--quiet', target], {
         stdio: ['ignore', 'pipe', 'pipe'],
         maxBuffer: 32 * 1024 * 1024,
       });
-      gitWorktree(target, 'checkout', '--quiet', '--detach', revision);
+      gitWorktree(target, 'remote', 'add', 'origin', gitdir);
+      gitWorktree(target, 'fetch', '--quiet', '--depth=1', 'origin', ref);
+      if (gitWorktree(target, 'rev-parse', 'FETCH_HEAD') !== revision) {
+        throw new Error(`materialized fetch mismatch: ${row.repository}`);
+      }
+      gitWorktree(target, 'checkout', '--quiet', '--detach', 'FETCH_HEAD');
       if (gitWorktree(target, 'rev-parse', 'HEAD') !== revision) {
         throw new Error(`materialized revision mismatch: ${row.repository}`);
       }
