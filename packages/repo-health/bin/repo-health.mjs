@@ -7,22 +7,24 @@ import {
   buildOutputs, evaluateObservation, flakePackageNames, makeQuestions, parseJsonl, unknownEvaluation,
   validateRules, validateScope,
 } from '../lib/core.mjs';
+import { materializeBareScope } from '../lib/source.mjs';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function usage() {
-  return 'usage: repo-health run --root DIR --out DIR [--scope FILE] [--rules FILE]';
+  return 'usage: repo-health run (--root DIR | --bare-root DIR) --out DIR [--scope FILE] [--rules FILE]';
 }
 
 function args(argv) {
   if (argv[0] !== 'run') throw new Error(usage());
   const out = { scope: path.join(packageRoot, 'scope.jsonl'), rules: path.join(packageRoot, 'rules.jsonl') };
+  const keys = { '--root': 'root', '--bare-root': 'bareRoot', '--out': 'out', '--scope': 'scope', '--rules': 'rules' };
   for (let i = 1; i < argv.length; i += 2) {
     const key = argv[i], value = argv[i + 1];
-    if (!value || !['--root','--out','--scope','--rules'].includes(key)) throw new Error(usage());
-    out[key.slice(2)] = value;
+    if (!value || !keys[key]) throw new Error(usage());
+    out[keys[key]] = value;
   }
-  if (!out.root || !out.out) throw new Error(usage());
+  if (!out.out || Boolean(out.root) === Boolean(out.bareRoot)) throw new Error(usage());
   return out;
 }
 
@@ -127,21 +129,27 @@ async function main() {
   const options = args(process.argv.slice(2));
   const scope = validateScope(parseJsonl(fs.readFileSync(options.scope,'utf8')));
   const rules = validateRules(parseJsonl(fs.readFileSync(options.rules,'utf8')));
-  const evaluations = [];
-  for (const scopeRow of scope) {
-    let observation;
-    try { observation = observe(scopeRow, options.root); }
-    catch (error) { evaluations.push(unknownEvaluation({ scopeRow, rules, reason:`observation: ${error.message}` })); continue; }
-    try { evaluations.push(await jev(observation, rules)); }
-    catch (error) { evaluations.push(unknownEvaluation({ scopeRow, observation, rules, reason:`jev: ${error.name === 'AbortError' ? 'timeout' : error.message}` })); }
+  const materialized = options.bareRoot ? materializeBareScope(scope, options.bareRoot) : null;
+  const sourceRoot = materialized?.root ?? options.root;
+  try {
+    const evaluations = [];
+    for (const scopeRow of scope) {
+      let observation;
+      try { observation = observe(scopeRow, sourceRoot); }
+      catch (error) { evaluations.push(unknownEvaluation({ scopeRow, rules, reason:`observation: ${error.message}` })); continue; }
+      try { evaluations.push(await jev(observation, rules)); }
+      catch (error) { evaluations.push(unknownEvaluation({ scopeRow, observation, rules, reason:`jev: ${error.name === 'AbortError' ? 'timeout' : error.message}` })); }
+    }
+    const outputs = buildOutputs({ scope, rules, evaluations });
+    fs.mkdirSync(options.out, { recursive:true });
+    fs.writeFileSync(path.join(options.out,'report.jsonl'), outputs.reportText);
+    fs.writeFileSync(path.join(options.out,'receipt.json'), `${JSON.stringify(outputs.receipt, null, 2)}\n`);
+    fs.writeFileSync(path.join(options.out,'index.html'), outputs.html);
+    process.stdout.write(`${JSON.stringify({ status:outputs.receipt.complete?'PASS':'FAIL', ...outputs.summary, source:materialized?'bare-mirror':'worktree', out:path.resolve(options.out) })}\n`);
+    if (!outputs.receipt.complete) process.exitCode = 1;
+  } finally {
+    materialized?.cleanup();
   }
-  const outputs = buildOutputs({ scope, rules, evaluations });
-  fs.mkdirSync(options.out, { recursive:true });
-  fs.writeFileSync(path.join(options.out,'report.jsonl'), outputs.reportText);
-  fs.writeFileSync(path.join(options.out,'receipt.json'), `${JSON.stringify(outputs.receipt, null, 2)}\n`);
-  fs.writeFileSync(path.join(options.out,'index.html'), outputs.html);
-  process.stdout.write(`${JSON.stringify({ status:outputs.receipt.complete?'PASS':'FAIL', ...outputs.summary, out:path.resolve(options.out) })}\n`);
-  if (!outputs.receipt.complete) process.exitCode = 1;
 }
 
 main().catch((error) => { console.error(error.stack ?? error); process.exitCode = 2; });
