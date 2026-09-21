@@ -1,0 +1,7 @@
+{"kind":"repoHealth.scope.v1","id":"adrs","repository":"roccho-dev/adrs","path":"adrs"}
+{"kind":"repoHealth.scope.v1","id":"governance","repository":"roccho-dev/governance","path":"governance"}
+{"kind":"repoHealth.scope.v1","id":"ops","repository":"roccho-dev/ops","path":"ops"}
+{"kind":"repoHealth.scope.v1","id":"ui","repository":"roccho-dev/ui","path":"ui"}
+{"kind":"repoHealth.scope.v1","id":"envs","repository":"roccho-dev/envs","path":"envs"}
+{"kind":"repoHealth.scope.v1","id":"flakes","repository":"roccho-dev/flakes","path":"flakes"}
+{"kind":"repoHealth.scope.v1","id":"chatgpt","repository":"roccho-dev/chatgpt","path":"chatgpt"}

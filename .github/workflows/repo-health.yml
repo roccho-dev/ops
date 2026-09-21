@@ -1,0 +1,50 @@
+name: repo-health
+
+on:
+  pull_request:
+    paths:
+      - "packages/repo-health/**"
+      - "build/packages.jsonl"
+      - "build/checks.jsonl"
+      - "ci.intent.v1.jsonl"
+      - ".github/workflows/repo-health.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      OPS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.OPS_SHA }}
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Prove repo-health package contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build --no-link .#repo-health
+          nix build --no-link .#checks.x86_64-linux.repo-health
+
+      - name: Record boundary
+        shell: bash
+        run: |
+          {
+            echo "### Major Repo Health contract"
+            echo "- exact ops SHA: $OPS_SHA"
+            echo "- scope contract: 7 repositories"
+            echo "- destructive cases: 18"
+            echo "- live Jev / private-repository run: not claimed by this workflow"
+            echo "- authority: false"
+          } >> "$GITHUB_STEP_SUMMARY"
