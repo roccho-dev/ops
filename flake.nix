@@ -143,12 +143,12 @@
               pkgs = nixpkgs.legacyPackages.${system};
             in
             pkgs.runCommand "deploy-adapter-contract-check"
-              { nativeBuildInputs = [ pkgs.python3 ]; }
+              { nativeBuildInputs = [ pkgs.nodejs ]; }
               ''
                 cp -R ${./packages/deploy-adapter} source
                 chmod -R u+w source
                 cd source
-                python3 tests/run.py
+                node tests/run.mjs
                 mkdir -p "$out"
                 touch "$out/ok"
               '';
