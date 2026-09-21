@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions, parseJsonl, unknownEvaluation,
+  JEV_MODEL, buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions, parseJsonl, unknownEvaluation,
   validateJevBudget, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
@@ -126,7 +126,7 @@ async function jev(observation, rules) {
     const response = await fetch(endpoint, {
       method:'POST', signal:controller.signal,
       headers:{ authorization:`Bearer ${key}`, 'content-type':'application/json' },
-      body:JSON.stringify({ state:observation, model:'jev-1.13.0', questions }),
+      body:JSON.stringify({ state:observation, model:JEV_MODEL, questions }),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(`Jev HTTP ${response.status}`);
