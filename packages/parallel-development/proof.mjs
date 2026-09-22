@@ -56,7 +56,18 @@ function scoreMap(result) {
   if (group.status !== 'evaluated' || group.candidates !== 2 || group.evaluated !== 2 || group.returned !== 2 || group.findings.length !== 2) {
     throw new Error('INCOMPLETE_PHASE_RESULTS');
   }
-  return { group, scores: new Map(group.findings.map((finding) => [finding.subject?.[1], finding.noul])) };
+  return {
+    group,
+    scores: new Map(group.findings.map((finding) => [finding.subject?.[1], finding.noul])),
+    jevTopId: group.findings[0]?.subject?.[1],
+  };
+}
+
+export function classifyIncrementalEffect(jevHits, baselineHits) {
+  if (!Number.isSafeInteger(jevHits) || !Number.isSafeInteger(baselineHits) || jevHits < 0 || baselineHits < 0) {
+    throw new Error('INVALID_EFFECT_COUNTS');
+  }
+  return jevHits > baselineHits ? 'EFFECT_OBSERVED' : jevHits < baselineHits ? 'HARM_OBSERVED' : 'NO_EFFECT_OBSERVED';
 }
 
 export function summarize(results, expected) {
@@ -64,10 +75,13 @@ export function summarize(results, expected) {
   const byCase = new Map();
   for (const result of results) {
     if (!['declared', 'reversed'].includes(result.order) || result.error || result.calls !== 1) throw new Error('INCOMPLETE_PHASE_RESULTS');
-    const { group, scores } = scoreMap(result);
-    if (group.theme !== result.theme || scores.size !== 2) throw new Error('INCOMPLETE_PHASE_RESULTS');
+    const { group, scores, jevTopId } = scoreMap(result);
+    if (group.theme !== result.theme || scores.size !== 2 || !Array.isArray(result.inputCandidates) || result.inputCandidates.length !== 2) {
+      throw new Error('INCOMPLETE_PHASE_RESULTS');
+    }
+    if (!result.inputCandidates.every((id) => scores.has(id))) throw new Error('INCOMPLETE_PHASE_RESULTS');
     if (!byCase.has(result.caseId)) byCase.set(result.caseId, []);
-    byCase.get(result.caseId).push({ ...result, scores });
+    byCase.get(result.caseId).push({ ...result, scores, jevTopId });
   }
   if (byCase.size !== 18 || [...byCase.values()].some((rows) => rows.length !== 2)) throw new Error('INCOMPLETE_PHASE_RESULTS');
 
@@ -83,12 +97,37 @@ export function summarize(results, expected) {
       const preferred = row.scores.get(preferredId);
       const other = row.scores.get(otherId);
       const verdict = preferred > other ? 'preferred-higher' : preferred < other ? 'preferred-lower' : 'tie';
-      const comparison = { caseId, phase: row.phase, theme: row.theme, order: row.order, preferredId, otherId, preferred, other, verdict };
+      const baselineTopId = row.inputCandidates[0];
+      const baselineHitAt1 = baselineTopId === preferredId;
+      const jevHitAt1 = row.jevTopId === preferredId;
+      const comparison = {
+        caseId, phase: row.phase, theme: row.theme, order: row.order,
+        preferredId, otherId, preferred, other, verdict,
+        baselineTopId, jevTopId: row.jevTopId, baselineHitAt1, jevHitAt1,
+      };
       comparisons.push(comparison);
       return comparison;
     });
     cases.push({ caseId, phase: rows[0].phase, theme: rows[0].theme, stablePreferredHigher: perOrder.every((x) => x.verdict === 'preferred-higher'), perOrder });
   }
+
+  const baselineHits = comparisons.filter((x) => x.baselineHitAt1).length;
+  const jevHits = comparisons.filter((x) => x.jevHitAt1).length;
+  const effectByPhase = Object.fromEntries(['cut', 'pr', 'join'].map((phase) => {
+    const rows = comparisons.filter((x) => x.phase === phase);
+    const baseline = rows.filter((x) => x.baselineHitAt1).length;
+    const jev = rows.filter((x) => x.jevHitAt1).length;
+    return [phase, {
+      orders: rows.length,
+      baselineHits: baseline,
+      jevHits: jev,
+      deltaHitAt1: rows.length ? (jev - baseline) / rows.length : null,
+      classification: classifyIncrementalEffect(jev, baseline),
+    }];
+  }));
+  const fullScanCandidates = comparisons.length * 2;
+  const jevTop1Candidates = comparisons.length;
+  const sameGoldCoverageAsFullScan = jevHits === comparisons.length;
 
   return {
     kind: 'summary', status: 'OBSERVED', model: JEV_MODEL,
@@ -98,7 +137,29 @@ export function summarize(results, expected) {
     ties: comparisons.filter((x) => x.verdict === 'tie').length,
     stableCases: cases.filter((x) => x.stablePreferredHigher).length,
     unstableCases: cases.filter((x) => !x.stablePreferredHigher).length,
-    semanticThresholds: 0, goldLeakage: 0, comparisons, caseResults: cases,
+    semanticThresholds: 0,
+    goldLeakage: 0,
+    effect: {
+      kind: 'jevRankingEffect.v1',
+      scope: 'fixed-neutral-fixture-top1',
+      baseline: 'input-first-no-semantic-prior',
+      attentionBudget: 1,
+      orders: comparisons.length,
+      baselineHits,
+      jevHits,
+      baselineHitAt1: comparisons.length ? baselineHits / comparisons.length : null,
+      jevHitAt1: comparisons.length ? jevHits / comparisons.length : null,
+      deltaHitAt1: comparisons.length ? (jevHits - baselineHits) / comparisons.length : null,
+      classification: classifyIncrementalEffect(jevHits, baselineHits),
+      perPhase: effectByPhase,
+      fullScanCandidates,
+      jevTop1Candidates,
+      sameGoldCoverageAsFullScan,
+      potentialCandidateReadReduction: sameGoldCoverageAsFullScan ? 1 - (jevTop1Candidates / fullScanCandidates) : null,
+      downstreamDecisionEffect: 'UNMEASURED',
+    },
+    comparisons,
+    caseResults: cases,
   };
 }
 
@@ -123,7 +184,11 @@ async function main() {
   const results = [];
   for (const row of cases) {
     for (const [order, state] of [['declared', structuredClone(row.state)], ['reversed', reversed(row.state)]]) {
-      const result = { kind: 'case-order', caseId: row.caseId, phase: row.phase, theme: row.theme, order, stateDigest: sha256(state), calls: 0 };
+      const result = {
+        kind: 'case-order', caseId: row.caseId, phase: row.phase, theme: row.theme, order,
+        inputCandidates: state.candidates.map((candidate) => candidate.id),
+        stateDigest: sha256(state), calls: 0,
+      };
       try {
         Object.assign(result, await reviewPhase(state, { topK: 2, themes: [row.theme] }, (reviewState, questions) => {
           assertNoGoldLeak(reviewState, questions);

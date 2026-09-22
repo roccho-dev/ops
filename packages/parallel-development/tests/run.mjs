@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { JEV_MODEL } from '../../jev-review/core.mjs';
 import { reviewPhase, validateBenchmarkCase, PHASES } from '../phases.mjs';
-import { assertNoGoldLeak, summarize, validateCorpus, validateExpected } from '../proof.mjs';
+import { assertNoGoldLeak, classifyIncrementalEffect, summarize, validateCorpus, validateExpected } from '../proof.mjs';
 
 const parse = (url) => fs.readFileSync(url, 'utf8').trim().split(/\r?\n/u).filter(Boolean).map(JSON.parse);
 const cases = validateCorpus(parse(new URL('cases.jsonl', import.meta.url)));
@@ -32,7 +32,11 @@ for (const row of cases) {
       };
     });
     assert.equal(calls, 1);
-    results.push({ caseId: row.caseId, phase: row.phase, theme: row.theme, order, calls, ...result });
+    results.push({
+      caseId: row.caseId, phase: row.phase, theme: row.theme, order,
+      inputCandidates: state.candidates.map((candidate) => candidate.id),
+      calls, ...result,
+    });
   }
 }
 const summary = summarize(results, expected);
@@ -45,6 +49,34 @@ assert.equal(summary.ties, 0);
 assert.equal(summary.stableCases, 18);
 assert.equal(summary.semanticThresholds, 0);
 assert.equal(summary.goldLeakage, 0);
+assert.deepEqual(
+  {
+    baselineHits: summary.effect.baselineHits,
+    jevHits: summary.effect.jevHits,
+    baselineHitAt1: summary.effect.baselineHitAt1,
+    jevHitAt1: summary.effect.jevHitAt1,
+    deltaHitAt1: summary.effect.deltaHitAt1,
+    classification: summary.effect.classification,
+    potentialCandidateReadReduction: summary.effect.potentialCandidateReadReduction,
+    downstreamDecisionEffect: summary.effect.downstreamDecisionEffect,
+  },
+  {
+    baselineHits: 18,
+    jevHits: 36,
+    baselineHitAt1: 0.5,
+    jevHitAt1: 1,
+    deltaHitAt1: 0.5,
+    classification: 'EFFECT_OBSERVED',
+    potentialCandidateReadReduction: 0.5,
+    downstreamDecisionEffect: 'UNMEASURED',
+  },
+);
+assert.ok(Object.values(summary.effect.perPhase).every((row) =>
+  row.orders === 12 && row.baselineHits === 6 && row.jevHits === 12 && row.deltaHitAt1 === 0.5 && row.classification === 'EFFECT_OBSERVED'
+));
+assert.equal(classifyIncrementalEffect(18, 18), 'NO_EFFECT_OBSERVED');
+assert.equal(classifyIncrementalEffect(17, 18), 'HARM_OBSERVED');
+assert.equal(classifyIncrementalEffect(19, 18), 'EFFECT_OBSERVED');
 
 // Ranking quality is evidence, never an execution gate.
 const ties = [];
@@ -55,7 +87,11 @@ for (const row of cases) {
       model: JEV_MODEL,
       answers: Object.fromEntries(Object.keys(questions).map((key) => [key, { type: 'noul', noul: 0.5 }])),
     }));
-    ties.push({ caseId: row.caseId, phase: row.phase, theme: row.theme, order, calls: 1, ...result });
+    ties.push({
+      caseId: row.caseId, phase: row.phase, theme: row.theme, order,
+      inputCandidates: state.candidates.map((candidate) => candidate.id),
+      calls: 1, ...result,
+    });
   }
 }
 const tieSummary = summarize(ties, expected);
@@ -78,4 +114,8 @@ await assert.rejects(() => reviewPhase(cases[0].state, { topK: 2, themes: [cases
   answers: { ...Object.fromEntries(Object.keys(questions).map((key) => [key, { type: 'noul', noul: 0.5 }])), extra: { type: 'noul', noul: 0.5 } },
 })), /INVALID_JEV_ANSWERS/);
 
-console.log(JSON.stringify({ status: 'PASS', cases: 18, orders: 36, judgments: 72, semanticThresholds: 0, goldLeakage: 0 }));
+console.log(JSON.stringify({
+  status: 'PASS', cases: 18, orders: 36, judgments: 72,
+  semanticThresholds: 0, goldLeakage: 0,
+  effect: summary.effect,
+}));
