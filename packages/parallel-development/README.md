@@ -58,3 +58,30 @@ node packages/parallel-development/proof.mjs NEW_REPORT.jsonl
 ```
 
 Missing phase/theme/candidate evaluation, malformed response, model mismatch, or explicit gold leakage is an execution error. A reversed or tied semantic ordering is still a valid observed model result and must not be hidden as execution failure.
+
+## Incremental effect ablation
+
+Refs: roccho-dev/ops#409.
+
+The proof also asks a smaller question than “is Jev accurate?”:
+
+> Under the same top-1 attention budget, does Jev ordering surface the runner-only gold concern more often than no semantic ordering?
+
+For every neutral case and reversed order:
+
+```text
+baseline = first input candidate
+Jev      = top Noul-ranked candidate
+```
+
+The summary reports baseline hit@1, Jev hit@1, delta hit@1, and per-phase results. Classification is descriptive only:
+
+```text
+Jev > baseline  → EFFECT_OBSERVED
+Jev = baseline  → NO_EFFECT_OBSERVED
+Jev < baseline  → HARM_OBSERVED
+```
+
+No arbitrary adoption threshold is introduced. A NO_EFFECT or HARM result is a valid outcome.
+
+If Jev top1 retains the gold concern for every observation, the report also shows the **potential** candidate-reading reduction versus reading both candidates. This is not a claim about chat.pro token, latency, cost, or rework reduction. Those downstream effects remain `UNMEASURED` until a blinded decision-maker ablation is run.
