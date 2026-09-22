@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { JEV_MODEL, validateJevBudget } from '../../jev-review/core.mjs';
+import { evaluate } from '../../jev-review/review.mjs';
 export { JEV_MODEL, validateJevBudget };
 
 export const EXPECTED_REPOSITORIES = [
@@ -11,6 +12,10 @@ export const EXPECTED_REPOSITORIES = [
   'roccho-dev/flakes',
   'roccho-dev/chatgpt',
 ];
+
+const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+const exact = (x, names) => x && [Object.prototype, null].includes(Object.getPrototypeOf(x))
+  && Reflect.ownKeys(x).length === names.length && names.every((name) => Object.hasOwn(x, name));
 
 export function parseJsonl(text) {
   return String(text).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map((line, index) => {
@@ -78,12 +83,9 @@ export function validateRules(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('at least one rule is required');
   const ids = new Set();
   for (const row of rows) {
-    if (row?.kind !== 'repoHealth.rule.v1') throw new Error('invalid rule kind');
+    if (!exact(row, ['kind', 'id', 'concern']) || row.kind !== 'repoHealth.rule.v2') throw new Error('invalid rule contract');
     if (!/^[a-z0-9][a-z0-9-]*$/u.test(row.id ?? '') || ids.has(row.id)) throw new Error(`invalid or duplicate rule id: ${row?.id}`);
-    if (typeof row.instructions !== 'string' || row.instructions.trim() === '') throw new Error(`rule ${row.id} requires instructions`);
-    if (!Number.isFinite(row.failAt) || !Number.isFinite(row.passAt) || row.failAt < 0 || row.passAt > 1 || row.failAt >= row.passAt) throw new Error(`rule ${row.id} requires explicit valid failAt/passAt thresholds`);
-    if (typeof row.blocking !== 'boolean') throw new Error(`rule ${row.id} requires blocking boolean`);
-    if (!row.criteria || typeof row.criteria.true !== 'string' || typeof row.criteria.false !== 'string') throw new Error(`rule ${row.id} requires true/false criteria`);
+    if (typeof row.concern !== 'string' || row.concern.trim() === '') throw new Error(`rule ${row.id} requires concern`);
     ids.add(row.id);
   }
   return rows;
@@ -106,105 +108,99 @@ export function validateObservation(row) {
   return row;
 }
 
-export function makeQuestions(observation, rules) {
+export function semanticReviewInput(observation, rules) {
   validateObservation(observation); validateRules(rules);
-  const targets = [{ kind: 'repo', id: observation.repoId, path: '.', label: observation.repository }, ...observation.packages.map((pkg) => ({ kind: 'package', id: pkg.id, path: pkg.path, label: pkg.id }))];
-  const questions = {};
-  const mapping = {};
-  let index = 0;
-  for (const target of targets) {
-    for (const rule of rules) {
-      const questionId = `q${String(index++).padStart(5, '0')}`;
-      questions[questionId] = {
-        type: 'noul',
-        instructions: { question: rule.instructions, target },
-        criteria: rule.criteria,
-      };
-      mapping[questionId] = { target, ruleId: rule.id };
-    }
-  }
-  return { questions, mapping };
-}
-
-export function classifyNoul(value, rule) {
-  if (!Number.isFinite(value) || value < 0 || value > 1) return 'UNKNOWN';
-  if (value >= rule.passAt) return 'PASS';
-  if (value <= rule.failAt) return 'FAIL';
-  return 'UNKNOWN';
-}
-
-function aggregate(statuses) {
-  if (statuses.includes('FAIL')) return 'FAIL';
-  if (statuses.includes('UNKNOWN')) return 'UNKNOWN';
-  return 'PASS';
-}
-
-export function evaluateObservation({ observation, rules, response, mapping }) {
-  validateObservation(observation); validateRules(rules);
-  if (!response || typeof response !== 'object' || typeof response.model !== 'string' || !response.answers || typeof response.answers !== 'object') throw new Error('invalid Jev response envelope');
-  if (response.model !== JEV_MODEL) throw new Error(`unexpected Jev model: ${response.model}`);
-  const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
-  const expectedIds = Object.keys(mapping).sort();
-  const answerIds = Object.keys(response.answers).sort();
-  if (stableJson(expectedIds) !== stableJson(answerIds)) throw new Error('Jev response answer set mismatch');
-  const subjectDigest = sha256(observation);
-  const judgments = [];
-  for (const questionId of expectedIds) {
-    const meta = mapping[questionId];
-    const rule = ruleById.get(meta.ruleId);
-    const answer = response.answers[questionId];
-    if (!answer || answer.type !== 'noul' || !Number.isFinite(answer.noul) || answer.noul < 0 || answer.noul > 1) throw new Error(`invalid Noul answer: ${questionId}`);
-    judgments.push({
-      kind: 'repoHealth.judgment.v1',
-      repository: observation.repository,
-      revision: observation.revision,
-      targetKind: meta.target.kind,
-      targetId: meta.target.id,
-      targetPath: meta.target.path,
-      ruleId: rule.id,
-      noul: answer.noul,
-      status: classifyNoul(answer.noul, rule),
-      blocking: rule.blocking, subjectDigest, model: response.model,
-    });
-  }
-  const targets = new Map();
-  for (const judgment of judgments) {
-    const key = `${judgment.targetKind}:${judgment.targetId}`;
-    if (!targets.has(key)) targets.set(key, []);
-    targets.get(key).push(judgment);
-  }
-  const repoJudgments = targets.get(`repo:${observation.repoId}`) ?? [];
-  const packages = observation.packages.map((pkg) => {
-    const rows = targets.get(`package:${pkg.id}`) ?? [];
-    const blocking = rows.filter((row) => row.blocking);
-    return {
-      kind: 'repoHealth.package.v1', repository: observation.repository, revision: observation.revision,
-      packageId: pkg.id, packagePath: pkg.path, status: aggregate(blocking.map((row) => row.status)),
-      findings: blocking.filter((row) => row.status !== 'PASS').map((row) => ({ ruleId: row.ruleId, status: row.status, noul: row.noul })),
-    };
-  });
-  const rootBlocking = repoJudgments.filter((row) => row.blocking).map((row) => row.status);
-  const status = aggregate([...rootBlocking, ...packages.map((pkg) => pkg.status)]);
-  const repo = {
-    kind: 'repoHealth.repo.v1', repoId: observation.repoId, repository: observation.repository,
-    revision: observation.revision, tree: observation.tree, status,
-    packageCount: packages.length,
-    findings: repoJudgments.filter((row) => row.blocking && row.status !== 'PASS').map((row) => ({ ruleId: row.ruleId, status: row.status, noul: row.noul })),
+  const targets = [
+    { kind: 'repo', id: observation.repoId, path: '.' },
+    ...observation.packages.map((pkg) => ({ kind: 'package', id: pkg.id, path: pkg.path })),
+  ];
+  return {
+    themes: rules.map((rule) => rule.id),
+    items: rules.flatMap((rule) => targets.map((target) => ({
+      theme: rule.id,
+      subject: [target.kind, target.id],
+      concern: rule.concern,
+    }))),
+    targets,
   };
-  return { model: response.model, repo, packages, judgments };
 }
 
-export function unknownEvaluation({ scopeRow, observation = null, rules, reason }) {
+export async function evaluateObservation({ observation, rules, ask }) {
+  if (typeof ask !== 'function') throw new Error('INVALID_SEMANTIC_EVALUATOR');
+  const input = semanticReviewInput(observation, rules);
+  const result = await evaluate(observation, { themes: input.themes, items: input.items }, ask);
+  const targetPath = new Map(input.targets.map((target) => [`${target.kind}\0${target.id}`, target.path]));
+  const subjectDigest = sha256(observation);
+  const judgments = result.judgments.map((row) => ({
+    kind: 'repoHealth.judgment.v2',
+    repository: observation.repository,
+    revision: observation.revision,
+    targetKind: row.subject[0],
+    targetId: row.subject[1],
+    targetPath: targetPath.get(`${row.subject[0]}\0${row.subject[1]}`),
+    ruleId: row.theme,
+    noul: row.noul,
+    subjectDigest,
+    model: JEV_MODEL,
+  }));
+  const findingsFor = (kind, id) => judgments
+    .filter((row) => row.targetKind === kind && row.targetId === id)
+    .map((row) => ({ ruleId: row.ruleId, noul: row.noul }))
+    .sort((a, b) => b.noul - a.noul || compare(a.ruleId, b.ruleId));
+  const packages = observation.packages.map((pkg) => ({
+    kind: 'repoHealth.package.v2',
+    repository: observation.repository,
+    revision: observation.revision,
+    packageId: pkg.id,
+    packagePath: pkg.path,
+    deterministicStatus: 'PASS',
+    semanticStatus: 'EVALUATED',
+    findings: findingsFor('package', pkg.id),
+  }));
+  const repo = {
+    kind: 'repoHealth.repo.v2',
+    repoId: observation.repoId,
+    repository: observation.repository,
+    revision: observation.revision,
+    tree: observation.tree,
+    deterministicStatus: 'PASS',
+    semanticStatus: 'EVALUATED',
+    packageCount: packages.length,
+    findings: findingsFor('repo', observation.repoId),
+  };
+  return { model: JEV_MODEL, repo, packages, judgments, usage: result.usage };
+}
+
+export function unknownEvaluation({ scopeRow, observation = null, reason }) {
+  const observed = observation != null;
   const packages = observation?.packages ?? [];
+  const deterministicStatus = observed ? 'PASS' : 'UNKNOWN';
+  const semanticStatus = observed ? 'ERROR' : 'BLOCKED';
   return {
     model: null,
     repo: {
-      kind: 'repoHealth.repo.v1', repoId: scopeRow.id, repository: scopeRow.repository,
-      revision: observation?.revision ?? null, tree: observation?.tree ?? null, status: 'UNKNOWN', packageCount: packages.length,
-      findings: [{ ruleId: 'runtime', status: 'UNKNOWN', reason }],
+      kind: 'repoHealth.repo.v2',
+      repoId: scopeRow.id,
+      repository: scopeRow.repository,
+      revision: observation?.revision ?? null,
+      tree: observation?.tree ?? null,
+      deterministicStatus,
+      semanticStatus,
+      packageCount: packages.length,
+      findings: [{ ruleId: 'runtime', reason }],
     },
-    packages: packages.map((pkg) => ({ kind: 'repoHealth.package.v1', repository: scopeRow.repository, revision: observation?.revision ?? null, packageId: pkg.id, packagePath: pkg.path, status: 'UNKNOWN', findings: [{ ruleId: 'runtime', status: 'UNKNOWN', reason }] })),
-    judgments: [], rules: rules.map((rule) => rule.id), reason,
+    packages: packages.map((pkg) => ({
+      kind: 'repoHealth.package.v2',
+      repository: scopeRow.repository,
+      revision: observation?.revision ?? null,
+      packageId: pkg.id,
+      packagePath: pkg.path,
+      deterministicStatus,
+      semanticStatus,
+      findings: [{ ruleId: 'runtime', reason }],
+    })),
+    judgments: [],
+    reason,
   };
 }
 
@@ -217,36 +213,49 @@ export function buildOutputs({ scope, rules, evaluations }) {
     if (byRepo.has(repository)) throw new Error(`duplicate evaluation repository: ${repository}`);
     byRepo.set(repository, value);
   }
-  const ordered = scope.map((row) => byRepo.get(row.repository) ?? unknownEvaluation({ scopeRow: row, rules, reason: 'repository not evaluated' }));
+  const ordered = scope.map((row) => byRepo.get(row.repository) ?? unknownEvaluation({ scopeRow: row, reason: 'repository not evaluated' }));
   const repos = ordered.map((value) => value.repo);
   const summary = {
     expected: scope.length,
     observed: repos.filter((repo) => repo.revision).length,
-    pass: repos.filter((repo) => repo.status === 'PASS').length,
-    fail: repos.filter((repo) => repo.status === 'FAIL').length,
-    unknown: repos.filter((repo) => repo.status === 'UNKNOWN').length,
+    deterministicPass: repos.filter((repo) => repo.deterministicStatus === 'PASS').length,
+    deterministicUnknown: repos.filter((repo) => repo.deterministicStatus === 'UNKNOWN').length,
+    semanticEvaluated: repos.filter((repo) => repo.semanticStatus === 'EVALUATED').length,
+    semanticError: repos.filter((repo) => repo.semanticStatus === 'ERROR').length,
+    semanticBlocked: repos.filter((repo) => repo.semanticStatus === 'BLOCKED').length,
   };
   const reportRows = [];
   for (const value of ordered) reportRows.push(value.repo, ...value.packages, ...value.judgments);
   const reportText = reportRows.map((row) => stableJson(row)).join('\n') + '\n';
   const receipt = {
-    kind: 'repoHealth.receipt.v1', authority: false, model: JEV_MODEL, summary,
-    scopeDigest: sha256(scope), ruleDigest: sha256(rules), reportDigest: sha256(reportText),
-    complete: summary.observed === summary.expected && summary.fail === 0 && summary.unknown === 0,
+    kind: 'repoHealth.receipt.v2',
+    authority: false,
+    model: JEV_MODEL,
+    summary,
+    scopeDigest: sha256(scope),
+    ruleDigest: sha256(rules),
+    reportDigest: sha256(reportText),
+    complete: summary.observed === summary.expected
+      && summary.deterministicUnknown === 0
+      && summary.semanticError === 0
+      && summary.semanticBlocked === 0,
   };
   return { summary, reportRows, reportText, receipt, html: renderHtml({ summary, ordered, receipt }) };
 }
 
 export function renderHtml({ summary, ordered, receipt }) {
   const esc = (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+  const findingText = (finding) => finding.reason
+    ? `${esc(finding.ruleId)} — ${esc(finding.reason)}`
+    : `${esc(finding.ruleId)}: ${Number(finding.noul).toFixed(3)}`;
   const boxes = ordered.map((value) => {
     const repo = value.repo;
-    const repoFindings = (repo.findings ?? []).map((f) => `<div class="finding">↳ ${esc(f.ruleId)}: ${esc(f.status)}${f.reason ? ` — ${esc(f.reason)}` : ''}</div>`).join('');
+    const repoFindings = (repo.findings ?? []).map((finding) => `<div class="finding">↳ ${findingText(finding)}</div>`).join('');
     const packages = value.packages.map((pkg) => {
       const finding = (pkg.findings ?? [])[0];
-      return `<div class="pkg"><span>${esc(pkg.packageId)}</span><strong>${esc(pkg.status)}</strong></div>${finding ? `<div class="finding">↳ ${esc(finding.ruleId)}: ${esc(finding.status)}</div>` : ''}`;
+      return `<div class="pkg"><span>${esc(pkg.packageId)}</span><strong>${esc(pkg.deterministicStatus)} / ${esc(pkg.semanticStatus)}</strong></div>${finding ? `<div class="finding">↳ ${findingText(finding)}</div>` : ''}`;
     }).join('');
-    return `<section class="repo"><header><span>${esc(repo.repoId)}</span><strong>${esc(repo.status)}</strong></header>${repoFindings}${packages}</section>`;
+    return `<section class="repo"><header><span>${esc(repo.repoId)}</span><strong>${esc(repo.deterministicStatus)} / ${esc(repo.semanticStatus)}</strong></header>${repoFindings}${packages}</section>`;
   }).join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generated-artifact-authority" content="false"><title>Major Repo Health</title><style>html{font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#111;background:#fff}body{margin:0;padding:20px}main{max-width:1100px;margin:auto}h1{font-size:18px;margin:0 0 4px}.summary{margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}.repo{border:1px solid #111;padding:8px}.repo header,.pkg{display:flex;justify-content:space-between;gap:12px}.repo header{padding-bottom:6px;border-bottom:1px solid #111;margin-bottom:5px}.pkg{padding:3px 0}.finding{padding:2px 0 5px 14px;opacity:.8;font-size:12px}.receipt{margin-top:14px;font-size:11px;opacity:.65;word-break:break-all}</style></head><body><main><h1>Major Repo Health</h1><div class="summary">observed ${summary.observed}/${summary.expected} | fail ${summary.fail} | unknown ${summary.unknown}</div><div class="grid">${boxes}</div><div class="receipt">report ${esc(receipt.reportDigest)} · authority=false</div></main></body></html>\n`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generated-artifact-authority" content="false"><title>Major Repo Health</title><style>html{font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#111;background:#fff}body{margin:0;padding:20px}main{max-width:1100px;margin:auto}h1{font-size:18px;margin:0 0 4px}.summary{margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}.repo{border:1px solid #111;padding:8px}.repo header,.pkg{display:flex;justify-content:space-between;gap:12px}.repo header{padding-bottom:6px;border-bottom:1px solid #111;margin-bottom:5px}.pkg{padding:3px 0}.finding{padding:2px 0 5px 14px;opacity:.8;font-size:12px}.receipt{margin-top:14px;font-size:11px;opacity:.65;word-break:break-all}</style></head><body><main><h1>Major Repo Health</h1><div class="summary">observed ${summary.observed}/${summary.expected} | deterministic unknown ${summary.deterministicUnknown} | semantic error ${summary.semanticError} | semantic blocked ${summary.semanticBlocked}</div><div class="grid">${boxes}</div><div class="receipt">report ${esc(receipt.reportDigest)} · authority=false</div></main></body></html>\n`;
 }

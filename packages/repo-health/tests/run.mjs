@@ -5,8 +5,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  EXPECTED_REPOSITORIES, JEV_MODEL, buildOutputs, classifyNoul, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions,
-  parseJsonl, sha256, unknownEvaluation, validateJevBudget, validateObservation, validateRules, validateScope,
+  EXPECTED_REPOSITORIES, JEV_MODEL, buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath,
+  parseJsonl, semanticReviewInput, sha256, unknownEvaluation, validateJevBudget, validateObservation, validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
 
@@ -17,15 +17,23 @@ assert.equal(isSafeSemanticPath('README.md'), true);
 assert.equal(isSafeSemanticPath('secrets/jev-api-key.sops.yaml'), false);
 assert.equal(isSafeSemanticPath('package/.env.local'), false);
 assert.equal(isSafeSemanticPath('keys/id_ed25519'), false);
+
 const destructive = parseJsonl(fs.readFileSync(path.join(here, 'destructive.jsonl'), 'utf8'));
 assert.equal(destructive.length, 18);
 assert.equal(new Set(destructive.map((row) => row.id)).size, 18);
 
-const scope = EXPECTED_REPOSITORIES.map((repository) => ({ kind:'repoHealth.scope.v1', id: repository.split('/')[1], repository, path: repository.split('/')[1] }));
+const scope = EXPECTED_REPOSITORIES.map((repository) => ({
+  kind:'repoHealth.scope.v1', id:repository.split('/')[1], repository, path:repository.split('/')[1],
+}));
 const rules = [
-  { kind:'repoHealth.rule.v1', id:'purpose-alignment', instructions:'The target is consistent with its declared purpose.', criteria:{true:'No obvious contradiction.',false:'Observable implementation contradicts its purpose.'}, failAt:0.2, passAt:0.8, blocking:true },
+  { kind:'repoHealth.rule.v2', id:'purpose-misalignment', concern:'The target may contradict its declared purpose.' },
 ];
-const observation = { kind:'repoHealth.observation.v1', repoId:'ops', repository:'roccho-dev/ops', revision:'a'.repeat(40), tree:'b'.repeat(40), dirty:false, root:{purpose:'Operations packages.', files:['README.md']}, packages:[{id:'repo-health',path:'packages/repo-health',purpose:'health',evidence:{tests:['tests/run.mjs'],checks:['repo-health']}}] };
+const observation = {
+  kind:'repoHealth.observation.v1', repoId:'ops', repository:'roccho-dev/ops',
+  revision:'a'.repeat(40), tree:'b'.repeat(40), dirty:false,
+  root:{purpose:'Operations packages.', files:['README.md']},
+  packages:[{id:'repo-health',path:'packages/repo-health',purpose:'health',evidence:{tests:['tests/run.mjs'],checks:['repo-health']}}],
+};
 
 validateScope(scope); validateRules(rules); validateObservation(observation);
 assert.deepEqual(flakePackageNames({packages:{'x86_64-linux':{dataset:{type:'derivation'},'codex-cli':{type:'derivation'}},'aarch64-linux':{dataset:{type:'derivation'}}}}), ['codex-cli','dataset']);
@@ -34,37 +42,68 @@ assert.throws(() => flakePackageNames({packages:[]}), /invalid Nix packages surf
 validateObservation({...observation, packages:[{id:'dataset',path:'flake.nix#packages.*.dataset',purpose:'Declared Nix package output dataset.'}]});
 assert.throws(() => validateScope(scope.slice(0,6)), /exactly 7/u);
 assert.throws(() => validateScope([...scope.slice(0,6), {...scope[6], repository:'roccho-dev/governance'}]), /duplicate repository/u);
-assert.throws(() => validateRules([{...rules[0], passAt:undefined}]), /explicit valid/u);
+assert.throws(() => validateRules([{...rules[0], failAt:0.2}]), /invalid rule contract/u);
 assert.throws(() => validateRules([]), /at least one rule/u);
 assert.throws(() => validateObservation({...observation, dirty:true}), /must be clean/u);
 assert.throws(() => validateObservation({...observation, packages:[{id:'x',path:'packages/x'}]}), /package subject missing/u);
-assert.equal(classifyNoul(.9,rules[0]),'PASS'); assert.equal(classifyNoul(.1,rules[0]),'FAIL'); assert.equal(classifyNoul(.5,rules[0]),'UNKNOWN');
-const {questions,mapping}=makeQuestions(observation,rules);
-assert.equal(Object.keys(questions).length,2);
-assert.ok(validateJevBudget(observation, questions).stateBytes > 0);
-assert.throws(
-  () => validateJevBudget({...observation, root:{...observation.root, purpose:'x'.repeat(40000)}}, questions),
-  /state budget exceeded/u,
-);
-const response={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.95}]))};
-const evaluated=evaluateObservation({observation,rules,response,mapping});
-assert.equal(evaluated.repo.status,'PASS'); assert.equal(evaluated.packages[0].status,'PASS');
-assert.equal(evaluated.judgments[0].model,JEV_MODEL); assert.throws(()=>evaluateObservation({observation,rules,response:{...response,model:'jev-other'},mapping}),/unexpected Jev model/u);
-assert.match(evaluated.judgments[0].subjectDigest, /^sha256:[0-9a-f]{64}$/u);
-assert.throws(()=>evaluateObservation({observation,rules,response:{model:JEV_MODEL,answers:{}},mapping}),/answer set mismatch/u);
-const middle={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'noul',noul:.5}]))};
-assert.equal(evaluateObservation({observation,rules,response:middle,mapping}).repo.status,'UNKNOWN');
-const bad={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id)=>[id,{type:'choice',noul:.9}]))};
-assert.throws(()=>evaluateObservation({observation,rules,response:bad,mapping}),/invalid Noul/u);
-const failAnswers={model:JEV_MODEL,answers:Object.fromEntries(Object.keys(questions).map((id,i)=>[id,{type:'noul',noul:i===1?.05:.95}]))};
-const failed=evaluateObservation({observation,rules,response:failAnswers,mapping});
-assert.equal(failed.packages[0].status,'FAIL'); assert.equal(failed.repo.status,'FAIL');
-const evaluations=scope.map((s)=>s.id==='ops'?evaluated:unknownEvaluation({scopeRow:s,rules,reason:'fixture unavailable'}));
-const outputs=buildOutputs({scope,rules,evaluations});
-assert.throws(()=>buildOutputs({scope,rules,evaluations:[evaluated,evaluated]}),/duplicate evaluation repository/u);
-assert.equal(outputs.summary.expected,7); assert.equal(outputs.summary.observed,1); assert.equal(outputs.summary.unknown,6); assert.equal(outputs.receipt.complete,false); assert.equal(outputs.receipt.model,JEV_MODEL);
-assert.match(outputs.html,/Major Repo Health/u); assert.match(outputs.html,/authority=false/u); assert.doesNotMatch(outputs.html,/fixture-secret/u);
-assert.equal(parseJsonl('{"a":1}\n')[0].a,1); assert.throws(()=>parseJsonl('{bad}\n'),/line 1/u);
+
+const reviewInput = semanticReviewInput(observation, rules);
+assert.deepEqual(reviewInput.themes, ['purpose-misalignment']);
+assert.equal(reviewInput.items.length, 2);
+assert.ok(validateJevBudget(observation, Object.fromEntries(reviewInput.items.map((_, i) => [`q${i}`, {type:'noul',instructions:'x',criteria:{true:'x',false:'y'}}]))).stateBytes > 0);
+
+const evaluateWith = (noul) => evaluateObservation({
+  observation,
+  rules,
+  ask: async (_, questions) => ({
+    model:JEV_MODEL,
+    answers:Object.fromEntries(Object.keys(questions).map((id) => [id,{type:'noul',noul}])),
+  }),
+});
+const high = await evaluateWith(0.95);
+const low = await evaluateWith(0.05);
+const middle = await evaluateWith(0.5);
+for (const value of [high, low, middle]) {
+  assert.equal(value.repo.deterministicStatus, 'PASS');
+  assert.equal(value.repo.semanticStatus, 'EVALUATED');
+  assert.equal(value.packages[0].deterministicStatus, 'PASS');
+  assert.equal(value.packages[0].semanticStatus, 'EVALUATED');
+  assert.equal(Object.hasOwn(value.repo, 'status'), false);
+  assert.equal(Object.hasOwn(value.judgments[0], 'status'), false);
+}
+assert.equal(high.judgments[0].noul, 0.95);
+assert.equal(low.judgments[0].noul, 0.05);
+assert.equal(middle.judgments[0].noul, 0.5);
+assert.match(high.judgments[0].subjectDigest, /^sha256:[0-9a-f]{64}$/u);
+
+await assert.rejects(() => evaluateObservation({
+  observation, rules,
+  ask: async () => ({model:JEV_MODEL,answers:{}}),
+}), /INVALID_JEV_ANSWERS/u);
+
+const semanticError = unknownEvaluation({scopeRow:scope[2], observation, reason:'jev: timeout'});
+assert.equal(semanticError.repo.deterministicStatus, 'PASS');
+assert.equal(semanticError.repo.semanticStatus, 'ERROR');
+const observationBlocked = unknownEvaluation({scopeRow:scope[0], reason:'observation: missing'});
+assert.equal(observationBlocked.repo.deterministicStatus, 'UNKNOWN');
+assert.equal(observationBlocked.repo.semanticStatus, 'BLOCKED');
+
+const evaluations = scope.map((s) => s.id === 'ops' ? high : unknownEvaluation({scopeRow:s,reason:'fixture unavailable'}));
+const outputs = buildOutputs({scope,rules,evaluations});
+assert.throws(() => buildOutputs({scope,rules,evaluations:[high,high]}),/duplicate evaluation repository/u);
+assert.equal(outputs.summary.expected,7);
+assert.equal(outputs.summary.observed,1);
+assert.equal(outputs.summary.deterministicPass,1);
+assert.equal(outputs.summary.deterministicUnknown,6);
+assert.equal(outputs.summary.semanticEvaluated,1);
+assert.equal(outputs.summary.semanticBlocked,6);
+assert.equal(outputs.receipt.complete,false);
+assert.equal(outputs.receipt.model,JEV_MODEL);
+assert.match(outputs.html,/deterministic unknown/u);
+assert.match(outputs.html,/authority=false/u);
+assert.doesNotMatch(outputs.html,/fixture-secret/u);
+assert.equal(parseJsonl('{"a":1}\n')[0].a,1);
+assert.throws(()=>parseJsonl('{bad}\n'),/line 1/u);
 assert.match(sha256('x'),/^sha256:[0-9a-f]{64}$/u);
 
 function git(cwd, ...argv) {
@@ -119,4 +158,11 @@ try {
 
 await import('../design/test.mjs');
 await import('../closure/test.mjs');
-console.log(JSON.stringify({status:'PASS', destructive:destructive.length, scope:7, closureEvaluation:true}));
+console.log(JSON.stringify({
+  status:'PASS',
+  destructive:destructive.length,
+  scope:7,
+  semanticThresholds:0,
+  noulAuthority:false,
+  closureEvaluation:true,
+}));

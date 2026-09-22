@@ -1,3 +1,0 @@
-{"kind":"repoHealth.case.v1","id":"clear-pass","noul":0.95,"expected":"PASS"}
-{"kind":"repoHealth.case.v1","id":"clear-fail","noul":0.05,"expected":"FAIL"}
-{"kind":"repoHealth.case.v1","id":"uncertain","noul":0.50,"expected":"UNKNOWN"}
