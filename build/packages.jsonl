@@ -38,3 +38,4 @@
 {"bin":"artifact-assembly","deps":["node"],"entry":"packages/artifact-assembly/bin/artifact-assembly.mjs","env":[],"kind":"package","name":"artifact-assembly","runtime":"node"}
 {"bin":"hayamimi-web-build","deps":["python"],"entry":"packages/hayamimi-web/build/assemble.py","env":[],"kind":"package","name":"hayamimi-web-build","runtime":"python"}
 {"bin":"repo-health","deps":["git","nix","node"],"entry":"packages/repo-health/bin/repo-health.mjs","env":[],"kind":"package","name":"repo-health","runtime":"node"}
+{"bin":"jev-review","deps":["node"],"entry":"packages/jev-review/bin/jev-review.mjs","env":[],"kind":"package","name":"jev-review","runtime":"node"}

@@ -85,3 +85,11 @@ Jev < baseline  → HARM_OBSERVED
 No arbitrary adoption threshold is introduced. A NO_EFFECT or HARM result is a valid outcome.
 
 If Jev top1 retains the gold concern for every observation, the report also shows the **potential** candidate-reading reduction versus reading both candidates. This is not a claim about chat.pro token, latency, cost, or rework reduction. Those downstream effects remain `UNMEASURED` until a blinded decision-maker ablation is run.
+
+## Reuse boundary
+
+`reviewPhase(...)` is an application adapter, not the benchmark. Production input may contain any non-empty candidate set.
+
+The two-candidate / 18-case restriction belongs only to the paired effect fixture in `proof.mjs` and `tests/`.
+
+Proof output is standard JSONL. Its writer uses real newline delimiters so the retained artifact can be parsed by an ordinary JSONL reader without repair.

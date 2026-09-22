@@ -173,7 +173,7 @@ async function main() {
   const out = process.argv[2];
   if (!out || process.argv.length !== 3) throw new Error('usage: node proof.mjs NEW_REPORT.jsonl');
   fs.writeFileSync(out, '', { flag: 'wx', mode: 0o600 });
-  const append = (row) => fs.appendFileSync(out, `${JSON.stringify(row)}\\n`);
+  const append = (row) => fs.appendFileSync(out, `${JSON.stringify(row)}\n`);
   const cases = validateCorpus(parseJsonl(fs.readFileSync(new URL('tests/cases.jsonl', import.meta.url), 'utf8')));
   append({ kind: 'manifest', model: JEV_MODEL, opsSha: process.env.OPS_SHA ?? null, envsSha: process.env.ENVS_SHA ?? null,
     corpusDigest: sha256(cases), cases: 18, ordersPerCase: 2, semanticThresholds: 0, goldLoadedAfterRequests: true,

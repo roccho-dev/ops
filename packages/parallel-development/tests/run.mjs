@@ -104,6 +104,18 @@ const disabled = await reviewPhase(cases[0].state, { topK: 0, themes: [cases[0].
 assert.equal(calls, 0);
 assert.ok(disabled.ranked.every((group) => group.status === 'disabled' && group.evaluated === 0));
 
+const three = structuredClone(cases[0].state);
+const third = structuredClone(three.candidates[0]);
+third.id = 'n-extra';
+three.candidates.push(third);
+const threeResult = await reviewPhase(three, { topK: 2, themes: [cases[0].theme] }, async (_, questions) => ({
+  model: JEV_MODEL,
+  answers: Object.fromEntries(Object.keys(questions).map((key, index) => [key, { type: 'noul', noul: [0.1, 0.9, 0.5][index] }])),
+}));
+assert.equal(threeResult.ranked[0].candidates, 3);
+assert.equal(threeResult.ranked[0].evaluated, 3);
+assert.equal(threeResult.ranked[0].returned, 2);
+
 const broken = structuredClone(cases[0]); broken.extra = true;
 assert.throws(() => validateBenchmarkCase(broken), /INVALID_BENCHMARK_CASE/);
 assert.throws(() => validateCorpus(cases.slice(0, 17)), /INVALID_PHASE_CORPUS/);
