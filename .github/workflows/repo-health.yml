@@ -261,7 +261,7 @@ jobs:
           )"
           echo "input_digest=$input_digest" >> "$GITHUB_OUTPUT"
 
-      - name: Run real seven-repository Jev health judgment
+      - name: Run real seven-repository Jev semantic evaluation
         id: health
         continue-on-error: true
         shell: bash
@@ -341,8 +341,9 @@ jobs:
               f"- status: {'PASS' if receipt.get('complete') else 'FAIL'}",
               f"- model: {receipt['model']}",
               f"- observed: {receipt['summary']['observed']}/{receipt['summary']['expected']}",
-              f"- fail: {receipt['summary']['fail']}",
-              f"- unknown: {receipt['summary']['unknown']}",
+              f"- deterministic unknown: {receipt['summary']['deterministicUnknown']}",
+              f"- semantic error: {receipt['summary']['semanticError']}",
+              f"- semantic blocked: {receipt['summary']['semanticBlocked']}",
               f"- input digest: {input_digest}",
               f"- scope digest: {receipt['scopeDigest']}",
               f"- rule digest: {receipt['ruleDigest']}",

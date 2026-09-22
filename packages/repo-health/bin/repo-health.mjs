@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, makeQuestions, parseJsonl, unknownEvaluation,
+  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, parseJsonl, unknownEvaluation,
   validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
@@ -116,13 +116,15 @@ function observe(scopeRow, root) {
 }
 
 async function jev(observation, rules) {
-  const { questions, mapping } = makeQuestions(observation, rules);
-  const response = await askJev(observation, questions, {
-    key: process.env.JEV_API_KEY,
-    endpoint: process.env.REPO_HEALTH_JEV_URL || 'https://api.typesafe.ai/v1/systemone',
-    timeoutMs: Number(process.env.REPO_HEALTH_JEV_TIMEOUT_MS || '15000'),
+  return evaluateObservation({
+    observation,
+    rules,
+    ask: (state, questions) => askJev(state, questions, {
+      key: process.env.JEV_API_KEY,
+      endpoint: process.env.REPO_HEALTH_JEV_URL || 'https://api.typesafe.ai/v1/systemone',
+      timeoutMs: Number(process.env.REPO_HEALTH_JEV_TIMEOUT_MS || '15000'),
+    }),
   });
-  return evaluateObservation({ observation, rules, response, mapping });
 }
 
 async function main() {
@@ -136,9 +138,9 @@ async function main() {
     for (const scopeRow of scope) {
       let observation;
       try { observation = observe(scopeRow, sourceRoot); }
-      catch (error) { evaluations.push(unknownEvaluation({ scopeRow, rules, reason:`observation: ${error.message}` })); continue; }
+      catch (error) { evaluations.push(unknownEvaluation({ scopeRow, reason:`observation: ${error.message}` })); continue; }
       try { evaluations.push(await jev(observation, rules)); }
-      catch (error) { evaluations.push(unknownEvaluation({ scopeRow, observation, rules, reason:`jev: ${error.name === 'AbortError' ? 'timeout' : error.message}` })); }
+      catch (error) { evaluations.push(unknownEvaluation({ scopeRow, observation, reason:`jev: ${error.name === 'AbortError' ? 'timeout' : error.message}` })); }
     }
     const outputs = buildOutputs({ scope, rules, evaluations });
     fs.mkdirSync(options.out, { recursive:true });

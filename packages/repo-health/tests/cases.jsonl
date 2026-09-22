@@ -1,3 +1,3 @@
-{"kind":"repoHealth.case.v1","id":"clear-pass","noul":0.95,"expected":"PASS"}
-{"kind":"repoHealth.case.v1","id":"clear-fail","noul":0.05,"expected":"FAIL"}
-{"kind":"repoHealth.case.v1","id":"uncertain","noul":0.50,"expected":"UNKNOWN"}
+{"kind":"repoHealth.case.v2","id":"high-concern","noul":0.95,"expectedSemanticStatus":"EVALUATED"}
+{"kind":"repoHealth.case.v2","id":"low-concern","noul":0.05,"expectedSemanticStatus":"EVALUATED"}
+{"kind":"repoHealth.case.v2","id":"middle-concern","noul":0.5,"expectedSemanticStatus":"EVALUATED"}
