@@ -39,7 +39,7 @@ if (!fs.statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
   fail(`root is not a directory: ${root}`);
 }
 
-const token = requireEnv("VERCEL_TOKEN");
+requireEnv("VERCEL_TOKEN");
 requireEnv("VERCEL_ORG_ID");
 requireEnv("VERCEL_PROJECT_ID");
 
@@ -51,8 +51,6 @@ const deployArgs = [
   "--yes",
   "--cwd",
   root,
-  "--token",
-  token,
 ];
 if (target === "production") deployArgs.push("--prod");
 
