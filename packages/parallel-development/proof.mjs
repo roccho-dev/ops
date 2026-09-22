@@ -10,7 +10,9 @@ const stableJson = (value) => Array.isArray(value) ? `[${value.map(stableJson).j
     : JSON.stringify(value);
 const sha256 = (value) => `sha256:${crypto.createHash('sha256').update(typeof value === 'string' ? value : stableJson(value)).digest('hex')}`;
 const parseJsonl = (text) => String(text).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map(JSON.parse);
-const exact = (x, names) => x && [Object.prototype, null].includes(Object.getPrototypeOf(x))\n  && Reflect.ownKeys(x).length === names.length && names.every((name) => Object.hasOwn(x, name));\n
+const exact = (x, names) => x && [Object.prototype, null].includes(Object.getPrototypeOf(x))
+  && Reflect.ownKeys(x).length === names.length && names.every((name) => Object.hasOwn(x, name));
+
 export function validateCorpus(rows) {
   if (!Array.isArray(rows) || rows.length !== 18) throw new Error('INVALID_PHASE_CORPUS');
   const cases = new Set();
