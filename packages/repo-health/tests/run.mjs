@@ -118,4 +118,5 @@ try {
 }
 
 await import('../design/test.mjs');
-console.log(JSON.stringify({status:'PASS', destructive:destructive.length, scope:7}));
+await import('../closure/test.mjs');
+console.log(JSON.stringify({status:'PASS', destructive:destructive.length, scope:7, closureEvaluation:true}));
