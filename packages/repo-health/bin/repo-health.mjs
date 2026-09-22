@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, parseJsonl, unknownEvaluation,
+  buildOutputs, evaluateObservation, flakePackageNames, isSafeSemanticPath, parseJsonl, sha256, stableJson, unknownEvaluation,
   validateRules, validateScope,
 } from '../lib/core.mjs';
 import { materializeBareScope } from '../lib/source.mjs';
@@ -13,13 +13,13 @@ import { askJev } from '../lib/jev.mjs';
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function usage() {
-  return 'usage: repo-health run (--root DIR | --bare-root DIR) --out DIR [--scope FILE] [--rules FILE]';
+  return 'usage: repo-health run (--root DIR | --bare-root DIR) --out DIR [--repository OWNER/REPO] [--scope FILE] [--rules FILE]';
 }
 
 function args(argv) {
   if (argv[0] !== 'run') throw new Error(usage());
   const out = { scope: path.join(packageRoot, 'scope.jsonl'), rules: path.join(packageRoot, 'rules.jsonl') };
-  const keys = { '--root': 'root', '--bare-root': 'bareRoot', '--out': 'out', '--scope': 'scope', '--rules': 'rules' };
+  const keys = { '--root': 'root', '--bare-root': 'bareRoot', '--out': 'out', '--repository': 'repository', '--scope': 'scope', '--rules': 'rules' };
   for (let i = 1; i < argv.length; i += 2) {
     const key = argv[i], value = argv[i + 1];
     if (!value || !keys[key]) throw new Error(usage());
@@ -127,13 +127,60 @@ async function jev(observation, rules) {
   });
 }
 
+function repositoryOutputs({ scopeRow, rules, evaluation }) {
+  const reportRows = [evaluation.repo, ...evaluation.packages, ...evaluation.judgments];
+  const reportText = reportRows.map((row) => stableJson(row)).join('\n') + '\n';
+  const complete = evaluation.repo.deterministicStatus === 'PASS' && evaluation.repo.semanticStatus === 'EVALUATED';
+  const receipt = {
+    kind: 'repoHealth.repositoryReceipt.v1',
+    authority: false,
+    repository: scopeRow.repository,
+    revision: evaluation.repo.revision,
+    model: evaluation.model,
+    summary: {
+      expected: 1,
+      observed: evaluation.repo.revision ? 1 : 0,
+      deterministicStatus: evaluation.repo.deterministicStatus,
+      semanticStatus: evaluation.repo.semanticStatus,
+    },
+    scopeDigest: sha256(scopeRow),
+    ruleDigest: sha256(rules),
+    reportDigest: sha256(reportText),
+    complete,
+    reasonClass: typeof evaluation.reason === 'string' ? evaluation.reason.split(':', 1)[0] : null,
+  };
+  return { reportText, receipt };
+}
+
 async function main() {
   const options = args(process.argv.slice(2));
   const scope = validateScope(parseJsonl(fs.readFileSync(options.scope,'utf8')));
   const rules = validateRules(parseJsonl(fs.readFileSync(options.rules,'utf8')));
-  const materialized = options.bareRoot ? materializeBareScope(scope, options.bareRoot) : null;
+  const selectedScope = options.repository
+    ? scope.filter((row) => row.repository === options.repository)
+    : scope;
+  if (options.repository && selectedScope.length !== 1) throw new Error(`unknown repository: ${options.repository}`);
+  const materialized = options.bareRoot ? materializeBareScope(selectedScope, options.bareRoot) : null;
   const sourceRoot = materialized?.root ?? options.root;
   try {
+    if (options.repository) {
+      const scopeRow = selectedScope[0];
+      let observation, evaluation;
+      try { observation = observe(scopeRow, sourceRoot); }
+      catch (error) { evaluation = unknownEvaluation({ scopeRow, reason:`observation: ${error.message}` }); }
+      if (!evaluation) {
+        try { evaluation = await jev(observation, rules); }
+        catch (error) { evaluation = unknownEvaluation({ scopeRow, observation, reason:`jev: ${error.name === 'AbortError' ? 'timeout' : error.message}` }); }
+      }
+      const outputs = repositoryOutputs({ scopeRow, rules, evaluation });
+      fs.mkdirSync(options.out, { recursive:true });
+      fs.writeFileSync(path.join(options.out,'report.jsonl'), outputs.reportText);
+      fs.writeFileSync(path.join(options.out,'receipt.json'), `${JSON.stringify(outputs.receipt, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ status:outputs.receipt.complete?'PASS':'FAIL', repository:scopeRow.repository, ...outputs.receipt.summary, source:materialized?'bare-mirror':'worktree', out:path.resolve(options.out) })}\n`);
+      if (!outputs.receipt.complete) process.exitCode = 1;
+      return;
+    }
+
     const evaluations = [];
     for (const scopeRow of scope) {
       let observation;
