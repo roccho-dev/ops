@@ -1,4 +1,5 @@
-import { rankReview } from '../jev-review/review.mjs';
+import { evaluate } from '../jev-review/review.mjs';
+import { rankJudgments } from '../jev-review/rank.mjs';
 
 export const PHASES = Object.freeze({
   cut: Object.freeze([
@@ -97,11 +98,14 @@ export function validateBenchmarkCase(row) {
 
 export async function reviewPhase(state, { topK = 2, themes = null } = {}, ask) {
   validatePhaseState(state);
+  if (!Number.isSafeInteger(topK) || topK < 0) throw new Error('INVALID_TOP_K');
   const selected = themes == null ? PHASES[state.phase] : PHASES[state.phase].filter(([id]) => themes.includes(id));
   if (!selected.length || (themes != null && selected.length !== themes.length)) throw new Error('INVALID_PHASE_THEMES');
   const themeIds = selected.map(([id]) => id);
   const items = selected.flatMap(([theme, concern]) => state.candidates.map((candidate) => ({
     theme, subject: ['candidate', candidate.id], concern,
   })));
-  return rankReview(state, { topK, themes: themeIds, items }, ask);
+  if (topK === 0) return { calls: 0, ranked: rankJudgments([], { topK, themes: themeIds, items }), usage: {} };
+  const result = await evaluate(state, { themes: themeIds, items }, ask);
+  return { calls: result.calls, ranked: rankJudgments(result.judgments, { topK, themes: themeIds, items }), usage: result.usage };
 }

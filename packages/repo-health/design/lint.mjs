@@ -1,4 +1,5 @@
-import { rankReview } from '../../jev-review/review.mjs';
+import { evaluate } from '../../jev-review/review.mjs';
+import { rankJudgments } from '../../jev-review/rank.mjs';
 
 export const BUILTIN_THEMES = Object.freeze([
   { id: 'purpose', scope: 'design', concern: 'The design may fail to achieve the stated purpose or may only achieve a weaker outcome.' },
@@ -95,6 +96,9 @@ export async function review(design, options, ask) {
   if (hard.length) return { hard, calls: 0, ranked: themes.map((t) => ({ theme: t.id, status: 'blocked', candidates: null, evaluated: 0, returned: 0, findings: [] })), usage: {} };
   const state = JSON.parse(JSON.stringify(design));
   state.units.sort((a, b) => compare(a.id, b.id));
+  const themeIds = themes.map((theme) => theme.id);
   const items = themes.flatMap((theme) => subjects(state, theme.scope).map((subject) => ({ theme: theme.id, subject, concern: theme.concern })));
-  return { hard, ...await rankReview(state, { topK, themes: themes.map((theme) => theme.id), items }, ask) };
+  if (topK === 0) return { hard, calls: 0, ranked: rankJudgments([], { topK, themes: themeIds, items }), usage: {} };
+  const result = await evaluate(state, { themes: themeIds, items }, ask);
+  return { hard, calls: result.calls, ranked: rankJudgments(result.judgments, { topK, themes: themeIds, items }), usage: result.usage };
 }

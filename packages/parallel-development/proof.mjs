@@ -9,7 +9,7 @@ const stableJson = (value) => Array.isArray(value) ? `[${value.map(stableJson).j
   : value && typeof value === 'object' ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`
     : JSON.stringify(value);
 const sha256 = (value) => `sha256:${crypto.createHash('sha256').update(typeof value === 'string' ? value : stableJson(value)).digest('hex')}`;
-const parseJsonl = (text) => String(text).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map(JSON.parse);
+const parseJsonl = (text) => String(text).split(/\r?\n/u).map((line) => line.trim()).filter(Boolean).map(JSON.parse);\nconst exact = (x, names) => x && [Object.prototype, null].includes(Object.getPrototypeOf(x))\n  && Reflect.ownKeys(x).length === names.length && names.every((name) => Object.hasOwn(x, name));
 
 export function validateCorpus(rows) {
   if (!Array.isArray(rows) || rows.length !== 18) throw new Error('INVALID_PHASE_CORPUS');
@@ -113,8 +113,7 @@ async function main() {
   const append = (row) => fs.appendFileSync(out, `${JSON.stringify(row)}\\n`);
   const cases = validateCorpus(parseJsonl(fs.readFileSync(new URL('tests/cases.jsonl', import.meta.url), 'utf8')));
   append({ kind: 'manifest', model: JEV_MODEL, opsSha: process.env.OPS_SHA ?? null, envsSha: process.env.ENVS_SHA ?? null,
-    corpusDigest: sha256(cases), expectedDigest: sha256(fs.readFileSync(new URL('tests/expected.jsonl', import.meta.url), 'utf8')),
-    cases: 18, ordersPerCase: 2, semanticThresholds: 0, goldLoadedAfterRequests: true,
+    corpusDigest: sha256(cases), cases: 18, ordersPerCase: 2, semanticThresholds: 0, goldLoadedAfterRequests: true,
     claim: 'neutral cut/pr/join semantic comparison; raw evidence only; no accept authority' });
   if (!process.env.JEV_API_KEY?.trim()) throw new Error('JEV_API_KEY_REQUIRED');
   if (['SOPS_AGE_KEY', 'SOPS_AGE_KEY_FILE', 'SOPS_AGE_KEY_CMD'].some((key) => process.env[key])) throw new Error('DECRYPT_CAPABILITY_LEAK');
@@ -138,7 +137,9 @@ async function main() {
   }
 
   // Gold is loaded only after every model request has completed.
-  const expected = validateExpected(parseJsonl(fs.readFileSync(new URL('tests/expected.jsonl', import.meta.url), 'utf8')), cases);
+  const expectedText = fs.readFileSync(new URL('tests/expected.jsonl', import.meta.url), 'utf8');
+  const expected = validateExpected(parseJsonl(expectedText), cases);
+  append({ kind: 'gold-receipt', expectedDigest: sha256(expectedText), loadedAfterRequests: true });
   const summary = summarize(results, expected); append(summary); console.log(JSON.stringify(summary));
 }
 
