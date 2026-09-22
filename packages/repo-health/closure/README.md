@@ -23,6 +23,7 @@
 
 - raw Noul finding
 - subject edge
+- criterion / declared evidence
 - scope / snapshot
 - declared/evaluated coverage
 - Jev usage
