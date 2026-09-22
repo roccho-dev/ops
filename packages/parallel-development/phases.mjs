@@ -38,9 +38,8 @@ function issue(value) {
 }
 function candidateSet(state) {
   return Array.isArray(state.candidates) && state.candidates.length === 2
-    && unique(state.candidates.map((candidate) => candidate?.id))
-    && state.candidates.some((candidate) => candidate.id === 'good')
-    && state.candidates.some((candidate) => candidate.id === 'bad');
+    && state.candidates.every((candidate) => text(candidate?.id))
+    && unique(state.candidates.map((candidate) => candidate.id));
 }
 function cut(value) {
   return exact(value, ['id', 'goal', 'in','out', 'deps', 'write_scope', 'acceptance', 'design'])
@@ -88,11 +87,21 @@ export function validatePhaseState(state) {
   return state;
 }
 
-export async function reviewPhase(state, { topK  = 2 } = {}, ask) {
+export function validateBenchmarkCase(row) {
+  if (!exact(row, ['caseId', 'phase', 'theme', 'state']) || !/^case-[0-9]{2}$/u.test(row.caseId ?? '')
+    || !PHASES[row.phase] || !PHASES[row.phase].some(([theme]) => theme === row.theme)
+    || row.state?.phase !== row.phase) throw new Error('INVALID_BENCHMARK_CASE');
+  validatePhaseState(row.state);
+  return row;
+}
+
+export async function reviewPhase(state, { topK = 2, themes = null } = {}, ask) {
   validatePhaseState(state);
-  const themes = PHASES[state.phase].map(([id]) => id);
-  const items = PHASES[state.phase].flatMap(([theme, concern]) => state.candidates.map((candidate) => ({
+  const selected = themes == null ? PHASES[state.phase] : PHASES[state.phase].filter(([id]) => themes.includes(id));
+  if (!selected.length || (themes != null && selected.length !== themes.length)) throw new Error('INVALID_PHASE_THEMES');
+  const themeIds = selected.map(([id]) => id);
+  const items = selected.flatMap(([theme, concern]) => state.candidates.map((candidate) => ({
     theme, subject: ['candidate', candidate.id], concern,
   })));
-  return rankReview(state, { topK, themes, items }, ask);
+  return rankReview(state, { topK, themes: themeIds, items }, ask);
 }
