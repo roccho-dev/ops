@@ -128,10 +128,24 @@ export function semanticReviewInput(observation, rules) {
 export async function evaluateObservation({ observation, rules, ask }) {
   if (typeof ask !== 'function') throw new Error('INVALID_SEMANTIC_EVALUATOR');
   const input = semanticReviewInput(observation, rules);
-  const result = await evaluate(observation, { themes: input.themes, items: input.items }, ask);
+
+  const evaluateBatch = async (items) => {
+    try {
+      return [await evaluate(observation, { themes: input.themes, items }, ask)];
+    } catch (error) {
+      if (!String(error?.message ?? '').startsWith('Jev request budget exceeded:') || items.length < 2) throw error;
+      const middle = Math.ceil(items.length / 2);
+      return [
+        ...await evaluateBatch(items.slice(0, middle)),
+        ...await evaluateBatch(items.slice(middle)),
+      ];
+    }
+  };
+
+  const results = await evaluateBatch(input.items);
   const targetPath = new Map(input.targets.map((target) => [`${target.kind}\0${target.id}`, target.path]));
   const subjectDigest = sha256(observation);
-  const judgments = result.judgments.map((row) => ({
+  const judgments = results.flatMap((result) => result.judgments).map((row) => ({
     kind: 'repoHealth.judgment.v2',
     repository: observation.repository,
     revision: observation.revision,
@@ -168,7 +182,13 @@ export async function evaluateObservation({ observation, rules, ask }) {
     packageCount: packages.length,
     findings: findingsFor('repo', observation.repoId),
   };
-  return { model: JEV_MODEL, repo, packages, judgments, usage: result.usage };
+  return {
+    model: JEV_MODEL,
+    repo,
+    packages,
+    judgments,
+    usage: { calls: results.reduce((sum, result) => sum + result.calls, 0), batches: results.map((result) => result.usage) },
+  };
 }
 
 export function unknownEvaluation({ scopeRow, observation = null, reason }) {
