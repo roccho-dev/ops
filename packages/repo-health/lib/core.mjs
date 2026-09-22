@@ -128,21 +128,62 @@ export function semanticReviewInput(observation, rules) {
 export async function evaluateObservation({ observation, rules, ask }) {
   if (typeof ask !== 'function') throw new Error('INVALID_SEMANTIC_EVALUATOR');
   const input = semanticReviewInput(observation, rules);
+  const packagesById = new Map(observation.packages.map((pkg) => [pkg.id, pkg]));
+  const budgetError = (error) => /^Jev (?:state|state\+question|request) budget exceeded:/u.test(String(error?.message ?? ''));
 
-  const evaluateBatch = async (items) => {
+  const repositoryState = {
+    kind: 'repoHealth.repositorySemanticState.v1',
+    repository: observation.repository,
+    revision: observation.revision,
+    tree: observation.tree,
+    root: observation.root,
+    packageCount: observation.packages.length,
+    packageIndex: observation.packages.map((pkg) => ({
+      id: pkg.id,
+      path: pkg.path,
+      evidence: {
+        testCount: pkg.evidence?.testCount ?? 0,
+        checkCount: pkg.evidence?.checkCount ?? 0,
+      },
+      trackedFiles: pkg.trackedFiles ?? 0,
+    })),
+  };
+
+  const packageStateFor = (items) => {
+    const ids = [...new Set(items
+      .filter((item) => item.subject?.[0] === 'package')
+      .map((item) => item.subject[1]))];
+    return {
+      kind: 'repoHealth.packageSemanticState.v1',
+      repository: observation.repository,
+      revision: observation.revision,
+      tree: observation.tree,
+      root: observation.root,
+      packages: ids.map((id) => packagesById.get(id)).filter(Boolean),
+    };
+  };
+
+  const evaluateAdaptive = async (stateFor, items) => {
+    if (!items.length) return [];
+    const state = stateFor(items);
     try {
-      return [await evaluate(observation, { themes: input.themes, items }, ask)];
+      return [await evaluate(state, { themes: input.themes, items }, ask)];
     } catch (error) {
-      if (!String(error?.message ?? '').startsWith('Jev request budget exceeded:') || items.length < 2) throw error;
+      if (!budgetError(error) || items.length < 2) throw error;
       const middle = Math.ceil(items.length / 2);
       return [
-        ...await evaluateBatch(items.slice(0, middle)),
-        ...await evaluateBatch(items.slice(middle)),
+        ...await evaluateAdaptive(stateFor, items.slice(0, middle)),
+        ...await evaluateAdaptive(stateFor, items.slice(middle)),
       ];
     }
   };
 
-  const results = await evaluateBatch(input.items);
+  const repoItems = input.items.filter((item) => item.subject?.[0] === 'repo');
+  const packageItems = input.items.filter((item) => item.subject?.[0] === 'package');
+  const results = [
+    ...await evaluateAdaptive(() => repositoryState, repoItems),
+    ...await evaluateAdaptive(packageStateFor, packageItems),
+  ];
   const targetPath = new Map(input.targets.map((target) => [`${target.kind}\0${target.id}`, target.path]));
   const subjectDigest = sha256(observation);
   const judgments = results.flatMap((result) => result.judgments).map((row) => ({
