@@ -55,6 +55,7 @@ assert.deepEqual(authRows, [{ artifact: 'jev-review', kind: 'artifact.auth.v1', 
 const cliInput = { state, themes, items, topK: 1 };
 validateCliInput(cliInput);
 assert.throws(() => validateCliInput({ ...cliInput, extra: true }), /INVALID_JEV_REVIEW_INPUT/);
+assert.throws(() => validateCliInput({ state, themes, items, topK: 0 }), /INVALID_JEV_REVIEW_TOP_K/);
 const cliResult = await evaluateInput(cliInput, async (_, questions) => ({
   model: JEV_MODEL,
   answers: Object.fromEntries(Object.keys(questions).map((key, index) => [key, { type: 'noul', noul: [0.1, 0.9, 0.2][index] }])),

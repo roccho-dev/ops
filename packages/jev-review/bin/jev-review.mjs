@@ -14,7 +14,7 @@ export function validateCliInput(input) {
   if (!exactKeys(input, names) || !input.state || typeof input.state !== 'object' || Array.isArray(input.state)) {
     throw new Error('INVALID_JEV_REVIEW_INPUT');
   }
-  if (Object.hasOwn(input, 'topK') && (!Number.isSafeInteger(input.topK) || input.topK < 0)) {
+  if (Object.hasOwn(input, 'topK') && (!Number.isSafeInteger(input.topK) || input.topK <= 0)) {
     throw new Error('INVALID_JEV_REVIEW_TOP_K');
   }
   return input;
