@@ -34,3 +34,5 @@
 {"deps":["nodejs","artifact-assembly"],"kind":"check","name":"accounting-a2ui-lock","script":"verification/accounting-a2ui/check.mjs"}
 {"deps":["nodejs","artifact-assembly"],"kind":"check","name":"all-head-merge-closure","script":"verification/head-merge/check.mjs"}
 {"deps":["git","nodejs","repo-health"],"kind":"check","name":"repo-health","script":"packages/repo-health/tests/run.mjs"}
+{"deps":["nodejs"],"kind":"check","name":"parallel-development-jev-phases","script":"packages/parallel-development/tests/run.mjs"}
+{"deps":["nodejs"],"kind":"check","name":"jev-review","script":"packages/jev-review/tests/run.mjs"}
