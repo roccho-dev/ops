@@ -300,19 +300,19 @@ jobs:
           repos = {
               row["repository"]: row
               for row in report_rows
-              if row.get("kind") == "repoHealth.repo.v1"
+              if row.get("kind") == "repoHealth.repo.v2"
           }
-          package_counts = collections.defaultdict(collections.Counter)
-          rule_counts = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+          package_deterministic = collections.defaultdict(collections.Counter)
+          package_semantic = collections.defaultdict(collections.Counter)
           rule_ranges = collections.defaultdict(lambda: collections.defaultdict(list))
 
           for row in report_rows:
-              if row.get("kind") == "repoHealth.package.v1":
-                  package_counts[row["repository"]][row["status"]] += 1
-              elif row.get("kind") == "repoHealth.judgment.v1":
+              if row.get("kind") == "repoHealth.package.v2":
+                  package_deterministic[row["repository"]][row["deterministicStatus"]] += 1
+                  package_semantic[row["repository"]][row["semanticStatus"]] += 1
+              elif row.get("kind") == "repoHealth.judgment.v2":
                   repo = row["repository"]
                   rule = row["ruleId"]
-                  rule_counts[repo][rule][row["status"]] += 1
                   if isinstance(row.get("noul"), (int, float)):
                       rule_ranges[repo][rule].append(row["noul"])
 
@@ -320,17 +320,18 @@ jobs:
           for repository in sorted(repos):
               repo = repos[repository]
               rules = {}
-              for rule in sorted(rule_counts[repository]):
+              for rule in sorted(rule_ranges[repository]):
                   values = rule_ranges[repository][rule]
                   rules[rule] = {
-                      "statusCounts": dict(sorted(rule_counts[repository][rule].items())),
                       "min": round(min(values), 4) if values else None,
                       "max": round(max(values), 4) if values else None,
                   }
               safe.append({
                   "repository": repository,
-                  "status": repo["status"],
-                  "packageStatusCounts": dict(sorted(package_counts[repository].items())),
+                  "deterministicStatus": repo["deterministicStatus"],
+                  "semanticStatus": repo["semanticStatus"],
+                  "packageDeterministicStatusCounts": dict(sorted(package_deterministic[repository].items())),
+                  "packageSemanticStatusCounts": dict(sorted(package_semantic[repository].items())),
                   "rules": rules,
               })
 

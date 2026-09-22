@@ -1,3 +1,0 @@
-{"kind":"repoHealth.case.v2","id":"high-concern","noul":0.95,"expectedSemanticStatus":"EVALUATED"}
-{"kind":"repoHealth.case.v2","id":"low-concern","noul":0.05,"expectedSemanticStatus":"EVALUATED"}
-{"kind":"repoHealth.case.v2","id":"middle-concern","noul":0.5,"expectedSemanticStatus":"EVALUATED"}
