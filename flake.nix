@@ -155,6 +155,9 @@
               pkgs = nixpkgs.legacyPackages.${system};
             in
             pkgs.runCommand "vercel-go-native-local-check" { nativeBuildInputs = [ pkgs.go pkgs.nodejs ]; } ''
+              export HOME="$TMPDIR"
+              export GOCACHE="$TMPDIR/go-build"
+              mkdir -p "$GOCACHE"
               cp -R ${./verification/vercel-go-native} app
               chmod -R u+w app
               cd app
