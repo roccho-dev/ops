@@ -284,18 +284,57 @@ jobs:
           test -f "$private_out/receipt.json"
           test -f "$private_out/index.html"
 
-          python3 - "$private_out/receipt.json" "$stdout_file" "$GITHUB_STEP_SUMMARY" "${{ steps.snapshot.outputs.input_digest }}" <<'PY'
-          import json, pathlib, sys
+          python3 - "$private_out/receipt.json" "$private_out/report.jsonl" "$stdout_file" "$GITHUB_STEP_SUMMARY" "${{ steps.snapshot.outputs.input_digest }}" <<'PY'
+          import collections, json, pathlib, sys
 
           receipt = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          stdout = json.loads(pathlib.Path(sys.argv[2]).read_text())
-          summary_path = pathlib.Path(sys.argv[3])
-          input_digest = sys.argv[4]
+          report_rows = [
+              json.loads(line)
+              for line in pathlib.Path(sys.argv[2]).read_text().splitlines()
+              if line.strip()
+          ]
+          stdout = json.loads(pathlib.Path(sys.argv[3]).read_text())
+          summary_path = pathlib.Path(sys.argv[4])
+          input_digest = sys.argv[5]
 
-          expected = {"expected": 7, "observed": 7, "fail": 0, "unknown": 0}
-          for key, value in expected.items():
-              if receipt["summary"][key] != value:
-                  break
+          repos = {
+              row["repository"]: row
+              for row in report_rows
+              if row.get("kind") == "repoHealth.repo.v1"
+          }
+          package_counts = collections.defaultdict(collections.Counter)
+          rule_counts = collections.defaultdict(lambda: collections.defaultdict(collections.Counter))
+          rule_ranges = collections.defaultdict(lambda: collections.defaultdict(list))
+
+          for row in report_rows:
+              if row.get("kind") == "repoHealth.package.v1":
+                  package_counts[row["repository"]][row["status"]] += 1
+              elif row.get("kind") == "repoHealth.judgment.v1":
+                  repo = row["repository"]
+                  rule = row["ruleId"]
+                  rule_counts[repo][rule][row["status"]] += 1
+                  if isinstance(row.get("noul"), (int, float)):
+                      rule_ranges[repo][rule].append(row["noul"])
+
+          safe = []
+          for repository in sorted(repos):
+              repo = repos[repository]
+              rules = {}
+              for rule in sorted(rule_counts[repository]):
+                  values = rule_ranges[repository][rule]
+                  rules[rule] = {
+                      "statusCounts": dict(sorted(rule_counts[repository][rule].items())),
+                      "min": round(min(values), 4) if values else None,
+                      "max": round(max(values), 4) if values else None,
+                  }
+              safe.append({
+                  "repository": repository,
+                  "status": repo["status"],
+                  "packageStatusCounts": dict(sorted(package_counts[repository].items())),
+                  "rules": rules,
+              })
+
+          print("SAFE_REPO_HEALTH_DIAGNOSTIC=" + json.dumps(safe, sort_keys=True, separators=(",", ":")))
 
           lines = [
               "### Major Repo Health — live",
@@ -308,6 +347,7 @@ jobs:
               f"- scope digest: {receipt['scopeDigest']}",
               f"- rule digest: {receipt['ruleDigest']}",
               f"- report digest: {receipt['reportDigest']}",
+              "- diagnostic persistence: repo/rule aggregate only",
               "- full private report persisted: no",
               "- authority: false",
           ]
