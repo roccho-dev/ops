@@ -158,6 +158,8 @@ try {
 
 await import('../design/test.mjs');
 await import('../closure/test.mjs');
+await import('../dag/test.mjs');
+await import('../dag/benchmark/test.mjs');
 console.log(JSON.stringify({
   status:'PASS',
   destructive:destructive.length,
@@ -165,4 +167,5 @@ console.log(JSON.stringify({
   semanticThresholds:0,
   noulAuthority:false,
   closureEvaluation:true,
+  dagSemanticEvaluation:true,
 }));
