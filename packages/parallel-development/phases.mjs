@@ -38,7 +38,7 @@ function issue(value) {
   return exact(value, ['purpose', 'close_conditions']) && text(value.purpose) && strings(value.close_conditions) && value.close_conditions.length;
 }
 function candidateSet(state) {
-  return Array.isArray(state.candidates) && state.candidates.length === 2
+  return Array.isArray(state.candidates) && state.candidates.length > 0
     && state.candidates.every((candidate) => text(candidate?.id))
     && unique(state.candidates.map((candidate) => candidate.id));
 }
