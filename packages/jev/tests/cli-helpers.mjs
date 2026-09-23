@@ -26,6 +26,8 @@ export function createFakeFetch(scenario) {
           answers: { live: { type: "noul", noul: NaN } },
         }),
       };
+    } else if (scenario === "fetch_throws") {
+      throw new Error("Network error: simulated provider unreachable");
     }
 
     throw new Error("Unknown scenario: " + scenario);

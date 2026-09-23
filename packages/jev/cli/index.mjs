@@ -56,7 +56,7 @@ async function main() {
       text,
       question,
       apiKey,
-      fetch: globalThis.__TEST_FETCH__,
+      fetch: globalThis.fetch,
     });
 
     const result = { model, noul };

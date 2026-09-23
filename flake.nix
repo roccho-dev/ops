@@ -147,9 +147,33 @@
                 nativeBuildInputs = [ pkgs.nodejs ];
               }
               ''
+                mkdir -p $out
                 cd ${self}/packages/jev
+
+                # Run offline unit tests
                 ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
-                touch $out
+
+                # Test installed binary directly via symlink
+                BIN=${packages.${system}.jev}/bin/jev
+
+                # Test 1: invalid JSON should exit 1 and output single JSON line
+                OUTPUT=$($BIN <<< 'not json' 2>&1; echo "EXIT_CODE:$?")
+                LINE_COUNT=$(echo "$OUTPUT" | grep -v '^EXIT_CODE:' | wc -l)
+                [ "$LINE_COUNT" -eq 1 ] || (echo "Invalid JSON test: expected 1 line, got $LINE_COUNT"; exit 1)
+                echo "$OUTPUT" | grep -v '^EXIT_CODE:' | grep -q '"error":"invalid_json"' || exit 1
+                EXIT=$(echo "$OUTPUT" | grep '^EXIT_CODE:' | cut -d: -f3)
+                [ "$EXIT" -eq 1 ] || (echo "Invalid JSON test: expected exit 1, got $EXIT"; exit 1)
+
+                # Test 2: missing key should exit 2 and output single JSON line
+                INPUT='{"type":"noul","text":"test","question":"Q?"}'
+                OUTPUT=$(env -i $BIN <<< "$INPUT" 2>&1; echo "EXIT_CODE:$?")
+                LINE_COUNT=$(echo "$OUTPUT" | grep -v '^EXIT_CODE:' | wc -l)
+                [ "$LINE_COUNT" -eq 1 ] || (echo "Missing key test: expected 1 line, got $LINE_COUNT"; exit 1)
+                echo "$OUTPUT" | grep -v '^EXIT_CODE:' | grep -q '"error":"auth_missing"' || exit 1
+                EXIT=$(echo "$OUTPUT" | grep '^EXIT_CODE:' | cut -d: -f3)
+                [ "$EXIT" -eq 2 ] || (echo "Missing key test: expected exit 2, got $EXIT"; exit 1)
+
+                echo "All Nix check tests passed"
               '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
