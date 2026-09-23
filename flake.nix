@@ -148,34 +148,20 @@
               }
               ''
                 cd ${self}/packages/jev
-                # Run unit tests
                 ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
-
-                # Test installed binary direct and via symlink
+                cd "$TMPDIR"
+                unset JEV_API_KEY
                 BIN=${packages.${system}.jev}/bin/jev
-                test -x "$BIN" || exit 1
-
-                # Create symlink in existing TMPDIR
-                ln -s "$BIN" "$TMPDIR/jev-link" || exit 1
-                test -x "$TMPDIR/jev-link" || exit 1
-
-                # Test 1: direct execution with invalid JSON
-                OUT1=$(echo 'not json' | "$BIN" 2>&1)
-                EXIT1=$?
-                [ "$EXIT1" -eq 1 ] || (echo "invalid JSON: expected exit 1, got $EXIT1" && exit 1)
-                LINE1=$(echo "$OUT1" | wc -l)
-                [ "$LINE1" -eq 1 ] || (echo "invalid JSON: expected 1 line, got $LINE1" && exit 1)
-                echo "$OUT1" | grep -q 'invalid_json' || (echo "invalid JSON: missing error" && exit 1)
-
-                # Test 2: symlink execution with missing key
-                OUT2=$(echo '{"type":"noul","text":"t","question":"Q?"}' | "$TMPDIR/jev-link" 2>&1)
-                EXIT2=$?
-                [ "$EXIT2" -eq 2 ] || (echo "missing key: expected exit 2, got $EXIT2" && exit 1)
-                LINE2=$(echo "$OUT2" | wc -l)
-                [ "$LINE2" -eq 1 ] || (echo "missing key: expected 1 line, got $LINE2" && exit 1)
-                echo "$OUT2" | grep -q 'auth_missing' || (echo "missing key: missing error" && exit 1)
-
-                echo "check passed: unit tests + direct/symlink binary execution verified" > $out
+                ln -s "$BIN" jev-link
+                printf 'not json' > in1
+                printf '{"type":"noul","text":"t","question":"q"}' > in2
+                for b in "$BIN" ./jev-link; do
+                  rc=0; "$b" < in1 > o 2> e || rc=$?
+                  test "$rc" -eq 1; test "$(wc -l < o)" -eq 1; grep -q '"invalid_json"' o; test ! -s e
+                  rc=0; "$b" < in2 > o 2> e || rc=$?
+                  test "$rc" -eq 2; test "$(wc -l < o)" -eq 1; grep -q '"auth_missing"' o; test ! -s e
+                done
+                echo "jev check: unit tests; installed CLI direct+symlink: invalid=1, nokey=2, 1 stdout line, empty stderr" > $out
               '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
