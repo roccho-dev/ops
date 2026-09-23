@@ -1,0 +1,42 @@
+name: jev-arbitrary-iteration
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - experiments/jev-iteration/iteration.json
+      - .github/workflows/jev-arbitrary-iteration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: jev-arbitrary-iteration-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      INPUT: experiments/jev-iteration/iteration.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Jev core and arbitrary iteration input
+        run: |
+          set -euo pipefail
+          node packages/jev-review/tests/run.mjs
+          node --input-type=module - "$INPUT" <<'NODE'
+          import fs from 'node:fs';
+          import { validateCliInput } from './packages/jev-review/bin/jev-review.mjs';
+          const input = process.argv[2];
+          validateCliInput(JSON.parse(fs.readFileSync(input, 'utf8')));
+          NODE
