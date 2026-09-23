@@ -167,7 +167,7 @@
                 [ "$CODE2" -eq 2 ] || exit 1
                 grep -q 'auth_missing' /tmp/test2.out || exit 1
 
-                touch $out
+                echo "All Nix checks passed" > $out
               '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
