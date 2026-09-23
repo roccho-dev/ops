@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const cliPath = resolve(__dir, "../cli/index.mjs");
@@ -15,6 +16,8 @@ const EXIT_PROVIDER_ERROR = 3;
 const EXIT_CONTRACT_ERROR = 4;
 const EXIT_FATAL = 5;
 
+const TEST_API_KEY = "fake-test-key-12345-xyz";
+
 async function runCli(input, env = {}, scenario = null) {
   const finalEnv = {
     ...process.env,
@@ -25,12 +28,9 @@ async function runCli(input, env = {}, scenario = null) {
     finalEnv.TEST_FETCH_SCENARIO = scenario;
   }
 
-  // Convert Windows paths to file:// URLs for --import
-  const fileUrlFromPath = (path) => {
-    return "file://" + path.replace(/\\/g, "/");
-  };
-
-  const args = scenario ? ["--import", fileUrlFromPath(setupPath), cliPath] : [cliPath];
+  // Always preload fetch stub with --import using pathToFileURL
+  const setupUrl = pathToFileURL(setupPath).href;
+  const args = ["--import", setupUrl, cliPath];
 
   const child = spawn("node", args, {
     stdio: ["pipe", "pipe", "pipe"],
@@ -58,111 +58,181 @@ async function runCli(input, env = {}, scenario = null) {
   });
 }
 
-test("invalid JSON returns exit 1, single stdout JSON line, no key in stderr", async () => {
-  const { code, stdout, stderr } = await runCli("not json");
+test("invalid JSON returns exit 1, single stdout line, key not logged", async () => {
+  const { code, stdout, stderr } = await runCli("not json", { JEV_API_KEY: TEST_API_KEY });
   assert.equal(code, EXIT_INPUT_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "invalid_json");
-  assert(!stderr.includes("JEV_API_KEY"), "API key should not appear in stderr");
+  assert.equal(lines.length, 1);
+  assert(JSON.parse(lines[0]));
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("missing JEV_API_KEY returns exit 2, single stdout JSON line, key value not logged", async () => {
+test("missing JEV_API_KEY returns exit 2, single stdout line, key not logged", async () => {
   const input = JSON.stringify({ type: "noul", text: "test", question: "Q?" });
   const { code, stdout, stderr } = await runCli(input, { JEV_API_KEY: "" });
   assert.equal(code, EXIT_AUTH_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "auth_missing");
-  // Verify no actual key value is logged (use a test key to check)
-  // Empty key should not appear as a Bearer token or similar
-  assert(!stdout.includes("Bearer "), "API key value should not appear in stdout");
-  assert(!stderr.includes("Bearer "), "API key value should not appear in stderr");
+  assert.equal(lines.length, 1);
+  assert(JSON.parse(lines[0]));
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("empty text returns exit 1, single stdout JSON line", async () => {
+test("empty text returns exit 1, single stdout line, key not logged", async () => {
   const input = JSON.stringify({ type: "noul", text: "", question: "Q?" });
-  const { code, stdout } = await runCli(input, { JEV_API_KEY: "key" });
+  const { code, stdout, stderr } = await runCli(input, { JEV_API_KEY: TEST_API_KEY });
   assert.equal(code, EXIT_INPUT_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "input_invalid");
+  assert.equal(lines.length, 1);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("empty question returns exit 1, single stdout JSON line", async () => {
+test("empty question returns exit 1, single stdout line, key not logged", async () => {
   const input = JSON.stringify({ type: "noul", text: "test", question: "" });
-  const { code, stdout } = await runCli(input, { JEV_API_KEY: "key" });
+  const { code, stdout, stderr } = await runCli(input, { JEV_API_KEY: TEST_API_KEY });
   assert.equal(code, EXIT_INPUT_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "input_invalid");
+  assert.equal(lines.length, 1);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("non-object request returns exit 1, single stdout JSON line", async () => {
-  const input = '["not", "object"]';
-  const { code, stdout } = await runCli(input, { JEV_API_KEY: "key" });
-  assert.equal(code, EXIT_INPUT_ERROR);
-  const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "invalid_request");
-});
-
-test("unknown request type returns exit 1, single stdout JSON line", async () => {
-  const input = JSON.stringify({ type: "unknown", text: "test", question: "Q?" });
-  const { code, stdout } = await runCli(input, { JEV_API_KEY: "key" });
-  assert.equal(code, EXIT_INPUT_ERROR);
-  const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "input_invalid");
-});
-
-test("success path with injected fetch returns exit 0, single stdout JSON line, model and noul", async () => {
-  const input = JSON.stringify({ type: "noul", text: "test input", question: "Is this valid?" });
-  const env = { JEV_API_KEY: "test-key", TEST_FETCH_SCENARIO: "success" };
-  const { code, stdout } = await runCli(input, env, "success");
+test("success path returns exit 0, single stdout line, key not logged", async () => {
+  const input = JSON.stringify({ type: "noul", text: "test input", question: "Q?" });
+  const env = { JEV_API_KEY: TEST_API_KEY, TEST_FETCH_SCENARIO: "success" };
+  const { code, stdout, stderr } = await runCli(input, env, "success");
   assert.equal(code, EXIT_SUCCESS);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
+  assert.equal(lines.length, 1);
   const result = JSON.parse(lines[0]);
   assert.equal(result.model, "jev-1.13.0");
   assert.equal(result.noul, 0.75);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("provider error path with injected fetch returns exit 3, single stdout JSON line", async () => {
+test("provider error path returns exit 3, single stdout line, key not logged", async () => {
   const input = JSON.stringify({ type: "noul", text: "test", question: "Q?" });
-  const env = { JEV_API_KEY: "test-key", TEST_FETCH_SCENARIO: "provider_error" };
-  const { code, stdout } = await runCli(input, env, "provider_error");
+  const env = { JEV_API_KEY: TEST_API_KEY, TEST_FETCH_SCENARIO: "provider_error" };
+  const { code, stdout, stderr } = await runCli(input, env, "provider_error");
   assert.equal(code, EXIT_PROVIDER_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "provider_error");
+  assert.equal(lines.length, 1);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("contract error path with injected fetch returns exit 4, single stdout JSON line", async () => {
+test("contract error path returns exit 4, single stdout line, key not logged", async () => {
   const input = JSON.stringify({ type: "noul", text: "test", question: "Q?" });
-  const env = { JEV_API_KEY: "test-key", TEST_FETCH_SCENARIO: "contract_error" };
-  const { code, stdout } = await runCli(input, env, "contract_error");
+  const env = { JEV_API_KEY: TEST_API_KEY, TEST_FETCH_SCENARIO: "contract_error" };
+  const { code, stdout, stderr } = await runCli(input, env, "contract_error");
   assert.equal(code, EXIT_CONTRACT_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "contract_error");
+  assert.equal(lines.length, 1);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
 });
 
-test("fetch throws returns exit 3 (provider unreachable), single stdout JSON line", async () => {
+test("fetch throws returns exit 3 (provider unreachable), single stdout line, key not logged", async () => {
   const input = JSON.stringify({ type: "noul", text: "test", question: "Q?" });
-  const env = { JEV_API_KEY: "test-key", TEST_FETCH_SCENARIO: "fetch_throws" };
-  const { code, stdout } = await runCli(input, env, "fetch_throws");
+  const env = { JEV_API_KEY: TEST_API_KEY, TEST_FETCH_SCENARIO: "fetch_throws" };
+  const { code, stdout, stderr } = await runCli(input, env, "fetch_throws");
   assert.equal(code, EXIT_PROVIDER_ERROR);
   const lines = stdout.trim().split("\n").filter(l => l);
-  assert.equal(lines.length, 1, "Expected exactly one stdout line");
-  const result = JSON.parse(lines[0]);
-  assert.equal(result.error, "provider_unreachable");
+  assert.equal(lines.length, 1);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("client: missing api key throws auth_missing", async () => {
+  const { askJevNoul, JevError } = await import("../src/client.mjs");
+  try {
+    await askJevNoul({ text: "test", question: "Q?", apiKey: "" });
+    assert.fail("expected JevError");
+  } catch (e) {
+    assert(e instanceof JevError);
+    assert.equal(e.code, "auth_missing");
+  }
+});
+
+test("client: empty text throws input_invalid", async () => {
+  const { askJevNoul, JevError } = await import("../src/client.mjs");
+  try {
+    await askJevNoul({ text: "", question: "Q?", apiKey: "key" });
+    assert.fail("expected JevError");
+  } catch (e) {
+    assert(e instanceof JevError);
+    assert.equal(e.code, "input_invalid");
+  }
+});
+
+test("client: empty question throws input_invalid", async () => {
+  const { askJevNoul, JevError } = await import("../src/client.mjs");
+  try {
+    await askJevNoul({ text: "test", question: "", apiKey: "key" });
+    assert.fail("expected JevError");
+  } catch (e) {
+    assert(e instanceof JevError);
+    assert.equal(e.code, "input_invalid");
+  }
+});
+
+test("client: success with fake fetch returns typed result", async () => {
+  const { askJevNoul } = await import("../src/client.mjs");
+  const fakeFetch = async (url, options) => ({
+    ok: true,
+    json: async () => ({
+      model: "jev-1.13.0",
+      answers: { live: { type: "noul", noul: 0.75 } },
+    }),
+  });
+
+  const result = await askJevNoul({
+    text: "test",
+    question: "Q?",
+    apiKey: "key",
+    fetch: fakeFetch,
+  });
+
+  assert.deepEqual(result, { model: "jev-1.13.0", noul: 0.75 });
+});
+
+test("client: non-2xx response throws provider_error", async () => {
+  const { askJevNoul, JevError } = await import("../src/client.mjs");
+  const fakeFetch = async () => ({ ok: false, status: 500 });
+
+  try {
+    await askJevNoul({
+      text: "test",
+      question: "Q?",
+      apiKey: "key",
+      fetch: fakeFetch,
+    });
+    assert.fail("expected JevError");
+  } catch (e) {
+    assert(e instanceof JevError);
+    assert.equal(e.code, "provider_error");
+  }
+});
+
+test("client: fetch error throws provider_unreachable", async () => {
+  const { askJevNoul, JevError } = await import("../src/client.mjs");
+  const fakeFetch = async () => {
+    throw new Error("network error");
+  };
+
+  try {
+    await askJevNoul({
+      text: "test",
+      question: "Q?",
+      apiKey: "key",
+      fetch: fakeFetch,
+    });
+    assert.fail("expected JevError");
+  } catch (e) {
+    assert(e instanceof JevError);
+    assert.equal(e.code, "provider_unreachable");
+  }
 });

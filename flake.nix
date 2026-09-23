@@ -151,12 +151,32 @@
                 # Run offline unit tests
                 ${pkgs.nodejs}/bin/node --test tests/*.test.mjs > /dev/null
 
-                # Verify installed binary exists and is executable via symlink
+                # Test installed binary directly and via symlink from writable tmpdir
                 BIN=${packages.${system}.jev}/bin/jev
                 [ -x "$BIN" ] || (echo "Binary not executable" && exit 1)
-                [ -L "$BIN" ] || echo "Note: Binary path is not a symlink (may be wrapped)"
 
-                echo "Nix package build and check passed" > $out
+                # Copy binary to writable tmpdir and test via symlink
+                TMPDIR=$(mktemp -d)
+                ln -s "$BIN" "$TMPDIR/jev-link"
+
+                # Test 1: invalid JSON should exit 1 and output single JSON line
+                OUT1=$("$TMPDIR/jev-link" <<< 'not json' 2>&1)
+                CODE1=$?
+                [ "$CODE1" -eq 1 ] || (echo "invalid JSON exit code: expected 1, got $CODE1" && exit 1)
+                LINE_COUNT1=$(echo "$OUT1" | wc -l)
+                [ "$LINE_COUNT1" -eq 1 ] || (echo "invalid JSON lines: expected 1, got $LINE_COUNT1" && exit 1)
+                echo "$OUT1" | grep -q 'invalid_json' || (echo "invalid JSON output missing error" && exit 1)
+
+                # Test 2: missing key should exit 2 and output single JSON line
+                OUT2=$("$TMPDIR/jev-link" <<< '{"type":"noul","text":"t","question":"Q?"}' 2>&1)
+                CODE2=$?
+                [ "$CODE2" -eq 2 ] || (echo "missing key exit code: expected 2, got $CODE2" && exit 1)
+                LINE_COUNT2=$(echo "$OUT2" | wc -l)
+                [ "$LINE_COUNT2" -eq 1 ] || (echo "missing key lines: expected 1, got $LINE_COUNT2" && exit 1)
+                echo "$OUT2" | grep -q 'auth_missing' || (echo "missing key output missing error" && exit 1)
+
+                rm -rf "$TMPDIR"
+                echo "All check assertions passed" > $out
               '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =

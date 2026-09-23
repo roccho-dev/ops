@@ -1,7 +1,7 @@
 export function createFakeFetch(scenario) {
   return async (url, options) => {
-    // Ensure fetch never calls the actual provider
-    if (!url.includes("://api.typesafe.ai")) {
+    // Guard against unexpected provider calls
+    if (!url.includes("https://api.typesafe.ai/v1/systemone")) {
       throw new Error("Fetch called with unexpected URL: " + url);
     }
 
