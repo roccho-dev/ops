@@ -1,60 +1,49 @@
 {
   "state": {
-    "purpose": "Attack the commoditization weakness of cloud-cost watch without sacrificing fast time-to-cash or low owner time. Optimize for highest realized owner hourly earnings reached quickly.",
+    "purpose": "Differentiate AI cost optimization by moving from dashboards to proof-before-effect cost-quality optimization using customer historical evidence. Optimize for highest realized owner hourly earnings reached quickly.",
     "world": {
       "ownerCapitalJPY": 5000000,
       "ownerTimeHoursPerDay": 2,
       "aiFactory": "mostly semi-automatic",
-      "currentChampion": "T2 cloud-cost-savings-watch",
-      "currentChampionConcerns": {
-        "time-to-cash": 0.23,
-        "owner-time-growth": 0.31,
-        "outcome-value-ceiling": 0.34,
-        "recurring-fragility": 0.43,
-        "setup-build-friction": 0.28,
-        "outcome-verifiability": 0.38,
-        "commoditization": 0.73,
-        "proprietary-data-dependence": 0.31,
-        "sales-friction": 0.44,
-        "feedback-asset-weakness": 0.57
-      },
+      "priorGenerationFinding": "U4 cost-of-quality gate had the best balance on owner-time, setup, commoditization and sales friction within the delta generation; U3 had the strongest value ceiling.",
       "marketEvidence": [
-        "CloudZero publicly positions AI unit economics as cost per customer, transaction, API call, feature, team or product and supports CSV/API unit metrics.",
-        "CloudZero positions AI cost observability as connecting inference/cloud spend to business dimensions and outcomes.",
-        "Vantage publicly discusses FinOps for AI token costs and AI workload spend monitoring.",
-        "These facts prove competition as well as demand; generic cost dashboards are not a differentiated offer."
-      ]
+        "Mercor describes model routing as a cost-quality Pareto optimization problem: use the least expensive model that still meets required performance.",
+        "Sword Health reports an internal model-routing/control-plane effort reduced AI costs by 94% and saved more than $1M/year versus standard API usage.",
+        "Marlabs reports a customer case where prompt/model routing reduced LLM API costs by more than 50%.",
+        "Commercial and open model-routing products already exist, so merely recommending cheaper models is not differentiated."
+      ],
+      "evidenceCaveat": "Savings claims are vendor/company-reported and are not proof that this exact external audit will sell."
     },
     "candidates": [
       {
-        "id": "U1",
-        "name": "cloud-cost-watch-baseline",
-        "claim": "Customer provides recurring read-only cloud/AI billing exports. Engine detects anomalies, idle/waste patterns, concentration and quantified savings opportunities. Customer executes all effects and returns realized savings. One paid snapshot converts to monthly monitoring."
+        "id": "V1",
+        "name": "cost-of-quality-report",
+        "claim": "Customer exports existing model/provider cost plus its own accepted/rejected outcome or eval result by workflow. Engine reports cost per accepted outcome and identifies expensive workflows worth investigation. No alternative model replay is run. One paid snapshot can repeat monthly or quarterly."
       },
       {
-        "id": "U2",
-        "name": "AI-unit-economics-snapshot",
-        "claim": "An AI product company exports LLM/provider billing, model/workflow usage, and one existing business-unit metric such as customer, transaction, accepted run, or feature usage. Without installing a platform, the engine returns cost per unit, margin-risk segments, anomalies and prioritized optimize, reprice, investigate or retire recommendations. Customer executes all effects. Start with a fixed paid forensic snapshot from files, then recurring monitoring only if the same exports can be repeated."
+        "id": "V2",
+        "name": "offline-model-replay-audit",
+        "claim": "Customer exports a bounded historical prompt/trace sample plus its existing expected-output, eval label, accepted/rejected outcome, or other quality criterion. The AI factory replays that same corpus against selected alternative models/providers offline, calculates cost and customer-defined quality on the same cases, and returns a reproducible cost-quality Pareto frontier plus projected savings. It makes no production change. One paid audit is delivered from files; the exact same contract can be rerun when models, prices or workloads change."
       },
       {
-        "id": "U3",
-        "name": "AI-customer-margin-gate",
-        "claim": "An AI product company exports provider/model costs plus existing customer revenue or plan data and customer/workflow attribution. The engine identifies customers/features where AI cost erodes gross margin and returns standardized keep, reprice, limit, optimize or investigate recommendations. No production routing or model changes are executed. Start with one paid gross-margin snapshot; recurring monitoring uses the same file contract."
+        "id": "V3",
+        "name": "offline-routing-policy-audit",
+        "claim": "Same evidence as V2, but the factory additionally clusters workload types and evaluates offline routing policies that choose cheaper models for subsets while preserving the customer's quality requirement. Output is a reproducible candidate routing policy, projected savings and failure cases. Customer alone decides whether to implement it in production."
       },
       {
-        "id": "U4",
-        "name": "AI-cost-of-quality-gate",
-        "claim": "An AI product company exports model/provider cost plus its own existing accepted/rejected outcome or eval result by workflow. The engine reports cost per accepted outcome and identifies workflows where cheaper model/provider/prompt alternatives are worth controlled testing. It does not run production changes. Start with one paid snapshot, then recurring monitoring if the same evidence is available."
+        "id": "V4",
+        "name": "recurring-cost-quality-benchmark",
+        "claim": "Start with the V2 paid offline replay audit, then sell recurring benchmark refreshes when provider prices, models or customer workloads change. Each run uses the same fixed corpus/schema, compares current production choice with selected alternatives, records cost-quality deltas, and accumulates a versioned decision history. No production routing is owned by the service."
       }
     ],
     "constraints": [
-      "No full observability or FinOps platform build before paid evidence.",
-      "Use customer exports/CSV first.",
-      "No production routing or infrastructure change authority.",
-      "Customer must already possess any business/outcome metric required by the offer.",
-      "No standard owner review.",
-      "No proprietary benchmark promise.",
-      "No semantic PASS/FAIL threshold.",
+      "No production traffic or production credentials are required for the first paid audit.",
+      "Customer supplies the historical corpus and quality criterion.",
+      "First audit must be bounded enough to execute mostly automatically.",
+      "Customer executes all production effects.",
+      "No standard owner review except exception handling.",
+      "No proprietary universal benchmark claim; evaluation is customer-corpus-specific.",
+      "No semantic PASS/FAIL threshold in Jev evaluation.",
       "Compare only within each concern."
     ]
   },
@@ -67,7 +56,8 @@
     "outcome-verifiability",
     "commoditization",
     "data-availability-risk",
-    "sales-friction",
+    "variable-compute-cost",
+    "customer-risk",
     "feedback-asset-weakness"
   ],
   "items": [
@@ -75,7 +65,7 @@
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -83,15 +73,15 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers or usage."
+      "concern": "This candidate may cause owner time to grow materially with customers, corpora or each benchmark run."
     },
     {
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -99,63 +89,71 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "This candidate may fail to create stable recurring prepaid revenue."
+      "concern": "This candidate may fail to create stable repeat or recurring revenue after the first audit."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
+      "concern": "Data preparation, eval harness work or implementation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
+      "concern": "It may be difficult to objectively verify that the reported cost-quality improvement is valid and useful."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
+      "concern": "Existing eval, routing, observability products or generic AI may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
+      "concern": "The customer may lack a usable historical corpus or quality criterion, preventing the service from running cheaply."
     },
     {
-      "theme": "sales-friction",
+      "theme": "variable-compute-cost",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
+      "concern": "Replaying customer workloads across alternative models may create variable provider costs large enough to reduce margin or complicate pricing."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "V1"
+      ],
+      "concern": "Customers may perceive too much privacy, IP, security, quality or operational risk in sharing traces and relying on the output."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "U1"
+        "V1"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, benchmark methods, recurring contracts or decision-history assets that support eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -163,15 +161,15 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers or usage."
+      "concern": "This candidate may cause owner time to grow materially with customers, corpora or each benchmark run."
     },
     {
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -179,63 +177,71 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "This candidate may fail to create stable recurring prepaid revenue."
+      "concern": "This candidate may fail to create stable repeat or recurring revenue after the first audit."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
+      "concern": "Data preparation, eval harness work or implementation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
+      "concern": "It may be difficult to objectively verify that the reported cost-quality improvement is valid and useful."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
+      "concern": "Existing eval, routing, observability products or generic AI may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
+      "concern": "The customer may lack a usable historical corpus or quality criterion, preventing the service from running cheaply."
     },
     {
-      "theme": "sales-friction",
+      "theme": "variable-compute-cost",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
+      "concern": "Replaying customer workloads across alternative models may create variable provider costs large enough to reduce margin or complicate pricing."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "V2"
+      ],
+      "concern": "Customers may perceive too much privacy, IP, security, quality or operational risk in sharing traces and relying on the output."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "U2"
+        "V2"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, benchmark methods, recurring contracts or decision-history assets that support eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -243,15 +249,15 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers or usage."
+      "concern": "This candidate may cause owner time to grow materially with customers, corpora or each benchmark run."
     },
     {
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -259,63 +265,71 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "This candidate may fail to create stable recurring prepaid revenue."
+      "concern": "This candidate may fail to create stable repeat or recurring revenue after the first audit."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
+      "concern": "Data preparation, eval harness work or implementation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
+      "concern": "It may be difficult to objectively verify that the reported cost-quality improvement is valid and useful."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
+      "concern": "Existing eval, routing, observability products or generic AI may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
+      "concern": "The customer may lack a usable historical corpus or quality criterion, preventing the service from running cheaply."
     },
     {
-      "theme": "sales-friction",
+      "theme": "variable-compute-cost",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
+      "concern": "Replaying customer workloads across alternative models may create variable provider costs large enough to reduce margin or complicate pricing."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "V3"
+      ],
+      "concern": "Customers may perceive too much privacy, IP, security, quality or operational risk in sharing traces and relying on the output."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "U3"
+        "V3"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, benchmark methods, recurring contracts or decision-history assets that support eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -323,15 +337,15 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers or usage."
+      "concern": "This candidate may cause owner time to grow materially with customers, corpora or each benchmark run."
     },
     {
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -339,57 +353,65 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "This candidate may fail to create stable recurring prepaid revenue."
+      "concern": "This candidate may fail to create stable repeat or recurring revenue after the first audit."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
+      "concern": "Data preparation, eval harness work or implementation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
+      "concern": "It may be difficult to objectively verify that the reported cost-quality improvement is valid and useful."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
+      "concern": "Existing eval, routing, observability products or generic AI may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
+      "concern": "The customer may lack a usable historical corpus or quality criterion, preventing the service from running cheaply."
     },
     {
-      "theme": "sales-friction",
+      "theme": "variable-compute-cost",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
+      "concern": "Replaying customer workloads across alternative models may create variable provider costs large enough to reduce margin or complicate pricing."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "V4"
+      ],
+      "concern": "Customers may perceive too much privacy, IP, security, quality or operational risk in sharing traces and relying on the output."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "U4"
+        "V4"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, benchmark methods, recurring contracts or decision-history assets that support eventual company sale value."
     }
   ]
 }
