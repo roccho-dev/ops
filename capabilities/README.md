@@ -4,6 +4,8 @@ This directory is the temporary single home for local script implementations tha
 
 It is a migration/placement convention, not a new skill system or package manager. The agent-facing target is one `gosh` skill as described in `roccho-dev/ops#384`.
 
+The source for that one agent-facing skill is [`../packages/gosh/skill/SKILL.md`](../packages/gosh/skill/SKILL.md). Do not put additional Agent Skill directories under `capabilities/local/`; that directory is only for executable implementations covered by the rules below.
+
 `capabilities/index.jsonl` is intentionally only a staging index for now. Current `gosh` v0 does not consume it as an event contract or accepted authority.
 
 ## Layout

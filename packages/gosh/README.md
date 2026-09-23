@@ -6,6 +6,22 @@
 
 Local script capability placement is staged under [`../../capabilities/README.md`](../../capabilities/README.md). That convention does not change the current v0 event contract.
 
+## Agent Skill source and materialization
+
+The repository source for the single agent-facing Codex skill is [`skill/SKILL.md`](skill/SKILL.md). Its supporting references and observed-use proof travel with that directory. The skill remains a discovery surface; it does not make `capabilities/index.jsonl` authoritative or add the future `query`/`ensure` product shape.
+
+The Nix package `gosh-skill` copies the complete directory to `share/skills/gosh`. To make it available to a personal Codex installation, materialize that exact directory as `$CODEX_HOME/skills/gosh`, or as `~/.codex/skills/gosh` when `CODEX_HOME` is unset. Copy the whole directory so relative references remain valid. Compare the installed tree with the source or package output after materialization; a `SKILL.md` copy alone is incomplete.
+
+"Immediately usable" means all of the following, not merely that the source exists:
+
+1. the installed path is below the active Codex skills root;
+2. `SKILL.md` and every linked reference are readable there;
+3. the skill is listed in Codex's available-skills context on the next turn without an app restart;
+4. an explicit `$gosh` request loads the skill and can resolve the referenced repository knowledge;
+5. the proof records only behavior actually observed on the current host.
+
+The current local proof first established the discovery mechanism with the prototype skill name `wslc-storage-reclaim`, then confirmed on the following turn that the final `gosh` name was listed and loaded without an app restart.
+
 This package implements the v0 scope owned by `roccho-dev/ops#82`. It is not a shell, workflow daemon, HQ endpoint, queue, admission gate, accepted ledger, or decision authority.
 
 ## Boundary

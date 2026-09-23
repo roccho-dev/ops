@@ -1,0 +1,49 @@
+{
+  "type": "gosh.agentSkill.observedUseProof.v1",
+  "observedAt": "2026-09-18T05:57:10+09:00",
+  "repositorySource": "packages/gosh/skill/SKILL.md",
+  "capabilityReference": "packages/gosh/skill/references/wslc-storage-reclaim.md",
+  "executionInputPolicy": "Evidence only. No identity, path, size, timestamp, or container set in this proof is a default or execution input for another attempt.",
+  "prototypeMaterialization": "%USERPROFILE%\\.codex\\skills\\wslc-storage-reclaim",
+  "skillDiscovery": {
+    "listedByCodexOnFollowingTurn": true,
+    "loadedByCodexOnFollowingTurn": true,
+    "desktopAppRestartObserved": false,
+    "claim": "A valid personal skill placed below the Codex skills root became available on the next turn in the same desktop task."
+  },
+  "finalMaterialization": {
+    "skillName": "gosh",
+    "target": "%USERPROFILE%\\.codex\\skills\\gosh",
+    "repositoryTreeMatchedAfterCopy": true,
+    "prototypeMovedOutsideSkillsRoot": true,
+    "finalNameListedByCodex": true,
+    "explicitGoshInvocationLoaded": true,
+    "followingTurnReadbackAt": "2026-09-18T06:14:29+09:00"
+  },
+  "validation": {
+    "skillCreatorQuickValidate": "pass",
+    "nixPackage": "gosh-skill",
+    "nixPackageBuild": "pass",
+    "packageRequiredFilesPresent": true
+  },
+  "observedExecution": {
+    "date": "2026-09-17",
+    "host": "windows",
+    "storage": "wslc-storage.vhdx",
+    "fstrimTarget": "/var/lib/docker",
+    "fstrimDevice": "/dev/sdc",
+    "fstrimReportedBytes": 336076800,
+    "vhdBytesBefore": 123191951360,
+    "vhdBytesAfter": 92506423296,
+    "vhdBytesReclaimed": 30685528064,
+    "cFreeBytesBefore": 812359680,
+    "cFreeBytesAfter": 31493349376,
+    "cFreeBytesIncrease": 30680989696,
+    "diskpartOfficialSuccessTextObserved": true,
+    "entryRunningContainersRestored": true,
+    "namedVolumesPreserved": true,
+    "repoStatePreserved": true,
+    "temporaryHelpersRemoved": true
+  },
+  "claimCeiling": "This proves the recorded WSLC reclaim procedure and personal-skill discovery path on the observed host. It does not prove gosh query/ensure, arbitrary cleanup safety, another host, or an executable capability entry in capabilities/index.jsonl."
+}

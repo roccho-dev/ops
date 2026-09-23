@@ -1,0 +1,4 @@
+interface:
+  display_name: "gosh"
+  short_description: "Find proven ops capabilities and their exact placement"
+  default_prompt: "Use $gosh to locate the relevant proven ops capability and its exact placement contract."
