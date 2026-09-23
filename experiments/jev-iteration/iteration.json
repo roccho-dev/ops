@@ -1,52 +1,54 @@
 {
   "state": {
-    "purpose": "Reduce cloud-cost commoditization by moving from findings to customer-executable change artifacts, while keeping the customer's execution authority and preserving fast cash / low owner time.",
+    "purpose": "Combine the fast-cash action-ticket frontier with effect readback, without adding patch-generation or execution liability. Optimize for highest realized owner hourly earnings reached quickly and for transferable company assets.",
     "world": {
       "ownerCapitalJPY": 5000000,
       "ownerTimeHoursPerDay": 2,
       "aiFactory": "mostly semi-automatic",
-      "currentChampion": "cloud-cost-savings-refresh with simple fixed/prepaid pricing",
-      "priorFinding": "Outcome-based pricing did not materially reduce commoditization and increased attribution/contract/owner-work costs.",
-      "marketEvidence": [
-        "AWS states many organizations can identify savings but struggle to turn those insights into action across teams/applications.",
-        "The existing FinOps market contains many visibility, anomaly and savings-recommendation products; a findings-only report is easy to substitute."
-      ]
+      "priorFindings": [
+        "Z2 action-ticket factory had fastest time-to-cash (.24) and low owner/domain/customer-risk within the action-ready generation.",
+        "Z4 action-ticket + savings receipt had much stronger sellable-asset properties (.37 asset weakness) but slower time-to-cash (.43).",
+        "IaC patch generation improved actionability/commoditization somewhat but materially increased setup, liability, support and owner work."
+      ],
+      "designBoundary": "No generated code/patches and no execution authority. Differentiate through precise action artifacts plus deterministic readback lineage."
     },
     "candidates": [
       {
-        "id": "Z1",
-        "name": "findings-only-baseline",
-        "claim": "Customer supplies bounded cloud/AI billing exports. Factory returns prioritized savings findings and annualized estimates. Customer determines how to implement them. First audit can convert to up to four annual refreshes."
+        "id": "AA1",
+        "name": "action-ticket-baseline",
+        "claim": "For each high-value cloud-cost finding, return a standardized action ticket with exact resource, action, evidence, expected savings, risk notes, validation and rollback steps. Customer executes every action. Up to four annual refreshes can repeat the same workflow."
       },
       {
-        "id": "Z2",
-        "name": "action-ticket-factory",
-        "claim": "Customer supplies billing export plus minimal resource/config inventory. For each high-value finding, factory returns a standardized action ticket containing exact affected resource, proposed action, evidence, expected savings, risk notes, validation steps and rollback steps. It does not generate code or execute changes. Customer owns approval and execution. First paid action pack can convert to annual refresh."
+        "id": "AA2",
+        "name": "top3-ticket-plus-receipt",
+        "claim": "Return only the top three evidence-backed action tickets by expected annualized savings. Customer marks which ticket IDs it executed. On the next billing export, the factory automatically produces an effect receipt for those IDs: observed spend delta, expected-vs-observed savings, confounders and status. No code generation or execution. Same fixed schema repeats on refresh."
       },
       {
-        "id": "Z3",
-        "name": "reviewable-change-set-factory",
-        "claim": "Customer supplies billing export plus relevant IaC/config files for selected high-value findings. Factory returns a reviewable proposed change set or patch, evidence, expected savings, validation steps and rollback plan. It does not merge, deploy or execute. Customer reviews and applies. Scope is bounded to supported IaC/config patterns and selected findings."
+        "id": "AA3",
+        "name": "savings-ledger-refresh",
+        "claim": "Same top-three ticket workflow as AA2, but every proposal, customer execution status and subsequent effect receipt is appended to a versioned savings ledger. The first paid audit includes one readback. If useful, it converts to a prepaid annual plan with up to four refresh/readback cycles. The ledger becomes the canonical customer-specific history of proposed and realized savings."
       },
       {
-        "id": "Z4",
-        "name": "action-receipt-loop",
-        "claim": "Same standardized action tickets as Z2, plus after the customer executes an action the next billing export is compared with the prior baseline and a savings receipt records observed effect, confounders and whether the expected saving appeared. Same schema repeats across refreshes. No code generation or execution."
+        "id": "AA4",
+        "name": "unbounded-ticket-ledger",
+        "claim": "Produce all detected action tickets, track customer execution and maintain effect receipts/ledger for every action across recurring refreshes. No code generation or execution."
       },
       {
-        "id": "Z5",
-        "name": "change-set-plus-receipt",
-        "claim": "For a bounded set of supported IaC/config changes, combine Z3 reviewable patches with Z4 post-change savings receipts. Customer owns merge/deploy. Factory maintains exact proposal→customer action→billing readback lineage. First paid audit is limited to a small number of high-value changes and can convert to annual refresh."
+        "id": "AA5",
+        "name": "top1-proof-cycle",
+        "claim": "For the first paid audit, return only one highest-value, low-risk action ticket and include one automatic post-execution effect receipt. The goal is to prove one savings cycle with minimal setup. Only after that proof does the customer buy a larger three-ticket or annual refresh package using the identical schema."
       }
     ],
     "constraints": [
-      "Customer executes, merges and deploys every effect.",
+      "Customer executes every change.",
+      "No code or patch generation in this generation.",
       "No production write credentials.",
       "First paid scope must be bounded and file/export based.",
-      "No standard owner review except unsupported/ambiguous cases.",
-      "Do not support arbitrary infrastructure in v1; unsupported input must fail closed.",
+      "Effect receipt uses billing/export readback and exact ticket IDs.",
+      "Unsupported or ambiguous findings fail closed rather than require owner research by default.",
+      "No standard owner review.",
       "No full platform before repeated paid demand.",
-      "No semantic PASS/FAIL threshold in Jev.",
+      "No semantic PASS/FAIL threshold.",
       "Compare only within each concern."
     ]
   },
@@ -58,10 +60,10 @@
     "setup-build-friction",
     "outcome-verifiability",
     "technical-liability-risk",
-    "customer-risk",
-    "domain-knowledge-load",
+    "sales-friction",
     "support-surface-growth",
     "recurring-fragility",
+    "customer-lockin-weakness",
     "sellable-asset-weakness"
   ],
   "items": [
@@ -69,7 +71,7 @@
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -77,95 +79,95 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
+      "concern": "This candidate may cause owner time to grow materially with customers, actions, receipts or exceptions."
     },
     {
       "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
+      "concern": "The output may still leave too much work or ambiguity before the customer can produce economic savings."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal teams may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+      "concern": "Initial implementation, state tracking or customer data preparation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+      "concern": "It may be difficult to objectively verify whether the proposed action caused the observed savings."
     },
     {
       "theme": "technical-liability-risk",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+      "concern": "The service may create material technical or operational liability even though the customer executes changes."
     },
     {
-      "theme": "customer-risk",
+      "theme": "sales-friction",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
-    },
-    {
-      "theme": "domain-knowledge-load",
-      "subject": [
-        "candidate",
-        "Z1"
-      ],
-      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+      "concern": "The customer may resist paying because value, workflow, trust or commitment is too difficult to understand before purchase."
     },
     {
       "theme": "support-surface-growth",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+      "concern": "The number of actions, edge cases or readback interpretations may expand support scope too quickly."
     },
     {
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
+      "concern": "This candidate may fail to create predictable repeat or prepaid recurring revenue after easy savings are exhausted."
+    },
+    {
+      "theme": "customer-lockin-weakness",
+      "subject": [
+        "candidate",
+        "AA1"
+      ],
+      "concern": "After one or two savings cycles, the customer may have little reason to continue using the service."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Z1"
+        "AA1"
       ],
-      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, proposal→execution→effect histories, recurring contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -173,95 +175,95 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
+      "concern": "This candidate may cause owner time to grow materially with customers, actions, receipts or exceptions."
     },
     {
       "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
+      "concern": "The output may still leave too much work or ambiguity before the customer can produce economic savings."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal teams may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+      "concern": "Initial implementation, state tracking or customer data preparation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+      "concern": "It may be difficult to objectively verify whether the proposed action caused the observed savings."
     },
     {
       "theme": "technical-liability-risk",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+      "concern": "The service may create material technical or operational liability even though the customer executes changes."
     },
     {
-      "theme": "customer-risk",
+      "theme": "sales-friction",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
-    },
-    {
-      "theme": "domain-knowledge-load",
-      "subject": [
-        "candidate",
-        "Z2"
-      ],
-      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+      "concern": "The customer may resist paying because value, workflow, trust or commitment is too difficult to understand before purchase."
     },
     {
       "theme": "support-surface-growth",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+      "concern": "The number of actions, edge cases or readback interpretations may expand support scope too quickly."
     },
     {
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
+      "concern": "This candidate may fail to create predictable repeat or prepaid recurring revenue after easy savings are exhausted."
+    },
+    {
+      "theme": "customer-lockin-weakness",
+      "subject": [
+        "candidate",
+        "AA2"
+      ],
+      "concern": "After one or two savings cycles, the customer may have little reason to continue using the service."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Z2"
+        "AA2"
       ],
-      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, proposal→execution→effect histories, recurring contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -269,95 +271,95 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
+      "concern": "This candidate may cause owner time to grow materially with customers, actions, receipts or exceptions."
     },
     {
       "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
+      "concern": "The output may still leave too much work or ambiguity before the customer can produce economic savings."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal teams may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+      "concern": "Initial implementation, state tracking or customer data preparation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+      "concern": "It may be difficult to objectively verify whether the proposed action caused the observed savings."
     },
     {
       "theme": "technical-liability-risk",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+      "concern": "The service may create material technical or operational liability even though the customer executes changes."
     },
     {
-      "theme": "customer-risk",
+      "theme": "sales-friction",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
-    },
-    {
-      "theme": "domain-knowledge-load",
-      "subject": [
-        "candidate",
-        "Z3"
-      ],
-      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+      "concern": "The customer may resist paying because value, workflow, trust or commitment is too difficult to understand before purchase."
     },
     {
       "theme": "support-surface-growth",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+      "concern": "The number of actions, edge cases or readback interpretations may expand support scope too quickly."
     },
     {
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
+      "concern": "This candidate may fail to create predictable repeat or prepaid recurring revenue after easy savings are exhausted."
+    },
+    {
+      "theme": "customer-lockin-weakness",
+      "subject": [
+        "candidate",
+        "AA3"
+      ],
+      "concern": "After one or two savings cycles, the customer may have little reason to continue using the service."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Z3"
+        "AA3"
       ],
-      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, proposal→execution→effect histories, recurring contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -365,95 +367,95 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
+      "concern": "This candidate may cause owner time to grow materially with customers, actions, receipts or exceptions."
     },
     {
       "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
+      "concern": "The output may still leave too much work or ambiguity before the customer can produce economic savings."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal teams may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+      "concern": "Initial implementation, state tracking or customer data preparation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+      "concern": "It may be difficult to objectively verify whether the proposed action caused the observed savings."
     },
     {
       "theme": "technical-liability-risk",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+      "concern": "The service may create material technical or operational liability even though the customer executes changes."
     },
     {
-      "theme": "customer-risk",
+      "theme": "sales-friction",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
-    },
-    {
-      "theme": "domain-knowledge-load",
-      "subject": [
-        "candidate",
-        "Z4"
-      ],
-      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+      "concern": "The customer may resist paying because value, workflow, trust or commitment is too difficult to understand before purchase."
     },
     {
       "theme": "support-surface-growth",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+      "concern": "The number of actions, edge cases or readback interpretations may expand support scope too quickly."
     },
     {
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
+      "concern": "This candidate may fail to create predictable repeat or prepaid recurring revenue after easy savings are exhausted."
+    },
+    {
+      "theme": "customer-lockin-weakness",
+      "subject": [
+        "candidate",
+        "AA4"
+      ],
+      "concern": "After one or two savings cycles, the customer may have little reason to continue using the service."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Z4"
+        "AA4"
       ],
-      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, proposal→execution→effect histories, recurring contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -461,89 +463,89 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
+      "concern": "This candidate may cause owner time to grow materially with customers, actions, receipts or exceptions."
     },
     {
       "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
+      "concern": "The output may still leave too much work or ambiguity before the customer can produce economic savings."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal teams may reproduce the core value, weakening pricing power."
     },
     {
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+      "concern": "Initial implementation, state tracking or customer data preparation may be too burdensome for fast paid validation."
     },
     {
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+      "concern": "It may be difficult to objectively verify whether the proposed action caused the observed savings."
     },
     {
       "theme": "technical-liability-risk",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+      "concern": "The service may create material technical or operational liability even though the customer executes changes."
     },
     {
-      "theme": "customer-risk",
+      "theme": "sales-friction",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
-    },
-    {
-      "theme": "domain-knowledge-load",
-      "subject": [
-        "candidate",
-        "Z5"
-      ],
-      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+      "concern": "The customer may resist paying because value, workflow, trust or commitment is too difficult to understand before purchase."
     },
     {
       "theme": "support-surface-growth",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+      "concern": "The number of actions, edge cases or readback interpretations may expand support scope too quickly."
     },
     {
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
+      "concern": "This candidate may fail to create predictable repeat or prepaid recurring revenue after easy savings are exhausted."
+    },
+    {
+      "theme": "customer-lockin-weakness",
+      "subject": [
+        "candidate",
+        "AA5"
+      ],
+      "concern": "After one or two savings cycles, the customer may have little reason to continue using the service."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Z5"
+        "AA5"
       ],
-      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, proposal→execution→effect histories, recurring contracts or product assets that improve eventual company sale value."
     }
   ]
 }
