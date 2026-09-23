@@ -19,6 +19,6 @@ Success: `{"model":"...","noul":0.99}` (`noul` in [0,1]); error: `{"error":"..."
 
 **Direct jev exit codes:** `0` success, `1` input/JSON, `2` missing JEV_API_KEY, `3` provider, `4` contract, `5` internal.
 
-**Through envctl auth exec:** For any nonzero jev exit, `envctl` returns exit `1` and prints `envctl: exit status N` on stderr while the jev JSON output remains on stdout. If `envctl` fails before the child starts, stdout is empty.
+**With the current `envctl auth exec` implementation:** For any nonzero jev exit, `envctl` returns exit `1` and prints `envctl: exit status N` on stderr while the jev JSON output remains on stdout. If `envctl` fails before the child starts, stdout is empty.
 
 `envctl` injects `JEV_API_KEY` into the jev child process environment. The installed artifact requires `jev-api`; the selected envs environment must supply its binding. Installing or merging this package does not provision a credential. Pass no key in arguments or stdin.
