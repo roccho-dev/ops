@@ -1,23 +1,18 @@
 {
   "state": {
-    "purpose": "Blind stability test A for the current top economic-event candidates. Optimize for highest realized owner hourly earnings reached as quickly as possible.",
+    "purpose": "Blind stability test B for the current top economic-event candidates. Same claims and concerns as A; only candidate order is reversed. Optimize for highest realized owner hourly earnings reached as quickly as possible.",
     "world": {
       "ownerCapitalJPY": 5000000,
       "ownerTimeHoursPerDay": 2,
       "aiFactory": "mostly semi-automatic",
-      "evaluationMode": "blind stability A",
+      "evaluationMode": "blind stability B",
       "priorScoresIncluded": false
     },
     "candidates": [
       {
-        "id": "S1",
-        "name": "procurement-renewal-watch",
-        "claim": "A company with recurring SaaS/vendor renewals uploads a fixed renewal-calendar file plus contract/quote facts. The engine automatically creates 90/60/30-day renewal jobs and returns a standardized evidence-backed action: renew, cancel, downgrade, consolidate, re-quote, or investigate. Insufficient evidence returns NEED_MORE_EVIDENCE. Customer executes every procurement action. Final action and final annualized spend are returned through a fixed readback. One paid renewal trial converts to prepaid monthly monitoring. Standard runs require no owner review."
-      },
-      {
-        "id": "S2",
-        "name": "AI-profitability-gate",
-        "claim": "An AI product company exports existing LLM/agent traces with provider, model, usage cost, workflow identity and its own accepted-outcome count. The engine reports cost per accepted outcome, margin-risk bands, and standardized keep, investigate, reprice, optimize, or retire recommendations. It does not replace observability, route traffic or change production. Customer executes every effect. One paid snapshot converts to recurring monitoring. Standard runs require no owner review."
+        "id": "S4",
+        "name": "M&A-screening-watch",
+        "claim": "An M&A advisor supplies its own approved target universe plus acquisition mandate. The engine automatically ranks and screens that universe and returns evidence-backed target memos on recurring capacity. It does not source from a proprietary database, contact targets, negotiate, perform DD, or act as intermediary/FA. Customer executes every deal effect. Standard runs require no owner review."
       },
       {
         "id": "S3",
@@ -25,9 +20,14 @@
         "claim": "A cloud-using company provides recurring read-only billing exports. The engine detects spend anomalies, idle/waste patterns, cost concentration and quantified savings opportunities and returns a prioritized action list. It does not execute infrastructure changes. Customer executes every effect. One paid snapshot converts to recurring monitoring. Standard runs require no owner review."
       },
       {
-        "id": "S4",
-        "name": "M&A-screening-watch",
-        "claim": "An M&A advisor supplies its own approved target universe plus acquisition mandate. The engine automatically ranks and screens that universe and returns evidence-backed target memos on recurring capacity. It does not source from a proprietary database, contact targets, negotiate, perform DD, or act as intermediary/FA. Customer executes every deal effect. Standard runs require no owner review."
+        "id": "S2",
+        "name": "AI-profitability-gate",
+        "claim": "An AI product company exports existing LLM/agent traces with provider, model, usage cost, workflow identity and its own accepted-outcome count. The engine reports cost per accepted outcome, margin-risk bands, and standardized keep, investigate, reprice, optimize, or retire recommendations. It does not replace observability, route traffic or change production. Customer executes every effect. One paid snapshot converts to recurring monitoring. Standard runs require no owner review."
+      },
+      {
+        "id": "S1",
+        "name": "procurement-renewal-watch",
+        "claim": "A company with recurring SaaS/vendor renewals uploads a fixed renewal-calendar file plus contract/quote facts. The engine automatically creates 90/60/30-day renewal jobs and returns a standardized evidence-backed action: renew, cancel, downgrade, consolidate, re-quote, or investigate. Insufficient evidence returns NEED_MORE_EVIDENCE. Customer executes every procurement action. Final action and final annualized spend are returned through a fixed readback. One paid renewal trial converts to prepaid monthly monitoring. Standard runs require no owner review."
       }
     ],
     "constraints": [
@@ -56,7 +56,7 @@
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -64,7 +64,7 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "This candidate may cause owner time to grow materially with customers or usage."
     },
@@ -72,7 +72,7 @@
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -80,7 +80,7 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "This candidate may fail to create stable recurring prepaid revenue."
     },
@@ -88,7 +88,7 @@
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "Initial setup or required implementation may be too burdensome for fast sales and paid validation."
     },
@@ -96,7 +96,7 @@
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
     },
@@ -104,7 +104,7 @@
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
     },
@@ -112,7 +112,7 @@
       "theme": "domain-knowledge-load",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "This candidate may require too much specialized domain knowledge from the owner."
     },
@@ -120,7 +120,7 @@
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "S1"
+        "S4"
       ],
       "concern": "This candidate may fail to accumulate reusable workflow, outcome data, contracts or product assets that support eventual company sale value."
     },
@@ -128,87 +128,7 @@
       "theme": "customer-risk",
       "subject": [
         "candidate",
-        "S1"
-      ],
-      "concern": "Customers may perceive too much operational, quality, legal or business risk from relying on this candidate."
-    },
-    {
-      "theme": "time-to-cash",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "This candidate may take too long to obtain the first meaningful payment."
-    },
-    {
-      "theme": "owner-time-growth",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "This candidate may cause owner time to grow materially with customers or usage."
-    },
-    {
-      "theme": "outcome-value-ceiling",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
-    },
-    {
-      "theme": "recurring-fragility",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "This candidate may fail to create stable recurring prepaid revenue."
-    },
-    {
-      "theme": "setup-build-friction",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "Initial setup or required implementation may be too burdensome for fast sales and paid validation."
-    },
-    {
-      "theme": "outcome-verifiability",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
-    },
-    {
-      "theme": "commoditization",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
-    },
-    {
-      "theme": "domain-knowledge-load",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "This candidate may require too much specialized domain knowledge from the owner."
-    },
-    {
-      "theme": "feedback-asset-weakness",
-      "subject": [
-        "candidate",
-        "S2"
-      ],
-      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, contracts or product assets that support eventual company sale value."
-    },
-    {
-      "theme": "customer-risk",
-      "subject": [
-        "candidate",
-        "S2"
+        "S4"
       ],
       "concern": "Customers may perceive too much operational, quality, legal or business risk from relying on this candidate."
     },
@@ -296,7 +216,7 @@
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -304,7 +224,7 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "This candidate may cause owner time to grow materially with customers or usage."
     },
@@ -312,7 +232,7 @@
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -320,7 +240,7 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "This candidate may fail to create stable recurring prepaid revenue."
     },
@@ -328,7 +248,7 @@
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "Initial setup or required implementation may be too burdensome for fast sales and paid validation."
     },
@@ -336,7 +256,7 @@
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
     },
@@ -344,7 +264,7 @@
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
     },
@@ -352,7 +272,7 @@
       "theme": "domain-knowledge-load",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "This candidate may require too much specialized domain knowledge from the owner."
     },
@@ -360,7 +280,7 @@
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
       ],
       "concern": "This candidate may fail to accumulate reusable workflow, outcome data, contracts or product assets that support eventual company sale value."
     },
@@ -368,7 +288,87 @@
       "theme": "customer-risk",
       "subject": [
         "candidate",
-        "S4"
+        "S2"
+      ],
+      "concern": "Customers may perceive too much operational, quality, legal or business risk from relying on this candidate."
+    },
+    {
+      "theme": "time-to-cash",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "This candidate may take too long to obtain the first meaningful payment."
+    },
+    {
+      "theme": "owner-time-growth",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "This candidate may cause owner time to grow materially with customers or usage."
+    },
+    {
+      "theme": "outcome-value-ceiling",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
+    },
+    {
+      "theme": "recurring-fragility",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "This candidate may fail to create stable recurring prepaid revenue."
+    },
+    {
+      "theme": "setup-build-friction",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "Initial setup or required implementation may be too burdensome for fast sales and paid validation."
+    },
+    {
+      "theme": "outcome-verifiability",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
+    },
+    {
+      "theme": "commoditization",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
+    },
+    {
+      "theme": "domain-knowledge-load",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "This candidate may require too much specialized domain knowledge from the owner."
+    },
+    {
+      "theme": "feedback-asset-weakness",
+      "subject": [
+        "candidate",
+        "S1"
+      ],
+      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, contracts or product assets that support eventual company sale value."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "S1"
       ],
       "concern": "Customers may perceive too much operational, quality, legal or business risk from relying on this candidate."
     }
