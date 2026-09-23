@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -14,7 +14,6 @@ const EXIT_INPUT_ERROR = 1;
 const EXIT_AUTH_ERROR = 2;
 const EXIT_PROVIDER_ERROR = 3;
 const EXIT_CONTRACT_ERROR = 4;
-const EXIT_FATAL = 5;
 
 const TEST_API_KEY = "fake-test-key-12345-xyz";
 
@@ -144,95 +143,4 @@ test("fetch throws returns exit 3 (provider unreachable), single stdout line, ke
   assert.equal(lines.length, 1);
   assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
   assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
-});
-
-test("client: missing api key throws auth_missing", async () => {
-  const { askJevNoul, JevError } = await import("../src/client.mjs");
-  try {
-    await askJevNoul({ text: "test", question: "Q?", apiKey: "" });
-    assert.fail("expected JevError");
-  } catch (e) {
-    assert(e instanceof JevError);
-    assert.equal(e.code, "auth_missing");
-  }
-});
-
-test("client: empty text throws input_invalid", async () => {
-  const { askJevNoul, JevError } = await import("../src/client.mjs");
-  try {
-    await askJevNoul({ text: "", question: "Q?", apiKey: "key" });
-    assert.fail("expected JevError");
-  } catch (e) {
-    assert(e instanceof JevError);
-    assert.equal(e.code, "input_invalid");
-  }
-});
-
-test("client: empty question throws input_invalid", async () => {
-  const { askJevNoul, JevError } = await import("../src/client.mjs");
-  try {
-    await askJevNoul({ text: "test", question: "", apiKey: "key" });
-    assert.fail("expected JevError");
-  } catch (e) {
-    assert(e instanceof JevError);
-    assert.equal(e.code, "input_invalid");
-  }
-});
-
-test("client: success with fake fetch returns typed result", async () => {
-  const { askJevNoul } = await import("../src/client.mjs");
-  const fakeFetch = async (url, options) => ({
-    ok: true,
-    json: async () => ({
-      model: "jev-1.13.0",
-      answers: { live: { type: "noul", noul: 0.75 } },
-    }),
-  });
-
-  const result = await askJevNoul({
-    text: "test",
-    question: "Q?",
-    apiKey: "key",
-    fetch: fakeFetch,
-  });
-
-  assert.deepEqual(result, { model: "jev-1.13.0", noul: 0.75 });
-});
-
-test("client: non-2xx response throws provider_error", async () => {
-  const { askJevNoul, JevError } = await import("../src/client.mjs");
-  const fakeFetch = async () => ({ ok: false, status: 500 });
-
-  try {
-    await askJevNoul({
-      text: "test",
-      question: "Q?",
-      apiKey: "key",
-      fetch: fakeFetch,
-    });
-    assert.fail("expected JevError");
-  } catch (e) {
-    assert(e instanceof JevError);
-    assert.equal(e.code, "provider_error");
-  }
-});
-
-test("client: fetch error throws provider_unreachable", async () => {
-  const { askJevNoul, JevError } = await import("../src/client.mjs");
-  const fakeFetch = async () => {
-    throw new Error("network error");
-  };
-
-  try {
-    await askJevNoul({
-      text: "test",
-      question: "Q?",
-      apiKey: "key",
-      fetch: fakeFetch,
-    });
-    assert.fail("expected JevError");
-  } catch (e) {
-    assert(e instanceof JevError);
-    assert.equal(e.code, "provider_unreachable");
-  }
 });

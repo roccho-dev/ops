@@ -148,20 +148,34 @@
               }
               ''
                 cd ${self}/packages/jev
-                # Run offline unit tests
+                # Run unit tests
                 ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
 
-                # Verify installed binary exists and is executable via symlink
+                # Test installed binary direct and via symlink
                 BIN=${packages.${system}.jev}/bin/jev
                 test -x "$BIN" || exit 1
 
-                # Create writable tmpdir and test symlink execution
-                TMP=$(mktemp -d)
-                ln -s "$BIN" "$TMP/jev-link" || exit 1
-                test -x "$TMP/jev-link" || exit 1
+                # Create symlink in existing TMPDIR
+                ln -s "$BIN" "$TMPDIR/jev-link" || exit 1
+                test -x "$TMPDIR/jev-link" || exit 1
 
-                rm -rf "$TMP"
-                echo "Nix check passed: unit tests + binary via symlink verified" > $out
+                # Test 1: direct execution with invalid JSON
+                OUT1=$(echo 'not json' | "$BIN" 2>&1)
+                EXIT1=$?
+                [ "$EXIT1" -eq 1 ] || (echo "invalid JSON: expected exit 1, got $EXIT1" && exit 1)
+                LINE1=$(echo "$OUT1" | wc -l)
+                [ "$LINE1" -eq 1 ] || (echo "invalid JSON: expected 1 line, got $LINE1" && exit 1)
+                echo "$OUT1" | grep -q 'invalid_json' || (echo "invalid JSON: missing error" && exit 1)
+
+                # Test 2: symlink execution with missing key
+                OUT2=$(echo '{"type":"noul","text":"t","question":"Q?"}' | "$TMPDIR/jev-link" 2>&1)
+                EXIT2=$?
+                [ "$EXIT2" -eq 2 ] || (echo "missing key: expected exit 2, got $EXIT2" && exit 1)
+                LINE2=$(echo "$OUT2" | wc -l)
+                [ "$LINE2" -eq 1 ] || (echo "missing key: expected 1 line, got $LINE2" && exit 1)
+                echo "$OUT2" | grep -q 'auth_missing' || (echo "missing key: missing error" && exit 1)
+
+                echo "check passed: unit tests + direct/symlink binary execution verified" > $out
               '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
