@@ -161,7 +161,8 @@
                   rc=0; "$b" < in2 > o 2> e || rc=$?
                   test "$rc" -eq 2; test "$(wc -l < o)" -eq 1; grep -q '"auth_missing"' o; test ! -s e
                 done
-                echo "jev check: unit tests; installed CLI direct+symlink: invalid=1, nokey=2, 1 stdout line, empty stderr" > $out
+                cmp "${packages.${system}.jev}/share/jev/artifact.jsonl" "${self}/packages/jev/artifact.jsonl"
+                echo "jev check: unit tests; installed CLI direct+symlink: invalid=1, nokey=2, 1 stdout line, empty stderr; artifact verified" > $out
               '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
