@@ -1,52 +1,59 @@
 {
   "state": {
-    "purpose": "Mutate the stable low-friction cluster into higher-value offers. Optimize for highest realized owner hourly earnings reached as quickly as possible.",
+    "purpose": "Attack the commoditization weakness of cloud-cost watch without sacrificing fast time-to-cash or low owner time. Optimize for highest realized owner hourly earnings reached quickly.",
     "world": {
       "ownerCapitalJPY": 5000000,
       "ownerTimeHoursPerDay": 2,
       "aiFactory": "mostly semi-automatic",
-      "priorEvidenceMode": "structural A/B findings only; no prior Noul values included as authority",
-      "stableFindings": [
-        "Procurement-renewal and cloud-cost candidates consistently form the low-friction cluster.",
-        "M&A screening has a stronger per-output value ceiling but slower time-to-cash.",
-        "AI profitability gate had no stable dominant advantage in its prior form."
-      ],
+      "currentChampion": "T2 cloud-cost-savings-watch",
+      "currentChampionConcerns": {
+        "time-to-cash": 0.23,
+        "owner-time-growth": 0.31,
+        "outcome-value-ceiling": 0.34,
+        "recurring-fragility": 0.43,
+        "setup-build-friction": 0.28,
+        "outcome-verifiability": 0.38,
+        "commoditization": 0.73,
+        "proprietary-data-dependence": 0.31,
+        "sales-friction": 0.44,
+        "feedback-asset-weakness": 0.57
+      },
       "marketEvidence": [
-        "Zylo reports procurement customers using renewal and usage intelligence to generate measurable software savings, including large realized savings cases.",
-        "Vertice sells SaaS renewal visibility, benchmarking and savings outcomes and states it uses a large vendor pricing database.",
-        "Tropic markets contract extraction, renewal timing and spend intelligence backed by large negotiation/spend datasets and reports customer savings.",
-        "Vantage reports broad adoption for cloud/AI spend visibility and cost reduction; customer cases include quantified monthly/cloud savings."
-      ],
-      "evidenceCaveat": "Vendor adoption and savings claims are vendor-reported; they prove category demand, not this exact entrant."
+        "CloudZero publicly positions AI unit economics as cost per customer, transaction, API call, feature, team or product and supports CSV/API unit metrics.",
+        "CloudZero positions AI cost observability as connecting inference/cloud spend to business dimensions and outcomes.",
+        "Vantage publicly discusses FinOps for AI token costs and AI workload spend monitoring.",
+        "These facts prove competition as well as demand; generic cost dashboards are not a differentiated offer."
+      ]
     },
     "candidates": [
       {
-        "id": "T1",
-        "name": "software-renewal-savings-watch",
-        "claim": "Finance/procurement uploads a fixed renewal calendar plus contract, quote and available usage facts. The engine continuously prioritizes upcoming software/AI renewals and returns standardized cancel, downgrade, consolidate, re-quote, renew, or investigate actions with evidence. Customer executes every action and returns final annualized spend/savings. Start with one paid renewal analysis, then prepaid monthly monitoring. No negotiation service, proprietary benchmark promise, or standard owner review."
+        "id": "U1",
+        "name": "cloud-cost-watch-baseline",
+        "claim": "Customer provides recurring read-only cloud/AI billing exports. Engine detects anomalies, idle/waste patterns, concentration and quantified savings opportunities. Customer executes all effects and returns realized savings. One paid snapshot converts to monthly monitoring."
       },
       {
-        "id": "T2",
-        "name": "cloud-cost-savings-watch",
-        "claim": "A cloud/AI-using company provides recurring read-only billing exports. The engine detects cost anomalies, idle/waste patterns, concentration and quantified savings opportunities, then returns a prioritized action list. Customer executes changes and returns realized savings. Start with one paid snapshot, then prepaid monthly monitoring. No infrastructure changes or standard owner review."
+        "id": "U2",
+        "name": "AI-unit-economics-snapshot",
+        "claim": "An AI product company exports LLM/provider billing, model/workflow usage, and one existing business-unit metric such as customer, transaction, accepted run, or feature usage. Without installing a platform, the engine returns cost per unit, margin-risk segments, anomalies and prioritized optimize, reprice, investigate or retire recommendations. Customer executes all effects. Start with a fixed paid forensic snapshot from files, then recurring monitoring only if the same exports can be repeated."
       },
       {
-        "id": "T3",
-        "name": "tech-spend-opportunity-gate",
-        "claim": "Finance provides a fixed monthly export of software renewals, AI/provider spend and cloud billing summaries. The engine returns only the top evidence-backed cost actions across cancel, downgrade, consolidate, re-quote, optimize, or investigate, ranked by expected annualized savings. Customer executes all effects and returns realized savings. Start with one paid snapshot, then recurring monitoring. No full spend-management platform, no proprietary benchmark promise, no standard owner review."
+        "id": "U3",
+        "name": "AI-customer-margin-gate",
+        "claim": "An AI product company exports provider/model costs plus existing customer revenue or plan data and customer/workflow attribution. The engine identifies customers/features where AI cost erodes gross margin and returns standardized keep, reprice, limit, optimize or investigate recommendations. No production routing or model changes are executed. Start with one paid gross-margin snapshot; recurring monitoring uses the same file contract."
       },
       {
-        "id": "T4",
-        "name": "outcome-priced-renewal-watch",
-        "claim": "Same standardized software-renewal workflow as T1, but commercial terms are a small prepaid base fee plus a share of verified first-year savings from customer-executed actions. Realized savings readback is mandatory. No negotiation execution, no proprietary benchmark promise, and no standard owner review."
+        "id": "U4",
+        "name": "AI-cost-of-quality-gate",
+        "claim": "An AI product company exports model/provider cost plus its own existing accepted/rejected outcome or eval result by workflow. The engine reports cost per accepted outcome and identifies workflows where cheaper model/provider/prompt alternatives are worth controlled testing. It does not run production changes. Start with one paid snapshot, then recurring monitoring if the same evidence is available."
       }
     ],
     "constraints": [
-      "No full platform build before paid evidence.",
-      "First paid test uses exported files where possible.",
-      "Customer executes all external effects.",
+      "No full observability or FinOps platform build before paid evidence.",
+      "Use customer exports/CSV first.",
+      "No production routing or infrastructure change authority.",
+      "Customer must already possess any business/outcome metric required by the offer.",
       "No standard owner review.",
-      "No proprietary pricing benchmark is claimed unless actually acquired.",
+      "No proprietary benchmark promise.",
       "No semantic PASS/FAIL threshold.",
       "Compare only within each concern."
     ]
@@ -59,7 +66,7 @@
     "setup-build-friction",
     "outcome-verifiability",
     "commoditization",
-    "proprietary-data-dependence",
+    "data-availability-risk",
     "sales-friction",
     "feedback-asset-weakness"
   ],
@@ -68,7 +75,7 @@
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -76,7 +83,7 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
       "concern": "This candidate may cause owner time to grow materially with customers or usage."
     },
@@ -84,7 +91,7 @@
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -92,7 +99,7 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
       "concern": "This candidate may fail to create stable recurring prepaid revenue."
     },
@@ -100,7 +107,7 @@
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
       "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
     },
@@ -108,7 +115,7 @@
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
       "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
     },
@@ -116,39 +123,39 @@
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
-      "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "proprietary-data-dependence",
+      "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
-      "concern": "The candidate may depend on pricing benchmarks, proprietary usage data, network effects or other data assets the user does not currently own."
+      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
     },
     {
       "theme": "sales-friction",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
-      "concern": "The target customer may resist paying because trust, procurement, ROI proof or commercial terms create too much sales friction."
+      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "T1"
+        "U1"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, realized-outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -156,7 +163,7 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
       "concern": "This candidate may cause owner time to grow materially with customers or usage."
     },
@@ -164,7 +171,7 @@
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -172,7 +179,7 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
       "concern": "This candidate may fail to create stable recurring prepaid revenue."
     },
@@ -180,7 +187,7 @@
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
       "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
     },
@@ -188,7 +195,7 @@
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
       "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
     },
@@ -196,39 +203,39 @@
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
-      "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "proprietary-data-dependence",
+      "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
-      "concern": "The candidate may depend on pricing benchmarks, proprietary usage data, network effects or other data assets the user does not currently own."
+      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
     },
     {
       "theme": "sales-friction",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
-      "concern": "The target customer may resist paying because trust, procurement, ROI proof or commercial terms create too much sales friction."
+      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "T2"
+        "U2"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, realized-outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -236,7 +243,7 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
       "concern": "This candidate may cause owner time to grow materially with customers or usage."
     },
@@ -244,7 +251,7 @@
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -252,7 +259,7 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
       "concern": "This candidate may fail to create stable recurring prepaid revenue."
     },
@@ -260,7 +267,7 @@
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
       "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
     },
@@ -268,7 +275,7 @@
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
       "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
     },
@@ -276,39 +283,39 @@
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
-      "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "proprietary-data-dependence",
+      "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
-      "concern": "The candidate may depend on pricing benchmarks, proprietary usage data, network effects or other data assets the user does not currently own."
+      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
     },
     {
       "theme": "sales-friction",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
-      "concern": "The target customer may resist paying because trust, procurement, ROI proof or commercial terms create too much sales friction."
+      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "T3"
+        "U3"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, realized-outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
       "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
@@ -316,7 +323,7 @@
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
       "concern": "This candidate may cause owner time to grow materially with customers or usage."
     },
@@ -324,7 +331,7 @@
       "theme": "outcome-value-ceiling",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
       "concern": "The economic value per successful output may be too small to support very high pricing and owner hourly earnings."
     },
@@ -332,7 +339,7 @@
       "theme": "recurring-fragility",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
       "concern": "This candidate may fail to create stable recurring prepaid revenue."
     },
@@ -340,7 +347,7 @@
       "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
       "concern": "Initial setup, integrations or implementation may be too burdensome for fast paid validation."
     },
@@ -348,7 +355,7 @@
       "theme": "outcome-verifiability",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
       "concern": "It may be difficult to measure quickly and objectively whether the output created economic value."
     },
@@ -356,33 +363,33 @@
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
-      "concern": "Existing software or generic AI may reproduce the core value, weakening pricing power."
+      "concern": "Existing FinOps, observability, analytics or generic AI products may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "proprietary-data-dependence",
+      "theme": "data-availability-risk",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
-      "concern": "The candidate may depend on pricing benchmarks, proprietary usage data, network effects or other data assets the user does not currently own."
+      "concern": "The required customer cost, attribution, revenue, usage, accepted-outcome or quality data may be unavailable, inconsistent or too expensive to prepare."
     },
     {
       "theme": "sales-friction",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
-      "concern": "The target customer may resist paying because trust, procurement, ROI proof or commercial terms create too much sales friction."
+      "concern": "The target customer may resist paying because trust, data access, ROI proof or workflow change creates too much friction."
     },
     {
       "theme": "feedback-asset-weakness",
       "subject": [
         "candidate",
-        "T4"
+        "U4"
       ],
-      "concern": "This candidate may fail to accumulate reusable workflow, realized-outcome data, recurring contracts or product assets that support eventual company sale value."
+      "concern": "This candidate may fail to accumulate reusable workflow, outcome data, recurring contracts or product assets that support eventual company sale value."
     }
   ]
 }
