@@ -61,6 +61,11 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
+          jev =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.callPackage ./packages/jev/default.nix { inherit pkgs; nodejs = pkgs.nodejs; };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -137,6 +142,19 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          jev =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "jev-test"
+              {
+                nativeBuildInputs = [ pkgs.nodejs ];
+              }
+              ''
+                cd ${self}/packages/jev
+                ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
+                touch $out
+              '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
             let

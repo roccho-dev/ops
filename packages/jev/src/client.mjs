@@ -1,4 +1,8 @@
-// Generic Jev client: caller supplies question, we return typed result.
+// Generic Jev client: caller supplies text and question, we return typed result.
+// Injected fetch allows testing without network.
+
+const JEV_PROVIDER_URL = "https://api.typesafe.ai/v1/systemone";
+const JEV_MODEL = "jev-latest";
 
 export class JevError extends Error {
   constructor(code, message) {
@@ -28,35 +32,38 @@ function validateNoulAnswer(answer) {
   return answer.noul;
 }
 
-function validateChoiceAnswer(answer, expectedKeys) {
-  if (answer?.type !== "choice") throw new JevContractError("choice answer type required");
-  if (typeof answer?.choice !== "string") throw new JevContractError("choice must be string");
-  if (!expectedKeys.includes(answer.choice)) throw new JevContractError(`choice must be in ${JSON.stringify(expectedKeys)}`);
-  if (typeof answer?.confidence !== "number") throw new JevContractError("confidence must be number");
-  if (!Number.isFinite(answer.confidence)) throw new JevContractError("confidence must be finite");
-  if (answer.confidence < 0 || answer.confidence > 1) throw new JevContractError("confidence must be in [0,1]");
-  if (!answer.probabilities || typeof answer.probabilities !== "object") throw new JevContractError("probabilities must be object");
-  Object.entries(answer.probabilities).forEach(([k, v]) => {
-    if (!expectedKeys.includes(k)) throw new JevContractError(`probability key ${k} not in expected keys`);
-    if (typeof v !== "number" || !Number.isFinite(v)) throw new JevContractError(`probability ${k} must be finite number`);
-  });
-  return { choice: answer.choice, confidence: answer.confidence, probabilities: answer.probabilities };
-}
-
-export async function askJev(apiKey, question) {
+export async function askJevNoul({ text, question, apiKey, fetch: injectedFetch }) {
+  if (typeof text !== "string" || text.trim().length === 0) {
+    throw new JevError("input_invalid", "text must be non-empty string");
+  }
+  if (typeof question !== "string" || question.trim().length === 0) {
+    throw new JevError("input_invalid", "question must be non-empty string");
+  }
   if (typeof apiKey !== "string" || apiKey.length === 0) {
     throw new JevError("auth_missing", "JEV_API_KEY not provided or empty");
   }
 
+  const fetchFn = injectedFetch || globalThis.fetch;
+  const body = {
+    model: JEV_MODEL,
+    state: text,
+    questions: {
+      live: {
+        type: "noul",
+        instructions: question,
+      },
+    },
+  };
+
   let response;
   try {
-    response = await fetch("https://api.typesafe.ai/v1/systemone", {
+    response = await fetchFn(JEV_PROVIDER_URL, {
       method: "POST",
       headers: {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify(question),
+      body: JSON.stringify(body),
     });
   } catch (e) {
     throw new JevError("provider_unreachable", `Failed to reach provider: ${e.message}`);
@@ -77,58 +84,8 @@ export async function askJev(apiKey, question) {
     throw new JevContractError("provider response must be object");
   }
 
-  return {
-    model: validateModel(data.model),
-    answers: data.answers,
-  };
-}
-
-export async function askJevNoul(apiKey, text, instructions) {
-  if (typeof text !== "string" || text.trim().length === 0) {
-    throw new JevError("input_invalid", "text must be non-empty string");
-  }
-
-  const question = {
-    model: "jev-latest",
-    state: text,
-    questions: {
-      live: {
-        type: "noul",
-        instructions: instructions || "Is this state valid?",
-      },
-    },
-  };
-
-  const { model, answers } = await askJev(apiKey, question);
-  const noul = validateNoulAnswer(answers?.live);
+  const model = validateModel(data.model);
+  const noul = validateNoulAnswer(data.answers?.live);
 
   return { model, noul };
-}
-
-export async function askJevChoice(apiKey, text, choiceName, choiceKeys, instructions) {
-  if (typeof text !== "string" || text.trim().length === 0) {
-    throw new JevError("input_invalid", "text must be non-empty string");
-  }
-  if (!Array.isArray(choiceKeys) || choiceKeys.length === 0) {
-    throw new JevError("input_invalid", "choiceKeys must be non-empty array");
-  }
-
-  const criteria = Object.fromEntries(choiceKeys.map(k => [k, instructions?.[k] || k]));
-
-  const question = {
-    model: "jev-latest",
-    state: text,
-    questions: {
-      [choiceName]: {
-        type: "choice",
-        instructions: instructions?.prompt || "Choose one",
-        criteria,
-      },
-    },
-  };
-
-  const { model, answers } = await askJev(apiKey, question);
-  const result = validateChoiceAnswer(answers?.[choiceName], choiceKeys);
-
-  return { model, ...result };
 }

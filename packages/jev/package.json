@@ -1,0 +1,9 @@
+{
+  "name": "jev",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/client.mjs",
+    "./cli": "./cli/index.mjs"
+  }
+}
