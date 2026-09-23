@@ -1,0 +1,4 @@
+{"kind":"repoHealth.rule.v2","id":"purpose-misalignment","concern":"The target may materially contradict or fail to fulfill its declared purpose."}
+{"kind":"repoHealth.rule.v2","id":"responsibility-overlap","concern":"The target may own unrelated or duplicative responsibilities that should belong elsewhere."}
+{"kind":"repoHealth.rule.v2","id":"evidence-gap","concern":"The observable tests, checks, receipts, or other evidence may be insufficient for the target's declared completion claims."}
+{"kind":"repoHealth.rule.v2","id":"claim-overreach","concern":"The target's observable status or claims may materially exceed the visible evidence or declared authority."}
