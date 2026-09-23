@@ -61,6 +61,7 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
+          jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -137,6 +138,32 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          jev =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "jev-test"
+              {
+                nativeBuildInputs = [ pkgs.nodejs ];
+              }
+              ''
+                cd ${self}/packages/jev
+                ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
+                cd "$TMPDIR"
+                unset JEV_API_KEY
+                BIN=${packages.${system}.jev}/bin/jev
+                ln -s "$BIN" jev-link
+                printf 'not json' > in1
+                printf '{"type":"noul","text":"t","question":"q"}' > in2
+                for b in "$BIN" ./jev-link; do
+                  rc=0; "$b" < in1 > o 2> e || rc=$?
+                  test "$rc" -eq 1; test "$(wc -l < o)" -eq 1; grep -q '"invalid_json"' o; test ! -s e
+                  rc=0; "$b" < in2 > o 2> e || rc=$?
+                  test "$rc" -eq 2; test "$(wc -l < o)" -eq 1; grep -q '"auth_missing"' o; test ! -s e
+                done
+                cmp "${packages.${system}.jev}/share/jev/artifact.jsonl" "${self}/packages/jev/artifact.jsonl"
+                echo "jev check: unit tests; installed CLI direct+symlink: invalid=1, nokey=2, 1 stdout line, empty stderr; artifact verified" > $out
+              '';
           hq-modeling-runtime = packages.${system}.hq-modeling-runtime;
           issue-116-shiftleft-proof =
             let
