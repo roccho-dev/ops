@@ -16,7 +16,13 @@ Keep two facts reachable from this file:
 
 For Windows host storage recovery backed by WSLC, read [references/wslc-storage-reclaim.md](references/wslc-storage-reclaim.md) before acting. Its bounded proof is [proof/wslc-storage-reclaim-20260917.json](proof/wslc-storage-reclaim-20260917.json).
 
-Do not treat the reference as an admitted executable entry in `capabilities/index.jsonl`. It is a safety-sensitive runbook until a separately specified and proved executable contract exists.
+For making selected ChatGPT Project/thread history available to an external
+agent, including Claude Code, read
+[references/chatgpt-external-agent-read.md](references/chatgpt-external-agent-read.md).
+Its bounded proof is
+[proof/chatgpt-external-agent-read-20260921.json](proof/chatgpt-external-agent-read-20260921.json).
+
+Do not treat either reference as an admitted executable entry in `capabilities/index.jsonl`. Each is a safety-sensitive runbook until a separately specified and proved executable contract exists.
 
 ## Boundary
 

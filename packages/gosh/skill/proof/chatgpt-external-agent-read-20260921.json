@@ -1,0 +1,53 @@
+{
+  "schema": "gosh.observed-capability-proof.v1",
+  "capability": "chatgpt-project-thread-history-to-external-agent",
+  "observed_at": "2026-09-21",
+  "claim": "A host-mediated local capture path made explicitly selected ChatGPT Project/thread history readable by an external agent, including Claude Code, without browser use, ChatGPT credential sharing, or conversation-body relay through the coordinating model response context.",
+  "route": [
+    "authenticated host-side ChatGPT provider read",
+    "private local paginated provider capture",
+    "manifest and SHA-256 verification",
+    "external-agent local-file read",
+    "effect readback"
+  ],
+  "external_agent": {
+    "runtime": "Claude Code",
+    "model_selector": "opus",
+    "host": "windows",
+    "browser_used_for_successful_read": false,
+    "chatgpt_credentials_shared": false,
+    "session_identity_sha256": "bde80633dc29c6e358e727127c049b62226a737800a21673528d2b1b88beb67b"
+  },
+  "source_observation": {
+    "project_count": 2,
+    "conversation_count": 17,
+    "page_count": 41,
+    "reported_raw_capture_bytes": 1517806,
+    "current_private_capture_file_count": 60,
+    "current_private_capture_bytes": 1604828,
+    "current_private_capture_content_multiset_sha256": "5ff297a92894a68706860e8dbbadab8441f57742845c6ba990db989173790b3b",
+    "coordinating_model_body_relay_count": 0,
+    "chatgpt_mutation_count": 0,
+    "github_mutation_count": 0
+  },
+  "readback": {
+    "external_agent_observed_conversation_turns": true,
+    "external_agent_recovered_unprovided_titles": true,
+    "derived_analysis_created": true,
+    "derived_analysis_included_in_this_change": false
+  },
+  "known_limit": {
+    "provider_truncated_item_count": 1,
+    "provider_item_limit_characters": 20000,
+    "semantic_content_recovered_from_a_separate_duplicate": true,
+    "byte_identity_of_truncated_source_proved": false
+  },
+  "privacy": {
+    "raw_conversation_body_in_proof": false,
+    "conversation_identity_in_proof": false,
+    "absolute_capture_path_in_proof": false,
+    "capture_committed_to_repository": false
+  },
+  "orchestration_task_identity_sha256": "568557c7a307537ec2e74b4d5d977a9eaec5466385b9fdf70280daf8b217b895",
+  "scope_boundary": "Historical evidence only. Rediscover current source identities, permissions, provider behavior, capture location, and external-agent capabilities for every new attempt."
+}
