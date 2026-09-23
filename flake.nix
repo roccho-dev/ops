@@ -61,11 +61,7 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
-          jev =
-            let
-              pkgs = nixpkgs.legacyPackages.${system};
-            in
-            pkgs.callPackage ./packages/jev/default.nix { inherit pkgs; nodejs = pkgs.nodejs; };
+          jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";

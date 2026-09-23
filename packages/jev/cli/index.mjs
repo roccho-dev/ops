@@ -1,11 +1,12 @@
 import { askJevNoul, JevError, JevContractError } from "../src/client.mjs";
 
-// Exit codes: 0=success, 1=input/json error, 2=auth error, 3=provider error, 4=contract error
+// Exit codes: 0=success, 1=input/json error, 2=auth error, 3=provider error, 4=contract error, 5=internal/fatal
 const EXIT_SUCCESS = 0;
 const EXIT_INPUT_ERROR = 1;
 const EXIT_AUTH_ERROR = 2;
 const EXIT_PROVIDER_ERROR = 3;
 const EXIT_CONTRACT_ERROR = 4;
+const EXIT_FATAL = 5;
 
 const apiKey = process.env.JEV_API_KEY;
 
@@ -55,6 +56,7 @@ async function main() {
       text,
       question,
       apiKey,
+      fetch: globalThis.__TEST_FETCH__,
     });
 
     const result = { model, noul };
@@ -87,7 +89,7 @@ async function main() {
         error: "internal_error",
         message: error.message,
       };
-      exitCode = EXIT_PROVIDER_ERROR;
+      exitCode = EXIT_FATAL;
     }
 
     process.stdout.write(JSON.stringify(result) + "\n");
@@ -101,5 +103,5 @@ main().catch((error) => {
     message: error.message,
   };
   process.stdout.write(JSON.stringify(result) + "\n");
-  process.exitCode = 4;
+  process.exitCode = EXIT_FATAL;
 });
