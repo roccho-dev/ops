@@ -1,86 +1,67 @@
 {
   "state": {
-    "purpose": "Attack the commoditization weakness of cloud-cost-savings-refresh by changing value capture, not by adding product scope. Optimize for highest realized owner hourly earnings reached quickly.",
+    "purpose": "Reduce cloud-cost commoditization by moving from findings to customer-executable change artifacts, while keeping the customer's execution authority and preserving fast cash / low owner time.",
     "world": {
       "ownerCapitalJPY": 5000000,
       "ownerTimeHoursPerDay": 2,
       "aiFactory": "mostly semi-automatic",
-      "currentChampion": "X3 cloud-cost-savings-refresh",
-      "currentChampionEvidence": {
-        "time-to-cash": 0.26,
-        "owner-time-growth": 0.36,
-        "outcome-value-ceiling": 0.42,
-        "recurring-fragility": 0.52,
-        "setup-build-friction": 0.36,
-        "outcome-verifiability": 0.52,
-        "commoditization": 0.74,
-        "domain-knowledge-load": 0.26,
-        "data-availability-risk": 0.48,
-        "sales-friction": 0.5,
-        "regulatory-professional-risk": 0.23,
-        "sellable-asset-weakness": 0.5
-      },
+      "currentChampion": "cloud-cost-savings-refresh with simple fixed/prepaid pricing",
+      "priorFinding": "Outcome-based pricing did not materially reduce commoditization and increased attribution/contract/owner-work costs.",
       "marketEvidence": [
-        "ProsperOps publicly prices Autonomous Discount Management as a small percentage of realized cloud savings rather than cloud spend.",
-        "nOps describes commitment optimization as a share-of-savings business model and offers a free savings analysis.",
-        "ProsperOps+ publicly extends outcome-based pricing across a broader FinOps suite, arguing that pricing tied to optimization outcomes makes ROI clear.",
-        "AWS reports that visibility alone is insufficient for many organizations because teams struggle to turn identified savings into action."
-      ],
-      "caveats": [
-        "Outcome-based pricing is validated in the category, but established competitors often execute or automate the optimization itself.",
-        "This proposed service does not execute customer infrastructure changes, so attribution of realized savings may be weaker.",
-        "Public vendor claims do not prove this entrant can win customers."
+        "AWS states many organizations can identify savings but struggle to turn those insights into action across teams/applications.",
+        "The existing FinOps market contains many visibility, anomaly and savings-recommendation products; a findings-only report is easy to substitute."
       ]
     },
     "candidates": [
       {
-        "id": "Y1",
-        "name": "fixed-audit-annual-refresh",
-        "claim": "Keep X3 unchanged commercially: one prepaid bounded cloud-cost savings audit, then optional prepaid annual plan with up to four refreshes. Customer executes all actions. Price is fixed and unrelated to realized savings."
+        "id": "Z1",
+        "name": "findings-only-baseline",
+        "claim": "Customer supplies bounded cloud/AI billing exports. Factory returns prioritized savings findings and annualized estimates. Customer determines how to implement them. First audit can convert to up to four annual refreshes."
       },
       {
-        "id": "Y2",
-        "name": "pure-savings-share",
-        "claim": "Run the bounded cloud-cost audit with no upfront fee. Customer pays an agreed share only on independently verifiable first-year savings from customer-executed actions that originated in the audit. Reruns are included only while the savings-share agreement is active."
+        "id": "Z2",
+        "name": "action-ticket-factory",
+        "claim": "Customer supplies billing export plus minimal resource/config inventory. For each high-value finding, factory returns a standardized action ticket containing exact affected resource, proposed action, evidence, expected savings, risk notes, validation steps and rollback steps. It does not generate code or execute changes. Customer owns approval and execution. First paid action pack can convert to annual refresh."
       },
       {
-        "id": "Y3",
-        "name": "paid-audit-plus-savings-share",
-        "claim": "Charge a fixed prepaid fee for the bounded audit to cover analysis and establish first cash. If the customer implements an identified action, charge an additional agreed share of independently verifiable first-year savings. If the customer converts to the prepaid annual refresh plan, the initial audit schema and savings receipt remain unchanged. Customer executes all effects."
+        "id": "Z3",
+        "name": "reviewable-change-set-factory",
+        "claim": "Customer supplies billing export plus relevant IaC/config files for selected high-value findings. Factory returns a reviewable proposed change set or patch, evidence, expected savings, validation steps and rollback plan. It does not merge, deploy or execute. Customer reviews and applies. Scope is bounded to supported IaC/config patterns and selected findings."
       },
       {
-        "id": "Y4",
-        "name": "paid-audit-credit-to-outcome-contract",
-        "claim": "Charge a fixed prepaid audit fee. After the audit, the customer may convert to an outcome contract where the audit fee is credited against future savings-share charges. The service refreshes the same analysis up to four times per year; the customer executes all actions and reports verifiable realized savings."
+        "id": "Z4",
+        "name": "action-receipt-loop",
+        "claim": "Same standardized action tickets as Z2, plus after the customer executes an action the next billing export is compared with the prior baseline and a savings receipt records observed effect, confounders and whether the expected saving appeared. Same schema repeats across refreshes. No code generation or execution."
       },
       {
-        "id": "Y5",
-        "name": "fixed-fee-with-verified-savings-tier",
-        "claim": "Charge a fixed prepaid audit fee with no percentage share. The next annual-refresh price tier is determined by verified savings found in the previous period: higher verified value supports a higher fixed renewal price. Customer executes all actions; no contingent fee collection is required."
+        "id": "Z5",
+        "name": "change-set-plus-receipt",
+        "claim": "For a bounded set of supported IaC/config changes, combine Z3 reviewable patches with Z4 post-change savings receipts. Customer owns merge/deploy. Factory maintains exact proposal→customer action→billing readback lineage. First paid audit is limited to a small number of high-value changes and can convert to annual refresh."
       }
     ],
     "constraints": [
-      "Do not add execution authority, infrastructure changes, or new product modules.",
-      "First paid work must remain a bounded file/export-based audit.",
-      "Customer executes every effect.",
-      "Savings attribution must be based on observable customer billing/readback, not self-reported vague value.",
-      "No standard owner review.",
-      "No full SaaS platform before repeated paid demand.",
-      "No semantic PASS/FAIL threshold.",
+      "Customer executes, merges and deploys every effect.",
+      "No production write credentials.",
+      "First paid scope must be bounded and file/export based.",
+      "No standard owner review except unsupported/ambiguous cases.",
+      "Do not support arbitrary infrastructure in v1; unsupported input must fail closed.",
+      "No full platform before repeated paid demand.",
+      "No semantic PASS/FAIL threshold in Jev.",
       "Compare only within each concern."
     ]
   },
   "themes": [
     "time-to-cash",
     "owner-time-growth",
-    "value-capture-ceiling",
-    "recurring-fragility",
-    "sales-friction",
-    "savings-attribution-risk",
-    "collections-delay",
-    "contract-complexity",
+    "actionability-weakness",
     "commoditization",
-    "customer-incentive-misalignment",
+    "setup-build-friction",
+    "outcome-verifiability",
+    "technical-liability-risk",
+    "customer-risk",
+    "domain-knowledge-load",
+    "support-surface-growth",
+    "recurring-fragility",
     "sellable-asset-weakness"
   ],
   "items": [
@@ -88,441 +69,481 @@
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Y1"
+        "Z1"
       ],
-      "concern": "This commercial model may delay the first meaningful cash receipt."
+      "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
     {
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Y1"
+        "Z1"
       ],
-      "concern": "This commercial model may create too much owner work in measurement, negotiation, billing, disputes or account management."
+      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
     },
     {
-      "theme": "value-capture-ceiling",
+      "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Y1"
+        "Z1"
       ],
-      "concern": "This commercial model may capture too little of the economic savings created to support very high owner hourly earnings."
-    },
-    {
-      "theme": "recurring-fragility",
-      "subject": [
-        "candidate",
-        "Y1"
-      ],
-      "concern": "This commercial model may fail to create predictable repeat or recurring revenue."
-    },
-    {
-      "theme": "sales-friction",
-      "subject": [
-        "candidate",
-        "Y1"
-      ],
-      "concern": "The pricing/commitment may be too difficult for a new customer to accept before trust and value are proven."
-    },
-    {
-      "theme": "savings-attribution-risk",
-      "subject": [
-        "candidate",
-        "Y1"
-      ],
-      "concern": "It may be hard to prove which realized savings were caused by this service rather than customer actions, usage changes or provider pricing."
-    },
-    {
-      "theme": "collections-delay",
-      "subject": [
-        "candidate",
-        "Y1"
-      ],
-      "concern": "Payment may occur too long after the work is performed, reducing cash velocity and increasing collection risk."
-    },
-    {
-      "theme": "contract-complexity",
-      "subject": [
-        "candidate",
-        "Y1"
-      ],
-      "concern": "Commercial terms may require too much legal/accounting negotiation or custom contract logic for a one-person owner."
+      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Y1"
+        "Z1"
       ],
-      "concern": "Changing pricing alone may not create enough differentiation from FinOps tools, consultants or internal analysis."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "customer-incentive-misalignment",
+      "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Y1"
+        "Z1"
       ],
-      "concern": "The pricing structure may create incentives for the customer to avoid implementation, under-report savings, reject useful recommendations or resist renewal."
+      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+    },
+    {
+      "theme": "outcome-verifiability",
+      "subject": [
+        "candidate",
+        "Z1"
+      ],
+      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+    },
+    {
+      "theme": "technical-liability-risk",
+      "subject": [
+        "candidate",
+        "Z1"
+      ],
+      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "Z1"
+      ],
+      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
+    },
+    {
+      "theme": "domain-knowledge-load",
+      "subject": [
+        "candidate",
+        "Z1"
+      ],
+      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+    },
+    {
+      "theme": "support-surface-growth",
+      "subject": [
+        "candidate",
+        "Z1"
+      ],
+      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+    },
+    {
+      "theme": "recurring-fragility",
+      "subject": [
+        "candidate",
+        "Z1"
+      ],
+      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Y1"
+        "Z1"
       ],
-      "concern": "This commercial model may fail to create transferable recurring contracts, standardized savings receipts or pricing data that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Y2"
+        "Z2"
       ],
-      "concern": "This commercial model may delay the first meaningful cash receipt."
+      "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
     {
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Y2"
+        "Z2"
       ],
-      "concern": "This commercial model may create too much owner work in measurement, negotiation, billing, disputes or account management."
+      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
     },
     {
-      "theme": "value-capture-ceiling",
+      "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Y2"
+        "Z2"
       ],
-      "concern": "This commercial model may capture too little of the economic savings created to support very high owner hourly earnings."
-    },
-    {
-      "theme": "recurring-fragility",
-      "subject": [
-        "candidate",
-        "Y2"
-      ],
-      "concern": "This commercial model may fail to create predictable repeat or recurring revenue."
-    },
-    {
-      "theme": "sales-friction",
-      "subject": [
-        "candidate",
-        "Y2"
-      ],
-      "concern": "The pricing/commitment may be too difficult for a new customer to accept before trust and value are proven."
-    },
-    {
-      "theme": "savings-attribution-risk",
-      "subject": [
-        "candidate",
-        "Y2"
-      ],
-      "concern": "It may be hard to prove which realized savings were caused by this service rather than customer actions, usage changes or provider pricing."
-    },
-    {
-      "theme": "collections-delay",
-      "subject": [
-        "candidate",
-        "Y2"
-      ],
-      "concern": "Payment may occur too long after the work is performed, reducing cash velocity and increasing collection risk."
-    },
-    {
-      "theme": "contract-complexity",
-      "subject": [
-        "candidate",
-        "Y2"
-      ],
-      "concern": "Commercial terms may require too much legal/accounting negotiation or custom contract logic for a one-person owner."
+      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Y2"
+        "Z2"
       ],
-      "concern": "Changing pricing alone may not create enough differentiation from FinOps tools, consultants or internal analysis."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "customer-incentive-misalignment",
+      "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Y2"
+        "Z2"
       ],
-      "concern": "The pricing structure may create incentives for the customer to avoid implementation, under-report savings, reject useful recommendations or resist renewal."
+      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+    },
+    {
+      "theme": "outcome-verifiability",
+      "subject": [
+        "candidate",
+        "Z2"
+      ],
+      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+    },
+    {
+      "theme": "technical-liability-risk",
+      "subject": [
+        "candidate",
+        "Z2"
+      ],
+      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "Z2"
+      ],
+      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
+    },
+    {
+      "theme": "domain-knowledge-load",
+      "subject": [
+        "candidate",
+        "Z2"
+      ],
+      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+    },
+    {
+      "theme": "support-surface-growth",
+      "subject": [
+        "candidate",
+        "Z2"
+      ],
+      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+    },
+    {
+      "theme": "recurring-fragility",
+      "subject": [
+        "candidate",
+        "Z2"
+      ],
+      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Y2"
+        "Z2"
       ],
-      "concern": "This commercial model may fail to create transferable recurring contracts, standardized savings receipts or pricing data that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Y3"
+        "Z3"
       ],
-      "concern": "This commercial model may delay the first meaningful cash receipt."
+      "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
     {
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Y3"
+        "Z3"
       ],
-      "concern": "This commercial model may create too much owner work in measurement, negotiation, billing, disputes or account management."
+      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
     },
     {
-      "theme": "value-capture-ceiling",
+      "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Y3"
+        "Z3"
       ],
-      "concern": "This commercial model may capture too little of the economic savings created to support very high owner hourly earnings."
-    },
-    {
-      "theme": "recurring-fragility",
-      "subject": [
-        "candidate",
-        "Y3"
-      ],
-      "concern": "This commercial model may fail to create predictable repeat or recurring revenue."
-    },
-    {
-      "theme": "sales-friction",
-      "subject": [
-        "candidate",
-        "Y3"
-      ],
-      "concern": "The pricing/commitment may be too difficult for a new customer to accept before trust and value are proven."
-    },
-    {
-      "theme": "savings-attribution-risk",
-      "subject": [
-        "candidate",
-        "Y3"
-      ],
-      "concern": "It may be hard to prove which realized savings were caused by this service rather than customer actions, usage changes or provider pricing."
-    },
-    {
-      "theme": "collections-delay",
-      "subject": [
-        "candidate",
-        "Y3"
-      ],
-      "concern": "Payment may occur too long after the work is performed, reducing cash velocity and increasing collection risk."
-    },
-    {
-      "theme": "contract-complexity",
-      "subject": [
-        "candidate",
-        "Y3"
-      ],
-      "concern": "Commercial terms may require too much legal/accounting negotiation or custom contract logic for a one-person owner."
+      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Y3"
+        "Z3"
       ],
-      "concern": "Changing pricing alone may not create enough differentiation from FinOps tools, consultants or internal analysis."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "customer-incentive-misalignment",
+      "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Y3"
+        "Z3"
       ],
-      "concern": "The pricing structure may create incentives for the customer to avoid implementation, under-report savings, reject useful recommendations or resist renewal."
+      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+    },
+    {
+      "theme": "outcome-verifiability",
+      "subject": [
+        "candidate",
+        "Z3"
+      ],
+      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+    },
+    {
+      "theme": "technical-liability-risk",
+      "subject": [
+        "candidate",
+        "Z3"
+      ],
+      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "Z3"
+      ],
+      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
+    },
+    {
+      "theme": "domain-knowledge-load",
+      "subject": [
+        "candidate",
+        "Z3"
+      ],
+      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+    },
+    {
+      "theme": "support-surface-growth",
+      "subject": [
+        "candidate",
+        "Z3"
+      ],
+      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+    },
+    {
+      "theme": "recurring-fragility",
+      "subject": [
+        "candidate",
+        "Z3"
+      ],
+      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Y3"
+        "Z3"
       ],
-      "concern": "This commercial model may fail to create transferable recurring contracts, standardized savings receipts or pricing data that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Y4"
+        "Z4"
       ],
-      "concern": "This commercial model may delay the first meaningful cash receipt."
+      "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
     {
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Y4"
+        "Z4"
       ],
-      "concern": "This commercial model may create too much owner work in measurement, negotiation, billing, disputes or account management."
+      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
     },
     {
-      "theme": "value-capture-ceiling",
+      "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Y4"
+        "Z4"
       ],
-      "concern": "This commercial model may capture too little of the economic savings created to support very high owner hourly earnings."
-    },
-    {
-      "theme": "recurring-fragility",
-      "subject": [
-        "candidate",
-        "Y4"
-      ],
-      "concern": "This commercial model may fail to create predictable repeat or recurring revenue."
-    },
-    {
-      "theme": "sales-friction",
-      "subject": [
-        "candidate",
-        "Y4"
-      ],
-      "concern": "The pricing/commitment may be too difficult for a new customer to accept before trust and value are proven."
-    },
-    {
-      "theme": "savings-attribution-risk",
-      "subject": [
-        "candidate",
-        "Y4"
-      ],
-      "concern": "It may be hard to prove which realized savings were caused by this service rather than customer actions, usage changes or provider pricing."
-    },
-    {
-      "theme": "collections-delay",
-      "subject": [
-        "candidate",
-        "Y4"
-      ],
-      "concern": "Payment may occur too long after the work is performed, reducing cash velocity and increasing collection risk."
-    },
-    {
-      "theme": "contract-complexity",
-      "subject": [
-        "candidate",
-        "Y4"
-      ],
-      "concern": "Commercial terms may require too much legal/accounting negotiation or custom contract logic for a one-person owner."
+      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Y4"
+        "Z4"
       ],
-      "concern": "Changing pricing alone may not create enough differentiation from FinOps tools, consultants or internal analysis."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "customer-incentive-misalignment",
+      "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Y4"
+        "Z4"
       ],
-      "concern": "The pricing structure may create incentives for the customer to avoid implementation, under-report savings, reject useful recommendations or resist renewal."
+      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+    },
+    {
+      "theme": "outcome-verifiability",
+      "subject": [
+        "candidate",
+        "Z4"
+      ],
+      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+    },
+    {
+      "theme": "technical-liability-risk",
+      "subject": [
+        "candidate",
+        "Z4"
+      ],
+      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "Z4"
+      ],
+      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
+    },
+    {
+      "theme": "domain-knowledge-load",
+      "subject": [
+        "candidate",
+        "Z4"
+      ],
+      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+    },
+    {
+      "theme": "support-surface-growth",
+      "subject": [
+        "candidate",
+        "Z4"
+      ],
+      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+    },
+    {
+      "theme": "recurring-fragility",
+      "subject": [
+        "candidate",
+        "Z4"
+      ],
+      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Y4"
+        "Z4"
       ],
-      "concern": "This commercial model may fail to create transferable recurring contracts, standardized savings receipts or pricing data that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
     },
     {
       "theme": "time-to-cash",
       "subject": [
         "candidate",
-        "Y5"
+        "Z5"
       ],
-      "concern": "This commercial model may delay the first meaningful cash receipt."
+      "concern": "This candidate may take too long to obtain the first meaningful payment."
     },
     {
       "theme": "owner-time-growth",
       "subject": [
         "candidate",
-        "Y5"
+        "Z5"
       ],
-      "concern": "This commercial model may create too much owner work in measurement, negotiation, billing, disputes or account management."
+      "concern": "This candidate may cause owner time to grow materially with customers, exceptions or supported technologies."
     },
     {
-      "theme": "value-capture-ceiling",
+      "theme": "actionability-weakness",
       "subject": [
         "candidate",
-        "Y5"
+        "Z5"
       ],
-      "concern": "This commercial model may capture too little of the economic savings created to support very high owner hourly earnings."
-    },
-    {
-      "theme": "recurring-fragility",
-      "subject": [
-        "candidate",
-        "Y5"
-      ],
-      "concern": "This commercial model may fail to create predictable repeat or recurring revenue."
-    },
-    {
-      "theme": "sales-friction",
-      "subject": [
-        "candidate",
-        "Y5"
-      ],
-      "concern": "The pricing/commitment may be too difficult for a new customer to accept before trust and value are proven."
-    },
-    {
-      "theme": "savings-attribution-risk",
-      "subject": [
-        "candidate",
-        "Y5"
-      ],
-      "concern": "It may be hard to prove which realized savings were caused by this service rather than customer actions, usage changes or provider pricing."
-    },
-    {
-      "theme": "collections-delay",
-      "subject": [
-        "candidate",
-        "Y5"
-      ],
-      "concern": "Payment may occur too long after the work is performed, reducing cash velocity and increasing collection risk."
-    },
-    {
-      "theme": "contract-complexity",
-      "subject": [
-        "candidate",
-        "Y5"
-      ],
-      "concern": "Commercial terms may require too much legal/accounting negotiation or custom contract logic for a one-person owner."
+      "concern": "The output may still leave too much work to the customer before economic savings can actually occur."
     },
     {
       "theme": "commoditization",
       "subject": [
         "candidate",
-        "Y5"
+        "Z5"
       ],
-      "concern": "Changing pricing alone may not create enough differentiation from FinOps tools, consultants or internal analysis."
+      "concern": "Existing FinOps tools, cloud-provider recommendations, generic AI or internal engineers may reproduce the core value, weakening pricing power."
     },
     {
-      "theme": "customer-incentive-misalignment",
+      "theme": "setup-build-friction",
       "subject": [
         "candidate",
-        "Y5"
+        "Z5"
       ],
-      "concern": "The pricing structure may create incentives for the customer to avoid implementation, under-report savings, reject useful recommendations or resist renewal."
+      "concern": "Initial implementation, parsers, IaC support or customer data preparation may be too burdensome for fast paid validation."
+    },
+    {
+      "theme": "outcome-verifiability",
+      "subject": [
+        "candidate",
+        "Z5"
+      ],
+      "concern": "It may be difficult to objectively verify that the proposed action produced the claimed economic result."
+    },
+    {
+      "theme": "technical-liability-risk",
+      "subject": [
+        "candidate",
+        "Z5"
+      ],
+      "concern": "The output may create material risk of outages, regressions, security issues or harmful configuration changes even though the customer executes them."
+    },
+    {
+      "theme": "customer-risk",
+      "subject": [
+        "candidate",
+        "Z5"
+      ],
+      "concern": "Customers may perceive too much operational, security or trust risk in using the output."
+    },
+    {
+      "theme": "domain-knowledge-load",
+      "subject": [
+        "candidate",
+        "Z5"
+      ],
+      "concern": "This candidate may require too much cloud/IaC/FinOps domain knowledge from the owner."
+    },
+    {
+      "theme": "support-surface-growth",
+      "subject": [
+        "candidate",
+        "Z5"
+      ],
+      "concern": "Supporting many providers, services, IaC formats or edge cases may expand product/support scope too quickly."
+    },
+    {
+      "theme": "recurring-fragility",
+      "subject": [
+        "candidate",
+        "Z5"
+      ],
+      "concern": "This candidate may fail to produce predictable repeat or recurring prepaid revenue after initial savings opportunities are exhausted."
     },
     {
       "theme": "sellable-asset-weakness",
       "subject": [
         "candidate",
-        "Y5"
+        "Z5"
       ],
-      "concern": "This commercial model may fail to create transferable recurring contracts, standardized savings receipts or pricing data that improve eventual company sale value."
+      "concern": "This candidate may fail to accumulate transferable action templates, effect receipts, workflow history, contracts or product assets that improve eventual company sale value."
     }
   ]
 }
