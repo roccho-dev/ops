@@ -87,3 +87,49 @@ test('CLI executes through a symlink and emits JSON', { skip: !existsSync(repo) 
     assert.equal(JSON.parse(p.stdout).anchor_count, 1);
   } finally { unlinkSync(link); }
 });
+
+test('dispatcher key and transcript state stay read-only', async () => {
+  const { inspect, keyFor, decide, buildArgv } = await import('./dispatcher.mjs');
+  const c = 'a'.repeat(40);
+  const source = 'b'.repeat(40);
+  const rid = 'r';
+  const key = keyFor(c, rid, source);
+  assert.equal(key, keyFor(c, rid, source));
+  assert.notEqual(key, keyFor(c, rid, 'c'.repeat(40)));
+  const user = { type: 'user', message: { content: 'DISPATCH-KEY: ' + key + '\nbody' } };
+  const userBlock = { type: 'user', message: { content: [{ type: 'text', text: 'DISPATCH-KEY: ' + key + '\nbody' }] } };
+  const end = { type: 'assistant', message: { model: 'claude-opus-5-5', stop_reason: 'end_turn' } };
+  assert.equal(inspect([], key, rid, false), 'ABSENT');
+  assert.equal(inspect([], key, rid, true), 'STOP_ACTIVE');
+  for (const state of ['ABSENT', 'DUPLICATE', 'STOP_ACTIVE', 'STOP_INCOMPLETE'])
+    assert.equal(decide('check', state), 'NO_FIRE');
+  assert.equal(decide('first-launch', 'ABSENT'), 'FIRE');
+  assert.equal(decide('first-launch', 'DUPLICATE'), 'NO_FIRE');
+  assert.equal(inspect([user], key, rid, true), 'STOP_ACTIVE');
+  assert.equal(inspect([user], key, rid, false), 'STOP_INCOMPLETE');
+  assert.equal(inspect([user, end], key, rid, false), 'DUPLICATE');
+  assert.equal(inspect([userBlock, end], key, rid, false), 'DUPLICATE');
+  assert.equal(inspect([user, userBlock], key, rid, false), 'STOP_DUPLICATE_RECORDS');
+  assert.equal(inspect([{ type: 'assistant', message: { content: 'DISPATCH-KEY: ' + key } }], key, rid, false), 'ABSENT');
+});
+
+test('dispatcher argv expands five permissions as separate arguments', { skip: !existsSync(repo) }, async () => {
+  const { buildArgv } = await import('./dispatcher.mjs');
+  const rid = 'b27e547c-14b7-47b9-a72e-7d5fdcdd724c';
+  const templateCommit = 'c4ad8b9a5768bfea5103995e9ac3c5f1718ad965';
+  const result = select({ repo, commit: templateCommit, 'r-id': rid, 'git-bin': gitBin });
+  const old = JSON.parse(result.selected.find((row) => row.id === 'policy.jev.d-replacement.oci.v1').body);
+  const prompt = 'DISPATCH-KEY: abc\\nPREPARE';
+  const argv = buildArgv(old.target, templateCommit, rid, prompt);
+  const start = argv.indexOf('--allowedTools') + 1;
+  assert.deepEqual(argv.slice(start, start + 5),
+    old.target.allowed_tools_template.map((item) => item.replaceAll('<C>', templateCommit)));
+  assert.equal(argv.filter((part) => part === rid).length, 1);
+  assert.equal(argv.at(-1), prompt);
+});
+
+test('read checkout rejects a different policy commit', async () => {
+  const { verifyReadCheckout } = await import('./dispatcher.mjs');
+  assert.throws(() => verifyReadCheckout('/work/repos/adrs-oci-policy-self-read',
+    '0'.repeat(40), ['AGENTS.md']), /read checkout HEAD mismatch/);
+});
