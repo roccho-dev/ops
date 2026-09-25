@@ -118,6 +118,56 @@ test('instruction requires one exact final line and permits R to decline', async
   assert.throws(() => instruction('\x60' + line + '\x60', task, commit), /invalid/);
 });
 
+const auditSpec = { command: 'selector', readPaths: ['/policy'] };
+const safeTurn = (key, id, text = 'done') => [
+  { type: 'user', version: '2.1.280',
+    message: { content: 'DISPATCH-KEY: ' + key + '\nbody' } },
+  { type: 'assistant', version: '2.1.280', message: { content: [
+    { type: 'tool_use', id: 'bash', name: 'Bash', input: { command: 'selector' } },
+  ] } },
+  { type: 'user', version: '2.1.280',
+    message: { content: [{ type: 'tool_result', tool_use_id: 'bash', is_error: false }] },
+    toolUseResult: { stdout: '{}', stderr: '', interrupted: false } },
+  { type: 'assistant', version: '2.1.280', message: { content: [
+    { type: 'tool_use', id: 'read', name: 'Read',
+      input: { file_path: '/policy', offset: 1, limit: 150 } },
+  ] } },
+  { type: 'user', version: '2.1.280',
+    message: { content: [{ type: 'tool_result', tool_use_id: 'read' }] },
+    toolUseResult: { type: 'text',
+      file: { filePath: '/policy', startLine: 1, numLines: 2, totalLines: 2 } } },
+  { type: 'assistant', version: '2.1.280',
+    message: { id, model: 'claude-opus-5-5', stop_reason: 'end_turn',
+      content: [{ type: 'text', text }] } },
+];
+
+test('turn safety uses metadata and complete Read coverage', async () => {
+  const { auditTurn } = await import('./dispatcher.mjs');
+  const key = 'key';
+  const clean = safeTurn(key, 'final', 'quoted <persisted-output> and is_error');
+  assert.equal(auditTurn(clean, key, auditSpec), 'CLEAN');
+  const persisted = structuredClone(clean);
+  persisted[2].toolUseResult.persistedOutputPath = '/private/result';
+  assert.equal(auditTurn(persisted, key, auditSpec), 'STOP_PERSISTED_OUTPUT');
+  const errored = structuredClone(clean);
+  errored[2].message.content[0].is_error = true;
+  assert.equal(auditTurn(errored, key, auditSpec), 'STOP_TOOL_ERROR');
+  const foreign = structuredClone(clean);
+  foreign[1].message.content[0].input.command = 'other';
+  assert.equal(auditTurn(foreign, key, auditSpec), 'STOP_FOREIGN_TOOL');
+  const partial = structuredClone(clean);
+  partial[4].toolUseResult.file.numLines = 1;
+  assert.equal(auditTurn(partial, key, auditSpec), 'STOP_READ_INCOMPLETE');
+  const unknown = structuredClone(clean);
+  delete unknown[4].toolUseResult.file.startLine;
+  assert.equal(auditTurn(unknown, key, auditSpec), 'UNKNOWN_FORM');
+  const version = structuredClone(clean);
+  version[1].version = 'other';
+  assert.equal(auditTurn(version, key, auditSpec), 'UNKNOWN_VERSION');
+  const unreturned = clean.filter((_, i) => i !== 4);
+  assert.equal(auditTurn(unreturned, key, auditSpec), 'UNKNOWN_FORM');
+});
+
 test('stage routing requires completed R approval and W result', async () => {
   const { stageRoute, keyFor } = await import('./dispatcher.mjs');
   const c = 'a'.repeat(40), src = 'b'.repeat(40);
@@ -125,22 +175,24 @@ test('stage routing requires completed R approval and W result', async () => {
   const wid = '71bd57d0-e795-4a5e-846c-999d3073afa7';
   const task = { id: 'pin-audit', refs: ['policy/organization.md', 'policy/README.md'] };
   const line = 'W-START: task=pin-audit refs=policy/organization.md,policy/README.md C=' + c;
-  const turn = (key, id, text) => [
-    { type: 'user', message: { content: 'DISPATCH-KEY: ' + key + '\nC=' + c } },
-    { type: 'assistant', message: { id, model: 'claude-opus-5-5',
-      stop_reason: 'end_turn', content: [{ type: 'text', text }] } },
-  ];
-  assert.deepEqual(stageRoute('r-start', c, src, task, [], []), { source: src, id: rid });
-  assert.throws(() => stageRoute('w-work', c, src, task, [], []), /R start/);
+  const turn = safeTurn;
+  assert.deepEqual(stageRoute('r-start', c, src, task, [], [], auditSpec), { source: src, id: rid });
+  assert.throws(() => stageRoute('w-work', c, src, task, [], [], auditSpec), /R start/);
   const r = turn(keyFor(c, rid, src), 'r-final', 'reason\n' + line);
-  assert.deepEqual(stageRoute('w-work', c, src, task, r, []),
+  assert.deepEqual(stageRoute('w-work', c, src, task, r, [], auditSpec),
     { source: 'r-final', id: wid, previous: { line, r_record: 'r-final' } });
-  assert.throws(() => stageRoute('r-review', c, src, task, r, []), /W work/);
+  assert.throws(() => stageRoute('r-review', c, src, task, r, [], auditSpec), /W work/);
   const w = turn(keyFor(c, wid, 'r-final'), 'w-final', 'evidence');
-  assert.equal(stageRoute('r-review', c, src, task, r, w).source, 'w-final');
-  assert.equal(stageRoute('r-review', c, src, task, r, w).id, rid);
+  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec).source, 'w-final');
+  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec).id, rid);
   const decline = turn(keyFor(c, rid, src), 'r-decline', 'I decline');
-  assert.deepEqual(stageRoute('w-work', c, src, task, decline, []), { declined: true });
+  assert.deepEqual(stageRoute('w-work', c, src, task, decline, [], auditSpec), { declined: true });
+  const badR = structuredClone(r);
+  badR[2].toolUseResult.persistedOutputPath = '/private/result';
+  assert.throws(() => stageRoute('w-work', c, src, task, badR, [], auditSpec), /R start audit/);
+  const badW = structuredClone(w);
+  badW[2].toolUseResult.persistedOutputPath = '/private/result';
+  assert.throws(() => stageRoute('r-review', c, src, task, r, badW, auditSpec), /W work audit/);
 });
 
 test('keyed turn keeps split text, ignores repeat, and recognizes array user boundary', async () => {

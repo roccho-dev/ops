@@ -22,7 +22,7 @@ const firstText = (row) => {
 };
 export const keyFor = (commit, id, source) => sha([commit, id, source].join('\n'));
 export const decide = (mode, state) => mode === 'launch' && state === 'ABSENT' ? 'FIRE' : 'NO_FIRE';
-export const keyedTurn = (rows, key) => {
+const keyedRows = (rows, key) => {
   const marker = 'DISPATCH-KEY: ' + key;
   const hits = rows.flatMap((row, i) =>
     row.type === 'user' && firstText(row).split(/\r?\n/, 1)[0] === marker ? [i] : []);
@@ -30,7 +30,12 @@ export const keyedTurn = (rows, key) => {
   if (hits.length === 0) return { state: 'ABSENT' };
   const nextUser = rows.findIndex((row, i) => i > hits[0] &&
     row.type === 'user' && firstText(row) !== '');
-  const slice = rows.slice(hits[0] + 1, nextUser < 0 ? undefined : nextUser);
+  return { state: 'FOUND', rows: rows.slice(hits[0], nextUser < 0 ? undefined : nextUser) };
+};
+export const keyedTurn = (rows, key) => {
+  const found = keyedRows(rows, key);
+  if (found.state !== 'FOUND') return { state: found.state };
+  const slice = found.rows.slice(1);
   const finals = new Map();
   const seenParts = new Map();
   for (const row of slice) {
@@ -51,6 +56,76 @@ export const keyedTurn = (rows, key) => {
   if (finals.size > 1) return { state: 'STOP_MULTIPLE_FINALS' };
   if (finals.size === 0) return { state: 'STOP_INCOMPLETE' };
   return { state: 'DUPLICATE', final: [...finals.values()][0] };
+};
+// Metadata only: transcript text can quote errors or persisted-output markers.
+export const auditTurn = (rows, key, { command, readPaths }) => {
+  const found = keyedRows(rows, key);
+  if (found.state !== 'FOUND') return found.state;
+  const tools = new Map();
+  const seen = new Set();
+  const pages = new Map(readPaths.map((path) => [path, { total: null, ranges: [] }]));
+  let bashCount = 0;
+  for (const row of found.rows) {
+    if (row.type !== 'user' && row.type !== 'assistant') continue;
+    if (row.version !== '2.1.280') return 'UNKNOWN_VERSION';
+    const blocks = row.message?.content;
+    if (row.type === 'assistant') {
+      if (!Array.isArray(blocks)) return 'UNKNOWN_FORM';
+      for (const block of blocks) {
+        if (block?.type !== 'tool_use') continue;
+        if (typeof block.id !== 'string' || tools.has(block.id)) return 'UNKNOWN_FORM';
+        if (block.name === 'Bash') {
+          if (block.input?.command !== command) return 'STOP_FOREIGN_TOOL';
+          bashCount++;
+        } else if (block.name === 'Read') {
+          if (!pages.has(block.input?.file_path)) return 'STOP_FOREIGN_TOOL';
+        } else return 'STOP_FOREIGN_TOOL';
+        tools.set(block.id, block);
+      }
+    } else if (Array.isArray(blocks)) {
+      if (blocks.filter((block) => block?.type === 'tool_result').length > 1) return 'UNKNOWN_FORM';
+      for (const block of blocks) {
+        if (block?.type !== 'tool_result') continue;
+        const tool = tools.get(block.tool_use_id);
+        if (!tool || seen.has(block.tool_use_id)) return 'UNKNOWN_FORM';
+        seen.add(block.tool_use_id);
+        const result = row.toolUseResult;
+        if (!result || typeof result !== 'object') return 'UNKNOWN_FORM';
+        if (Object.hasOwn(result, 'persistedOutputPath')) return 'STOP_PERSISTED_OUTPUT';
+        if (block.is_error === true || result.interrupted === true) return 'STOP_TOOL_ERROR';
+        if (tool.name === 'Bash') {
+          if (block.is_error !== false || typeof result.stdout !== 'string' ||
+              typeof result.stderr !== 'string' || result.interrupted !== false)
+            return 'UNKNOWN_FORM';
+        } else {
+          const file = result.file;
+          if (result.type !== 'text' || !file || file.filePath !== tool.input.file_path ||
+              !Number.isInteger(file.startLine) || !Number.isInteger(file.numLines) ||
+              !Number.isInteger(file.totalLines) || file.startLine < 1 ||
+              file.numLines < 1 || file.totalLines < file.startLine + file.numLines - 1 ||
+              file.startLine !== (tool.input.offset ?? 1) ||
+              !Number.isInteger(tool.input.limit) || tool.input.limit < file.numLines)
+            return 'UNKNOWN_FORM';
+          const page = pages.get(file.filePath);
+          if (page.total !== null && page.total !== file.totalLines) return 'UNKNOWN_FORM';
+          page.total = file.totalLines;
+          page.ranges.push([file.startLine, file.startLine + file.numLines - 1]);
+        }
+      }
+    } else if (typeof blocks !== 'string') return 'UNKNOWN_FORM';
+  }
+  if (bashCount !== 1 || seen.size !== tools.size) return 'UNKNOWN_FORM';
+  for (const page of pages.values()) {
+    if (page.total === null) return 'STOP_READ_INCOMPLETE';
+    page.ranges.sort((a, b) => a[0] - b[0]);
+    let next = 1;
+    for (const [first, last] of page.ranges) {
+      if (first > next) return 'STOP_READ_INCOMPLETE';
+      next = Math.max(next, last + 1);
+    }
+    if (next !== page.total + 1) return 'STOP_READ_INCOMPLETE';
+  }
+  return 'CLEAN';
 };
 const active = (id) => readdirSync('/proc').some((pid) => {
   if (!/^\d+$/.test(pid)) return false;
@@ -111,16 +186,18 @@ export const instruction = (text, task, commit) => {
       text.trimEnd().split(/\r?\n/).at(-1) !== line) fail('invalid W instruction');
   return line;
 };
-export const stageRoute = (step, commit, sourceCommit, task, rRows, wRows) => {
+export const stageRoute = (step, commit, sourceCommit, task, rRows, wRows, audit) => {
   const rStart = keyedTurn(rRows, keyFor(commit, R, sourceCommit));
   if (step === 'r-start') return { source: sourceCommit, id: R };
   if (rStart.state !== 'DUPLICATE') fail('R start not complete');
+  if (auditTurn(rRows, keyFor(commit, R, sourceCommit), audit) !== 'CLEAN') fail('R start audit not clean');
   const line = instruction(rStart.final.text, task, commit);
   if (line === 'DECLINED') return { declined: true };
   const previous = { line, r_record: rStart.final.id };
   if (step === 'w-work') return { source: rStart.final.id, id: W, previous };
   const wTurn = keyedTurn(wRows, keyFor(commit, W, rStart.final.id));
   if (wTurn.state !== 'DUPLICATE') fail('W work not complete');
+  if (auditTurn(wRows, keyFor(commit, W, rStart.final.id), audit) !== 'CLEAN') fail('W work audit not clean');
   return { source: wTurn.final.id, id: R, previous, wTurn };
 };
 const argsOf = (values) => {
@@ -159,15 +236,22 @@ export function run(mode, step, commit) {
   if (task?.id !== 'pin-audit' ||
       JSON.stringify(task?.refs) !== JSON.stringify(['policy/organization.md', 'policy/README.md']))
     fail('task mismatch');
+  const selectCommand = '/root/.nix-profile/bin/node ' + old.target.ops_read_checkout +
+    '/packages/jev-dispatcher/policy-select.mjs --repo ' + repo + ' --commit ' + commit +
+    ' --r-id ' + R + ' --git-bin ' + gitBin + ' --format selected';
+  const paths = old.target.read_paths.map((name) => old.target.adrs_read_checkout + '/' + name);
+  const audit = { command: selectCommand, readPaths: paths };
   const rRows = transcript(R);
   const wRows = transcript(W);
-  const route = stageRoute(step, commit, contract.source_commit, task, rRows, wRows);
+  const route = stageRoute(step, commit, contract.source_commit, task, rRows, wRows, audit);
   if (route.declined) return { state: 'DECLINED', fired: false, step, commit };
   const { source, id, previous, wTurn } = route;
   const key = keyFor(commit, id, source);
   const rows = id === R ? rRows : wRows;
   const turn = keyedTurn(rows, key);
-  const state = active(id) || (step === 'r-review' && active(W)) ? 'STOP_ACTIVE' : turn.state;
+  const audited = turn.state === 'DUPLICATE' ? auditTurn(rows, key, audit) : turn.state;
+  const state = active(id) || (step === 'r-review' && active(W))
+    ? 'STOP_ACTIVE' : audited === 'CLEAN' ? 'DUPLICATE' : audited;
   if (decide(mode, state) !== 'FIRE')
     return { state, fired: false, step, key, commit, id };
   if (step === 'r-start') {
@@ -182,12 +266,8 @@ export function run(mode, step, commit) {
   verifyReadCheckout(old.target.adrs_read_checkout, commit, old.target.read_paths);
   const header = 'DISPATCH-KEY: ' + key + '\nCONTRACT: ' + ROW + '@' + contract.version +
     ' C=' + commit + ' STEP=' + step + ' SOURCE=' + source + '\n';
-  const selectCommand = '/root/.nix-profile/bin/node ' + old.target.ops_read_checkout +
-    '/packages/jev-dispatcher/policy-select.mjs --repo ' + repo + ' --commit ' + commit +
-    ' --r-id ' + R + ' --git-bin ' + gitBin + ' --format selected';
   if (old.target.allowed_tools_template.at(-1).replaceAll('<C>', commit) !==
       'Bash(' + selectCommand + ')') fail('selector permission mismatch');
-  const paths = old.target.read_paths.map((name) => old.target.adrs_read_checkout + '/' + name);
   const readInstruction = 'Run only: ' + selectCommand + '. Read only these paths with Read, ' +
     'offset/limit 150 pages to EOF: ' + paths.join('; ') + '. Denial, error, truncation or mismatch means STOP without workaround. ';
   let body;
@@ -222,9 +302,12 @@ export function run(mode, step, commit) {
   });
   try { verifyReadCheckout(old.target.adrs_read_checkout, commit, old.target.read_paths); }
   catch (error) { return { state: 'UNKNOWN', fired: true, step, key, commit, id, error: String(error.message) }; }
-  const after = keyedTurn(transcript(id), key);
+  const resultRows = transcript(id);
+  const after = keyedTurn(resultRows, key);
   if (child.error || child.status !== 0 || active(id) || after.state !== 'DUPLICATE')
     return { state: 'UNKNOWN', fired: true, step, key, commit, id, exit: child.status, error: String(child.error ?? '') };
+  const safety = auditTurn(resultRows, key, audit);
+  if (safety !== 'CLEAN') return { state: safety, fired: true, step, key, commit, id };
   let reply;
   try { reply = JSON.parse(child.stdout); } catch { return { state: 'UNKNOWN', fired: true, step, key, commit, id, error: 'invalid Claude output' }; }
   if (reply.session_id !== id) return { state: 'UNKNOWN', fired: true, step, key, commit, id, error: 'session mismatch' };
@@ -235,7 +318,7 @@ if (process.argv[1] && realpathSync(ownFile) === realpathSync(process.argv[1])) 
     const { mode, step, commit } = argsOf(process.argv.slice(2));
     const result = run(mode, step, commit);
     process.stdout.write(JSON.stringify(result) + '\n');
-    if (result.state.startsWith('STOP') || result.state === 'UNKNOWN') process.exitCode = 2;
+    if (result.state.startsWith('STOP') || result.state.startsWith('UNKNOWN')) process.exitCode = 2;
   } catch (error) {
     process.stderr.write(String(error.message) + '\n');
     process.exitCode = 2;
