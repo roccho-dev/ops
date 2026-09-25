@@ -13,6 +13,37 @@ export function createFakeFetch(scenario) {
           answers: { live: { type: "noul", noul: 0.75 } },
         }),
       };
+    } else if (scenario === "success_choice") {
+      return {
+        ok: true,
+        json: async () => ({
+          model: "jev-1.13.0",
+          answers: {
+            live: {
+              type: "choice",
+              choice: "a",
+              probabilities: { a: 0.8, b: 0.2 },
+              confidence: 0.9,
+            },
+          },
+        }),
+      };
+    } else if (scenario === "success_score") {
+      return {
+        ok: true,
+        json: async () => ({
+          model: "jev-1.13.0",
+          answers: {
+            live: {
+              type: "score",
+              score: 1.95,
+              legend: { "0": "low", "1": "medium", "2": "high" },
+              probabilities: { "0": 0.1, "1": 0.2, "2": 0.7 },
+              confidence: 0.88,
+            },
+          },
+        }),
+      };
     } else if (scenario === "provider_error") {
       return {
         ok: false,
