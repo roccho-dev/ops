@@ -1,4 +1,4 @@
-import { askJevNoul, JevError, JevContractError } from "../src/client.mjs";
+import { askJevNoul, askJevChoice, askJevScore, JevError, JevContractError } from "../src/client.mjs";
 
 // Exit codes: 0=success, 1=input/json error, 2=auth error, 3=provider error, 4=contract error, 5=internal/fatal
 const EXIT_SUCCESS = 0;
@@ -41,10 +41,10 @@ async function main() {
     return;
   }
 
-  const { type, text, question } = request;
+  const { type, text, criteria, question } = request;
 
   try {
-    if (type !== "noul") {
+    if (!type || (type !== "noul" && type !== "choice" && type !== "score")) {
       throw new JevError("input_invalid", `Unknown request type: ${type}`);
     }
 
@@ -52,14 +52,35 @@ async function main() {
       throw new JevError("auth_missing", "JEV_API_KEY environment variable not set");
     }
 
-    const { model, noul } = await askJevNoul({
-      text,
-      question,
-      apiKey,
-      fetch: globalThis.fetch,
-    });
+    let result;
+    if (type === "noul") {
+      const { model, noul } = await askJevNoul({
+        text,
+        question,
+        apiKey,
+        fetch: globalThis.fetch,
+      });
+      result = { model, noul };
+    } else if (type === "choice") {
+      const { model, choice } = await askJevChoice({
+        text,
+        criteria,
+        instructions: question,
+        apiKey,
+        fetch: globalThis.fetch,
+      });
+      result = { model, choice };
+    } else if (type === "score") {
+      const { model, score } = await askJevScore({
+        text,
+        criteria,
+        instructions: question,
+        apiKey,
+        fetch: globalThis.fetch,
+      });
+      result = { model, score };
+    }
 
-    const result = { model, noul };
     process.stdout.write(JSON.stringify(result) + "\n");
     process.exitCode = EXIT_SUCCESS;
   } catch (error) {

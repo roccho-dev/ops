@@ -27,7 +27,6 @@ async function runCli(input, env = {}, scenario = null) {
     finalEnv.TEST_FETCH_SCENARIO = scenario;
   }
 
-  // Always preload fetch stub with --import using pathToFileURL
   const setupUrl = pathToFileURL(setupPath).href;
   const args = ["--import", setupUrl, cliPath];
 
@@ -65,6 +64,14 @@ test("invalid JSON returns exit 1, single stdout line, key not logged", async ()
   assert(JSON.parse(lines[0]));
   assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
   assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("unknown type returns exit 1 before auth check", async () => {
+  const input = JSON.stringify({ type: "unknown", text: "test", question: "Q?" });
+  const { code, stdout, stderr } = await runCli(input, {});
+  assert.equal(code, EXIT_INPUT_ERROR);
+  const result = JSON.parse(stdout.trim());
+  assert.equal(result.error, "input_invalid");
 });
 
 test("missing JEV_API_KEY returns exit 2, single stdout line, key not logged", async () => {
@@ -143,4 +150,109 @@ test("fetch throws returns exit 3 (provider unreachable), single stdout line, ke
   assert.equal(lines.length, 1);
   assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
   assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("choice type success returns exit 0, single stdout line, key not logged", async () => {
+  const input = JSON.stringify({
+    type: "choice",
+    text: "test input",
+    criteria: { a: "option a", b: "option b" },
+    question: "Pick one",
+  });
+  const env = { JEV_API_KEY: TEST_API_KEY };
+  const { code, stdout, stderr } = await runCli(input, env, "success_choice");
+  assert.equal(code, EXIT_SUCCESS);
+  const lines = stdout.trim().split("\n").filter(l => l);
+  assert.equal(lines.length, 1);
+  const result = JSON.parse(lines[0]);
+  assert.equal(result.model, "jev-1.13.0");
+  assert.equal(result.choice.type, "choice");
+  assert.equal(result.choice.choice, "a");
+  assert.deepEqual(result.choice.probabilities, { a: 0.8, b: 0.2 });
+  assert.equal(result.choice.confidence, 0.9);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("choice type missing criteria returns exit 1", async () => {
+  const input = JSON.stringify({
+    type: "choice",
+    text: "test input",
+    criteria: {},
+    question: "Pick one",
+  });
+  const env = { JEV_API_KEY: TEST_API_KEY };
+  const { code, stdout, stderr } = await runCli(input, env);
+  assert.equal(code, EXIT_INPUT_ERROR);
+  const lines = stdout.trim().split("\n").filter(l => l);
+  assert.equal(lines.length, 1);
+  const result = JSON.parse(lines[0]);
+  assert.equal(result.error, "input_invalid");
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("choice type missing instructions returns exit 1", async () => {
+  const input = JSON.stringify({
+    type: "choice",
+    text: "test input",
+    criteria: { a: "opt a", b: "opt b" },
+    question: "",
+  });
+  const env = { JEV_API_KEY: TEST_API_KEY };
+  const { code, stdout, stderr } = await runCli(input, env);
+  assert.equal(code, EXIT_INPUT_ERROR);
+});
+
+test("score type success returns exit 0, single stdout line, key not logged", async () => {
+  const input = JSON.stringify({
+    type: "score",
+    text: "test input",
+    criteria: ["low", "medium", "high"],
+    question: "Rate it",
+  });
+  const env = { JEV_API_KEY: TEST_API_KEY };
+  const { code, stdout, stderr } = await runCli(input, env, "success_score");
+  assert.equal(code, EXIT_SUCCESS);
+  const lines = stdout.trim().split("\n").filter(l => l);
+  assert.equal(lines.length, 1);
+  const result = JSON.parse(lines[0]);
+  assert.equal(result.model, "jev-1.13.0");
+  assert.equal(result.score.type, "score");
+  assert.equal(result.score.score, 1.95);
+  assert.deepEqual(result.score.legend, { "0": "low", "1": "medium", "2": "high" });
+  assert.deepEqual(result.score.probabilities, { "0": 0.1, "1": 0.2, "2": 0.7 });
+  assert.equal(result.score.confidence, 0.88);
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("score type missing criteria returns exit 1", async () => {
+  const input = JSON.stringify({
+    type: "score",
+    text: "test input",
+    criteria: [],
+    question: "Rate it",
+  });
+  const env = { JEV_API_KEY: TEST_API_KEY };
+  const { code, stdout, stderr } = await runCli(input, env);
+  assert.equal(code, EXIT_INPUT_ERROR);
+  const lines = stdout.trim().split("\n").filter(l => l);
+  assert.equal(lines.length, 1);
+  const result = JSON.parse(lines[0]);
+  assert.equal(result.error, "input_invalid");
+  assert(!stdout.includes(TEST_API_KEY), "API key should not appear in stdout");
+  assert(!stderr.includes(TEST_API_KEY), "API key should not appear in stderr");
+});
+
+test("score type missing instructions returns exit 1", async () => {
+  const input = JSON.stringify({
+    type: "score",
+    text: "test input",
+    criteria: ["low", "high"],
+    question: "",
+  });
+  const env = { JEV_API_KEY: TEST_API_KEY };
+  const { code, stdout, stderr } = await runCli(input, env);
+  assert.equal(code, EXIT_INPUT_ERROR);
 });
