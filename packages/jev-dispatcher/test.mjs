@@ -134,7 +134,7 @@ const safeTurn = (key, id, text = 'done') => [
       input: { file_path: '/policy', offset: 1, limit: 150 } },
   ] } },
   { type: 'user', version: '2.1.280',
-    message: { content: [{ type: 'tool_result', tool_use_id: 'read' }] },
+    message: { content: [{ type: 'tool_result', tool_use_id: 'read', content: 'file bytes' }] },
     toolUseResult: { type: 'text',
       file: { filePath: '/policy', startLine: 1, numLines: 2, totalLines: 2 } } },
   { type: 'assistant', version: '2.1.280',
@@ -185,6 +185,12 @@ test('turn safety uses metadata and complete Read coverage', async () => {
   const hiddenResult = structuredClone(clean);
   hiddenResult[2].message.content[0].type = 'server_tool_result';
   assert.equal(auditTurn(hiddenResult, key, auditSpec), 'STOP_FOREIGN_TOOL');
+  const image = structuredClone(clean);
+  image[4].message.content.push({ type: 'image', source: 'unexpected' });
+  assert.equal(auditTurn(image, key, auditSpec), 'UNKNOWN_FORM');
+  const document = structuredClone(clean);
+  document[3].message.content.push({ type: 'document', source: 'unexpected' });
+  assert.equal(auditTurn(document, key, auditSpec), 'UNKNOWN_FORM');
   const mismatched = structuredClone(clean);
   mismatched[2].message.content[0].content = 'shorter';
   assert.equal(auditTurn(mismatched, key, auditSpec), 'UNKNOWN_FORM');

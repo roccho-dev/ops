@@ -87,7 +87,9 @@ export const auditTurn = (rows, key, { command, readPaths }) => {
         if (block?.type !== 'tool_use') {
           if (typeof block?.type === 'string' && block.type.endsWith('tool_use'))
             return 'STOP_FOREIGN_TOOL';
-          continue;
+          if (block?.type === 'text' && typeof block.text === 'string') continue;
+          if (block?.type === 'thinking') continue;
+          return 'UNKNOWN_FORM';
         }
         if (typeof block.id !== 'string' || tools.has(block.id)) return 'UNKNOWN_FORM';
         if (block.name === 'Bash') {
@@ -99,15 +101,16 @@ export const auditTurn = (rows, key, { command, readPaths }) => {
         tools.set(block.id, block);
       }
     } else if (Array.isArray(blocks)) {
-      if (blocks.filter((block) => block?.type === 'tool_result').length > 1) return 'UNKNOWN_FORM';
+      if (blocks.length !== 1) return 'UNKNOWN_FORM';
       for (const block of blocks) {
         if (block?.type !== 'tool_result') {
           if (typeof block?.type === 'string' && block.type.endsWith('tool_result'))
             return 'STOP_FOREIGN_TOOL';
-          continue;
+          return 'UNKNOWN_FORM';
         }
         const tool = tools.get(block.tool_use_id);
-        if (!tool || seen.has(block.tool_use_id)) return 'UNKNOWN_FORM';
+        if (!tool || seen.has(block.tool_use_id) || typeof block.content !== 'string')
+          return 'UNKNOWN_FORM';
         seen.add(block.tool_use_id);
         if (block.is_error === true) return 'STOP_TOOL_ERROR';
         const result = row.toolUseResult;
