@@ -88,48 +88,93 @@ test('CLI executes through a symlink and emits JSON', { skip: !existsSync(repo) 
   } finally { unlinkSync(link); }
 });
 
-test('dispatcher key and transcript state stay read-only', async () => {
-  const { inspect, keyFor, decide, buildArgv } = await import('./dispatcher.mjs');
-  const c = 'a'.repeat(40);
-  const source = 'b'.repeat(40);
-  const rid = 'r';
-  const key = keyFor(c, rid, source);
-  assert.equal(key, keyFor(c, rid, source));
-  assert.notEqual(key, keyFor(c, rid, 'c'.repeat(40)));
+test('keyed turns distinguish absent, complete, incomplete and duplicate records', async () => {
+  const { keyedTurn, keyFor, decide } = await import('./dispatcher.mjs');
+  const key = keyFor('a'.repeat(40), 'r', 'b'.repeat(40));
   const user = { type: 'user', message: { content: 'DISPATCH-KEY: ' + key + '\nbody' } };
-  const userBlock = { type: 'user', message: { content: [{ type: 'text', text: 'DISPATCH-KEY: ' + key + '\nbody' }] } };
-  const end = { type: 'assistant', message: { model: 'claude-opus-5-5', stop_reason: 'end_turn' } };
-  assert.equal(inspect([], key, rid, false), 'ABSENT');
-  assert.equal(inspect([], key, rid, true), 'STOP_ACTIVE');
-  for (const state of ['ABSENT', 'DUPLICATE', 'STOP_ACTIVE', 'STOP_INCOMPLETE'])
+  const block = { type: 'user', message: { content: [{ type: 'text', text: 'DISPATCH-KEY: ' + key }] } };
+  const done = { type: 'assistant', message: { id: 'msg-1', model: 'claude-opus-5-5', stop_reason: 'end_turn',
+    content: [{ type: 'text', text: 'done' }] } };
+  assert.equal(keyedTurn([], key).state, 'ABSENT');
+  assert.equal(keyedTurn([user], key).state, 'STOP_INCOMPLETE');
+  assert.deepEqual(keyedTurn([user, done], key), { state: 'DUPLICATE', final: { id: 'msg-1', text: 'done' } });
+  assert.equal(keyedTurn([block, done], key).state, 'DUPLICATE');
+  assert.equal(keyedTurn([user, block], key).state, 'STOP_DUPLICATE_RECORDS');
+  assert.equal(keyedTurn([{ type: 'assistant', message: { content: 'DISPATCH-KEY: ' + key } }], key).state, 'ABSENT');
+  for (const state of ['ABSENT', 'DUPLICATE', 'STOP_INCOMPLETE'])
     assert.equal(decide('check', state), 'NO_FIRE');
-  assert.equal(decide('first-launch', 'ABSENT'), 'FIRE');
-  assert.equal(decide('first-launch', 'DUPLICATE'), 'NO_FIRE');
-  assert.equal(inspect([user], key, rid, true), 'STOP_ACTIVE');
-  assert.equal(inspect([user], key, rid, false), 'STOP_INCOMPLETE');
-  assert.equal(inspect([user, end], key, rid, false), 'DUPLICATE');
-  assert.equal(inspect([userBlock, end], key, rid, false), 'DUPLICATE');
-  assert.equal(inspect([user, userBlock], key, rid, false), 'STOP_DUPLICATE_RECORDS');
-  assert.equal(inspect([{ type: 'assistant', message: { content: 'DISPATCH-KEY: ' + key } }], key, rid, false), 'ABSENT');
+  assert.equal(decide('launch', 'ABSENT'), 'FIRE');
 });
 
-test('dispatcher argv expands five permissions as separate arguments', { skip: !existsSync(repo) }, async () => {
-  const { buildArgv } = await import('./dispatcher.mjs');
+test('instruction requires one exact final line and permits R to decline', async () => {
+  const { instruction } = await import('./dispatcher.mjs');
+  const task = { id: 'pin-audit', refs: ['policy/organization.md', 'policy/README.md'] };
+  const commit = 'a'.repeat(40);
+  const line = 'W-START: task=pin-audit refs=policy/organization.md,policy/README.md C=' + commit;
+  assert.equal(instruction('I decline', task, commit), 'DECLINED');
+  assert.equal(instruction('Reason\n' + line, task, commit), line);
+  assert.throws(() => instruction(line + '\n' + line, task, commit), /invalid/);
+  assert.throws(() => instruction(line + '\nMore prose', task, commit), /invalid/);
+  assert.throws(() => instruction('\x60' + line + '\x60', task, commit), /invalid/);
+});
+
+test('stage routing requires completed R approval and W result', async () => {
+  const { stageRoute, keyFor } = await import('./dispatcher.mjs');
+  const c = 'a'.repeat(40), src = 'b'.repeat(40);
   const rid = 'b27e547c-14b7-47b9-a72e-7d5fdcdd724c';
+  const wid = '71bd57d0-e795-4a5e-846c-999d3073afa7';
+  const task = { id: 'pin-audit', refs: ['policy/organization.md', 'policy/README.md'] };
+  const line = 'W-START: task=pin-audit refs=policy/organization.md,policy/README.md C=' + c;
+  const turn = (key, id, text) => [
+    { type: 'user', message: { content: 'DISPATCH-KEY: ' + key + '\nC=' + c } },
+    { type: 'assistant', message: { id, model: 'claude-opus-5-5',
+      stop_reason: 'end_turn', content: [{ type: 'text', text }] } },
+  ];
+  assert.deepEqual(stageRoute('r-start', c, src, task, [], []), { source: src, id: rid });
+  assert.throws(() => stageRoute('w-work', c, src, task, [], []), /R start/);
+  const r = turn(keyFor(c, rid, src), 'r-final', 'reason\n' + line);
+  assert.deepEqual(stageRoute('w-work', c, src, task, r, []),
+    { source: 'r-final', id: wid, previous: { line, r_record: 'r-final' } });
+  assert.throws(() => stageRoute('r-review', c, src, task, r, []), /W work/);
+  const w = turn(keyFor(c, wid, 'r-final'), 'w-final', 'evidence');
+  assert.equal(stageRoute('r-review', c, src, task, r, w).source, 'w-final');
+  assert.equal(stageRoute('r-review', c, src, task, r, w).id, rid);
+  const decline = turn(keyFor(c, rid, src), 'r-decline', 'I decline');
+  assert.deepEqual(stageRoute('w-work', c, src, task, decline, []), { declined: true });
+});
+
+test('keyed turn keeps split text, ignores repeat, and recognizes array user boundary', async () => {
+  const { keyedTurn, keyFor } = await import('./dispatcher.mjs');
+  const key = keyFor('a'.repeat(40), 'r', 'b');
+  const start = { type: 'user', message: { content: 'DISPATCH-KEY: ' + key } };
+  const final = (text, id = 'm1') => ({ type: 'assistant', message: { id,
+    model: 'claude-opus-5-5', stop_reason: 'end_turn',
+    content: [{ type: 'text', text }] } });
+  const next = { type: 'user', message: { content: [{ type: 'text', text: 'later' }] } };
+  assert.deepEqual(keyedTurn([start, final('one '), final('two'), final('two')], key),
+    { state: 'DUPLICATE', final: { id: 'm1', text: 'one two' } });
+  assert.equal(keyedTurn([start, final('one'), next, final('later', 'm2')], key).final.text, 'one');
+  assert.equal(keyedTurn([start, { type: 'assistant', message: { id: 'wrong',
+    model: 'other', stop_reason: 'end_turn', content: [{ type: 'text', text: 'x' }] } }], key).state,
+    'STOP_INCOMPLETE');
+});
+
+test('dispatcher argv keeps five permissions as separate arguments', { skip: !existsSync(repo) }, async () => {
+  const { buildArgv } = await import('./dispatcher.mjs');
   const templateCommit = 'c4ad8b9a5768bfea5103995e9ac3c5f1718ad965';
+  const rid = 'b27e547c-14b7-47b9-a72e-7d5fdcdd724c';
   const result = select({ repo, commit: templateCommit, 'r-id': rid, 'git-bin': gitBin });
   const old = JSON.parse(result.selected.find((row) => row.id === 'policy.jev.d-replacement.oci.v1').body);
-  const prompt = 'DISPATCH-KEY: abc\\nPREPARE';
-  const argv = buildArgv(old.target, templateCommit, rid, prompt);
+  const argv = buildArgv(old.target, templateCommit, rid, 'prompt');
   const start = argv.indexOf('--allowedTools') + 1;
   assert.deepEqual(argv.slice(start, start + 5),
     old.target.allowed_tools_template.map((item) => item.replaceAll('<C>', templateCommit)));
-  assert.equal(argv.filter((part) => part === rid).length, 1);
-  assert.equal(argv.at(-1), prompt);
+  assert.equal(argv[argv.indexOf('--resume') + 1], rid);
+  assert.equal(argv.at(-1), 'prompt');
 });
 
-test('read checkout rejects a different policy commit', async () => {
+test('read checkout rejects another commit', async () => {
   const { verifyReadCheckout } = await import('./dispatcher.mjs');
   assert.throws(() => verifyReadCheckout('/work/repos/adrs-oci-policy-self-read',
-    '0'.repeat(40), ['AGENTS.md']), /read checkout HEAD mismatch/);
+    '0'.repeat(40), ['AGENTS.md']), /read checkout mismatch/);
 });
