@@ -57,22 +57,38 @@ export const keyedTurn = (rows, key) => {
   if (finals.size === 0) return { state: 'STOP_INCOMPLETE' };
   return { state: 'DUPLICATE', final: [...finals.values()][0] };
 };
-// Metadata only: transcript text can quote errors or persisted-output markers.
+// Structural audit: quoted error or persisted-output text is not a signal.
 export const auditTurn = (rows, key, { command, readPaths }) => {
   const found = keyedRows(rows, key);
   if (found.state !== 'FOUND') return found.state;
+  if (found.rows.some((row) => ['user', 'assistant'].includes(row.type) &&
+      row.version !== '2.1.280')) return 'UNKNOWN_VERSION';
+  if (found.rows.some((row) => row.type === 'user' && Array.isArray(row.message?.content) &&
+      row.message.content.some((block) => block?.type === 'tool_result') &&
+      row.toolUseResult && typeof row.toolUseResult === 'object' &&
+      Object.hasOwn(row.toolUseResult, 'persistedOutputPath')))
+    return 'STOP_PERSISTED_OUTPUT';
   const tools = new Map();
   const seen = new Set();
   const pages = new Map(readPaths.map((path) => [path, { total: null, ranges: [] }]));
   let bashCount = 0;
   for (const row of found.rows) {
-    if (row.type !== 'user' && row.type !== 'assistant') continue;
-    if (row.version !== '2.1.280') return 'UNKNOWN_VERSION';
+    if (row.type !== 'user' && row.type !== 'assistant') {
+      if (row.type === 'attachment' &&
+          ['total_tokens_reminder', 'silent_turn_reminder'].includes(row.attachment?.type)) continue;
+      if (['last-prompt', 'mode', 'atis-latch', 'cost-state', 'queue-operation'].includes(row.type))
+        continue;
+      return 'UNKNOWN_FORM';
+    }
     const blocks = row.message?.content;
     if (row.type === 'assistant') {
       if (!Array.isArray(blocks)) return 'UNKNOWN_FORM';
       for (const block of blocks) {
-        if (block?.type !== 'tool_use') continue;
+        if (block?.type !== 'tool_use') {
+          if (typeof block?.type === 'string' && block.type.endsWith('tool_use'))
+            return 'STOP_FOREIGN_TOOL';
+          continue;
+        }
         if (typeof block.id !== 'string' || tools.has(block.id)) return 'UNKNOWN_FORM';
         if (block.name === 'Bash') {
           if (block.input?.command !== command) return 'STOP_FOREIGN_TOOL';
@@ -85,18 +101,24 @@ export const auditTurn = (rows, key, { command, readPaths }) => {
     } else if (Array.isArray(blocks)) {
       if (blocks.filter((block) => block?.type === 'tool_result').length > 1) return 'UNKNOWN_FORM';
       for (const block of blocks) {
-        if (block?.type !== 'tool_result') continue;
+        if (block?.type !== 'tool_result') {
+          if (typeof block?.type === 'string' && block.type.endsWith('tool_result'))
+            return 'STOP_FOREIGN_TOOL';
+          continue;
+        }
         const tool = tools.get(block.tool_use_id);
         if (!tool || seen.has(block.tool_use_id)) return 'UNKNOWN_FORM';
         seen.add(block.tool_use_id);
+        if (block.is_error === true) return 'STOP_TOOL_ERROR';
         const result = row.toolUseResult;
         if (!result || typeof result !== 'object') return 'UNKNOWN_FORM';
-        if (Object.hasOwn(result, 'persistedOutputPath')) return 'STOP_PERSISTED_OUTPUT';
-        if (block.is_error === true || result.interrupted === true) return 'STOP_TOOL_ERROR';
+        if (result.interrupted === true) return 'STOP_TOOL_ERROR';
         if (tool.name === 'Bash') {
           if (block.is_error !== false || typeof result.stdout !== 'string' ||
-              typeof result.stderr !== 'string' || result.interrupted !== false)
+              typeof result.stderr !== 'string' || result.interrupted !== false ||
+              typeof block.content !== 'string' || block.content !== result.stdout)
             return 'UNKNOWN_FORM';
+          if (result.stderr !== '') return 'STOP_TOOL_ERROR';
         } else {
           const file = result.file;
           if (result.type !== 'text' || !file || file.filePath !== tool.input.file_path ||
@@ -112,7 +134,9 @@ export const auditTurn = (rows, key, { command, readPaths }) => {
           page.ranges.push([file.startLine, file.startLine + file.numLines - 1]);
         }
       }
-    } else if (typeof blocks !== 'string') return 'UNKNOWN_FORM';
+      if (row.toolUseResult && !blocks.some((block) => block?.type === 'tool_result'))
+        return 'UNKNOWN_FORM';
+    } else if (typeof blocks !== 'string' || row.toolUseResult) return 'UNKNOWN_FORM';
   }
   if (bashCount !== 1 || seen.size !== tools.size) return 'UNKNOWN_FORM';
   for (const page of pages.values()) {

@@ -126,7 +126,8 @@ const safeTurn = (key, id, text = 'done') => [
     { type: 'tool_use', id: 'bash', name: 'Bash', input: { command: 'selector' } },
   ] } },
   { type: 'user', version: '2.1.280',
-    message: { content: [{ type: 'tool_result', tool_use_id: 'bash', is_error: false }] },
+    message: { content: [{ type: 'tool_result', tool_use_id: 'bash', is_error: false,
+      content: '{}' }] },
     toolUseResult: { stdout: '{}', stderr: '', interrupted: false } },
   { type: 'assistant', version: '2.1.280', message: { content: [
     { type: 'tool_use', id: 'read', name: 'Read',
@@ -164,6 +165,29 @@ test('turn safety uses metadata and complete Read coverage', async () => {
   const version = structuredClone(clean);
   version[1].version = 'other';
   assert.equal(auditTurn(version, key, auditSpec), 'UNKNOWN_VERSION');
+  const unknownRow = structuredClone(clean);
+  unknownRow.splice(3, 0, { type: 'system', subtype: 'compact_boundary' });
+  assert.equal(auditTurn(unknownRow, key, auditSpec), 'UNKNOWN_FORM');
+  const hook = structuredClone(clean);
+  hook.splice(3, 0, { type: 'attachment', attachment: { type: 'hook_additional_context' } });
+  assert.equal(auditTurn(hook, key, auditSpec), 'UNKNOWN_FORM');
+  const reminder = structuredClone(clean);
+  reminder.splice(3, 0, { type: 'attachment',
+    attachment: { type: 'total_tokens_reminder', text: 'context reminder' } });
+  assert.equal(auditTurn(reminder, key, auditSpec), 'CLEAN');
+  const denied = structuredClone(clean);
+  denied[2].message.content[0].is_error = true;
+  denied[2].toolUseResult = 'Error: Permission denied';
+  assert.equal(auditTurn(denied, key, auditSpec), 'STOP_TOOL_ERROR');
+  const foreignUse = structuredClone(clean);
+  foreignUse[1].message.content[0].type = 'server_tool_use';
+  assert.equal(auditTurn(foreignUse, key, auditSpec), 'STOP_FOREIGN_TOOL');
+  const hiddenResult = structuredClone(clean);
+  hiddenResult[2].message.content[0].type = 'server_tool_result';
+  assert.equal(auditTurn(hiddenResult, key, auditSpec), 'STOP_FOREIGN_TOOL');
+  const mismatched = structuredClone(clean);
+  mismatched[2].message.content[0].content = 'shorter';
+  assert.equal(auditTurn(mismatched, key, auditSpec), 'UNKNOWN_FORM');
   const unreturned = clean.filter((_, i) => i !== 4);
   assert.equal(auditTurn(unreturned, key, auditSpec), 'UNKNOWN_FORM');
 });
