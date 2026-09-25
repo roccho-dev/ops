@@ -17,6 +17,10 @@ This command reads Git objects by commit and path; it does not read the checkout
 
 Node 22.5 or newer with `node:sqlite` is required. The OCI proof uses Node 24.19.0. Run the focused tests with `node --test packages/jev-dispatcher/test.mjs`.
 
-## One R dispatch proof
+## Staged OCI R/W proof
 
-dispatcher.mjs --mode first-launch --commit <ADRS-commit> performs one fixed OCI R self-read under a separate ADRS contract and P's same-version GO. --mode check only inspects the fixed R transcript and policy; it has no Claude spawn path. A completed keyed turn returns DUPLICATE on repeat, while active, incomplete, or uncertain evidence stops without retry. The contract borrows only the CLI and Read templates from the older self-read row; that row's W-first GO is not reused. P may invoke first-launch once for this event; subsequent invocations use check. The command does not enforce one-time authorization of first-launch after a crash with no transcript record, simultaneous initial invocations, or general event dispatch. It does not assess R's understanding, direct W, or call Jev.
+The first, completed R-only proof is in Ops commit `9c5ba2e6ef190cf7a7ef04aedcf7eb769e12d6ba` and ADRS PR #411. Its R found a copied blob-hash gate defect, so it is not a semantic pass.
+
+`dispatcher.mjs --mode launch --step r-start|w-work|r-review --commit <ADRS-commit>` implements three separately authorized, read-only stages for the fixed OCI Opus R and W sessions. R first reads the same policy commit and may end with one exact `W-START` line or decline. Only that line allows a later W launch. W reads the commit itself and reports. A further launch gives W's final response to R as untrusted JSON; R rereads the commit and judges independently. `--mode check` only inspects policy and keyed provider records; it cannot launch. Each stage needs P's same-version GO after the previous stage's readback.
+
+The dispatcher uses fixed stage prompts, carries identifiers and W response bytes, and does not judge policy meaning, call Jev, chain stages, or decide that W or R understood. A completed keyed turn is duplicate on repeat. Active, incomplete, and uncertain turns stop without retry. Initial concurrent launches and a crash before the provider records the key are outside this proof.
