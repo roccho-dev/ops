@@ -45,9 +45,13 @@ Each package receipt binds:
 
 ## Provider boundary
 
-GitHub Actions is only a compute and artifact adapter. Normal PR/push runs execute
-selftests. An actual release run requires an explicit content-addressed gov release
-tag, the exact governance engine source, and a `gov-package-output.tar.gz`
-transport asset whose extracted NAR hash must match the release descriptor.
-Local carry uses the same engine commit through a local Git path; GitHub CI uses
-that commit through an exact GitHub flake reference. No `latest` lookup is permitted.
+GitHub Actions is only a compute and artifact adapter. Every PR/push first runs
+the deterministic contract selftests, then resolves the newest canonical
+published content-addressed gov release, requires that exact release to contain the
+package-output assets, and executes its exact package obligations
+against the exact candidate SHA. An explicit workflow dispatch may pin an exact
+release tag instead. A compatible release must include `gov-package-output.tar.gz`
+and its digest; absence or incompatibility of the canonical published release is
+blocking, not Green. CI never falls back to an older compatible release.
+The exact governance engine commit is read from that release and the extracted
+NAR hash must match its descriptor.
