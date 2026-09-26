@@ -1,4 +1,9 @@
 { lib, stdenv, pkg-config, curl, json_c, chromium, python3, binutils }:
+let
+  # The exact nixpkgs curl defaults to websocketSupport = false. CDP requires
+  # ws/wss at runtime; override only this package dependency, not the package set.
+  curlWebsocket = curl.override { websocketSupport = true; };
+in
 stdenv.mkDerivation {
   pname = "cdp-tty";
   version = "0.1.0";
@@ -6,7 +11,7 @@ stdenv.mkDerivation {
   outputs = [ "out" "dev" "proof" ];
   strictDeps = true;
   nativeBuildInputs = [ pkg-config ];
-  buildInputs = [ curl json_c ];
+  buildInputs = [ curlWebsocket json_c ];
   nativeCheckInputs = [ chromium (python3.withPackages (p: [ p.websocket-client ])) binutils ];
   doCheck = true;
   checkPhase = ''
@@ -16,9 +21,10 @@ stdenv.mkDerivation {
     chmod 700 "$XDG_RUNTIME_DIR"
     export CHROME_BIN=${chromium}/bin/chromium
     make probe
-    ${curl.dev}/bin/curl-config --version
-    ${curl.dev}/bin/curl-config --protocols
-    echo ${lib.escapeShellArg (builtins.toJSON { configureFlags = curl.configureFlags or [ ]; cmakeFlags = curl.cmakeFlags or [ ]; source = curl.meta.position or ""; })}
+    ${curlWebsocket.dev}/bin/curl-config --version
+    ${curlWebsocket.dev}/bin/curl-config --protocols | tee curl-protocols.txt
+    grep -Fx WS curl-protocols.txt
+    grep -Fx WSS curl-protocols.txt
     set -o pipefail
     python3 -u tests/proof.py | tee proof.jsonl
     runHook postCheck
@@ -31,8 +37,9 @@ stdenv.mkDerivation {
     cp libcdp-tty.a "$dev/lib/"
     cp cdp.h "$dev/include/cdp-tty/"
     cp proof.jsonl "$proof/raws.jsonl"
+    cp curl-protocols.txt "$proof/curl-protocols.txt"
     python3 -c 'import json,sys; rows=[json.loads(s) for s in open("proof.jsonl")]; assert all(r["status"] == "PASS" for r in rows if r["test"] != "residuals"); assert any(r["test"] == "residuals" and r["status"] == "NOT_RUN" for r in rows); [print(json.dumps(r)) for r in rows if any(k in r["test"] for k in ("block", "rejected", "only", "generation", "wire-", "no-retry", "isolation"))]' > "$proof/disruptives.jsonl"
-    sha256sum cdp.c cdp.h tty.c tty.h main.c Makefile tests/probe.c tests/proof.py > "$proof/source.sha256"
+    sha256sum cdp.c cdp.h tty.c tty.h main.c Makefile tests/probe.c tests/proof.py default.nix > "$proof/source.sha256"
     ${chromium}/bin/chromium --version > "$proof/versions.txt"
     pkg-config --modversion libcurl json-c >> "$proof/versions.txt"
     runHook postInstall
