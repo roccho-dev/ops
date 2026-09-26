@@ -60,6 +60,7 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          cdp-tty = nixpkgs.legacyPackages.${system}.callPackage ./packages/cdp-tty { };
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
@@ -138,6 +139,7 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          cdp-tty = packages.${system}.cdp-tty.proof;
           jev =
             let
               pkgs = nixpkgs.legacyPackages.${system};
