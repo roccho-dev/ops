@@ -21,11 +21,11 @@ stdenv.mkDerivation {
     chmod 700 "$XDG_RUNTIME_DIR"
     export CHROME_BIN=${chromium}/bin/chromium
     make probe
-    ${curlWebsocket.dev}/bin/curl-config --version
-    ${curlWebsocket.dev}/bin/curl-config --protocols | tee curl-protocols.txt
-    grep -Fx WS curl-protocols.txt
-    grep -Fx WSS curl-protocols.txt
     set -o pipefail
+    ${lib.getBin curlWebsocket}/bin/curl --version | tee curl-version.txt
+    sed -n 's/^Protocols: //p' curl-version.txt | tr ' ' '\n' > curl-protocols.txt
+    grep -Fx ws curl-protocols.txt
+    grep -Fx wss curl-protocols.txt
     python3 -u tests/proof.py | tee proof.jsonl
     runHook postCheck
   '';
