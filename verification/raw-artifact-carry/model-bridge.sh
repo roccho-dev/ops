@@ -56,3 +56,50 @@ cp "$laya_out/files/"*.tar.gz "$bridge/laya/"
 cp "$laya_out/request.json" "$bridge/laya/"
 cp "$laya_out/receipt.json" "$bridge/laya/"
 cp "$RUNNER_TEMP/laya.verify.json" "$bridge/laya/verify.json"
+
+chunks="$RUNNER_TEMP/model-carry-chunks"
+mkdir -p "$chunks"
+
+qwen_file="$bridge/qwen/Qwen3.5-0.8B-Q4_0.gguf"
+laya_file="$(find "$bridge/laya" -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+test -f "$qwen_file"
+test -f "$laya_file"
+
+split -b 250M -d -a 2 "$qwen_file" "$chunks/qwen.part."
+split -b 250M -d -a 2 "$laya_file" "$chunks/laya.part."
+
+test -f "$chunks/qwen.part.00"
+test -f "$chunks/qwen.part.01"
+test -f "$chunks/qwen.part.02"
+test -f "$chunks/laya.part.00"
+test -f "$chunks/laya.part.01"
+test -f "$chunks/laya.part.02"
+
+python3 - "$bridge" "$chunks" <<'PY'
+import hashlib, json, pathlib, sys
+bridge, chunks = map(pathlib.Path, sys.argv[1:])
+qwen = bridge / "qwen" / "Qwen3.5-0.8B-Q4_0.gguf"
+laya = next((bridge / "laya").glob("*.tar.gz"))
+
+def info(path):
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(8 * 1024 * 1024), b""):
+            h.update(chunk)
+    return {"name": path.name, "bytes": path.stat().st_size, "sha256": h.hexdigest()}
+
+manifest = {
+    "schema": "ops.modelCarryBridge/1",
+    "qwen": {
+        "file": info(qwen),
+        "parts": [info(p) for p in sorted(chunks.glob("qwen.part.*"))],
+    },
+    "laya": {
+        "file": info(laya),
+        "parts": [info(p) for p in sorted(chunks.glob("laya.part.*"))],
+    },
+}
+(chunks / "manifest.json").write_text(
+    json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+)
+PY
