@@ -509,7 +509,9 @@ test('CLI names the contract id and version explicitly', async () => {
   assert.throws(() => argsOf(argv.with(7, 'r session')), /usage/);
 });
 
-test('read checkout rejects another commit', async () => {
+test('read checkout rejects another commit', {
+  skip: !existsSync('/root/.nix-profile/bin/git') || !existsSync('/work/repos/adrs-oci-policy-self-read'),
+}, async () => {
   const { verifyReadCheckout } = await import('./dispatcher.mjs');
   assert.throws(() => verifyReadCheckout('/work/repos/adrs-oci-policy-self-read',
     '0'.repeat(40), ['AGENTS.md']), /read checkout mismatch/);
