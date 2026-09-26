@@ -38,7 +38,7 @@ button{position:absolute;left:200px;top:120px;width:220px;height:90px}
 #stamp{position:absolute;left:20px;top:250px}</style>
 <input id=text><input id=other style="top:350px"><button id=button>fixture button</button><div id=stamp>stable</div>
 <script>window.events=[];window.clicks=0;
-for(const type of ['mousedown','mouseup','click','keydown','keyup','wheel','input'])
+for(const type of ['mousedown','mousemove','mouseup','click','auxclick','dblclick','contextmenu','keydown','keyup','wheel','input'])
 addEventListener(type,e=>events.push({type,key:e.key,button:e.button,x:e.clientX,y:e.clientY,dy:e.deltaY}));
 button.onclick=()=>clicks++;</script>'''
 
@@ -312,11 +312,16 @@ class Sink:
             assert self.p.poll() is None, self.p.stderr.read().decode()
         assert self.frames >= count, "no frame"
         time.sleep(.04)  # let the product consume the matching terminal acknowledgement
-    def click(self, x=310, y=160, button=0):
+    def cell(self, x, y):
         c, r = self.last_size
         # Fixture coordinates are CSS; screenshot width/height at DPR=1.
         left, top = (self.cols-c)//2, (self.rows-1-r)//2
-        cx, cy = left+int(x/self.pixels[0]*c)+1, top+int(y/self.pixels[1]*r)+1
+        return left+int(x/self.pixels[0]*c)+1, top+int(y/self.pixels[1]*r)+1
+    def mouse_event(self, code, x, y, final="M"):
+        cx, cy = self.cell(x, y)
+        self.send(f"\x1b[<{code};{cx};{cy}{final}".encode())
+    def click(self, x=310, y=160, button=0):
+        cx, cy = self.cell(x, y)
         self.send(f"\x1b[<{button};{cx};{cy}M\x1b[<{button};{cx};{cy}m".encode())
     def close(self, sig=None):
         if self.p.poll() is None:
@@ -369,6 +374,90 @@ def independent_geometry_proof():
             assert p.command("frame")[0] != 0
         assert ctl.evaluate("sideEffects") == 0
         record("geometry-getter-side-effect-rejected")
+
+def terminal_ux_proof():
+    """Page UX through the SGR mouse/bracketed-paste/Kitty PTY contract used by Noctty.
+    This proves protocol behavior only; it does not claim that a real Noctty renderer ran.
+    """
+    with browser() as (page, ctl, chrome, debug, _):
+        with Audit(page["webSocketDebuggerUrl"]) as audit:
+            sink = Sink(audit.url)
+            try:
+                sink.wait_frame()
+                for button in (0, 1, 2):
+                    before = ctl.evaluate("events.filter(e=>e.type==='mousedown').length")
+                    sink.click(310, 160, button)
+                    sink.wait_frame(sink.frames + 1)
+                    eventually(lambda: ctl.evaluate("events.filter(e=>e.type==='mousedown').length") == before + 1)
+                    last = ctl.evaluate("events.filter(e=>e.type==='mousedown').at(-1)")
+                    assert last["button"] == button and last["x"] == 310 and last["y"] == 160
+                record("ux-page-left-middle-right-click", buttons=3)
+
+                before = ctl.evaluate("events.filter(e=>e.type==='wheel').length")
+                sink.mouse_event(65, 310, 160)
+                sink.wait_frame(sink.frames + 1)
+                eventually(lambda: ctl.evaluate("events.filter(e=>e.type==='wheel').length") == before + 1)
+                assert ctl.evaluate("events.filter(e=>e.type==='wheel').at(-1).dy") == 80
+                record("ux-page-wheel", delta_y=80)
+
+                sink.click(100, 45)
+                sink.wait_frame(sink.frames + 1)
+                sink.send(b"\x1b[200~" + "日本語".encode() + b"\x1b[201~")
+                sink.wait_frame(sink.frames + 1)
+                eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "日本語")
+                sink.send(b"\t")
+                sink.wait_frame(sink.frames + 1)
+                eventually(lambda: ctl.evaluate("document.activeElement.id") == "other")
+                sink.send(b"\t")
+                sink.wait_frame(sink.frames + 1)
+                eventually(lambda: ctl.evaluate("document.activeElement.id") == "button")
+                clicks = ctl.evaluate("clicks")
+                sink.send(b"\r")
+                sink.wait_frame(sink.frames + 1)
+                eventually(lambda: ctl.evaluate("clicks") == clicks + 1)
+                record("ux-keyboard-navigation-committed-text", japanese=True, tab=True, enter=True)
+
+                inputs = len([m for m in audit.methods if m.startswith("Input.")])
+                events = ctl.evaluate("events.length")
+                sx, sy = sink.cell(230, 150)
+                ex, ey = sink.cell(380, 190)
+                sink.send((f"\x1b[<0;{sx};{sy}M"
+                           f"\x1b[<32;{ex};{ey}M"
+                           f"\x1b[<0;{ex};{ey}m").encode())
+                for _ in range(8):
+                    sink.pump()
+                assert len([m for m in audit.methods if m.startswith("Input.")]) == inputs
+                assert ctl.evaluate("events.length") == events
+                record("ux-page-drag-explicitly-blocked", browser_internal_drag=False, text_selection_drag=False)
+
+                inputs = len([m for m in audit.methods if m.startswith("Input.")])
+                moves = ctl.evaluate("events.filter(e=>e.type==='mousemove').length")
+                sink.mouse_event(35, 350, 170)
+                for _ in range(5):
+                    sink.pump()
+                assert len([m for m in audit.methods if m.startswith("Input.")]) == inputs
+                assert ctl.evaluate("events.filter(e=>e.type==='mousemove').length") == moves
+                record("ux-hover-explicitly-unavailable", css_hover=False)
+
+                inputs = len([m for m in audit.methods if m.startswith("Input.")])
+                clicks = ctl.evaluate("clicks")
+                cx, cy = sink.cell(310, 160)
+                sink.send(f"\x1b[<4;{cx};{cy}M\x1b[<4;{cx};{cy}m".encode())
+                for _ in range(5):
+                    sink.pump()
+                assert len([m for m in audit.methods if m.startswith("Input.")]) == inputs
+                assert ctl.evaluate("clicks") == clicks
+                record("ux-modified-mouse-explicitly-unavailable", shift_click=False)
+
+                record("ux-browser-equivalence-summary",
+                       browser_equivalent=False,
+                       works=["page pixels","left/middle/right page click","wheel","basic keys","committed UTF-8/paste","local terminal resize"],
+                       gaps=["hover","page drag/text selection","modified mouse","IME composition","browser chrome/native dialogs","OS file drop into page"])
+            finally:
+                code, err = sink.close()
+                assert code == 0, err
+        assert chrome.poll() is None
+
 
 def fixture_auth_proof():
     """A real local HTTP session, not a user's service/account credential."""
@@ -440,6 +529,7 @@ def fixture_auth_proof():
 
 def run():
     independent_geometry_proof()
+    terminal_ux_proof()
     assert subprocess.run([str(ROOT / "cdp-tty"), "--help"], capture_output=True).returncode == 0
     for url in ["http://127.0.0.1:1/json", "ws://0.0.0.0:1/devtools/page/a", "ws://127.0.0.1:1/devtools/browser/a",
                 "ws://127.0.0.1:1/devtools/page/", "ws://user:secret@127.0.0.1:1/devtools/page/a", "ws://127.0.0.1:1/devtools/page/a#fragment"]:
@@ -608,7 +698,20 @@ def run():
     assert not re.search(r"\b(exec\w*|fork|system|popen|tcsetattr|signal|sigaction|exit)\b", symbols)
     record("finite-wire-surface-no-process-tty-global-core", method_count=len(wire))
     fixture_auth_proof()
-    residuals = dict(windows_ssh="NOT_RUN", real_service_auth="NOT_RUN", real_terminal_renderer="NOT_RUN", drag="NOT_IMPLEMENTED", ime_composition="NOT_IMPLEMENTED")
+    residuals = dict(
+        windows_ssh="NOT_RUN",
+        real_service_auth="NOT_RUN",
+        real_noctty_renderer="NOT_RUN",
+        browser_internal_drag="UNSUPPORTED",
+        text_selection_drag="UNSUPPORTED",
+        hover="UNSUPPORTED",
+        modified_mouse="UNSUPPORTED",
+        ime_composition="UNSUPPORTED_COMMITTED_TEXT_ONLY",
+        os_file_drop_to_page="UNSUPPORTED_NO_DISTINCT_TERMINAL_SEMANTICS",
+        browser_chrome_native_dialogs="OUT_OF_SCOPE",
+        audio="OUT_OF_SCOPE",
+        sustained_performance="NOT_ACCEPTED",
+    )
     print(json.dumps({"test": "residuals", "status": "NOT_RUN", **residuals}), flush=True)
 
 if __name__ == "__main__":
