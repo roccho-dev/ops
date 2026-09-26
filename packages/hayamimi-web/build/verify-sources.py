@@ -33,6 +33,18 @@ def main():
             if rec != {'id': ident, 'kind': 'git', 'revision': row['revision']} or got != row['revision']:
                 raise SystemExit(f'{ident}: revision mismatch')
             continue
+        if row['kind'] == 'url':
+            p = work / 'cmake-deps' / row['filename']
+            got_sha = digest(p)
+            expected = {
+                'id': ident, 'kind': 'url', 'url': row['url'],
+                'filename': row['filename'], 'bytes': row['bytes'], 'sha256': got_sha
+            }
+            if rec != expected or p.stat().st_size != row['bytes']:
+                raise SystemExit(f'{ident}: url receipt mismatch')
+            if got_sha != row['sha256']:
+                raise SystemExit(f'{ident}: sha256 mismatch')
+            continue
         if row['kind'] != 'github-release-asset':
             raise SystemExit(f'{ident}: unsupported source kind')
         p = work / 'downloads' / row['name']
