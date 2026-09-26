@@ -7,6 +7,7 @@ on:
       - "packages/gosh/**"
       - "packages/ops-portable-runtime-pack/**"
       - "packages/chatgpt-capability/ingress/carrier-job.mjs"
+      - "verification/raw-artifact-carry/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
       - "ci.intent.v1.jsonl"
@@ -18,6 +19,7 @@ on:
       - "packages/gosh/**"
       - "packages/ops-portable-runtime-pack/**"
       - "packages/chatgpt-capability/ingress/carrier-job.mjs"
+      - "verification/raw-artifact-carry/**"
       - "build/packages.jsonl"
       - "build/checks.jsonl"
       - "ci.intent.v1.jsonl"
@@ -39,6 +41,183 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: packages/gosh/go.mod
+
+      - name: Stage Qwen Q4_K_M for sandbox proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/qwen-q4km"
+          mkdir -p "$out"
+          url="https://huggingface.co/diodel/Qwen3.5-0.8B-Q4_K_M-GGUF/resolve/main/qwen3.5-0.8b-Q4_K_M.gguf?download=true"
+          file="$out/qwen3.5-0.8b-Q4_K_M.gguf"
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 "$url" -o "$file"
+          printf '%s  %s\n' "fb89581c3863314f6e6e1810f11b0bbb30a07315e7b1229a5c7db10fb0100ca6" "$file" | sha256sum --check -
+          split -b 250M -d -a 2 "$file" "$out/part."
+          rm "$file"
+
+      - name: Upload Qwen Q4_K_M part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-q4km-00-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-q4km/part.00
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Q4_K_M part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-q4km-01-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-q4km/part.01
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Q4_K_M part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-q4km-02-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-q4km/part.02
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Stage accelerate wheel for sandbox Qwen proof
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/qwen-wheelhouse"
+          python -m pip download --only-binary=:all: --no-deps             --dest "$RUNNER_TEMP/qwen-wheelhouse" "accelerate==1.10.1"
+
+      - name: Upload accelerate wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-accelerate-wheel-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-wheelhouse/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Prove raw Carry above legacy 128 MiB bound
+        shell: bash
+        run: node packages/chatgpt-capability/ingress/carrier-job.mjs selftest-raw-large
+
+      - name: Prove real Qwen model raw Carry
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="verification/raw-artifact-carry/qwen3.5-0.8b-q4_0.json"
+          request="$RUNNER_TEMP/qwen3.5-0.8b-q4_0.request.json"
+          out="$RUNNER_TEMP/qwen3.5-0.8b-q4_0"
+          receipt="$RUNNER_TEMP/qwen3.5-0.8b-q4_0.verify.json"
+
+          python3 - "$manifest" "$request" <<'PY'
+          import json,pathlib,sys
+          manifest_path,out_path=map(pathlib.Path,sys.argv[1:])
+          x=json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert x["schema"]=="ops.rawArtifactCarryProof/1"
+          assert x["kind"]=="model"
+          assert x["revision"]=="8fea620810c4afa23dd6443f999a48574c1611a3"
+          assert x["license"]=="Apache-2.0"
+          request={
+              "schema":"carrier-job/2",
+              "request_id":x["id"],
+              "sources":[{
+                  "name":x["filename"],
+                  "url":x["url"],
+                  "bytes":x["bytes"],
+                  "sha256":x["sha256"],
+              }],
+              "payload":{"source":x["filename"],"codec":"raw"},
+          }
+          out_path.write_text(json.dumps(request,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
+          PY
+
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize             --request "$request" --out "$out"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify             --input "$out" --receipt "$receipt"
+
+          python3 - "$manifest" "$receipt" "$out" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest_path,receipt_path,root=map(pathlib.Path,sys.argv[1:])
+          expected=json.loads(manifest_path.read_text(encoding="utf-8"))
+          observed=json.loads(receipt_path.read_text(encoding="utf-8"))
+          assert observed["schema"]=="carrier-job-receipt/2"
+          assert observed["status"]=="PASS"
+          assert observed["payload"]["source"]==expected["filename"]
+          assert observed["payload"]["bytes"]==expected["bytes"]
+          assert observed["payload"]["sha256"]==expected["sha256"]
+          payload=root/"files"/expected["filename"]
+          assert payload.stat().st_size==expected["bytes"]
+          h=hashlib.sha256()
+          with payload.open("rb") as f:
+              for chunk in iter(lambda:f.read(8*1024*1024),b""):
+                  h.update(chunk)
+          assert h.hexdigest()==expected["sha256"]
+          print(json.dumps({
+              "schema":"ops.rawArtifactCarryModelProof/1",
+              "status":"PASS",
+              "id":expected["id"],
+              "bytes":expected["bytes"],
+              "sha256":expected["sha256"],
+          },sort_keys=True))
+          PY
+
+      - name: Prove real Laya model raw Carry
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="verification/raw-artifact-carry/laya-multilingual.json"
+          request="$RUNNER_TEMP/laya-multilingual.request.json"
+          out="$RUNNER_TEMP/laya-multilingual"
+          receipt="$RUNNER_TEMP/laya-multilingual.verify.json"
+
+          python3 - "$manifest" "$request" <<'PY'
+          import json,pathlib,sys
+          manifest_path,out_path=map(pathlib.Path,sys.argv[1:])
+          x=json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert x["schema"]=="ops.rawArtifactCarryProof/1"
+          assert x["kind"]=="model"
+          assert x["license"]=="Apache-2.0"
+          request={
+              "schema":"carrier-job/2",
+              "request_id":x["id"],
+              "sources":[{
+                  "name":x["filename"],
+                  "url":x["url"],
+                  "bytes":x["bytes"],
+                  "sha256":x["sha256"],
+              }],
+              "payload":{"source":x["filename"],"codec":"raw"},
+          }
+          out_path.write_text(json.dumps(request,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
+          PY
+
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize             --request "$request" --out "$out"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify             --input "$out" --receipt "$receipt"
+
+          python3 - "$manifest" "$receipt" "$out" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest_path,receipt_path,root=map(pathlib.Path,sys.argv[1:])
+          expected=json.loads(manifest_path.read_text(encoding="utf-8"))
+          observed=json.loads(receipt_path.read_text(encoding="utf-8"))
+          assert observed["schema"]=="carrier-job-receipt/2"
+          assert observed["status"]=="PASS"
+          assert observed["payload"]["source"]==expected["filename"]
+          assert observed["payload"]["bytes"]==expected["bytes"]
+          assert observed["payload"]["sha256"]==expected["sha256"]
+          payload=root/"files"/expected["filename"]
+          assert payload.stat().st_size==expected["bytes"]
+          h=hashlib.sha256()
+          with payload.open("rb") as f:
+              for chunk in iter(lambda:f.read(8*1024*1024),b""):
+                  h.update(chunk)
+          assert h.hexdigest()==expected["sha256"]
+          print(json.dumps({
+              "schema":"ops.rawArtifactCarryModelProof/1",
+              "status":"PASS",
+              "id":expected["id"],
+              "bytes":expected["bytes"],
+              "sha256":expected["sha256"],
+          },sort_keys=True))
+          PY
 
       - name: Build, Carry, materialize, and replay
         env:
