@@ -198,6 +198,79 @@ test('turn safety uses metadata and complete Read coverage', async () => {
   assert.equal(auditTurn(unreturned, key, auditSpec), 'UNKNOWN_FORM');
 });
 
+// Synthetic pr-link session metadata; no real session, repository or PR.
+const prLink = (sessionId, number = 7, repository = 'example-org/example-repo') => ({
+  type: 'pr-link', sessionId, prNumber: number,
+  prUrl: 'https://github.com/' + repository + '/pull/' + number,
+  prRepository: repository, timestamp: '2026-01-02T03:04:05.678Z' });
+const withRows = (rows, ...extra) => {
+  const copy = structuredClone(rows);
+  copy.splice(3, 0, ...extra);
+  return copy;
+};
+
+test('pr-link metadata is accepted only in its exact shape for the audited session', async () => {
+  const { auditTurn } = await import('./dispatcher.mjs');
+  const key = 'key';
+  const clean = safeTurn(key, 'final');
+  const spec = { ...auditSpec, sessionId: 'w-session' };
+  const audit = (...links) => auditTurn(withRows(clean, ...links), key, spec);
+  const changed = (edit) => { const link = prLink('w-session'); edit(link); return link; };
+  assert.equal(audit(prLink('w-session')), 'CLEAN');
+  assert.equal(audit(prLink('w-session'), prLink('w-session')), 'CLEAN');
+  assert.equal(audit(prLink('w-session', 7), prLink('w-session', 8, 'other-org/other-repo')), 'CLEAN');
+  assert.equal(auditTurn(withRows(clean, prLink('w-session')), key, auditSpec), 'UNKNOWN_FORM');
+  for (const link of [
+    prLink('r-session'),
+    changed((x) => { delete x.timestamp; }),
+    changed((x) => { x.uuid = 'extra'; }),
+    changed((x) => { x.prNumber = '7'; }),
+    changed((x) => { x.prNumber = 0; }),
+    changed((x) => { x.prNumber = 7.5; }),
+    changed((x) => { x.prNumber = -7; }),
+    changed((x) => { x.prRepository = 'other-org/example-repo'; }),
+    changed((x) => { x.prUrl = 'https://github.com/example-org/example-repo/pull/8'; }),
+    changed((x) => { x.prUrl = 'https://example.com/example-org/example-repo/pull/7'; }),
+    changed((x) => { x.prUrl = 'http://github.com/example-org/example-repo/pull/7'; }),
+    changed((x) => { x.prRepository = 'example-repo'; x.prUrl = 'https://github.com/example-repo/pull/7'; }),
+    changed((x) => { x.prRepository = 'example-org/..'; x.prUrl = 'https://github.com/example-org/../pull/7'; }),
+    changed((x) => { x.timestamp = 'yesterday'; }),
+    changed((x) => { x.timestamp = '2026-13-40T00:00:00Z'; }),
+  ]) assert.equal(audit(link), 'UNKNOWN_FORM', JSON.stringify(link));
+  const drop = { type: 'attachment', attachment: { type: 'thinking_drop' } };
+  assert.equal(audit(drop), 'UNKNOWN_FORM');
+  assert.equal(audit(prLink('w-session'), drop), 'UNKNOWN_FORM');
+  const linked = withRows(clean, prLink('w-session'));
+  const partial = structuredClone(linked);
+  partial[5].toolUseResult.file.numLines = 1;
+  assert.equal(auditTurn(partial, key, spec), 'STOP_READ_INCOMPLETE');
+  const foreign = structuredClone(linked);
+  foreign[1].message.content[0].input.command = 'other';
+  assert.equal(auditTurn(foreign, key, spec), 'STOP_FOREIGN_TOOL');
+  const noBash = linked.filter((_, i) => i !== 1 && i !== 2);
+  assert.equal(auditTurn(noBash, key, spec), 'UNKNOWN_FORM');
+});
+
+test('each stage audits pr-link metadata against its own actor', async () => {
+  const { stageRoute, keyFor } = await import('./dispatcher.mjs');
+  const c = 'a'.repeat(40), src = 'job.example@v1';
+  const task = { id: 'example-task', refs: ['policy/a.md'] };
+  const line = 'W-START: task=example-task refs=policy/a.md C=' + c;
+  const actors = { r: 'r-session', w: 'w-session' };
+  const r = withRows(safeTurn(keyFor(c, 'r-session', src), 'r-final', 'reason\n' + line),
+    prLink('r-session'));
+  const w = withRows(safeTurn(keyFor(c, 'w-session', 'r-final'), 'w-final', 'evidence'),
+    prLink('w-session'));
+  assert.equal(stageRoute('w-work', c, src, task, r, [], auditSpec, actors).id, 'w-session');
+  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec, actors).source, 'w-final');
+  const rWrong = withRows(safeTurn(keyFor(c, 'r-session', src), 'r-final', 'reason\n' + line),
+    prLink('w-session'));
+  assert.throws(() => stageRoute('w-work', c, src, task, rWrong, [], auditSpec, actors), /R start audit/);
+  const wWrong = withRows(safeTurn(keyFor(c, 'w-session', 'r-final'), 'w-final', 'evidence'),
+    prLink('r-session'));
+  assert.throws(() => stageRoute('r-review', c, src, task, r, wWrong, auditSpec, actors), /W work audit/);
+});
+
 test('stage routing requires completed R approval and W result', async () => {
   const { stageRoute, keyFor } = await import('./dispatcher.mjs');
   const c = 'a'.repeat(40), src = 'b'.repeat(40);
