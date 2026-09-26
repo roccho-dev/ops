@@ -1,6 +1,10 @@
-{ lib, stdenv, pkg-config, curl, json_c, chromium, python3, binutils }:
+{ lib, stdenv, pkg-config, curl, json_c, chromium, python3, binutils, makeFontsConf, noto-fonts-cjk-sans }:
 let
+  # The exact nixpkgs curl defaults to websocketSupport = false. CDP requires
+  # ws/wss at runtime; override only this package dependency, not the package set.
   curlWebsocket = curl.override { websocketSupport = true; };
+  # Test-owned browser/controller/proxy capabilities stay outside runtime source.
+  # This source is a required Nix input, not an optional CI-side download.
   proofSource = ../../verification/cdp-tty/proof.py;
 in
 stdenv.mkDerivation {
@@ -19,6 +23,8 @@ stdenv.mkDerivation {
     mkdir -p "$HOME" "$XDG_RUNTIME_DIR"
     chmod 700 "$XDG_RUNTIME_DIR"
     export CHROME_BIN=${chromium}/bin/chromium
+    # Fonts are required by the test browser for visible text and real text input.
+    export FONTCONFIG_FILE=${makeFontsConf { fontDirectories = [ noto-fonts-cjk-sans ]; }}
     test ! -e tests/proof.py
     cp ${proofSource} tests/proof.py
     make probe
@@ -27,23 +33,7 @@ stdenv.mkDerivation {
     sed -n 's/^Protocols: //p' curl-version.txt | tr ' ' '\n' > curl-protocols.txt
     grep -Fx ws curl-protocols.txt
     grep -Fx wss curl-protocols.txt
-    CDP_TTY_PACKAGE="$PWD" python3 -u - <<'DIAGNOSTIC' | tee proof.jsonl
-    import runpy, sys
-    scope = runpy.run_path("tests/proof.py")
-    Controller, Probe = scope["Controller"], scope["Probe"]
-    evaluate, command = Controller.evaluate, Probe.command
-    def observed(self, expression):
-        result = evaluate(self, expression)
-        if expression == "clicks" or "#text" in expression:
-            print("FIXTURE", expression, repr(result), file=sys.stderr, flush=True)
-        return result
-    def sent(self, text):
-        result = command(self, text)
-        print("PROBE", text.split()[0], result, file=sys.stderr, flush=True)
-        return result
-    Controller.evaluate, Probe.command = observed, sent
-    scope["run"]()
-    DIAGNOSTIC
+    CDP_TTY_PACKAGE="$PWD" python3 -u tests/proof.py | tee proof.jsonl
     runHook postCheck
   '';
   installPhase = ''
