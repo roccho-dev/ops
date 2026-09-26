@@ -16,6 +16,9 @@ stdenv.mkDerivation {
     chmod 700 "$XDG_RUNTIME_DIR"
     export CHROME_BIN=${chromium}/bin/chromium
     make probe
+    ${curl.dev}/bin/curl-config --version
+    ${curl.dev}/bin/curl-config --protocols
+    echo ${lib.escapeShellArg (builtins.toJSON { configureFlags = curl.configureFlags or [ ]; cmakeFlags = curl.cmakeFlags or [ ]; source = curl.meta.position or ""; })}
     set -o pipefail
     python3 -u tests/proof.py | tee proof.jsonl
     runHook postCheck
