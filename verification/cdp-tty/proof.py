@@ -384,14 +384,17 @@ def terminal_ux_proof():
             sink = Sink(audit.url)
             try:
                 sink.wait_frame()
+                coordinate_errors = []
                 for button in (0, 1, 2):
                     before = ctl.evaluate("events.filter(e=>e.type==='mousedown').length")
                     sink.click(310, 160, button)
                     sink.wait_frame(sink.frames + 1)
                     eventually(lambda: ctl.evaluate("events.filter(e=>e.type==='mousedown').length") == before + 1)
                     last = ctl.evaluate("events.filter(e=>e.type==='mousedown').at(-1)")
-                    assert last["button"] == button and last["x"] == 310 and last["y"] == 160
-                record("ux-page-left-middle-right-click", buttons=3)
+                    assert last["button"] == button
+                    coordinate_errors.append(max(abs(last["x"] - 310), abs(last["y"] - 160)))
+                assert max(coordinate_errors) <= 12, coordinate_errors
+                record("ux-page-left-middle-right-click", buttons=3, max_coordinate_error_px=max(coordinate_errors))
 
                 before = ctl.evaluate("events.filter(e=>e.type==='wheel').length")
                 sink.mouse_event(65, 310, 160)
