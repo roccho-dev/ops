@@ -96,6 +96,55 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Stage Laya typed-decisions checkpoint for sandbox benchmark
+        shell: bash
+        run: bash verification/raw-artifact-carry/typed-decisions-bridge.sh
+
+      - name: Upload Laya typed-decisions manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-typed-meta-${{ github.sha }}
+          path: ${{ runner.temp }}/laya-typed-decisions/chunks/manifest.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya typed-decisions part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-typed-00-${{ github.sha }}
+          path: ${{ runner.temp }}/laya-typed-decisions/chunks/part.00
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya typed-decisions part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-typed-01-${{ github.sha }}
+          path: ${{ runner.temp }}/laya-typed-decisions/chunks/part.01
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya typed-decisions part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-typed-02-${{ github.sha }}
+          path: ${{ runner.temp }}/laya-typed-decisions/chunks/part.02
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya typed-decisions part 03
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-typed-03-${{ github.sha }}
+          path: ${{ runner.temp }}/laya-typed-decisions/chunks/part.03
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Prove raw Carry above legacy 128 MiB bound
         shell: bash
         run: node packages/chatgpt-capability/ingress/carrier-job.mjs selftest-raw-large
