@@ -40,6 +40,10 @@ jobs:
         with:
           go-version-file: packages/gosh/go.mod
 
+      - name: Prove raw Carry above legacy 128 MiB bound
+        shell: bash
+        run: node packages/chatgpt-capability/ingress/carrier-job.mjs selftest-raw-large
+
       - name: Build, Carry, materialize, and replay
         env:
           GH_TOKEN: ${{ github.token }}
