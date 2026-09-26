@@ -203,7 +203,7 @@ int tty_run(Cdp *c, int observe, const volatile sig_atomic_t *cancel) {
         struct pollfd p={STDIN_FILENO,POLLIN,0}; int r=poll(&p,1,25);
         if (r<0 && errno!=EINTR) goto done;
         if (r>0) {
-            if (!(p.revents&POLLIN)) goto done;
+            if (!(p.revents&POLLIN) || t.used>=sizeof(t.input)-1) goto done;
             ssize_t n=read(STDIN_FILENO,t.input+t.used,sizeof(t.input)-t.used-1);
             if (n<=0 || memchr(t.input+t.used,0,(size_t)n)) goto done;
             t.used+=(size_t)n; t.input[t.used]=0; last_byte=clock_ms();
