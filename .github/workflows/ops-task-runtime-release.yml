@@ -42,6 +42,21 @@ jobs:
         with:
           go-version-file: packages/gosh/go.mod
 
+      - name: Stage Laya runtime wheels for sandbox proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/laya-wheelhouse"
+          python -m pip download --only-binary=:all: --no-deps             --dest "$RUNNER_TEMP/laya-wheelhouse"             "laya==0.3.20" "transformers==5.17.0" "tokenizers==0.23.2"
+
+      - name: Upload Laya runtime wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: laya-runtime-wheels-${{ github.sha }}
+          path: ${{ runner.temp }}/laya-wheelhouse/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Prove raw Carry above legacy 128 MiB bound
         shell: bash
         run: node packages/chatgpt-capability/ingress/carrier-job.mjs selftest-raw-large
