@@ -47,7 +47,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/laya-wheelhouse"
-          python -m pip download --only-binary=:all: --no-deps             --dest "$RUNNER_TEMP/laya-wheelhouse"             "laya==0.3.20" "transformers==5.17.0" "tokenizers==0.23.2"
+          python -m pip download --only-binary=:all: --no-deps             --dest "$RUNNER_TEMP/laya-wheelhouse"             "laya==0.3.20" "transformers==5.17.0" "tokenizers==0.23.2" "safetensors==0.8.0"
 
       - name: Upload Laya runtime wheels
         uses: actions/upload-artifact@v4
