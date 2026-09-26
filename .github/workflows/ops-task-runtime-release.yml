@@ -42,6 +42,46 @@ jobs:
         with:
           go-version-file: packages/gosh/go.mod
 
+      - name: Stage Qwen Q4_K_M for sandbox proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/qwen-q4km"
+          mkdir -p "$out"
+          url="https://huggingface.co/diodel/Qwen3.5-0.8B-Q4_K_M-GGUF/resolve/main/qwen3.5-0.8b-Q4_K_M.gguf?download=true"
+          file="$out/qwen3.5-0.8b-Q4_K_M.gguf"
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 1 "$url" -o "$file"
+          printf '%s  %s\n' "fb89581c3863314f6e6e1810f11b0bbb30a07315e7b1229a5c7db10fb0100ca6" "$file" | sha256sum --check -
+          split -b 250M -d -a 2 "$file" "$out/part."
+          rm "$file"
+
+      - name: Upload Qwen Q4_K_M part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-q4km-00-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-q4km/part.00
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Q4_K_M part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-q4km-01-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-q4km/part.01
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Q4_K_M part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-q4km-02-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-q4km/part.02
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
       - name: Stage accelerate wheel for sandbox Qwen proof
         shell: bash
         run: |
