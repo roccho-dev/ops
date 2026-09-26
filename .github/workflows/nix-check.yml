@@ -30,6 +30,8 @@ jobs:
           out="$(nix-build packages/cdp-tty/proof.nix --no-out-link 2> >(tee cdp-tty-proof/build.log >&2))"
           cp "$out"/* cdp-tty-proof/
           cat cdp-tty-proof/raws.jsonl
+          echo "--- Noctty/browser UX contract ---"
+          cat cdp-tty-proof/ux.jsonl
           git diff --exit-code -- flake.lock
       - uses: actions/upload-artifact@v4
         if: always()
