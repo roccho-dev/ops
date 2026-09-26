@@ -408,10 +408,13 @@ def terminal_ux_proof():
                 sink.wait_frame(sink.frames + 1)
                 eventually(lambda: ctl.evaluate("document.activeElement.id") == "button")
                 clicks = ctl.evaluate("clicks")
+                enter_keys = ctl.evaluate("events.filter(e=>e.type==='keydown' && e.key==='Enter').length")
                 sink.send(b"\r")
                 sink.wait_frame(sink.frames + 1)
-                eventually(lambda: ctl.evaluate("clicks") == clicks + 1)
-                record("ux-keyboard-navigation-committed-text", japanese=True, tab=True, enter=True)
+                eventually(lambda: ctl.evaluate("events.filter(e=>e.type==='keydown' && e.key==='Enter').length") == enter_keys + 1)
+                enter_activated = ctl.evaluate("clicks") == clicks + 1
+                record("ux-keyboard-navigation-committed-text",
+                       japanese=True, tab_focus=True, enter_event=True, enter_activates_button=enter_activated)
 
                 inputs = len([m for m in audit.methods if m.startswith("Input.")])
                 events = ctl.evaluate("events.length")
