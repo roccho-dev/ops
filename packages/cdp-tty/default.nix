@@ -38,8 +38,19 @@ stdenv.mkDerivation {
     cp cdp.h "$dev/include/cdp-tty/"
     cp proof.jsonl "$proof/raws.jsonl"
     cp curl-protocols.txt "$proof/curl-protocols.txt"
-    python3 -c 'import json,sys; rows=[json.loads(s) for s in open("proof.jsonl")]; assert all(r["status"] == "PASS" for r in rows if r["test"] != "residuals"); assert any(r["test"] == "residuals" and r["status"] == "NOT_RUN" for r in rows); [print(json.dumps(r)) for r in rows if any(k in r["test"] for k in ("block", "rejected", "only", "generation", "wire-", "no-retry", "isolation"))]' > "$proof/disruptives.jsonl"
-    sha256sum cdp.c cdp.h tty.c tty.h main.c Makefile tests/probe.c tests/proof.py default.nix > "$proof/source.sha256"
+    python3 <<'PYTHON' > "$proof/disruptives.jsonl"
+    import json
+    with open("proof.jsonl") as source:
+        rows = [json.loads(line) for line in source]
+    checks = [row for row in rows if row["test"] != "residuals"]
+    residuals = [row for row in rows if row["test"] == "residuals"]
+    assert checks and all(row["status"] == "PASS" for row in checks)
+    assert len(residuals) == 1 and residuals[0]["status"] == "NOT_RUN"
+    for row in checks:
+        if any(key in row["test"] for key in ("block", "rejected", "only", "generation", "wire-", "no-retry", "isolation")):
+            print(json.dumps(row))
+    PYTHON
+    sha256sum cdp.c cdp.h tty.c tty.h main.c Makefile tests/probe.c tests/proof.py default.nix proof.nix > "$proof/source.sha256"
     ${chromium}/bin/chromium --version > "$proof/versions.txt"
     pkg-config --modversion libcurl json-c >> "$proof/versions.txt"
     runHook postInstall
