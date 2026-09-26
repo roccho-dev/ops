@@ -1,0 +1,62 @@
+name: verify issue 355 exact operation catalog
+
+on:
+  push:
+    branches:
+      - proposal/issue-355-operation-catalog
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-355-operation-catalog-verify
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: DeterminateSystems/nix-installer-action@90bb610b7aef3fbc0420e8015400f1509b4510d4
+
+      - name: Focused contract and regression controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain=v1)"
+          test -d packages/ops-operation-catalog
+          node packages/ops-operation-catalog/tests/test-operation-catalog.mjs
+          node packages/ops-package-responses/lib/selftest.mjs
+          nix-instantiate --parse packages/ops-operation-catalog/flake.nix >/dev/null
+
+      - name: Build twice and verify exact output
+        shell: bash
+        run: |
+          set -euo pipefail
+          out1="$(nix build ./packages/ops-operation-catalog --no-link --print-out-paths)"
+          out2="$(nix build ./packages/ops-operation-catalog --no-link --print-out-paths)"
+          test "$out1" = "$out2"
+          test -f "$out1/operation-catalog.jsonl"
+          test -f "$out1/manifest.json"
+          sha256sum "$out1/operation-catalog.jsonl" "$out1/manifest.json" > "$RUNNER_TEMP/catalog.SHA256SUMS"
+          mkdir -p "$RUNNER_TEMP/issue355-evidence/catalog"
+          cp -a "$out1"/. "$RUNNER_TEMP/issue355-evidence/catalog/"
+          cp "$RUNNER_TEMP/catalog.SHA256SUMS" "$RUNNER_TEMP/issue355-evidence/"
+          git rev-parse HEAD > "$RUNNER_TEMP/issue355-evidence/source.commit"
+          git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/issue355-evidence/source.tree"
+          printf '%s\n' "$out1" > "$RUNNER_TEMP/issue355-evidence/nix.store-path"
+          nix path-info --json "$out1" > "$RUNNER_TEMP/issue355-evidence/nix.path-info.json"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue-355-operation-catalog-evidence
+          path: ${{ runner.temp }}/issue355-evidence
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
