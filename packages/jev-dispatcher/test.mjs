@@ -509,8 +509,220 @@ test('CLI names the contract id and version explicitly', async () => {
   assert.throws(() => argsOf(argv.with(7, 'r session')), /usage/);
 });
 
-test('read checkout rejects another commit', async () => {
+test('read checkout rejects another commit', {
+  skip: !existsSync('/root/.nix-profile/bin/git') || !existsSync('/work/repos/adrs-oci-policy-self-read'),
+}, async () => {
   const { verifyReadCheckout } = await import('./dispatcher.mjs');
   assert.throws(() => verifyReadCheckout('/work/repos/adrs-oci-policy-self-read',
     '0'.repeat(40), ['AGENTS.md']), /read checkout mismatch/);
+});
+
+// Synthetic scoped job: no real policy text, session, path or command.
+const WT = '/wt';
+const WT_FILES = [WT + '/pkg/a.mjs', WT + '/pkg/b.md'];
+const scopedRows = () => jobRows().map((row) => {
+  if (row.id !== 'job.example') return row;
+  const { task, ...rest } = structuredClone(row);
+  return { ...rest, objective: 'Synthetic objective.', target: { worktree: WT, files: ['pkg/a.mjs', 'pkg/b.md'] },
+    go_commands: {
+      selector: 'select --commit <C>',
+      adrs_read_checkout: '/adrs',
+      policy_reads: ['/adrs/AGENTS.md', '/adrs/policy/a.md', '/adrs/policy/b.md'],
+      r_start: { read: [...WT_FILES], bash: [] },
+      w: { read: [...WT_FILES], edit: [...WT_FILES], bash: [] },
+      r_pre_publication: { read: [...WT_FILES], bash: ['diff base --commit <C>'] },
+      r_post_publication: { read: [...WT_FILES], bash: ['show head', 'pr view'] },
+    } };
+});
+const scopedChanged = (edit) => asSelected(scopedRows().map((row) => {
+  if (row.id !== 'job.example') return row;
+  const copy = structuredClone(row);
+  edit(copy);
+  return copy;
+}));
+
+test('scoped stage capabilities come only from go_commands with <C> substituted', async () => {
+  const { loadJob, stageCapabilities } = await import('./dispatcher.mjs');
+  const job = loadJob(asSelected(scopedRows()), jobArgs);
+  const c = 'a'.repeat(40);
+  const policy = ['Read(//adrs/AGENTS.md)', 'Read(//adrs/policy/a.md)', 'Read(//adrs/policy/b.md)'];
+  const files = ['Read(//wt/pkg/a.mjs)', 'Read(//wt/pkg/b.md)'];
+  const w = stageCapabilities(job, 'w', c);
+  assert.equal(w.tools, 'Bash,Read,Edit');
+  assert.deepEqual(w.allowed, [...policy, ...files, 'Edit(//wt/pkg/a.mjs)', 'Edit(//wt/pkg/b.md)',
+    'Bash(select --commit ' + c + ')']);
+  assert.deepEqual(w.audit, { selector: 'select --commit ' + c, commands: [],
+    policyReads: ['/adrs/AGENTS.md', '/adrs/policy/a.md', '/adrs/policy/b.md'],
+    stableReads: [], editPaths: WT_FILES });
+  const pre = stageCapabilities(job, 'r_pre_publication', c);
+  assert.equal(pre.tools, 'Bash,Read');
+  assert.deepEqual(pre.allowed, [...policy, ...files, 'Bash(select --commit ' + c + ')',
+    'Bash(diff base --commit ' + c + ')']);
+  assert.deepEqual(pre.audit.stableReads, WT_FILES);
+  assert.ok(!JSON.stringify([w, pre]).includes('old'));
+  assert.throws(() => stageCapabilities(job, 'other', c), /stage capability/);
+});
+
+for (const [name, selected, error] of [
+  ['both task and go_commands', scopedChanged((row) => { row.task = { id: 't', refs: ['policy/a.md'], w_question: 'q' }; }),
+    /job shape/],
+  ['neither task nor go_commands', scopedChanged((row) => { delete row.go_commands; }), /job shape/],
+  ['relative stage path', scopedChanged((row) => { row.go_commands.r_start.read = ['wt/pkg/a.mjs']; }),
+    /stage capability/],
+  ['duplicate stage path', scopedChanged((row) => { row.go_commands.r_start.read.push(WT_FILES[0]); }),
+    /stage capability/],
+  ['edit path not read', scopedChanged((row) => { row.go_commands.w.read = [WT_FILES[1]]; }), /not readable/],
+  ['edit path outside target', scopedChanged((row) => {
+    row.go_commands.w.read.push('/wt/other'); row.go_commands.w.edit.push('/wt/other'); }), /outside target/],
+  ['unknown placeholder', scopedChanged((row) => { row.go_commands.r_post_publication.bash = ['show <HEAD>']; }),
+    /placeholder/],
+  ['selector without one <C>', scopedChanged((row) => { row.go_commands.selector = 'select'; }), /go_commands/],
+  ['policy reads disagree with requires', scopedChanged((row) => { row.go_commands.policy_reads.pop(); }),
+    /go_commands/],
+  ['other read checkout', scopedChanged((row) => { row.go_commands.adrs_read_checkout = '/other'; }), /go_commands/],
+  ['relative target file', scopedChanged((row) => { row.target.files = ['/pkg/a.mjs']; }), /target mismatch/],
+  ['empty objective', scopedChanged((row) => { row.objective = ' '; }), /objective/],
+]) {
+  test('scoped job rejects ' + name, async () => {
+    const { loadJob } = await import('./dispatcher.mjs');
+    assert.throws(() => loadJob(selected, jobArgs), error);
+  });
+}
+
+test('argv replaces --tools only through the stage parameter', async () => {
+  const { loadJob, buildArgv } = await import('./dispatcher.mjs');
+  const job = loadJob(asSelected(jobRows()), jobArgs);
+  const argv = (tools) => buildArgv(job.template, ['Read(//x)'], 'w-session', 'prompt', tools);
+  const toolsOf = (list) => list[list.indexOf('--tools') + 1];
+  assert.equal(toolsOf(buildArgv(job.template, ['Read(//x)'], 'w-session', 'prompt')), 'Bash,Read');
+  assert.equal(toolsOf(argv('Bash,Read,Edit')), 'Bash,Read,Edit');
+  assert.equal(job.template[job.template.indexOf('--tools') + 1], 'Bash,Read');
+  assert.throws(() => argv('Bash,Read,Write'), /tools mismatch/);
+});
+
+const scopedSpec = { selector: 'selector', commands: ['declared'], policyReads: ['/policy'],
+  stableReads: ['/stable'], editPaths: ['/edit'] };
+const v = '2.1.280';
+const use = (id, name, input) => ({ type: 'assistant', version: v,
+  message: { content: [{ type: 'tool_use', id, name, input }] } });
+const result = (id, toolUseResult, content = 'ok') => ({ type: 'user', version: v,
+  message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: false, content }] }, toolUseResult });
+const bashPair = (id, command) => [use(id, 'Bash', { command }),
+  result(id, { stdout: '{}', stderr: '', interrupted: false }, '{}')];
+const readPair = (id, path, numLines, totalLines) => [use(id, 'Read', { file_path: path, offset: 1, limit: 150 }),
+  result(id, { type: 'text', file: { filePath: path, startLine: 1, numLines, totalLines } })];
+const scopedTurn = (key) => [
+  { type: 'user', version: v, message: { content: 'DISPATCH-KEY: ' + key + '\nbody' } },
+  ...bashPair('b1', 'selector'), ...bashPair('b2', 'declared'),
+  ...readPair('r1', '/policy', 2, 2), ...readPair('r2', '/stable', 3, 3), ...readPair('r3', '/edit', 1, 5),
+  use('e1', 'Edit', { file_path: '/edit', old_string: 'a', new_string: 'b' }),
+  result('e1', { filePath: '/edit', oldString: 'a', newString: 'b' }),
+  { type: 'assistant', version: v, message: { id: 'final', model: 'claude-opus-5-5', stop_reason: 'end_turn',
+    content: [{ type: 'text', text: 'done' }] } },
+];
+const useOf = (rows, id) => rows.find((row) => row.message?.content?.[0]?.id === id).message.content[0];
+const resultOf = (rows, id) => rows.find((row) => row.message?.content?.[0]?.tool_use_id === id);
+
+test('scoped audit admits declared commands, stable reads and well-formed edits only', async () => {
+  const { auditTurn } = await import('./dispatcher.mjs');
+  const key = 'key';
+  const audit = (edit, spec = scopedSpec) => {
+    const rows = scopedTurn(key);
+    edit(rows);
+    return auditTurn(rows, key, spec);
+  };
+  assert.equal(audit(() => {}), 'CLEAN');
+  assert.equal(audit((t) => { useOf(t, 'b2').input.command = 'other'; }), 'STOP_FOREIGN_TOOL');
+  assert.equal(audit((t) => { useOf(t, 'e1').input.file_path = '/other'; }), 'STOP_FOREIGN_TOOL');
+  assert.equal(audit((t) => { useOf(t, 'e1').name = 'Write'; }), 'STOP_FOREIGN_TOOL');
+  assert.equal(audit((t) => { useOf(t, 'r2').input.file_path = '/elsewhere'; }), 'STOP_FOREIGN_TOOL');
+  assert.equal(audit((t) => { resultOf(t, 'e1').toolUseResult.filePath = '/other'; }), 'UNKNOWN_FORM');
+  assert.equal(audit((t) => { resultOf(t, 'e1').toolUseResult.newString = 'c'; }), 'UNKNOWN_FORM');
+  assert.equal(audit((t) => { useOf(t, 'e1').input.extra = 1; }), 'UNKNOWN_FORM');
+  assert.equal(audit((t) => { useOf(t, 'e1').input.replace_all = 'yes'; }), 'UNKNOWN_FORM');
+  assert.equal(audit((t) => { useOf(t, 'e1').input.replace_all = false; }), 'CLEAN');
+  assert.equal(audit((t) => { resultOf(t, 'e1').message.content[0].is_error = true; }), 'STOP_TOOL_ERROR');
+  assert.equal(audit((t) => { resultOf(t, 'r2').toolUseResult.file.numLines = 1; }), 'STOP_READ_INCOMPLETE');
+  assert.equal(audit((t) => { resultOf(t, 'r1').toolUseResult.file.numLines = 1; }), 'STOP_READ_INCOMPLETE');
+  assert.equal(audit((t) => { t.splice(1, 2); }), 'UNKNOWN_FORM');
+  assert.equal(audit(() => {}, { command: 'selector', readPaths: ['/policy', '/stable'] }), 'STOP_FOREIGN_TOOL');
+});
+
+test('route is exactly one value-free last line outside a code fence', async () => {
+  const { routeOf } = await import('./dispatcher.mjs');
+  for (const route of ['W', 'PUBLISH', 'P', 'TERMINAL'])
+    assert.equal(routeOf('Reasons.\n\nROUTE: ' + route + '\n'), route);
+  for (const text of ['no route', 'ROUTE: W\nROUTE: P', 'ROUTE: W\nmore prose',
+    '\x60\x60\x60\nROUTE: W\n\x60\x60\x60', '\x60\x60\x60\nROUTE: W', 'ROUTE: w', 'ROUTE: W extra',
+    '  ROUTE: P\nROUTE: W'])
+    assert.throws(() => routeOf(text), /invalid route/, text);
+});
+
+test('next stage walks the keyed chain and launches nothing', async () => {
+  const { nextStage, keyFor } = await import('./dispatcher.mjs');
+  const c = 'a'.repeat(40), label = 'job.example@v1';
+  const job = { r: 'r-session', w: 'w-session' };
+  const spec = () => auditSpec;
+  const rTurn = (source, id, route) => safeTurn(keyFor(c, 'r-session', source), id, 'reasons\nROUTE: ' + route);
+  const wTurn = (source, id) => safeTurn(keyFor(c, 'w-session', source), id, 'changed');
+  const next = (r, w) => nextStage(c, label, job, r, w, spec);
+  assert.deepEqual(next([], []), { stage: 'r_start', id: 'r-session', source: label, prior: null });
+  const r1 = rTurn(label, 'r1', 'W');
+  assert.equal(next(r1, []).stage, 'w');
+  assert.equal(next(r1, []).source, 'r1');
+  const w1 = wTurn('r1', 'w1');
+  assert.deepEqual([next(r1, w1).stage, next(r1, w1).source], ['r_pre_publication', 'w1']);
+  const r2 = rTurn('w1', 'r2', 'W');
+  assert.deepEqual([next([...r1, ...r2], w1).stage, next([...r1, ...r2], w1).source], ['w', 'r2']);
+  const w2 = wTurn('r2', 'w2');
+  const r3 = rTurn('w2', 'r3', 'PUBLISH');
+  const published = next([...r1, ...r2, ...r3], [...w1, ...w2]);
+  assert.deepEqual([published.state, published.stage, published.source], ['PUBLISH_PENDING', 'r_post_publication', 'r3']);
+  const r4 = rTurn('r3', 'r4', 'TERMINAL');
+  assert.deepEqual(next([...r1, ...r2, ...r3, ...r4], [...w1, ...w2]), { state: 'TERMINAL', final: 'r4' });
+  const r4w = rTurn('r3', 'r4w', 'W');
+  assert.equal(next([...r1, ...r2, ...r3, ...r4w], [...w1, ...w2]).stage, 'w');
+  assert.deepEqual(next(rTurn(label, 'rp', 'P'), []), { state: 'RETURN_P', final: 'rp' });
+  assert.throws(() => next([...r1, ...rTurn('w1', 'rt', 'TERMINAL')], w1), /invalid route/);
+  assert.throws(() => next(rTurn(label, 'rs', 'PUBLISH'), []), /invalid route/);
+  const badW = structuredClone(w1);
+  badW[2].toolUseResult.persistedOutputPath = '/private/result';
+  assert.throws(() => next(r1, badW), /w audit not clean/);
+  assert.throws(() => next(safeTurn(keyFor(c, 'r-session', label), 'r0', 'no route'), []), /invalid route/);
+});
+
+test('declared-file snapshot stops on any path outside the declared files', async () => {
+  const { snapshotOf, snapshotDigest, headerSnapshot } = await import('./dispatcher.mjs');
+  const files = ['pkg/a.mjs', 'pkg/b.md'];
+  const snap = snapshotOf('h', ' M pkg/a.mjs\n?? pkg/b.md\n', ['1', '2'], files);
+  assert.deepEqual(snap, { head: 'h', files: { 'pkg/a.mjs': '1', 'pkg/b.md': '2' } });
+  assert.deepEqual(snapshotOf('h', '', ['1', '2'], files).files, snap.files);
+  for (const status of ['?? other.txt\n', 'R  pkg/a.mjs -> other.txt\n', '!! node_modules/\n'])
+    assert.throws(() => snapshotOf('h', status, ['1', '2'], files), /STOP_WORKTREE_CHANGED/, status);
+  assert.notEqual(snapshotDigest(snap), snapshotDigest(snapshotOf('h', '', ['1', '3'], files)));
+  const digest = snapshotDigest(snap);
+  const header = { type: 'user', message: { content: 'DISPATCH-KEY: k\nCONTRACT: job.example@v1 C=' +
+    'a'.repeat(40) + ' STEP=w SOURCE=r1 SNAPSHOT=' + digest + '\nbody' } };
+  assert.equal(headerSnapshot([header], 'k'), digest);
+  assert.equal(headerSnapshot([], 'k'), null);
+});
+
+test('scoped launch records are well formed for version use', async () => {
+  const { versionUse } = await import('./dispatcher.mjs');
+  const c = 'a'.repeat(40), other = 'b'.repeat(40);
+  const record = (commit, step) => ({ type: 'user', message: { content: 'DISPATCH-KEY: ' + 'f'.repeat(64) +
+    '\nCONTRACT: job.example@v1 C=' + commit + ' STEP=' + step + ' SOURCE=r1 SNAPSHOT=' + 'e'.repeat(64) } });
+  for (const step of ['r_start', 'w', 'r_pre_publication', 'r_post_publication']) {
+    assert.equal(versionUse([[record(c, step)], []], 'job.example', 'v1', c), 'UNUSED_ELSEWHERE');
+    assert.equal(versionUse([[record(other, step)], []], 'job.example', 'v1', c), 'STOP_VERSION_USED');
+  }
+  assert.equal(versionUse([[record(c, 'later')], []], 'job.example', 'v1', c), 'STOP_MALFORMED_RECORD');
+});
+
+test('CLI accepts --step next and still rejects unknown steps', async () => {
+  const { argsOf } = await import('./dispatcher.mjs');
+  const argv = ['--mode', 'launch', '--step', 'next', '--commit', 'a'.repeat(40),
+    '--r-id', 'r-session', '--contract-id', 'job.example', '--version', 'v1'];
+  assert.equal(argsOf(argv).step, 'next');
+  assert.throws(() => argsOf(argv.with(3, 'later')), /usage/);
 });

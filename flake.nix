@@ -149,6 +149,7 @@
                 nativeBuildInputs = [ pkgs.nodejs ];
               }
               ''
+                ${pkgs.nodejs}/bin/node --test ${self}/packages/jev-dispatcher/test.mjs
                 cd ${self}/packages/jev
                 ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
                 cd "$TMPDIR"
