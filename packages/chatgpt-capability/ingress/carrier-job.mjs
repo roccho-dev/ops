@@ -5,6 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const sha = (x) => crypto.createHash("sha256").update(x).digest("hex");
 const json = (x) => `${JSON.stringify(x, null, 2)}\n`;
@@ -41,6 +43,143 @@ async function source(u) {
     if (b.length > 128 * 1024 * 1024) fail(`source too large: ${u.href}`);
     return b;
   } finally { clearTimeout(t); }
+}
+
+function rawRequest(file) {
+  const x = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (x?.schema !== "carrier-job/2" || !/^[A-Za-z0-9._-]{1,128}$/.test(x.request_id ?? "") || !Array.isArray(x.sources) || !x.sources.length) fail("invalid carrier-job/2 request");
+  const seen = new Set();
+  const sources = x.sources.map((s, i) => {
+    const n = name(s?.name, `sources[${i}].name`);
+    if (seen.has(n)) fail(`duplicate source: ${n}`);
+    seen.add(n);
+    let u;
+    try { u = new URL(s.url); } catch { fail(`invalid source URL: ${n}`); }
+    if (!["https:", "file:"].includes(u.protocol)) fail(`unsupported source URL: ${n}`);
+    if (!Number.isSafeInteger(s.bytes) || s.bytes < 0) fail(`${n}.bytes must be a non-negative safe integer`);
+    return { name: n, url: u.href, bytes: s.bytes, sha256: hex(s.sha256, `${n}.sha256`) };
+  });
+  const payloadSource = name(x?.payload?.source, "payload.source");
+  if (x?.payload?.codec !== "raw" || !seen.has(payloadSource)) fail("payload must select a raw source");
+  return { schema: "carrier-job/2", request_id: x.request_id, sources, payload: { source: payloadSource, codec: "raw" } };
+}
+
+async function fileInfo(file) {
+  const h = crypto.createHash("sha256");
+  let bytes = 0;
+  for await (const chunk of fs.createReadStream(file)) {
+    bytes += chunk.length;
+    h.update(chunk);
+  }
+  return { bytes, sha256: h.digest("hex") };
+}
+
+async function streamSource(u, target, expected) {
+  const h = crypto.createHash("sha256");
+  let bytes = 0;
+  const meter = new Transform({
+    transform(chunk, _encoding, callback) {
+      bytes += chunk.length;
+      if (bytes > expected.bytes) return callback(new Error(`source bytes exceed expected: ${expected.name}`));
+      h.update(chunk);
+      callback(null, chunk);
+    },
+  });
+  const copy = async (input) => {
+    await pipeline(input, meter, fs.createWriteStream(target, { flags: "wx" }));
+    const digest = h.digest("hex");
+    if (bytes !== expected.bytes) fail(`source bytes mismatch: ${expected.name}`);
+    if (digest !== expected.sha256) fail(`source sha256 mismatch: ${expected.name}`);
+    return { bytes, sha256: digest };
+  };
+
+  try {
+    if (u.protocol === "file:") return await copy(fs.createReadStream(fileURLToPath(u)));
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 10 * 60_000);
+    try {
+      const r = await fetch(u, { redirect: "follow", signal: c.signal });
+      if (!r.ok) fail(`GET ${r.status}: ${u.href}`);
+      if (!r.body) fail(`empty response body: ${u.href}`);
+      return await copy(Readable.fromWeb(r.body));
+    } finally { clearTimeout(t); }
+  } catch (error) {
+    fs.rmSync(target, { force: true });
+    throw error;
+  }
+}
+
+function rawReceipt(r, req, rows) {
+  const payload = rows.find((row) => row.name === r.payload.source);
+  if (!payload) fail("payload source missing");
+  return {
+    schema: "carrier-job-receipt/2", status: "PASS", requestId: r.request_id, requestSha256: sha(req), sources: rows,
+    payload: { source: payload.name, path: `files/${payload.name}`, codec: "raw", bytes: payload.bytes, sha256: payload.sha256 },
+  };
+}
+
+async function materializeRaw(reqFile, out, sourceDirInput = null) {
+  if (fs.existsSync(out)) fail(`out exists: ${out}`);
+  const r = rawRequest(reqFile);
+  const sourceDir = validateSourceDir(sourceDirInput, r.sources);
+  fs.mkdirSync(path.join(out, "files"), { recursive: true });
+  const req = Buffer.from(json(r));
+  fs.writeFileSync(path.join(out, "request.json"), req);
+  const rows = [];
+  for (const s of r.sources) {
+    const bound = sourceDir ? path.join(sourceDir, s.name) : null;
+    const u = bound && fs.existsSync(bound) ? pathToFileURL(bound) : new URL(s.url);
+    const info = await streamSource(u, path.join(out, "files", s.name), s);
+    rows.push({ ...s, ...info });
+  }
+  fs.writeFileSync(path.join(out, "receipt.json"), json(rawReceipt(r, req, rows)));
+  const sumRows = [
+    `${sha(req)}  request.json`,
+    ...rows.map((row) => `${row.sha256}  files/${row.name}`),
+  ];
+  fs.writeFileSync(path.join(out, "SHA256SUMS"), `${sumRows.join("\n")}\n`);
+  return verifyRaw(out);
+}
+
+async function verifyRaw(root) {
+  const r = rawRequest(path.join(root, "request.json"));
+  const allowed = ["SHA256SUMS", "files", "receipt.json", "request.json"].sort();
+  if (JSON.stringify(fs.readdirSync(root).sort()) !== JSON.stringify(allowed)) fail("unexpected artifact entries");
+  for (const f of allowed.filter((x) => x !== "files")) if (!fs.lstatSync(path.join(root, f)).isFile()) fail(`not a regular file: ${f}`);
+  if (!fs.lstatSync(path.join(root, "files")).isDirectory()) fail("files must be a directory");
+  const actual = fs.readdirSync(path.join(root, "files")).sort();
+  const expected = r.sources.map((s) => s.name).sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) fail("source inventory mismatch");
+  for (const f of actual) if (!fs.lstatSync(path.join(root, "files", f)).isFile()) fail(`not a regular file: ${f}`);
+
+  const lines = fs.readFileSync(path.join(root, "SHA256SUMS"), "utf8").trimEnd().split("\n");
+  const wanted = ["request.json", ...r.sources.map((s) => `files/${s.name}`)].sort();
+  const got = [];
+  const observed = new Map();
+  for (const line of lines) {
+    const m = line.match(/^([a-f0-9]{64})  ([A-Za-z0-9._/-]+)$/);
+    if (!m || m[2].split("/").some((x) => !x || x === "." || x === "..")) fail("invalid SHA256SUMS");
+    if (got.includes(m[2])) fail(`duplicate checksum path: ${m[2]}`);
+    const file = path.join(root, ...m[2].split("/"));
+    const info = m[2] === "request.json"
+      ? { bytes: fs.statSync(file).size, sha256: sha(fs.readFileSync(file)) }
+      : await fileInfo(file);
+    if (info.sha256 !== m[1]) fail(`checksum mismatch: ${m[2]}`);
+    got.push(m[2]);
+    observed.set(m[2], info);
+  }
+  if (JSON.stringify(got.sort()) !== JSON.stringify(wanted)) fail("checksum inventory mismatch");
+
+  const req = fs.readFileSync(path.join(root, "request.json"));
+  const rows = r.sources.map((s) => {
+    const info = observed.get(`files/${s.name}`);
+    if (!info || info.bytes !== s.bytes) fail(`source bytes mismatch: ${s.name}`);
+    if (info.sha256 !== s.sha256) fail(`source sha256 mismatch: ${s.name}`);
+    return { ...s, ...info };
+  });
+  const observedReceipt = rawReceipt(r, req, rows);
+  if (json(JSON.parse(fs.readFileSync(path.join(root, "receipt.json"), "utf8"))) !== json(observedReceipt)) fail("receipt mismatch");
+  return observedReceipt;
 }
 
 function decode(b) {
@@ -146,6 +285,7 @@ function options(a, required, optional = []) {
 }
 
 function rejects(fn, re) { try { fn(); } catch (e) { if (re.test(e.message)) return; throw e; } fail(`expected ${re}`); }
+async function rejectsAsync(fn, re) { try { await fn(); } catch (e) { if (re.test(e.message)) return; throw e; } fail(`expected ${re}`); }
 
 async function selftest() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "carrier-job-"));
@@ -180,12 +320,55 @@ async function selftest() {
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 }
 
+async function rawSelftest() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "carrier-job-raw-"));
+  try {
+    const src = path.join(root, "src"); fs.mkdirSync(src);
+    const payloadPath = path.join(src, "model.gguf");
+    const chunk = Buffer.alloc(1024 * 1024, 0x5a);
+    const count = 129;
+    const h = crypto.createHash("sha256");
+    const fd = fs.openSync(payloadPath, "wx");
+    try {
+      for (let i = 0; i < count; i += 1) { fs.writeSync(fd, chunk); h.update(chunk); }
+    } finally { fs.closeSync(fd); }
+    const bytes = count * chunk.length;
+    const digest = h.digest("hex");
+    const r = {
+      schema: "carrier-job/2",
+      request_id: "raw-large-selftest",
+      sources: [{ name: "model.gguf", url: pathToFileURL(payloadPath).href, bytes, sha256: digest }],
+      payload: { source: "model.gguf", codec: "raw" },
+    };
+    const rf = path.join(root, "request.json"); fs.writeFileSync(rf, json(r));
+    const out = path.join(root, "out"); await materializeRaw(rf, out);
+    fs.rmSync(src, { recursive: true, force: true });
+    await verifyRaw(out);
+    fs.appendFileSync(path.join(out, "files", "model.gguf"), "x");
+    await rejectsAsync(() => verifyRaw(out), /checksum mismatch|source bytes mismatch|source sha256 mismatch/);
+    console.log(JSON.stringify({ schema: "carrier-job-raw-selftest/1", status: "PASS", bytes, positive: 2, negative: 1 }));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+}
+
 async function main() {
   const [cmd, ...a] = process.argv.slice(2);
   if (!cmd || cmd === "selftest") return selftest();
-  if (cmd === "materialize") { const o = options(a, ["--request", "--out"], ["--source-dir"]); console.log(JSON.stringify(await materialize(o["--request"], o["--out"], o["--source-dir"] ?? null))); return; }
-  if (cmd === "verify") { const o = options(a, ["--input", "--receipt"]); const x = verify(o["--input"]); fs.writeFileSync(o["--receipt"], json(x)); console.log(JSON.stringify(x)); return; }
-  fail("usage: carrier-job.mjs [selftest] | materialize --request FILE --out DIR [--source-dir DIR] | verify --input DIR --receipt FILE");
+  if (cmd === "selftest-raw-large") return rawSelftest();
+  if (cmd === "materialize") {
+    const o = options(a, ["--request", "--out"], ["--source-dir"]);
+    const schema = JSON.parse(fs.readFileSync(o["--request"], "utf8"))?.schema;
+    const x = schema === "carrier-job/2"
+      ? await materializeRaw(o["--request"], o["--out"], o["--source-dir"] ?? null)
+      : await materialize(o["--request"], o["--out"], o["--source-dir"] ?? null);
+    console.log(JSON.stringify(x)); return;
+  }
+  if (cmd === "verify") {
+    const o = options(a, ["--input", "--receipt"]);
+    const schema = JSON.parse(fs.readFileSync(path.join(o["--input"], "request.json"), "utf8"))?.schema;
+    const x = schema === "carrier-job/2" ? await verifyRaw(o["--input"]) : verify(o["--input"]);
+    fs.writeFileSync(o["--receipt"], json(x)); console.log(JSON.stringify(x)); return;
+  }
+  fail("usage: carrier-job.mjs [selftest|selftest-raw-large] | materialize --request FILE --out DIR [--source-dir DIR] | verify --input DIR --receipt FILE");
 }
 
 main().catch((e) => { console.error(`carrier-job: ${e.message}`); process.exit(1); });
