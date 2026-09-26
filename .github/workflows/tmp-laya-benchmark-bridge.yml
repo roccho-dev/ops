@@ -19,5 +19,8 @@ jobs:
           path: |
             packages/parallel-development/tests/cases.jsonl
             packages/parallel-development/tests/expected.jsonl
+            packages/repo-health/design/cases.jsonl
+            packages/repo-health/dag/benchmark/cases.jsonl
+            packages/repo-health/dag/benchmark/gold.jsonl
           if-no-files-found: error
           retention-days: 1
