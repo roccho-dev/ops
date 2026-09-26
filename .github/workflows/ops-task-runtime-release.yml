@@ -42,6 +42,20 @@ jobs:
         with:
           go-version-file: packages/gosh/go.mod
 
+      - name: Stage accelerate wheel for sandbox Qwen proof
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/qwen-wheelhouse"
+          python -m pip download --only-binary=:all: --no-deps             --dest "$RUNNER_TEMP/qwen-wheelhouse" "accelerate==1.10.1"
+
+      - name: Upload accelerate wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: qwen-accelerate-wheel-${{ github.sha }}
+          path: ${{ runner.temp }}/qwen-wheelhouse/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Prove raw Carry above legacy 128 MiB bound
         shell: bash
         run: node packages/chatgpt-capability/ingress/carrier-job.mjs selftest-raw-large
