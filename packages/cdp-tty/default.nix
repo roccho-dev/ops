@@ -31,7 +31,7 @@ stdenv.mkDerivation {
     sed -n 's/^Protocols: //p' curl-version.txt | tr ' ' '\n' > curl-protocols.txt
     grep -Fx ws curl-protocols.txt
     grep -Fx wss curl-protocols.txt
-    python3 -u tests/proof.py | tee proof.jsonl
+    CDP_TTY_PACKAGE="$PWD" python3 -u tests/proof.py | tee proof.jsonl
     runHook postCheck
   '';
   installPhase = ''

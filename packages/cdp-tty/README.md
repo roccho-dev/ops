@@ -32,20 +32,25 @@ The project-wide licensing decision is not changed by this package.
 
 ## Finite browser surface
 
-Six methods, with no arbitrary caller-supplied method/JSON passthrough:
+Seven methods, with no arbitrary caller-supplied method/JSON passthrough:
 
 | Method | Purpose |
 |---|---|
 | `Page.getLayoutMetrics` | CSS viewport geometry, scroll position and zoom limits |
 | `Page.getFrameTree` | Main-frame loader identity across navigation |
-| `Page.captureScreenshot` | Clipped viewport PNG, never resize/emulate the viewport |
+| `Page.captureScreenshot` | Full existing-view PNG; no clip or temporary emulation |
 | `Input.dispatchMouseEvent` | Click pair or wheel |
 | `Input.dispatchKeyEvent` | Finite supported key-down/up pairs |
 | `Input.insertText` | Committed UTF-8 text |
+| `Runtime.evaluate` | One fixed side-effect-checked read of innerWidth/innerHeight/DPR |
 
-Explicit screenshot clipping excludes scrollbar pixels; treating an unclipped
-PNG width as CSS viewport width caused a real coordinate error in the first
-proof. DPR 1 and 2 now exercise this boundary.
+A clipped surface capture was observed resetting another CDP client's DPR=2
+back to 1. Capture now uses `fromSurface:false` without a clip. The fixed
+geometry expression supplies scrollbar-inclusive dimensions absent from
+`getLayoutMetrics`; the caller cannot supply JavaScript. `throwOnSideEffect`
+rejects page-defined getters that would write state, and the audit checks the
+exact expression and flags. No `Runtime.enable` or DOM mutation is added.
+Tests cover startup DPR 1/2 and independent-controller DPR 2/1.25.
 
 Before input, compare a new frame/geometry/loader with the acknowledged shown
 frame. A change discards the input. This reduces stale-frame mistakes; it is
@@ -74,6 +79,7 @@ OS privilege isolation is not supplied by an API allowlist.
 ## Proof
 
 `make check` builds the CLI and actual static library, then requires real Chrome.
+The harness lives at `verification/cdp-tty/proof.py`, outside runtime sources.
 `nix-build packages/cdp-tty/proof.nix --no-out-link` uses the repository's existing
 nixpkgs lock and this same package recipe, without unrelated private inputs.
 The package emits `out` (CLI), `dev` (C library/header), and `proof` (receipts).
@@ -85,6 +91,12 @@ cookie. An independent connection records viewer wire methods. A real PTY plus
 acknowledgements, mouse/key/text, resize and terminal cleanup. Fault injection
 covers fragmented WS/control/UTF-8, malformed JSON, wrong response ID, oversized
 messages/paste/numbers, bad PNG envelope, timeout and unknown input completion.
+The same mandatory CI entry also logs into a disposable loopback HTTP fixture
+and verifies authenticated requests, cookies, targets and viewport survive
+normal exit, SIGTERM, SIGHUP and SIGKILL. That is fixture-service evidence,
+not a proof of a user's third-party login or an actual SSH disconnect.
+Positive input effects are observed with bounded waits across the independent
+CDP connections; accepting an input request is not the effect observation.
 
 Receipts keep observations in `raws.jsonl`, a filtered destructive-case view in
 `disruptives.jsonl`, source hashes and dependency versions. They contain no page
@@ -94,8 +106,8 @@ failed assertion fails the proof; untested final gates remain `NOT_RUN`.
 **Still required before #423 completion:** a real graphical terminal renderer,
 Windows -> SSH -> selected OCI deployment, real service login survival,
 full drag/required modifiers and sustained CPU/bandwidth measurements. A
-synthetic cookie and a PTY sink prove neither authenticated service use nor the
-human-visible Windows path. Keep the PR Draft until its full acceptance scope
+synthetic cookie, local HTTP session and PTY sink do not prove third-party
+login survival or the human-visible Windows path. Keep the PR Draft until its full acceptance scope
 is resolved; do not close #423 or remove existing recovery paths from this proof.
 
 Protocol references: Chrome DevTools Protocol Page/Input, Kitty graphics

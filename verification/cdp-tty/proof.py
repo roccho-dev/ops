@@ -7,6 +7,7 @@ import base64
 import contextlib
 import fcntl
 import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -26,9 +27,9 @@ import urllib.request
 import zlib
 import websocket
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("CDP_TTY_PACKAGE", Path(__file__).resolve().parents[2] / "packages/cdp-tty")).resolve()
 ALLOWED = {"Page.getLayoutMetrics", "Page.getFrameTree", "Page.captureScreenshot",
-           "Input.dispatchMouseEvent", "Input.dispatchKeyEvent", "Input.insertText"}
+           "Input.dispatchMouseEvent", "Input.dispatchKeyEvent", "Input.insertText", "Runtime.evaluate"}
 RECEIPTS: list[dict] = []
 PAGE = b'''<!doctype html><meta charset=utf-8><title>fixture</title>
 <style>body{margin:0;height:2500px;background:#eee;font:18px sans-serif}
@@ -172,6 +173,11 @@ class AuditHandler(socketserver.StreamRequestHandler):
                 method = req["method"]
                 self.server.methods.append(method)  # never retain params, frames or secrets
                 assert method in ALLOWED, f"forbidden wire method: {method}"
+                if method == "Runtime.evaluate":
+                    assert req["params"] == {"expression": "({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})",
+                        "returnByValue": True, "throwOnSideEffect": True, "silent": True, "timeout": 1000}
+                if method == "Page.captureScreenshot":
+                    assert req["params"] == {"format": "png", "captureBeyondViewport": False, "fromSurface": False}
                 fault = self.server.fault
                 if fault == "timeout":
                     time.sleep(4)
@@ -327,11 +333,113 @@ class Sink:
         os.close(self.slave)
         err = self.p.stderr.read().decode()
         self.p.stderr.close()
-        assert restored, "TTY attributes not restored"
+        assert restored or sig == signal.SIGKILL, "TTY attributes not restored"
         return self.p.returncode, err
 
 
+def independent_geometry_proof():
+    """Observer A owns emulation; native connection B must preserve it."""
+    with browser() as (page, ctl, chrome, debug, _):
+        state = "[innerWidth,innerHeight,devicePixelRatio]"
+        for width, height, dpr in ((640, 480, 2), (701, 509, 1.25)):
+            ctl.call("Emulation.setDeviceMetricsOverride", {
+                "width": width, "height": height, "deviceScaleFactor": dpr, "mobile": False})
+            eventually(lambda: ctl.evaluate(state) == [width, height, dpr])
+            before = ctl.evaluate(state)
+            with Audit(page["webSocketDebuggerUrl"]) as audit, Probe(audit.url) as p:
+                p.frame()
+                assert before == ctl.evaluate(state), {"before": before, "after": ctl.evaluate(state)}
+                count = ctl.evaluate("clicks")
+                assert p.command("click 310 160 0")[0] == 0
+                eventually(lambda: ctl.evaluate("clicks") == count + 1)
+                assert ctl.evaluate("events.filter(e=>e.type==='click').at(-1).x") == 310
+                ctl.evaluate("document.querySelector('#stamp').textContent+='x'")
+                assert p.command("click 310 160 0")[0] == 2
+                assert ctl.evaluate("clicks") == count + 1
+                assert before == ctl.evaluate(state)
+            assert chrome.poll() is None and before == ctl.evaluate(state)
+            with Probe(page["webSocketDebuggerUrl"]) as p:
+                p.frame()  # Direct attach too: an audit proxy is not required.
+            assert before == ctl.evaluate(state)
+            record("independent-controller-dpr-input-detach-reattach", dpr=dpr, viewport=before[:2])
+        # Page script must not turn the fixed geometry read into a write.
+        ctl.evaluate("window.sideEffects=0; Object.defineProperty(window,'innerWidth',"
+                     "{configurable:true,get(){window.sideEffects++; return 701}}); void 0")
+        with Probe(page["webSocketDebuggerUrl"]) as p:
+            assert p.command("frame")[0] != 0
+        assert ctl.evaluate("sideEffects") == 0
+        record("geometry-getter-side-effect-rejected")
+
+def fixture_auth_proof():
+    """A real local HTTP session, not a user's service/account credential."""
+    token = os.urandom(24).hex()
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+        def do_GET(self):
+            authenticated = self.headers.get("Cookie") == "proof-session=" + token
+            login = self.path == "/login"
+            self.send_response(200 if login or authenticated else 401)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            if login:
+                self.send_header("Set-Cookie", "proof-session=" + token + "; Path=/; HttpOnly; SameSite=Strict")
+            self.end_headers()
+            self.wfile.write(PAGE if login or authenticated else b"unauthenticated")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with browser() as (page, ctl, chrome, debug, _):
+            origin = f"http://127.0.0.1:{server.server_port}"
+            result = ctl.call("Page.navigate", {"url": origin + "/login"})
+            assert not result.get("errorText"), "test HTTP navigation blocked: " + result.get("errorText", "")
+            eventually(lambda: ctl.evaluate("!!document.querySelector('#text')"))
+            state = "[innerWidth,innerHeight,devicePixelRatio]"
+            before = ctl.evaluate(state)
+            cookies = ctl.call("Network.getAllCookies")["cookies"]
+            ids = sorted(x["id"] for x in json.load(urllib.request.urlopen(f"http://127.0.0.1:{debug}/json/list", timeout=2)))
+            def authenticated():
+                result = ctl.call("Runtime.evaluate", {"expression": "fetch('/session').then(r=>r.status)",
+                    "awaitPromise": True, "returnByValue": True})
+                return result.get("result", {}).get("value") == 200
+            assert authenticated()
+            # Server-side authentication must distinguish missing credentials.
+            try:
+                urllib.request.urlopen(origin + "/session", timeout=2)
+                raise AssertionError("unauthenticated session was accepted")
+            except urllib.error.HTTPError as error:
+                assert error.code == 401
+            for sig in (None, signal.SIGTERM, signal.SIGHUP, signal.SIGKILL):
+                with Audit(page["webSocketDebuggerUrl"]) as audit:
+                    sink = Sink(audit.url)
+                    try:
+                        sink.wait_frame()
+                        count = ctl.evaluate("clicks")
+                        sink.click()
+                        sink.wait_frame(sink.frames + 1)
+                        eventually(lambda: ctl.evaluate("clicks") == count + 1)
+                        # A second CDP client remains usable while the viewer lives.
+                        assert authenticated() and before == ctl.evaluate(state)
+                    finally:
+                        code, _ = sink.close(sig)
+                    assert code == (-signal.SIGKILL if sig == signal.SIGKILL else 0)
+                assert chrome.poll() is None
+                assert cookies == ctl.call("Network.getAllCookies")["cookies"]
+                assert before == ctl.evaluate(state) and authenticated()
+                assert ids == sorted(x["id"] for x in json.load(urllib.request.urlopen(f"http://127.0.0.1:{debug}/json/list", timeout=2)))
+                record("fixture-auth-viewer-exit-isolation", signal=int(sig or 0),
+                       browser_alive=True, same_targets=True, session_http_status=200)
+            ctl.call("Network.deleteCookies", {"name": "proof-session", "url": origin})
+            assert not authenticated()
+            record("fixture-auth-missing-cookie-rejected", session_http_status=401)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
 def run():
+    independent_geometry_proof()
     assert subprocess.run([str(ROOT / "cdp-tty"), "--help"], capture_output=True).returncode == 0
     for url in ["http://127.0.0.1:1/json", "ws://0.0.0.0:1/devtools/page/a", "ws://127.0.0.1:1/devtools/browser/a",
                 "ws://127.0.0.1:1/devtools/page/", "ws://user:secret@127.0.0.1:1/devtools/page/a", "ws://127.0.0.1:1/devtools/page/a#fragment"]:
@@ -351,22 +459,22 @@ def run():
                     assert p.command("click -1 1 0")[0] == 3
                     assert p.command("key 999")[0] == 3
                     assert p.command("click 310 160 0")[0] == 0
-                    assert ctl.evaluate("clicks") == 1
+                    eventually(lambda: ctl.evaluate("clicks") == 1)
                     point = ctl.evaluate("events.find(e=>e.type==='click')")
                     assert point["x"] == 310 and point["y"] == 160
                     record("real-click-css-coordinate", dpr=scale)
                     ctl.evaluate("document.querySelector('#text').focus()")
                     p.frame()
                     assert p.command("text 日本語")[0] == 0
-                    assert ctl.evaluate("document.querySelector('#text').value") == "日本語"
+                    eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "日本語")
                     p.frame()
                     assert p.command("key 2")[0] == 0  # Backspace
-                    assert ctl.evaluate("document.querySelector('#text').value") == "日本"
+                    eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "日本")
                     p.frame()
                     assert p.command("key 11")[0] == 0  # Ctrl-A
                     p.frame()
                     assert p.command("text replaced")[0] == 0
-                    assert ctl.evaluate("document.querySelector('#text').value") == "replaced"
+                    eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "replaced")
                     record("real-utf8-physical-key-select-all", dpr=scale)
                     p.frame()
                     assert p.command("wheel 400 400 80")[0] == 0
@@ -377,7 +485,7 @@ def run():
                     p.frame()
                     ctl.evaluate("document.querySelector('#stamp').textContent='changed'")
                     assert p.command("text forbidden-stale")[0] == 2
-                    assert ctl.evaluate("document.querySelector('#text').value") == "replaced"
+                    eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "replaced")
                     record("stale-pixels-block-input", dpr=scale)
                     p.frame()
                     old_loader = ctl.call("Page.getFrameTree")["frameTree"]["frame"]["loaderId"]
@@ -407,16 +515,16 @@ def run():
                         assert sink.pixels == (int(f[1]), int(f[2]))
                         sink.click()
                         sink.wait_frame(sink.frames+1)
-                        assert ctl.evaluate("clicks") == 1
+                        eventually(lambda: ctl.evaluate("clicks") == 1)
                         # Focus is external controller responsibility; input still traverses the PTY.
                         ctl.evaluate("document.querySelector('#text').focus()")
                         sink.wait_frame(sink.frames+1)
                         sink.send(b"\x1b[200~" + "端末入力".encode() + b"\x1b[201~")
                         sink.wait_frame(sink.frames+1)
-                        assert ctl.evaluate("document.querySelector('#text').value") == "端末入力"
+                        eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "端末入力")
                         sink.send(b"\x7f")
                         sink.wait_frame(sink.frames+1)
-                        assert ctl.evaluate("document.querySelector('#text').value") == "端末入"
+                        eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "端末入")
                         sink.resize(28, 80)
                         sink.wait_frame(sink.frames+1)
                         assert before == ctl.evaluate("[innerWidth,innerHeight,devicePixelRatio]")
@@ -458,7 +566,7 @@ def run():
                         for _ in range(5): sink.pump()
                         sink.send(text[1:])
                         sink.wait_frame(sink.frames+1)
-                        assert ctl.evaluate("document.querySelector('#text').value") == "日"
+                        eventually(lambda: ctl.evaluate("document.querySelector('#text').value") == "日")
                         count = len([m for m in audit.methods if m.startswith("Input.")])
                         sink.send(b"\x1bO")
                         for _ in range(3): sink.pump()
@@ -499,6 +607,7 @@ def run():
     symbols = subprocess.run(["nm", "-u", str(ROOT / "libcdp-tty.a")], capture_output=True, text=True, check=True).stdout
     assert not re.search(r"\b(exec\w*|fork|system|popen|tcsetattr|signal|sigaction|exit)\b", symbols)
     record("finite-wire-surface-no-process-tty-global-core", method_count=len(wire))
+    fixture_auth_proof()
     residuals = dict(windows_ssh="NOT_RUN", real_service_auth="NOT_RUN", real_terminal_renderer="NOT_RUN", drag="NOT_IMPLEMENTED", ime_composition="NOT_IMPLEMENTED")
     print(json.dumps({"test": "residuals", "status": "NOT_RUN", **residuals}), flush=True)
 

@@ -13,7 +13,7 @@ main.o tty.o cdp.o: cdp.h
 probe: tests/probe.c libcdp-tty.a
 	$(CC) $(CPPFLAGS) $(CFLAGS) -I. -o $@ tests/probe.c libcdp-tty.a $(LDLIBS)
 check: all probe
-	python3 tests/proof.py
+	CDP_TTY_PACKAGE="$(CURDIR)" python3 ../../verification/cdp-tty/proof.py
 clean:
 	rm -f *.o *.a cdp-tty probe
 .PHONY: all check clean

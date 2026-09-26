@@ -12,10 +12,10 @@
 #define LIMIT (16u * 1024u * 1024u)
 struct Cdp { CURL *curl; curl_socket_t socket; unsigned id; int broken;
     const volatile sig_atomic_t *cancel; };
-typedef enum { METRICS, TREE, SHOT, MOUSE, KEYS, INSERT } Method;
+typedef enum { METRICS, TREE, SHOT, MOUSE, KEYS, INSERT, VIEW } Method;
 /* The only wire method names. No generic passthrough API. */
 static const char *const methods[] = { "Page.getLayoutMetrics", "Page.getFrameTree",
-    "Page.captureScreenshot", "Input.dispatchMouseEvent", "Input.dispatchKeyEvent", "Input.insertText" };
+    "Page.captureScreenshot", "Input.dispatchMouseEvent", "Input.dispatchKeyEvent", "Input.insertText", "Runtime.evaluate" };
 static int64_t now(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec*1000LL+t.tv_nsec/1000000; }
 static int cancelled(Cdp *c) { return c->cancel && *c->cancel; }
 static int wait_socket(Cdp *c, short events, int64_t deadline) {
@@ -56,7 +56,7 @@ static json_object *receive(Cdp *c, int64_t end) {
 }
 static json_object *call(Cdp *c, Method method, json_object *params) {
     json_object *answer = NULL, *req = json_object_new_object();
-    if (!req || !params || !c || c->broken || cancelled(c) || method < METRICS || method > INSERT) goto done;
+    if (!req || !params || !c || c->broken || cancelled(c) || method < METRICS || method > VIEW) goto done;
     unsigned id = ++c->id;
     json_object_object_add(req, "id", json_object_new_int64(id));
     json_object_object_add(req, "method", json_object_new_string(methods[method]));
@@ -167,12 +167,36 @@ static int png_header(Frame *f) {
     f->height=(uint32_t)bytes[20]<<24 | (uint32_t)bytes[21]<<16 | (uint32_t)bytes[22]<<8 | bytes[23];
     return !f->width || !f->height || (uint64_t)f->width*f->height>16000000 ? -1:0;
 }
+/* A fixed, side-effect-checked geometry read; never accept caller JavaScript.
+ * getLayoutMetrics excludes scrollbars and supplies no DPR. A full-view PNG
+ * needs innerWidth/innerHeight for correct CSS coordinates, without a clip
+ * that can reset another CDP client's device-metrics override. */
+static json_object *view_geometry(Cdp *c) {
+    json_object *p=json_object_new_object();
+    json_object_object_add(p,"expression",json_object_new_string("({width:innerWidth,height:innerHeight,dpr:devicePixelRatio})"));
+    json_object_object_add(p,"returnByValue",json_object_new_boolean(1));
+    json_object_object_add(p,"throwOnSideEffect",json_object_new_boolean(1));
+    json_object_object_add(p,"silent",json_object_new_boolean(1));
+    json_object_object_add(p,"timeout",json_object_new_int(1000));
+    json_object *r=call(c,VIEW,p), *v=get(get(r,"result"),"value"), *out=NULL;
+    if (get(r,"exceptionDetails") || !json_object_is_type(v,json_type_object)) goto done;
+    const char *keys[]={"width","height","dpr"};
+    for (size_t i=0;i<3;i++) {
+        json_object *n=get(v,keys[i]);
+        if ((!json_object_is_type(n,json_type_double) && !json_object_is_type(n,json_type_int)) ||
+            !isfinite(json_object_get_double(n)) || json_object_get_double(n)<=0 ||
+            json_object_get_double(n)>(i==2 ? 16:32768)) goto done;
+    }
+    out=json_object_get(v);
+done:
+    json_object_put(r); return out;
+}
 static json_object *geometry(Cdp *c) {
     json_object *metrics=call(c,METRICS,json_object_new_object());
-    json_object *tree=call(c,TREE,json_object_new_object()), *result=NULL;
+    json_object *tree=call(c,TREE,json_object_new_object()), *view=view_geometry(c), *result=NULL;
     json_object *v=get(metrics,"cssVisualViewport"), *l=get(metrics,"cssLayoutViewport");
     json_object *loader=get(get(get(tree,"frameTree"),"frame"),"loaderId");
-    if (!json_object_is_type(v,json_type_object) || !json_object_is_type(l,json_type_object) ||
+    if (!view || !json_object_is_type(v,json_type_object) || !json_object_is_type(l,json_type_object) ||
         !json_object_is_type(loader,json_type_string)) goto done;
     const char *numbers[]={"clientWidth","clientHeight","pageX","pageY","offsetX","offsetY","scale"};
     for (size_t i=0;i<sizeof(numbers)/sizeof(*numbers);i++) {
@@ -187,8 +211,9 @@ static json_object *geometry(Cdp *c) {
     json_object_object_add(result,"visual",json_object_get(v));
     json_object_object_add(result,"layout",json_object_get(l));
     json_object_object_add(result,"loader",json_object_get(loader));
+    json_object_object_add(result,"view",json_object_get(view));
 done:
-    json_object_put(metrics); json_object_put(tree); return result;
+    json_object_put(metrics); json_object_put(tree); json_object_put(view); return result;
 }
 int cdp_frame(Cdp *c, Frame *out) {
     memset(out,0,sizeof(*out));
@@ -198,14 +223,8 @@ int cdp_frame(Cdp *c, Frame *out) {
     json_object *p=json_object_new_object();
     json_object_object_add(p,"format",json_object_new_string("png"));
     json_object_object_add(p,"captureBeyondViewport",json_object_new_boolean(0));
-    /* Explicit CSS viewport clip excludes scrollbars; never resize the page. */
-    json_object *clip=json_object_new_object(), *view=get(before,"visual");
-    json_object_object_add(clip,"x",json_object_get(get(view,"pageX")));
-    json_object_object_add(clip,"y",json_object_get(get(view,"pageY")));
-    json_object_object_add(clip,"width",json_object_get(get(view,"clientWidth")));
-    json_object_object_add(clip,"height",json_object_get(get(view,"clientHeight")));
-    json_object_object_add(clip,"scale",json_object_new_double(1));
-    json_object_object_add(p,"clip",clip);
+    /* Capture the existing view. No clip/temporary emulation/resize/restore. */
+    json_object_object_add(p,"fromSurface",json_object_new_boolean(0));
     shot=call(c,SHOT,p); after=geometry(c);
     if (!after) goto done;
     if (!json_object_equal(before,after)) { status=CDP_STALE; goto done; }
@@ -214,8 +233,8 @@ int cdp_frame(Cdp *c, Frame *out) {
     out->len=(size_t)json_object_get_string_len(data);
     out->png=strdup(json_object_get_string(data));
     out->geometry=strdup(json_object_to_json_string_ext(after,JSON_C_TO_STRING_PLAIN));
-    out->css_width=json_object_get_double(get(get(after,"visual"),"clientWidth"));
-    out->css_height=json_object_get_double(get(get(after,"visual"),"clientHeight"));
+    out->css_width=json_object_get_double(get(get(after,"view"),"width"));
+    out->css_height=json_object_get_double(get(get(after,"view"),"height"));
     if (!out->png || !out->geometry || strlen(out->png)!=out->len || png_header(out)) goto done;
     status=CDP_OK;
 done:
