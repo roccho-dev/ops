@@ -1,0 +1,115 @@
+name: Mobile Agent persistent GitHub Carry bootstrap
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-persistent-carry-bootstrap.yml'
+      - '.github/workflows/mobile-agent-url-only-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-agent-persistent-carry
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPOSITORY: roccho-dev/mobile-agent
+  SOURCE_COMMIT: 1daa001bf780053f4319e3fb20b4ea9a6e0d0442
+  APP_BYTES: '2412388'
+  APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+  APP_GIT_BLOB: ebdb39084fa3cc57b0295818f6f339f62f0fca90
+  CARRY_TAG: mobile-agent-app-sha256-3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+
+jobs:
+  bootstrap:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Read exact App from immutable source Git blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/carry"
+          mkdir -p "$root"
+          gh api "repos/$SOURCE_REPOSITORY/git/blobs/$APP_GIT_BLOB" > "$root/source-blob.json"
+          python3 - "$root/source-blob.json" "$root/app.index.html" <<'PY'
+          import base64,hashlib,json,os,pathlib,sys
+          record=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert record['sha']==os.environ['APP_GIT_BLOB'],record.get('sha')
+          app=base64.b64decode(''.join(record['content'].split()),validate=True)
+          assert len(app)==int(os.environ['APP_BYTES']),len(app)
+          assert hashlib.sha256(app).hexdigest()==os.environ['APP_SHA256']
+          assert hashlib.sha1(f"blob {len(app)}\0".encode()+app).hexdigest()==os.environ['APP_GIT_BLOB']
+          text=app.decode('utf-8')
+          for token in ('graph/1','map/1','seq/1','maxgraph'):
+              assert token.lower() in text.lower(),token
+          pathlib.Path(sys.argv[2]).write_bytes(app)
+          print(json.dumps({'status':'PASS_EXACT_SOURCE_BLOB','bytes':len(app),'sha256':hashlib.sha256(app).hexdigest(),'gitBlob':record['sha']}))
+          PY
+
+      - name: Create or verify content-addressed Carry tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/carry/app.index.html" "$RUNNER_TEMP/carry/receipt.json" <<'PY'
+          import base64,hashlib,json,os,pathlib,urllib.error,urllib.request,sys
+          repo=os.environ['GITHUB_REPOSITORY']; token=os.environ['GH_TOKEN']; candidate=os.environ['CANDIDATE_SHA']
+          app_path=pathlib.Path(sys.argv[1]); receipt_path=pathlib.Path(sys.argv[2])
+          app_bytes=int(os.environ['APP_BYTES']); app_sha=os.environ['APP_SHA256']; app_blob=os.environ['APP_GIT_BLOB']
+          tag=os.environ['CARRY_TAG']; ref='refs/tags/'+tag
+          def api(method,path,value=None):
+              data=None if value is None else json.dumps(value,separators=(',',':')).encode()
+              req=urllib.request.Request('https://api.github.com/'+path,method=method,data=data,headers={'Accept':'application/vnd.github+json','Authorization':'Bearer '+token,'Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'ops-mobile-agent-carry/2'})
+              try:
+                  with urllib.request.urlopen(req,timeout=90) as response: return json.loads(response.read())
+              except urllib.error.HTTPError as error:
+                  body=error.read().decode(errors='replace')
+                  if error.code==404: return None
+                  raise RuntimeError(f'{method} {path}: HTTP {error.code}: {body}') from error
+          app=app_path.read_bytes()
+          assert len(app)==app_bytes and hashlib.sha256(app).hexdigest()==app_sha
+          assert hashlib.sha1(f'blob {len(app)}\0'.encode()+app).hexdigest()==app_blob
+          ref_path='repos/'+repo+'/git/ref/tags/'+tag
+          current=api('GET',ref_path)
+          if current is None:
+              created_blob=api('POST','repos/'+repo+'/git/blobs',{'content':base64.b64encode(app).decode(),'encoding':'base64'})['sha']
+              assert created_blob==app_blob
+              manifest={'schema':'ops.mobileAgentPersistentGitHubCarry/2','status':'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY','authority':'roccho-dev/adrs#316','source':{'repository':os.environ['SOURCE_REPOSITORY'],'commit':os.environ['SOURCE_COMMIT'],'gitBlob':app_blob},'app':{'path':'mobile-agent/app.index.html','bytes':app_bytes,'sha256':'sha256:'+app_sha,'gitBlob':app_blob,'presets':['graph/1','map/1','seq/1']},'carry':{'kind':'content-addressed-git-tag','ref':ref}}
+              body=(json.dumps(manifest,sort_keys=True,separators=(',',':'))+'\n').encode()
+              manifest_blob=api('POST','repos/'+repo+'/git/blobs',{'content':base64.b64encode(body).decode(),'encoding':'base64'})['sha']
+              tree=api('POST','repos/'+repo+'/git/trees',{'tree':[{'path':'mobile-agent/app.index.html','mode':'100644','type':'blob','sha':app_blob},{'path':'mobile-agent/manifest.json','mode':'100644','type':'blob','sha':manifest_blob}]})['sha']
+              commit=api('POST','repos/'+repo+'/git/commits',{'message':'carry: exact Mobile Agent App '+app_sha[:12],'tree':tree,'parents':[candidate]})['sha']
+              api('POST','repos/'+repo+'/git/refs',{'ref':ref,'sha':commit})
+              current=api('GET',ref_path)
+          assert current and current['object']['type']=='commit'
+          commit_sha=current['object']['sha']; commit=api('GET','repos/'+repo+'/git/commits/'+commit_sha)
+          tree_sha=commit['tree']['sha']; tree=api('GET','repos/'+repo+'/git/trees/'+tree_sha+'?recursive=1')
+          entries={x['path']:x for x in tree['tree'] if x['type']=='blob'}
+          assert entries['mobile-agent/app.index.html']['sha']==app_blob
+          record=api('GET','repos/'+repo+'/git/blobs/'+app_blob)
+          restored=base64.b64decode(''.join(record['content'].split()),validate=True)
+          assert restored==app and len(restored)==app_bytes and hashlib.sha256(restored).hexdigest()==app_sha
+          receipt={'schema':'ops.mobileAgentPersistentGitHubCarryReceipt/2','status':'PASS_MOBILE_AGENT_PERSISTENT_GITHUB_CARRY','authority':'roccho-dev/adrs#316','repository':repo,'ref':ref,'commit':commit_sha,'tree':tree_sha,'appBlob':app_blob,'appBytes':app_bytes,'appSha256':'sha256:'+app_sha,'githubByteReadback':'PASS','sourceCloneRequired':False,'consumerBuildRequired':False}
+          receipt_path.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(receipt,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-persistent-github-carry-${{ github.run_id }}
+          path: ${{ runner.temp }}/carry/receipt.json
+          if-no-files-found: error
+          retention-days: 90
