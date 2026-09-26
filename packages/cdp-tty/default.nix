@@ -3,6 +3,9 @@ let
   # The exact nixpkgs curl defaults to websocketSupport = false. CDP requires
   # ws/wss at runtime; override only this package dependency, not the package set.
   curlWebsocket = curl.override { websocketSupport = true; };
+  # Test-owned browser/controller/proxy capabilities stay outside runtime source.
+  # This source is a required Nix input, not an optional CI-side download.
+  proofSource = ../../verification/cdp-tty/proof.py;
 in
 stdenv.mkDerivation {
   pname = "cdp-tty";
@@ -20,6 +23,8 @@ stdenv.mkDerivation {
     mkdir -p "$HOME" "$XDG_RUNTIME_DIR"
     chmod 700 "$XDG_RUNTIME_DIR"
     export CHROME_BIN=${chromium}/bin/chromium
+    test ! -e tests/proof.py
+    cp ${proofSource} tests/proof.py
     make probe
     set -o pipefail
     ${lib.getBin curlWebsocket}/bin/curl --version | tee curl-version.txt
