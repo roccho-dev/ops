@@ -60,8 +60,32 @@ export const keyedTurn = (rows, key) => {
   if (finals.size === 0) return { state: 'STOP_INCOMPLETE' };
   return { state: 'DUPLICATE', final: [...finals.values()][0] };
 };
+// Claude Code 2.1.280 session metadata recording a PR linked to the session. Accepting it
+// classifies transcript structure only: it proves neither the repository is expected nor that
+// no PR context reached the model.
+const PR_LINK_KEYS = JSON.stringify(['prNumber', 'prRepository', 'prUrl', 'sessionId', 'timestamp', 'type']);
+const repository = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
+const instant = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+// Rejects impossible calendar dates and times that Date.parse silently rolls over.
+export const validInstant = (value) => {
+  const match = typeof value === 'string' ? instant.exec(value) : null;
+  if (!match) return false;
+  const [year, month, day, hour, minute, second] = match.slice(1).map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day && date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute && date.getUTCSeconds() === second;
+};
+export const prLinkValid = (row, sessionId) => typeof sessionId === 'string' &&
+  JSON.stringify(Object.keys(row).sort()) === PR_LINK_KEYS && row.sessionId === sessionId &&
+  Number.isSafeInteger(row.prNumber) && row.prNumber > 0 &&
+  typeof row.prRepository === 'string' && repository.test(row.prRepository) &&
+  row.prUrl === 'https://github.com/' + row.prRepository + '/pull/' + row.prNumber &&
+  validInstant(row.timestamp);
 // Structural audit: quoted error or persisted-output text is not a signal.
-export const auditTurn = (rows, key, { command, readPaths }) => {
+export const auditTurn = (rows, key, { command, readPaths, sessionId }) => {
   const found = keyedRows(rows, key);
   if (found.state !== 'FOUND') return found.state;
   if (found.rows.some((row) => ['user', 'assistant'].includes(row.type) &&
@@ -77,6 +101,10 @@ export const auditTurn = (rows, key, { command, readPaths }) => {
   let bashCount = 0;
   for (const row of found.rows) {
     if (row.type !== 'user' && row.type !== 'assistant') {
+      if (row.type === 'pr-link') {
+        if (prLinkValid(row, sessionId)) continue;
+        return 'UNKNOWN_FORM';
+      }
       if (row.type === 'attachment' &&
           ['total_tokens_reminder', 'silent_turn_reminder'].includes(row.attachment?.type)) continue;
       if (['last-prompt', 'mode', 'atis-latch', 'cost-state', 'queue-operation'].includes(row.type))
@@ -315,14 +343,16 @@ export const stageRoute = (step, commit, startSource, task, rRows, wRows, audit,
   const rStart = keyedTurn(rRows, keyFor(commit, r, startSource));
   if (step === 'r-start') return { source: startSource, id: r };
   if (rStart.state !== 'DUPLICATE') fail('R start not complete');
-  if (auditTurn(rRows, keyFor(commit, r, startSource), audit) !== 'CLEAN') fail('R start audit not clean');
+  if (auditTurn(rRows, keyFor(commit, r, startSource), { ...audit, sessionId: r }) !== 'CLEAN')
+    fail('R start audit not clean');
   const line = instruction(rStart.final.text, task, commit);
   if (line === 'DECLINED') return { declined: true };
   const previous = { line, r_record: rStart.final.id };
   if (step === 'w-work') return { source: rStart.final.id, id: w, previous };
   const wTurn = keyedTurn(wRows, keyFor(commit, w, rStart.final.id));
   if (wTurn.state !== 'DUPLICATE') fail('W work not complete');
-  if (auditTurn(wRows, keyFor(commit, w, rStart.final.id), audit) !== 'CLEAN') fail('W work audit not clean');
+  if (auditTurn(wRows, keyFor(commit, w, rStart.final.id), { ...audit, sessionId: w }) !== 'CLEAN')
+    fail('W work audit not clean');
   return { source: wTurn.final.id, id: r, previous, wTurn };
 };
 const USAGE = 'usage: --mode launch|check --step r-start|w-work|r-review --commit <40-hex> ' +
@@ -366,7 +396,7 @@ export function run({ mode, step, commit, rId, contractId, version }) {
   const key = keyFor(commit, id, source);
   const rows = id === job.r ? rRows : wRows;
   const turn = keyedTurn(rows, key);
-  const audited = turn.state === 'DUPLICATE' ? auditTurn(rows, key, audit) : turn.state;
+  const audited = turn.state === 'DUPLICATE' ? auditTurn(rows, key, { ...audit, sessionId: id }) : turn.state;
   const busy = () => active(id) || (step === 'r-review' && active(job.w));
   const state = busy() ? 'STOP_ACTIVE' : audited === 'CLEAN' ? 'DUPLICATE' : audited;
   if (decide(mode, state) !== 'FIRE') return { ...base, state, key, id };
@@ -415,7 +445,7 @@ export function run({ mode, step, commit, rId, contractId, version }) {
   const resultRows = transcript(id);
   const after = keyedTurn(resultRows, key);
   if (after.state !== 'DUPLICATE') return { ...fired, state: 'UNKNOWN', error: 'keyed turn ' + after.state };
-  const safety = auditTurn(resultRows, key, audit);
+  const safety = auditTurn(resultRows, key, { ...audit, sessionId: id });
   if (safety !== 'CLEAN') return { ...fired, state: safety };
   let reply;
   try { reply = JSON.parse(child.stdout); } catch { return { ...fired, state: 'UNKNOWN', error: 'invalid Claude output' }; }
