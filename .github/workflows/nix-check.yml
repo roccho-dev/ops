@@ -6,6 +6,37 @@ on:
     branches: [proposals]
 
 jobs:
+  cdp-tty-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Prove native library and CLI with real Chrome and a PTY
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p cdp-tty-proof
+          git rev-parse HEAD > cdp-tty-proof/source.commit
+          git archive --format=tar.gz HEAD packages/cdp-tty verification/cdp-tty flake.lock .github/workflows/nix-check.yml > cdp-tty-proof/source.tar.gz
+          out="$(nix-build packages/cdp-tty/proof.nix --no-out-link 2> >(tee cdp-tty-proof/build.log >&2))"
+          cp "$out"/* cdp-tty-proof/
+          cat cdp-tty-proof/raws.jsonl
+          git diff --exit-code -- flake.lock
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cdp-tty-proof-${{ github.event.pull_request.head.sha || github.sha }}
+          path: cdp-tty-proof/
+          if-no-files-found: error
   flake-check:
     runs-on: ubuntu-24.04
     steps:
