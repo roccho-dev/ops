@@ -236,7 +236,17 @@ test('pr-link metadata is accepted only in its exact shape for the audited sessi
     changed((x) => { x.prRepository = 'example-org/..'; x.prUrl = 'https://github.com/example-org/../pull/7'; }),
     changed((x) => { x.timestamp = 'yesterday'; }),
     changed((x) => { x.timestamp = '2026-13-40T00:00:00Z'; }),
+    changed((x) => { x.timestamp = '2026-02-30T00:00:00Z'; }),
+    changed((x) => { x.timestamp = '2025-02-29T00:00:00Z'; }),
+    changed((x) => { x.timestamp = '2026-01-02T25:00:00Z'; }),
+    changed((x) => { x.timestamp = '2026-01-02T24:00:00Z'; }),
+    changed((x) => { x.timestamp = '2026-01-02T03:60:00Z'; }),
+    changed((x) => { x.timestamp = '2026-01-02T03:04:60Z'; }),
+    changed((x) => { x.timestamp = '2026-01-02T03:04:05+24:00'; }),
   ]) assert.equal(audit(link), 'UNKNOWN_FORM', JSON.stringify(link));
+  for (const timestamp of ['2024-02-29T00:00:00Z', '2026-01-02T03:04:05Z',
+    '2026-01-02T03:04:05.1+09:00', '2026-12-31T23:59:59.999-05:30', '0050-01-02T03:04:05Z'])
+    assert.equal(audit(changed((x) => { x.timestamp = timestamp; })), 'CLEAN', timestamp);
   const drop = { type: 'attachment', attachment: { type: 'thinking_drop' } };
   assert.equal(audit(drop), 'UNKNOWN_FORM');
   assert.equal(audit(prLink('w-session'), drop), 'UNKNOWN_FORM');

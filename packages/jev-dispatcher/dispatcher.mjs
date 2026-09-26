@@ -65,14 +65,25 @@ export const keyedTurn = (rows, key) => {
 // no PR context reached the model.
 const PR_LINK_KEYS = JSON.stringify(['prNumber', 'prRepository', 'prUrl', 'sessionId', 'timestamp', 'type']);
 const repository = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/(?!\.\.?$)[A-Za-z0-9._-]+$/;
-const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const instant = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
+// Rejects impossible calendar dates and times that Date.parse silently rolls over.
+export const validInstant = (value) => {
+  const match = typeof value === 'string' ? instant.exec(value) : null;
+  if (!match) return false;
+  const [year, month, day, hour, minute, second] = match.slice(1).map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day && date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute && date.getUTCSeconds() === second;
+};
 export const prLinkValid = (row, sessionId) => typeof sessionId === 'string' &&
   JSON.stringify(Object.keys(row).sort()) === PR_LINK_KEYS && row.sessionId === sessionId &&
   Number.isSafeInteger(row.prNumber) && row.prNumber > 0 &&
   typeof row.prRepository === 'string' && repository.test(row.prRepository) &&
   row.prUrl === 'https://github.com/' + row.prRepository + '/pull/' + row.prNumber &&
-  typeof row.timestamp === 'string' && instant.test(row.timestamp) &&
-  !Number.isNaN(Date.parse(row.timestamp));
+  validInstant(row.timestamp);
 // Structural audit: quoted error or persisted-output text is not a signal.
 export const auditTurn = (rows, key, { command, readPaths, sessionId }) => {
   const found = keyedRows(rows, key);
