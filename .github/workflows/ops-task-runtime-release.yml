@@ -110,11 +110,65 @@ jobs:
         shell: bash
         run: bash verification/raw-artifact-carry/model-bridge.sh
 
-      - name: Upload model Carry bridge
+      - name: Upload model Carry bridge metadata
         uses: actions/upload-artifact@v4
         with:
-          name: model-carry-bridge-${{ github.sha }}
-          path: ${{ runner.temp }}/model-carry-bridge/
+          name: model-carry-meta-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/manifest.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Carry part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-carry-qwen-00-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/qwen.part.00
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Carry part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-carry-qwen-01-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/qwen.part.01
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Qwen Carry part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-carry-qwen-02-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/qwen.part.02
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya Carry part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-carry-laya-00-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/laya.part.00
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya Carry part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-carry-laya-01-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/laya.part.01
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload Laya Carry part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-carry-laya-02-${{ github.sha }}
+          path: ${{ runner.temp }}/model-carry-chunks/laya.part.02
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
