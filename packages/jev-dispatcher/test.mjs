@@ -206,23 +206,28 @@ test('stage routing requires completed R approval and W result', async () => {
   const task = { id: 'pin-audit', refs: ['policy/organization.md', 'policy/README.md'] };
   const line = 'W-START: task=pin-audit refs=policy/organization.md,policy/README.md C=' + c;
   const turn = safeTurn;
-  assert.deepEqual(stageRoute('r-start', c, src, task, [], [], auditSpec), { source: src, id: rid });
-  assert.throws(() => stageRoute('w-work', c, src, task, [], [], auditSpec), /R start/);
+  const actors = { r: rid, w: wid };
+  assert.deepEqual(stageRoute('r-start', c, src, task, [], [], auditSpec, actors), { source: src, id: rid });
+  assert.throws(() => stageRoute('w-work', c, src, task, [], [], auditSpec, actors), /R start/);
   const r = turn(keyFor(c, rid, src), 'r-final', 'reason\n' + line);
-  assert.deepEqual(stageRoute('w-work', c, src, task, r, [], auditSpec),
+  assert.deepEqual(stageRoute('w-work', c, src, task, r, [], auditSpec, actors),
     { source: 'r-final', id: wid, previous: { line, r_record: 'r-final' } });
-  assert.throws(() => stageRoute('r-review', c, src, task, r, [], auditSpec), /W work/);
+  assert.throws(() => stageRoute('r-review', c, src, task, r, [], auditSpec, actors), /W work/);
   const w = turn(keyFor(c, wid, 'r-final'), 'w-final', 'evidence');
-  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec).source, 'w-final');
-  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec).id, rid);
+  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec, actors).source, 'w-final');
+  assert.equal(stageRoute('r-review', c, src, task, r, w, auditSpec, actors).id, rid);
   const decline = turn(keyFor(c, rid, src), 'r-decline', 'I decline');
-  assert.deepEqual(stageRoute('w-work', c, src, task, decline, [], auditSpec), { declined: true });
+  assert.deepEqual(stageRoute('w-work', c, src, task, decline, [], auditSpec, actors), { declined: true });
   const badR = structuredClone(r);
   badR[2].toolUseResult.persistedOutputPath = '/private/result';
-  assert.throws(() => stageRoute('w-work', c, src, task, badR, [], auditSpec), /R start audit/);
+  assert.throws(() => stageRoute('w-work', c, src, task, badR, [], auditSpec, actors), /R start audit/);
   const badW = structuredClone(w);
   badW[2].toolUseResult.persistedOutputPath = '/private/result';
-  assert.throws(() => stageRoute('r-review', c, src, task, r, badW, auditSpec), /W work audit/);
+  assert.throws(() => stageRoute('r-review', c, src, task, r, badW, auditSpec, actors), /W work audit/);
+  const job = 'job.example@v1';
+  const jobStart = turn(keyFor(c, 'r-session', job), 'r-job', 'reason\n' + line);
+  assert.equal(stageRoute('w-work', c, job, task, jobStart, [], auditSpec,
+    { r: 'r-session', w: 'w-session' }).id, 'w-session');
 });
 
 test('keyed turn keeps split text, ignores repeat, and recognizes array user boundary', async () => {
@@ -241,18 +246,184 @@ test('keyed turn keeps split text, ignores repeat, and recognizes array user bou
     'STOP_INCOMPLETE');
 });
 
-test('dispatcher argv keeps five permissions as separate arguments', { skip: !existsSync(repo) }, async () => {
-  const { buildArgv } = await import('./dispatcher.mjs');
-  const templateCommit = 'c4ad8b9a5768bfea5103995e9ac3c5f1718ad965';
-  const rid = 'b27e547c-14b7-47b9-a72e-7d5fdcdd724c';
-  const result = select({ repo, commit: templateCommit, 'r-id': rid, 'git-bin': gitBin });
+// Synthetic selection: no real policy text, task question or transcript content.
+const ALLOWED = '<each allowed_tools_template pattern as its own argv element; substitute C first>';
+const TEMPLATE = ['/usr/bin/env', 'SHELL=/bin/sh', 'PATH=/bin', '/lib/ld.so', '--library-path', '/lib',
+  '/opt/cli', '-p', '--resume', '<OCI-W-or-R-session-id>', '--model', 'model-x',
+  '--permission-mode', 'dontAsk', '--tools', 'Bash,Read', '--allowedTools', ALLOWED,
+  '--setting-sources', '', '--strict-mcp-config', '--output-format', 'json', '<minimal-prompt>'];
+const withTemplate = (edit) => changed('policy.jev.d-replacement.oci.v1', (row) => {
+  row.target.argv_template = edit([...TEMPLATE]);
+});
+const jobRows = () => [
+  { op: 'document', id: '/root', rel: null, schema: 3, state: 'active' },
+  { id: 'r-session', rel: { parent: '/root', kind: 'reviews' }, state: 'active', role: 'r',
+    requires: ['policy/a.md', 'policy/b.md'] },
+  { id: 'w-session', rel: { parent: 'r-session', kind: 'delegates' }, state: 'active', role: 'w' },
+  { id: 'policy.jev.d-replacement.oci.v1', rel: { parent: 'r-session', kind: 'details' }, state: 'active',
+    target: { cli: '/opt/cli', model: 'model-x', argv_template: TEMPLATE, cwd: '/work',
+      read_paths: ['old.md'], allowed_tools_template: ['Read(//old/old.md)'] } },
+  { id: 'job.example', rel: { parent: 'r-session', kind: 'details' }, state: 'active', version: 'v1',
+    r_id: 'r-session', w_id: 'w-session', uses_target_of: 'policy.jev.d-replacement.oci.v1',
+    task: { id: 'example-task', refs: ['policy/a.md'], w_question: 'Synthetic question.' },
+    dispatcher: { authority: 'roccho-dev/ops', commit: 'c'.repeat(40),
+      path: 'packages/jev-dispatcher/dispatcher.mjs', checkout: '/ops' },
+    adrs_read_checkout: '/adrs', ops_read_checkout: '/ops', limits: { timeout_ms: 1000 } },
+];
+const asSelected = (rows) => rows.map((body) => ({ id: body.id, body: JSON.stringify(body) }));
+const jobArgs = { rId: 'r-session', contractId: 'job.example', version: 'v1' };
+const changed = (id, edit) => asSelected(jobRows().map((row) => {
+  if (row.id !== id) return row;
+  const copy = structuredClone(row);
+  edit(copy);
+  return copy;
+}));
+
+test('job row supplies actors, task, checkouts and timeout', async () => {
+  const { loadJob } = await import('./dispatcher.mjs');
+  const job = loadJob(asSelected(jobRows()), jobArgs);
+  assert.equal(job.r, 'r-session');
+  assert.equal(job.w, 'w-session');
+  assert.equal(job.task.w_question, 'Synthetic question.');
+  assert.deepEqual(job.readPaths, ['AGENTS.md', 'policy/a.md', 'policy/b.md']);
+  assert.equal(job.adrs, '/adrs');
+  assert.equal(job.ops, '/ops');
+  assert.equal(job.timeout, 1000);
+  assert.equal(job.cwd, '/work');
+});
+
+for (const [name, selected, error] of [
+  ['other version', asSelected(jobRows()), /contract mismatch/],
+  ['second dispatcher row', changed('policy.jev.d-replacement.oci.v1', (row) => { row.dispatcher = {}; }), /ambiguity/],
+  ['W not a delegate', changed('w-session', (row) => { row.rel.kind = 'reviews'; }), /actor mismatch/],
+  ['W of another R', changed('job.example', (row) => { row.w_id = 'r-session'; }), /actor mismatch/],
+  ['ref outside reads', changed('job.example', (row) => { row.task.refs = ['policy/z.md']; }), /task mismatch/],
+  ['empty question', changed('job.example', (row) => { row.task.w_question = ' '; }), /task mismatch/],
+  ['split Ops checkout', changed('job.example', (row) => { row.ops_read_checkout = '/other'; }), /checkout mismatch/],
+  ['relative ADRS checkout', changed('job.example', (row) => { row.adrs_read_checkout = 'adrs'; }), /checkout mismatch/],
+  ['missing timeout', changed('job.example', (row) => { delete row.limits; }), /timeout mismatch/],
+  ['zero timeout', changed('job.example', (row) => { row.limits.timeout_ms = 0; }), /timeout mismatch/],
+  ['other borrowed row', changed('job.example', (row) => { row.uses_target_of = 'other'; }), /borrowing mismatch/],
+  ['external requires', changed('r-session', (row) => { row.requires.push({ authority: 'x', commit: 'a'.repeat(40), path: 'p' }); }),
+    /external requires/],
+  ['bad argv template', changed('policy.jev.d-replacement.oci.v1', (row) => { row.target.argv_template.push(ALLOWED); }),
+    /argv template/],
+  ['cwd outside the transcript project', changed('policy.jev.d-replacement.oci.v1', (row) => { row.target.cwd = '/elsewhere'; }),
+    /cwd must be/],
+  ['permission bypass option', withTemplate((t) => { t.splice(7, 0, '--dangerously-skip-permissions'); return t; }),
+    /not allowed/],
+  ['other permission mode', withTemplate((t) => { t[t.indexOf('dontAsk')] = 'acceptEdits'; return t; }),
+    /value mismatch/],
+  ['extra tools', withTemplate((t) => { t[t.indexOf('Bash,Read')] = 'Bash,Read,Edit'; return t; }),
+    /value mismatch/],
+  ['loaded setting sources', withTemplate((t) => { t[t.indexOf('--setting-sources') + 1] = 'user'; return t; }),
+    /value mismatch/],
+  ['repeated model option', withTemplate((t) => { t.splice(7, 0, '--model', 'model-x'); return t; }),
+    /not allowed/],
+  ['missing JSON output', withTemplate((t) => { t.splice(t.indexOf('--output-format'), 2); return t; }),
+    /argv template mismatch/],
+  ['extra environment assignment', withTemplate((t) => { t.splice(1, 0, 'EXTRA=1'); return t; }),
+    /argv template mismatch/],
+]) {
+  test('job row rejects ' + name, async () => {
+    const { loadJob } = await import('./dispatcher.mjs');
+    const version = name === 'other version' ? 'v2' : 'v1';
+    assert.throws(() => loadJob(selected, { ...jobArgs, version }), error);
+  });
+}
+
+test('the pinned borrowed OCI template passes the option allowlist', { skip: !existsSync(repo) }, async () => {
+  const { borrow, checkTemplate } = await import('./dispatcher.mjs');
+  const result = select({ repo, commit: 'd2603acf75971674c9ed03f97da07a08b6bccbc6',
+    'r-id': 'b27e547c-14b7-47b9-a72e-7d5fdcdd724c', 'git-bin': gitBin });
   const old = JSON.parse(result.selected.find((row) => row.id === 'policy.jev.d-replacement.oci.v1').body);
-  const argv = buildArgv(old.target, templateCommit, rid, 'prompt');
+  assert.equal(checkTemplate(borrow(old.target)).cwd, '/work');
+});
+
+test('borrowing exposes only the four named target fields', async () => {
+  const { borrow } = await import('./dispatcher.mjs');
+  const field = borrow(jobRows()[3].target);
+  assert.equal(field('cwd'), '/work');
+  for (const name of ['read_paths', 'allowed_tools_template', 'adrs_read_checkout'])
+    assert.throws(() => field(name), /not borrowable/);
+});
+
+test('allowlist and argv come from the job checkouts, never the old template', async () => {
+  const { loadJob, commands, buildArgv } = await import('./dispatcher.mjs');
+  const job = loadJob(asSelected(jobRows()), jobArgs);
+  const c = 'a'.repeat(40);
+  const { allowed, audit, selectCommand } = commands(job, c);
+  assert.equal(selectCommand, '/root/.nix-profile/bin/node /ops/packages/jev-dispatcher/policy-select.mjs ' +
+    '--repo /adrs --commit ' + c + ' --r-id r-session ' +
+    '--git-bin /root/.nix-profile/bin/git --format selected');
+  assert.deepEqual(allowed, ['Read(//adrs/AGENTS.md)', 'Read(//adrs/policy/a.md)',
+    'Read(//adrs/policy/b.md)', 'Bash(' + selectCommand + ')']);
+  assert.deepEqual(audit.readPaths, ['/adrs/AGENTS.md', '/adrs/policy/a.md', '/adrs/policy/b.md']);
+  assert.ok(!JSON.stringify(allowed).includes('old'));
+  const argv = buildArgv(job.template, allowed, 'w-session', 'prompt');
   const start = argv.indexOf('--allowedTools') + 1;
-  assert.deepEqual(argv.slice(start, start + 5),
-    old.target.allowed_tools_template.map((item) => item.replaceAll('<C>', templateCommit)));
-  assert.equal(argv[argv.indexOf('--resume') + 1], rid);
+  assert.deepEqual(argv.slice(start, start + 4), allowed);
+  assert.equal(argv[argv.indexOf('--resume') + 1], 'w-session');
   assert.equal(argv.at(-1), 'prompt');
+});
+
+test('bootstrap and job ADRS stores must yield the same selection', async () => {
+  const { sameSelection } = await import('./dispatcher.mjs');
+  const result = () => ({ commit: 'a'.repeat(40), tree: 't', agents: { oid: 'ag' }, control: { oid: 'co' },
+    sql_sha256: 'sq', selected: [{ line_no: 1, id: 'r-session', body_sha256: 'b1', body: '{}' }],
+    requires: [{ path: 'policy/a.md', oid: 'p1' }] });
+  assert.ok(sameSelection(result(), result()));
+  for (const edit of [(x) => { x.tree = 'u'; }, (x) => { x.control.oid = 'cx'; },
+    (x) => { x.selected[0].body_sha256 = 'b2'; }, (x) => { x.requires[0].oid = 'p2'; },
+    (x) => { x.selected.push({ line_no: 2, id: 'w-session', body_sha256: 'b3' }); }]) {
+    const other = result();
+    edit(other);
+    assert.ok(!sameSelection(result(), other));
+  }
+});
+
+test('a contract version is used by keyed launch records at one commit only', async () => {
+  const { versionUse } = await import('./dispatcher.mjs');
+  const c = 'a'.repeat(40), other = 'b'.repeat(40);
+  const record = (text, type = 'user') => ({ type, message: { content: text } });
+  const launch = (commit, label = 'job.example@v1') => 'DISPATCH-KEY: ' + 'f'.repeat(64) +
+    '\nCONTRACT: ' + label + ' C=' + commit + ' STEP=r-start SOURCE=' + label + '\nbody';
+  const use = (rows) => versionUse([rows, []], 'job.example', 'v1', c);
+  assert.equal(use([record(launch(other))]), 'STOP_VERSION_USED');
+  assert.equal(versionUse([[], [record(launch(other))]], 'job.example', 'v1', c), 'STOP_VERSION_USED');
+  assert.equal(use([{ type: 'user', message: { content: [{ type: 'text', text: launch(other) }] } }]),
+    'STOP_VERSION_USED');
+  assert.equal(use([record(launch(c))]), 'UNUSED_ELSEWHERE');
+  assert.equal(use([record(launch(other, 'job.example@v2'))]), 'UNUSED_ELSEWHERE');
+  assert.equal(use([record(launch(other), 'assistant')]), 'UNUSED_ELSEWHERE');
+  assert.equal(use([record('PREPARE read-only.\n' + launch(other))]), 'UNUSED_ELSEWHERE');
+  assert.equal(use([record('quoted ' + launch(other))]), 'UNUSED_ELSEWHERE');
+  const legacy = 'DISPATCH-KEY: ' + 'f'.repeat(64) + '\nlegacy stage header\nbody';
+  assert.equal(use([record(legacy)]), 'UNUSED_ELSEWHERE');
+  const malformed = 'DISPATCH-KEY: ' + 'f'.repeat(64) + '\nCONTRACT: job.example@v1 C=short STEP=r-start';
+  assert.equal(use([record(malformed)]), 'STOP_MALFORMED_RECORD');
+  assert.equal(use([record(malformed.replace('C=short', 'C=' + c + ' STEP=other'))]), 'STOP_MALFORMED_RECORD');
+});
+
+test('timeout and failed children are UNKNOWN; a surviving child is STOP_ACTIVE', async () => {
+  const { spawnOutcome } = await import('./dispatcher.mjs');
+  const timedOut = { error: Object.assign(new Error('spawnSync ETIMEDOUT'), { code: 'ETIMEDOUT' }),
+    status: null, signal: 'SIGTERM' };
+  assert.equal(spawnOutcome({ status: 0, signal: null }, false), 'EXITED');
+  assert.equal(spawnOutcome(timedOut, false), 'UNKNOWN');
+  assert.equal(spawnOutcome(timedOut, true), 'STOP_ACTIVE');
+  assert.equal(spawnOutcome({ status: 1, signal: null }, false), 'UNKNOWN');
+  assert.equal(spawnOutcome({ status: 0, signal: null }, true), 'STOP_ACTIVE');
+});
+
+test('CLI names the contract id and version explicitly', async () => {
+  const { argsOf } = await import('./dispatcher.mjs');
+  const argv = ['--mode', 'check', '--step', 'r-start', '--commit', 'a'.repeat(40),
+    '--r-id', 'r-session', '--contract-id', 'job.example', '--version', 'v1'];
+  assert.deepEqual(argsOf(argv), { mode: 'check', step: 'r-start', commit: 'a'.repeat(40),
+    rId: 'r-session', contractId: 'job.example', version: 'v1' });
+  assert.throws(() => argsOf(argv.slice(0, 10)), /usage/);
+  assert.throws(() => argsOf(argv.with(7, 'r session')), /usage/);
 });
 
 test('read checkout rejects another commit', async () => {
