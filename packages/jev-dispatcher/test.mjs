@@ -248,8 +248,13 @@ test('keyed turn keeps split text, ignores repeat, and recognizes array user bou
 
 // Synthetic selection: no real policy text, task question or transcript content.
 const ALLOWED = '<each allowed_tools_template pattern as its own argv element; substitute C first>';
-const TEMPLATE = ['/usr/bin/env', '/opt/cli', '-p', '--resume', '<OCI-W-or-R-session-id>',
-  '--model', 'model-x', '--allowedTools', ALLOWED, '--strict-mcp-config', '<minimal-prompt>'];
+const TEMPLATE = ['/usr/bin/env', 'SHELL=/bin/sh', 'PATH=/bin', '/lib/ld.so', '--library-path', '/lib',
+  '/opt/cli', '-p', '--resume', '<OCI-W-or-R-session-id>', '--model', 'model-x',
+  '--permission-mode', 'dontAsk', '--tools', 'Bash,Read', '--allowedTools', ALLOWED,
+  '--setting-sources', '', '--strict-mcp-config', '--output-format', 'json', '<minimal-prompt>'];
+const withTemplate = (edit) => changed('policy.jev.d-replacement.oci.v1', (row) => {
+  row.target.argv_template = edit([...TEMPLATE]);
+});
 const jobRows = () => [
   { op: 'document', id: '/root', rel: null, schema: 3, state: 'active' },
   { id: 'r-session', rel: { parent: '/root', kind: 'reviews' }, state: 'active', role: 'r',
@@ -303,6 +308,22 @@ for (const [name, selected, error] of [
     /external requires/],
   ['bad argv template', changed('policy.jev.d-replacement.oci.v1', (row) => { row.target.argv_template.push(ALLOWED); }),
     /argv template/],
+  ['cwd outside the transcript project', changed('policy.jev.d-replacement.oci.v1', (row) => { row.target.cwd = '/elsewhere'; }),
+    /cwd must be/],
+  ['permission bypass option', withTemplate((t) => { t.splice(7, 0, '--dangerously-skip-permissions'); return t; }),
+    /not allowed/],
+  ['other permission mode', withTemplate((t) => { t[t.indexOf('dontAsk')] = 'acceptEdits'; return t; }),
+    /value mismatch/],
+  ['extra tools', withTemplate((t) => { t[t.indexOf('Bash,Read')] = 'Bash,Read,Edit'; return t; }),
+    /value mismatch/],
+  ['loaded setting sources', withTemplate((t) => { t[t.indexOf('--setting-sources') + 1] = 'user'; return t; }),
+    /value mismatch/],
+  ['repeated model option', withTemplate((t) => { t.splice(7, 0, '--model', 'model-x'); return t; }),
+    /not allowed/],
+  ['missing JSON output', withTemplate((t) => { t.splice(t.indexOf('--output-format'), 2); return t; }),
+    /argv template mismatch/],
+  ['extra environment assignment', withTemplate((t) => { t.splice(1, 0, 'EXTRA=1'); return t; }),
+    /argv template mismatch/],
 ]) {
   test('job row rejects ' + name, async () => {
     const { loadJob } = await import('./dispatcher.mjs');
@@ -310,6 +331,14 @@ for (const [name, selected, error] of [
     assert.throws(() => loadJob(selected, { ...jobArgs, version }), error);
   });
 }
+
+test('the pinned borrowed OCI template passes the option allowlist', { skip: !existsSync(repo) }, async () => {
+  const { borrow, checkTemplate } = await import('./dispatcher.mjs');
+  const result = select({ repo, commit: 'd2603acf75971674c9ed03f97da07a08b6bccbc6',
+    'r-id': 'b27e547c-14b7-47b9-a72e-7d5fdcdd724c', 'git-bin': gitBin });
+  const old = JSON.parse(result.selected.find((row) => row.id === 'policy.jev.d-replacement.oci.v1').body);
+  assert.equal(checkTemplate(borrow(old.target)).cwd, '/work');
+});
 
 test('borrowing exposes only the four named target fields', async () => {
   const { borrow } = await import('./dispatcher.mjs');
@@ -369,6 +398,11 @@ test('a contract version is used by keyed launch records at one commit only', as
   assert.equal(use([record(launch(other), 'assistant')]), 'UNUSED_ELSEWHERE');
   assert.equal(use([record('PREPARE read-only.\n' + launch(other))]), 'UNUSED_ELSEWHERE');
   assert.equal(use([record('quoted ' + launch(other))]), 'UNUSED_ELSEWHERE');
+  const legacy = 'DISPATCH-KEY: ' + 'f'.repeat(64) + '\nlegacy stage header\nbody';
+  assert.equal(use([record(legacy)]), 'UNUSED_ELSEWHERE');
+  const malformed = 'DISPATCH-KEY: ' + 'f'.repeat(64) + '\nCONTRACT: job.example@v1 C=short STEP=r-start';
+  assert.equal(use([record(malformed)]), 'STOP_MALFORMED_RECORD');
+  assert.equal(use([record(malformed.replace('C=short', 'C=' + c + ' STEP=other'))]), 'STOP_MALFORMED_RECORD');
 });
 
 test('timeout and failed children are UNKNOWN; a surviving child is STOP_ACTIVE', async () => {

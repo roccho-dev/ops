@@ -164,8 +164,11 @@ const active = (id) => readdirSync('/proc').some((pid) => {
     return args.some((value, i) => value === '--resume' && args[i + 1] === id);
   } catch { return false; }
 });
+// Claude Code keeps a session transcript under HOME, in a project directory named from cwd.
+const HOME = '/home/dev';
+const CWD = '/work';
 const transcript = (id) => {
-  const path = '/home/dev/.claude/projects/-work/' + id + '.jsonl';
+  const path = HOME + '/.claude/projects/-work/' + id + '.jsonl';
   return readFileSync(path, 'utf8').trimEnd().split('\n').map((line) => JSON.parse(line));
 };
 const git = (...args) => {
@@ -204,19 +207,32 @@ export const checkTemplate = (field) => {
   const model = field('model');
   const template = field('argv_template');
   const cwd = field('cwd');
-  if (typeof cli !== 'string' || typeof model !== 'string' || !absolute(cwd) ||
+  if (typeof cli !== 'string' || typeof model !== 'string' || typeof cwd !== 'string' ||
       !Array.isArray(template) || !template.every((part) => typeof part === 'string'))
     fail('borrowed target invalid');
-  const count = (value) => template.filter((part) => part === value).length;
-  const after = (flag) => template[template.indexOf(flag) + 1];
-  if (template[0] !== '/usr/bin/env' || count(cli) !== 1 ||
-      count('--model') !== 1 || after('--model') !== model ||
-      count('--resume') !== 1 || count(PLACEHOLDER.session) !== 1 || after('--resume') !== PLACEHOLDER.session ||
-      count('--allowedTools') !== 1 || count(PLACEHOLDER.allowed) !== 1 ||
-      after('--allowedTools') !== PLACEHOLDER.allowed ||
-      count(PLACEHOLDER.prompt) !== 1 || template.at(-1) !== PLACEHOLDER.prompt ||
-      !template.includes('--strict-mcp-config'))
+  // Transcripts are read from the project directory for CWD; any other cwd could hide a keyed record.
+  if (cwd !== CWD) fail('cwd must be ' + CWD);
+  const [env, shell, path, loader, libraryFlag, libraryPath, launcher] = template;
+  if (env !== '/usr/bin/env' || !/^SHELL=\/\S+$/.test(shell) || !/^PATH=\/\S*$/.test(path) ||
+      !absolute(loader) || libraryFlag !== '--library-path' || !absolute(libraryPath) ||
+      launcher !== cli || !absolute(cli) || template.at(-1) !== PLACEHOLDER.prompt)
     fail('argv template mismatch');
+  // Every CLI option after the launcher is allowlisted with its exact value, once.
+  const options = new Map([['-p', null], ['--resume', PLACEHOLDER.session], ['--model', model],
+    ['--permission-mode', 'dontAsk'], ['--tools', 'Bash,Read'], ['--allowedTools', PLACEHOLDER.allowed],
+    ['--setting-sources', ''], ['--strict-mcp-config', null], ['--output-format', 'json']]);
+  const seen = new Set();
+  let i = 7;
+  while (i < template.length - 1) {
+    const option = template[i];
+    if (!options.has(option) || seen.has(option)) fail('argv option not allowed: ' + option);
+    seen.add(option);
+    const value = options.get(option);
+    if (value === null) { i += 1; continue; }
+    if (template[i + 1] !== value) fail('argv option value mismatch: ' + option);
+    i += 2;
+  }
+  if (i !== template.length - 1 || seen.size !== options.size) fail('argv template mismatch');
   return { template, cwd };
 };
 export const buildArgv = (template, allowed, id, prompt) => {
@@ -278,8 +294,11 @@ export const versionUse = (rowSets, contractId, version, commit) => {
     if (row.type !== 'user') continue;
     const [first, second] = firstText(row).split(/\r?\n/, 2);
     if (!/^DISPATCH-KEY: [0-9a-f]{64}$/.test(first ?? '')) continue;
-    const match = launchRecord.exec(second ?? '');
-    if (match && match[1] === contractId && match[2] === version && match[3] !== commit)
+    // Legacy keyed records may carry another second line; a malformed CONTRACT line is uncertain.
+    if (!(second ?? '').startsWith('CONTRACT: ')) continue;
+    const match = launchRecord.exec(second);
+    if (!match) return 'STOP_MALFORMED_RECORD';
+    if (match[1] === contractId && match[2] === version && match[3] !== commit)
       return 'STOP_VERSION_USED';
   }
   return 'UNUSED_ELSEWHERE';
@@ -339,8 +358,8 @@ export function run({ mode, step, commit, rId, contractId, version }) {
   const wRows = transcript(job.w);
   const label = contractId + '@' + version;
   const base = { fired: false, step, commit, contract: label };
-  if (versionUse([rRows, wRows], contractId, version, commit) !== 'UNUSED_ELSEWHERE')
-    return { ...base, state: 'STOP_VERSION_USED' };
+  const use = versionUse([rRows, wRows], contractId, version, commit);
+  if (use !== 'UNUSED_ELSEWHERE') return { ...base, state: use };
   const route = stageRoute(step, commit, label, task, rRows, wRows, audit, job);
   if (route.declined) return { ...base, state: 'DECLINED' };
   const { source, id, previous, wTurn } = route;
@@ -382,6 +401,7 @@ export function run({ mode, step, commit, rId, contractId, version }) {
     'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY'];
   const env = Object.fromEntries(allowedEnv.filter((name) => process.env[name] !== undefined)
     .map((name) => [name, process.env[name]]));
+  if (env.HOME !== HOME) fail('HOME must be ' + HOME);
   const child = spawnSync(argv[0], argv.slice(1), {
     cwd: job.cwd, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
     timeout: job.timeout, killSignal: 'SIGTERM',
