@@ -106,6 +106,65 @@ jobs:
           },sort_keys=True))
           PY
 
+      - name: Prove real Laya model raw Carry
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="verification/raw-artifact-carry/laya-multilingual.json"
+          request="$RUNNER_TEMP/laya-multilingual.request.json"
+          out="$RUNNER_TEMP/laya-multilingual"
+          receipt="$RUNNER_TEMP/laya-multilingual.verify.json"
+
+          python3 - "$manifest" "$request" <<'PY'
+          import json,pathlib,sys
+          manifest_path,out_path=map(pathlib.Path,sys.argv[1:])
+          x=json.loads(manifest_path.read_text(encoding="utf-8"))
+          assert x["schema"]=="ops.rawArtifactCarryProof/1"
+          assert x["kind"]=="model"
+          assert x["license"]=="Apache-2.0"
+          request={
+              "schema":"carrier-job/2",
+              "request_id":x["id"],
+              "sources":[{
+                  "name":x["filename"],
+                  "url":x["url"],
+                  "bytes":x["bytes"],
+                  "sha256":x["sha256"],
+              }],
+              "payload":{"source":x["filename"],"codec":"raw"},
+          }
+          out_path.write_text(json.dumps(request,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
+          PY
+
+          node packages/chatgpt-capability/ingress/carrier-job.mjs materialize             --request "$request" --out "$out"
+          node packages/chatgpt-capability/ingress/carrier-job.mjs verify             --input "$out" --receipt "$receipt"
+
+          python3 - "$manifest" "$receipt" "$out" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest_path,receipt_path,root=map(pathlib.Path,sys.argv[1:])
+          expected=json.loads(manifest_path.read_text(encoding="utf-8"))
+          observed=json.loads(receipt_path.read_text(encoding="utf-8"))
+          assert observed["schema"]=="carrier-job-receipt/2"
+          assert observed["status"]=="PASS"
+          assert observed["payload"]["source"]==expected["filename"]
+          assert observed["payload"]["bytes"]==expected["bytes"]
+          assert observed["payload"]["sha256"]==expected["sha256"]
+          payload=root/"files"/expected["filename"]
+          assert payload.stat().st_size==expected["bytes"]
+          h=hashlib.sha256()
+          with payload.open("rb") as f:
+              for chunk in iter(lambda:f.read(8*1024*1024),b""):
+                  h.update(chunk)
+          assert h.hexdigest()==expected["sha256"]
+          print(json.dumps({
+              "schema":"ops.rawArtifactCarryModelProof/1",
+              "status":"PASS",
+              "id":expected["id"],
+              "bytes":expected["bytes"],
+              "sha256":expected["sha256"],
+          },sort_keys=True))
+          PY
+
       - name: Build, Carry, materialize, and replay
         env:
           GH_TOKEN: ${{ github.token }}
