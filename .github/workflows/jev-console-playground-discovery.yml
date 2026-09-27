@@ -1,0 +1,92 @@
+name: jev-console-playground-discovery
+
+on:
+  push:
+    branches:
+      - proof/dispatcher-query-real-jev-smoke-260927
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect official public surfaces without calling Jev
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/jev-console-discovery"
+          mkdir -p "$out/assets"
+          python3 - "$out" <<'PY'
+          import html, pathlib, re, sys, urllib.parse, urllib.request
+
+          out = pathlib.Path(sys.argv[1])
+          origins = ["https://typesafe.ai/", "https://console.typesafe.ai/"]
+          headers = {"User-Agent": "roccho-dev-real-jev-e2e-discovery/1"}
+          report = []
+
+          def fetch(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  return response.geturl(), response.status, response.headers, response.read()
+
+          for i, origin in enumerate(origins):
+              try:
+                  final, status, response_headers, body = fetch(origin)
+              except Exception as exc:
+                  report.append(f"origin={origin}\nerror={type(exc).__name__}:{exc}\n")
+                  continue
+              text = body.decode("utf-8", "replace")
+              (out / f"origin-{i}.html").write_text(text)
+              report.append(f"origin={origin}\nfinal={final}\nstatus={status}\nbytes={len(body)}\n")
+              refs = []
+              for match in re.finditer(r'''(?:src|href)=["']([^"']+)["']''', text, re.I):
+                  ref = html.unescape(match.group(1))
+                  url = urllib.parse.urljoin(final, ref)
+                  if urllib.parse.urlsplit(url).scheme in {"http", "https"}:
+                      refs.append(url)
+              seen = set()
+              for j, url in enumerate(refs):
+                  if url in seen or j >= 80:
+                      continue
+                  seen.add(url)
+                  path = urllib.parse.urlsplit(url).path.lower()
+                  if not path.endswith((".js", ".mjs", ".json")):
+                      continue
+                  try:
+                      asset_final, asset_status, _, asset_body = fetch(url)
+                  except Exception:
+                      continue
+                  name = f"{i}-{len(list((out/'assets').iterdir())):03d}.txt"
+                  asset_text = asset_body.decode("utf-8", "replace")
+                  (out / "assets" / name).write_text(f"URL {asset_final}\nSTATUS {asset_status}\n\n{asset_text}")
+
+          (out / "origins.txt").write_text("\n".join(report))
+          patterns = re.compile(r"(?i)(systemone|playground|anonymous|guest|api\.typesafe|/v1/|questions|jev-latest|try[-_ ]?free)")
+          hits = []
+          for path in sorted(out.rglob("*")):
+              if not path.is_file():
+                  continue
+              for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                  if patterns.search(line):
+                      hits.append(f"{path.relative_to(out)}:{line_no}:{line[:1200]}")
+                      if len(hits) >= 400:
+                          break
+              if len(hits) >= 400:
+                  break
+          (out / "hits.txt").write_text("\n".join(hits) + ("\n" if hits else ""))
+          print((out / "origins.txt").read_text())
+          print(f"assets={len(list((out/'assets').glob('*')))} hits={len(hits)}")
+          PY
+          sed -n '1,120p' "$out/hits.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jev-console-playground-discovery
+          path: ${{ runner.temp }}/jev-console-discovery
+          if-no-files-found: error
+          retention-days: 3
