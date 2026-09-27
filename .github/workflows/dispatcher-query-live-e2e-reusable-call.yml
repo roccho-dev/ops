@@ -1,0 +1,16 @@
+name: dispatcher-query-live-e2e-reusable-call
+
+on:
+  push:
+    branches:
+      - proof/dispatcher-query-real-jev-smoke-260927
+
+permissions:
+  contents: read
+
+jobs:
+  real-jev-e2e:
+    uses: roccho-dev/envs/.github/workflows/dispatcher-query-live-e2e-reusable.yml@69593cd70e3e457e4cd3d0d7cfbcb395b61d5c9a
+    with:
+      envs_sha: 69593cd70e3e457e4cd3d0d7cfbcb395b61d5c9a
+      ops_sha: 821c762edb0a748f40146e7f264b17ba2c228900
