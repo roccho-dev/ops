@@ -1,0 +1,104 @@
+name: dispatcher-query-real-jev-smoke
+
+on:
+  push:
+    branches:
+      - proof/dispatcher-query-real-jev-smoke-260927
+
+permissions:
+  contents: read
+
+jobs:
+  real-jev:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TARGET_OPS_SHA: 821c762edb0a748f40146e7f264b17ba2c228900
+      ENDPOINT: https://apps-9-e2e.voice-ui.pages.dev/api/jev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify proof source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "$TARGET_OPS_SHA"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/dispatcher-query-real-jev-smoke.yml"
+
+      - name: Verify deployed function without invoking Jev
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output "$RUNNER_TEMP/get.json" --write-out '%{http_code}' --max-time 20 "$ENDPOINT")"
+          test "$status" = 405
+
+      - name: Invoke real Jev exactly once
+        id: call
+        shell: bash
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/request.json"
+          response="$RUNNER_TEMP/response.json"
+          cat > "$request" <<'JSON'
+          {"kind":"voice-ui.jev.request.v2","text":"Add one directed edge from node-c to node-a.","graph":{"regions":["node-a","node-b","node-c"]}}
+          JSON
+
+          curl --fail --silent --show-error \
+            --max-time 20 \
+            --request POST \
+            --header 'content-type: application/json' \
+            --data-binary "@$request" \
+            "$ENDPOINT" > "$response"
+
+          python3 - "$response" <<'PY'
+          import json, pathlib, sys
+          value = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert value.get("kind") == "voice-ui.jev.decision.v2", value
+          assert isinstance(value.get("model"), str) and value["model"], value
+          answers = value.get("answers") or {}
+          assert answers.get("action", {}).get("choice") == "add-edge", value
+          assert answers.get("source", {}).get("choice") == "node-c", value
+          assert answers.get("target", {}).get("choice") == "node-a", value
+          for key in ("action", "source", "target"):
+              answer = answers[key]
+              assert answer.get("type") == "choice", value
+              assert isinstance(answer.get("confidence"), (int, float)), value
+          PY
+
+          sha256sum "$request" > "$RUNNER_TEMP/SHA256SUMS"
+          sha256sum "$response" >> "$RUNNER_TEMP/SHA256SUMS"
+          echo "response=$response" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize non-authority smoke
+        shell: bash
+        env:
+          RESPONSE: ${{ steps.call.outputs.response }}
+        run: |
+          set -euo pipefail
+          python3 - "$RESPONSE" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import hashlib, json, pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          value = json.loads(path.read_text())
+          print("## Real Jev transport smoke")
+          print()
+          print(f"- target Ops implementation: `{__import__('os').environ['TARGET_OPS_SHA']}`")
+          print(f"- model: `{value['model']}`")
+          print(f"- action: `{value['answers']['action']['choice']}`")
+          print(f"- source: `{value['answers']['source']['choice']}`")
+          print(f"- target: `{value['answers']['target']['choice']}`")
+          print(f"- raw response sha256: `{hashlib.sha256(path.read_bytes()).hexdigest()}`")
+          print("- provider calls through the endpoint: `1` by construction")
+          print("- authority/effect: `false` (transport smoke only)")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dispatcher-query-real-jev-smoke-${{ env.TARGET_OPS_SHA }}
+          path: |
+            ${{ runner.temp }}/request.json
+            ${{ steps.call.outputs.response }}
+            ${{ runner.temp }}/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
