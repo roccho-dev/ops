@@ -18,15 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Verify proof source
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "$TARGET_OPS_SHA"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/dispatcher-query-real-jev-smoke.yml"
+          git merge-base --is-ancestor "$TARGET_OPS_SHA" HEAD
+          test "$(git diff --name-only "$TARGET_OPS_SHA" HEAD)" = ".github/workflows/dispatcher-query-real-jev-smoke.yml"
 
       - name: Verify deployed function without invoking Jev
         shell: bash
