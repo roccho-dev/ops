@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           cp flake.nix flake.nix.before
-          nix fmt -- flake.nix
+          nix shell .#prove-feat -c nixfmt flake.nix
           test -n "$(git diff -- flake.nix)"
           git diff -- flake.nix > flake.nix.diff
       - uses: actions/upload-artifact@v4
