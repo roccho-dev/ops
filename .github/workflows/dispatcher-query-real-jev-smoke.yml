@@ -14,6 +14,7 @@ jobs:
     timeout-minutes: 5
     env:
       TARGET_OPS_SHA: 821c762edb0a748f40146e7f264b17ba2c228900
+      BASE_URL: https://apps-9-e2e.voice-ui.pages.dev
       ENDPOINT: https://apps-9-e2e.voice-ui.pages.dev/api/jev
     steps:
       - uses: actions/checkout@v4
@@ -28,12 +29,12 @@ jobs:
           git merge-base --is-ancestor "$TARGET_OPS_SHA" HEAD
           test "$(git diff --name-only "$TARGET_OPS_SHA" HEAD)" = ".github/workflows/dispatcher-query-real-jev-smoke.yml"
 
-      - name: Verify deployed function without invoking Jev
+      - name: Verify deployed site without invoking Jev
         shell: bash
         run: |
           set -euo pipefail
-          status="$(curl --silent --show-error --output "$RUNNER_TEMP/get.json" --write-out '%{http_code}' --max-time 20 "$ENDPOINT")"
-          test "$status" = 405
+          curl --fail --silent --show-error --max-time 20 "$BASE_URL/" > "$RUNNER_TEMP/index.html"
+          grep -q 'id="surface"' "$RUNNER_TEMP/index.html"
 
       - name: Invoke real Jev exactly once
         id: call
