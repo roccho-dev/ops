@@ -1,0 +1,37 @@
+name: Dispatcher query development source
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/dispatcher-query-development.yml'
+      - 'packages/jev-dispatcher/**'
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Export exact public source for offline development
+        env:
+          EXPECTED: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          git archive --format=tar.gz --output="$RUNNER_TEMP/ops-source.tar.gz" HEAD
+          git ls-tree -r HEAD > "$RUNNER_TEMP/ops-source-tree.txt"
+          printf '%s\n' "$EXPECTED" > "$RUNNER_TEMP/ops-source-commit.txt"
+          sha256sum "$RUNNER_TEMP/ops-source.tar.gz" > "$RUNNER_TEMP/ops-source.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dispatcher-query-development-source
+          path: |
+            ${{ runner.temp }}/ops-source.tar.gz
+            ${{ runner.temp }}/ops-source-tree.txt
+            ${{ runner.temp }}/ops-source-commit.txt
+            ${{ runner.temp }}/ops-source.sha256
+          if-no-files-found: error
+          retention-days: 3
