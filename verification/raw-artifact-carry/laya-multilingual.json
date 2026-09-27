@@ -1,0 +1,13 @@
+{
+  "schema": "ops.rawArtifactCarryProof/1",
+  "id": "laya-multilingual",
+  "kind": "model",
+  "repository": "convaiinnovations/laya-multilingual",
+  "revision": "052592a15d198d9ad47da779604259b10b47b7aa",
+  "filename": "model.safetensors",
+  "url": "https://huggingface.co/convaiinnovations/laya-multilingual/resolve/052592a15d198d9ad47da779604259b10b47b7aa/model.safetensors?download=true",
+  "bytes": 643835514,
+  "sha256": "9d628fd971b700382ac6f65920a86f149777b2e748e0c955fb3b19695aa8f204",
+  "license": "Apache-2.0",
+  "purpose": "real Jev-like System One model Carry proof; Carry remains format-agnostic"
+}
