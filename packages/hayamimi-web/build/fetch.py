@@ -31,6 +31,7 @@ def main():
     work = pathlib.Path(a.work).resolve()
     (work / 'sources').mkdir(parents=True, exist_ok=True)
     (work / 'downloads').mkdir(parents=True, exist_ok=True)
+    (work / 'cmake-deps').mkdir(parents=True, exist_ok=True)
     rows = [json.loads(x) for x in (root / 'sources.lock.jsonl').read_text().splitlines() if x.strip()]
     receipt = []
     for r in rows:
@@ -44,6 +45,32 @@ def main():
             if got != r['revision']:
                 raise SystemExit(f"{r['id']}: revision mismatch")
             receipt.append({'id': r['id'], 'kind': 'git', 'revision': got})
+            continue
+        if r['kind'] == 'url':
+            # Direct network input declared by identity. The mirror is a transport
+            # fallback only: it must satisfy the same bytes and sha256, and the
+            # receipt records the declared url so the closure stays byte-identical
+            # regardless of which transport succeeded.
+            dst = work / 'cmake-deps' / r['filename']
+            if not dst.exists():
+                last = None
+                for source in [r['url']] + ([r['mirror']] if r.get('mirror') else []):
+                    try:
+                        download(source, dst)
+                        break
+                    except Exception as err:
+                        last = err
+                else:
+                    raise SystemExit(f"{r['id']}: no transport succeeded: {last}")
+            if dst.stat().st_size != r['bytes']:
+                raise SystemExit(f"{r['id']}: byte size mismatch")
+            got_sha = sha256(dst)
+            if got_sha != r['sha256']:
+                raise SystemExit(f"{r['id']}: sha256 mismatch")
+            receipt.append({
+                'id': r['id'], 'kind': 'url', 'url': r['url'],
+                'filename': r['filename'], 'bytes': dst.stat().st_size, 'sha256': got_sha
+            })
             continue
         if r['kind'] != 'github-release-asset':
             raise SystemExit(f"{r['id']}: unsupported source kind")
