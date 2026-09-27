@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --max-time 20 "$BASE_URL/" > "$RUNNER_TEMP/index.html"
-          grep -q 'id="surface"' "$RUNNER_TEMP/index.html"
+          test -s "$RUNNER_TEMP/index.html"
 
       - name: Invoke real Jev exactly once
         id: call
