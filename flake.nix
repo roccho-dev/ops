@@ -63,6 +63,7 @@
           cdp-tty = nixpkgs.legacyPackages.${system}.callPackage ./packages/cdp-tty { };
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
+          jev-dispatcher-query = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev-dispatcher { };
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -140,6 +141,27 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           cdp-tty = packages.${system}.cdp-tty.proof;
+          jev-dispatcher-query =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+            in
+            pkgs.runCommand "jev-dispatcher-query-test"
+              {
+                nativeBuildInputs = [
+                  pkgs.nodejs
+                  pkgs.git
+                ];
+              }
+              ''
+                export HOME="$TMPDIR/home"
+                mkdir -p "$HOME"
+                export GIT_BIN=${pkgs.git}/bin/git
+                export QUERY_BIN=${packages.${system}.jev-dispatcher-query}/bin/jev-dispatcher-query
+                export NODE_NO_WARNINGS=1
+                ${pkgs.nodejs}/bin/node --test ${self}/packages/jev-dispatcher/query.test.mjs > "$out"
+                "$QUERY_BIN" --help > /dev/null
+                cmp ${./packages/jev-dispatcher/artifact.jsonl} ${packages.${system}.jev-dispatcher-query}/share/jev-dispatcher/artifact.jsonl
+              '';
           jev =
             let
               pkgs = nixpkgs.legacyPackages.${system};
