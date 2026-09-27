@@ -160,7 +160,9 @@
                 export NODE_NO_WARNINGS=1
                 ${pkgs.nodejs}/bin/node --test ${self}/packages/jev-dispatcher/query.test.mjs > "$out"
                 "$QUERY_BIN" --help > /dev/null
-                cmp ${./packages/jev-dispatcher/artifact.jsonl} ${packages.${system}.jev-dispatcher-query}/share/jev-dispatcher/artifact.jsonl
+                cmp ${./packages/jev-dispatcher/artifact.jsonl} ${
+                  packages.${system}.jev-dispatcher-query
+                }/share/jev-dispatcher/artifact.jsonl
               '';
           jev =
             let
