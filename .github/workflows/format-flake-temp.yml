@@ -1,0 +1,38 @@
+name: temporary flake formatter
+
+on:
+  pull_request:
+    paths:
+      - flake.nix
+      - .github/workflows/format-flake-temp.yml
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Produce canonical formatter output
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp flake.nix flake.nix.before
+          nix fmt -- flake.nix
+          test -n "$(git diff -- flake.nix)"
+          git diff -- flake.nix > flake.nix.diff
+      - uses: actions/upload-artifact@v4
+        with:
+          name: formatted-flake-${{ github.event.pull_request.head.sha }}
+          path: |
+            flake.nix
+            flake.nix.diff
+          if-no-files-found: error
