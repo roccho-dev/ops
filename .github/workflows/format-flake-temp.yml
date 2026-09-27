@@ -26,7 +26,10 @@ jobs:
         run: |
           set -euo pipefail
           cp flake.nix flake.nix.before
-          nix shell .#prove-feat -c nixfmt flake.nix
+          prove="$(nix build --no-link --print-out-paths .#prove-feat)"
+          nixfmt="$(nix-store -q --references "$prove" | grep -- '-nixfmt-' | head -n1)"
+          test -x "$nixfmt/bin/nixfmt"
+          "$nixfmt/bin/nixfmt" flake.nix
           test -n "$(git diff -- flake.nix)"
           git diff -- flake.nix > flake.nix.diff
       - uses: actions/upload-artifact@v4
