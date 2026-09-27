@@ -14,8 +14,8 @@ jobs:
     timeout-minutes: 5
     env:
       TARGET_OPS_SHA: 821c762edb0a748f40146e7f264b17ba2c228900
-      BASE_URL: https://apps-9-e2e.voice-ui.pages.dev
-      ENDPOINT: https://apps-9-e2e.voice-ui.pages.dev/api/jev
+      BASE_URL: https://voice-ui.pages.dev
+      ENDPOINT: https://voice-ui.pages.dev/api/jev
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,7 +27,11 @@ jobs:
         run: |
           set -euo pipefail
           git merge-base --is-ancestor "$TARGET_OPS_SHA" HEAD
-          test "$(git diff --name-only "$TARGET_OPS_SHA" HEAD)" = ".github/workflows/dispatcher-query-real-jev-smoke.yml"
+          actual="$(git diff --name-only "$TARGET_OPS_SHA" HEAD | sort)"
+          expected="$(printf '%s\n' \
+            '.github/workflows/dispatcher-query-live-e2e-reusable-call.yml' \
+            '.github/workflows/dispatcher-query-real-jev-smoke.yml' | sort)"
+          test "$actual" = "$expected"
 
       - name: Verify deployed site without invoking Jev
         shell: bash
