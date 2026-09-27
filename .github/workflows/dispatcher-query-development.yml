@@ -1,37 +1,64 @@
-name: Dispatcher query development source
+name: Dispatcher query exact materialization
 on:
   pull_request:
     paths:
       - '.github/workflows/dispatcher-query-development.yml'
-      - 'packages/jev-dispatcher/**'
+      - '.github/query-patch-*'
 permissions:
   contents: read
 jobs:
-  source:
+  materialize:
+    if: github.event.pull_request.number == 434 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/dispatcher-query-closure'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-      - name: Export exact public source for offline development
+          fetch-depth: 2
+      - name: Apply only the hash-bound, locally tested source patch
         env:
-          EXPECTED: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
-          test "$(git rev-parse HEAD)" = "$EXPECTED"
-          git archive --format=tar.gz --output="$RUNNER_TEMP/ops-source.tar.gz" HEAD
-          git ls-tree -r HEAD > "$RUNNER_TEMP/ops-source-tree.txt"
-          printf '%s\n' "$EXPECTED" > "$RUNNER_TEMP/ops-source-commit.txt"
-          sha256sum "$RUNNER_TEMP/ops-source.tar.gz" > "$RUNNER_TEMP/ops-source.sha256"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dispatcher-query-development-source
-          path: |
-            ${{ runner.temp }}/ops-source.tar.gz
-            ${{ runner.temp }}/ops-source-tree.txt
-            ${{ runner.temp }}/ops-source-commit.txt
-            ${{ runner.temp }}/ops-source.sha256
-          if-no-files-found: error
-          retention-days: 3
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse HEAD^)" = '9eb5ed3e5b7b23b0c77aa73b419dc7b55a49f782'
+          test -z "$(git status --porcelain)"
+          python3 - <<'PY'
+          from pathlib import Path
+          import gzip, hashlib, io, json, subprocess
+          meta_path = Path('.github/query-patch-meta.json')
+          data = meta_path.read_bytes()
+          assert hashlib.sha256(data).hexdigest() == '3a8587aa0826fc0fa4204436695e8ec79fed7b1ee14eb62960989194f79565c7'
+          meta = json.loads(data)
+          assert meta['base'] == '9eb5ed3e5b7b23b0c77aa73b419dc7b55a49f782'
+          compressed = b''.join(Path(p).read_bytes() for p in meta['chunks'])
+          with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+              patch = stream.read(meta['patch_bytes'] + 1)
+          assert len(patch) == meta['patch_bytes'] == 56727
+          assert hashlib.sha256(patch).hexdigest() == meta['patch_sha256'] == '061dbd896fcfa377650683cd116714c96b4852a8426e572cb939fa459f5fc048'
+          subprocess.run(['git', 'apply', '--check', '--whitespace=error-all', '-'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '--whitespace=error-all', '-'], input=patch, check=True)
+          for name, expected in meta['files'].items():
+              p = Path(name)
+              assert p.is_file() and not p.is_symlink()
+              assert hashlib.sha256(p.read_bytes()).hexdigest() == expected, name
+          temporary = [str(meta_path), *meta['chunks']]
+          for name in temporary:
+              Path(name).unlink()
+          names = [*meta['files'], *temporary]
+          subprocess.run(['git', 'add', '--', *names], check=True)
+          staged = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
+          assert set(staged) == set(names), staged
+          subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
+          print('Exact patch and all 9 resulting file digests verified. No repository code executed.')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -c core.hooksPath=/dev/null commit -m 'feat(jev-dispatcher): add bounded advisory query, installed CLI and evidence checks'
+          remote_head=$(git ls-remote origin refs/heads/feat/dispatcher-query-closure | cut -f1)
+          test "$remote_head" = "$EXPECTED_HEAD"
+          git -c core.hooksPath=/dev/null push origin HEAD:refs/heads/feat/dispatcher-query-closure
+          git rev-parse HEAD
