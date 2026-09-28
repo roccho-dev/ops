@@ -13,14 +13,18 @@ on:
       - 'verification/mobile-agent-url-only-runtime/**'
   workflow_dispatch:
     inputs:
+      expected_sha:
+        description: Exact approved 40-character ops commit SHA
+        required: true
+        type: string
       deploy:
         description: Deploy and accept the exact candidate
         required: true
-        default: true
+        default: false
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   ROOT: verification/mobile-agent-url-only-runtime
@@ -39,11 +43,20 @@ jobs:
       tree_digest: ${{ steps.build.outputs.tree_digest }}
       file_count: ${{ steps.build.outputs.file_count }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - name: Admit exact manual candidate
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.16.0'
       - name: Install browser proof dependency
@@ -59,7 +72,7 @@ jobs:
             --source-sha "$(git rev-parse HEAD)" \
             --out "$RUNNER_TEMP/result" \
             --github-output "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mobile-agent-url-only-runtime-site-${{ github.run_id }}
           path: ${{ runner.temp }}/result/
@@ -68,20 +81,31 @@ jobs:
 
   deploy:
     needs: materialize
-    if: github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: cloudflare-production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ needs.materialize.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - name: Verify effect source identity
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_SHA" = '${{ needs.materialize.outputs.source_sha }}'
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: mobile-agent-url-only-runtime-site-${{ github.run_id }}
           path: ${{ runner.temp }}/staged
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.16.0'
       - name: Install public browser proof dependency
@@ -126,7 +150,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
       - name: Upload accepted proof
         id: accepted
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mobile-agent-business-model-public-url-receipt-${{ github.run_id }}
           path: ${{ runner.temp }}/public-proof/
