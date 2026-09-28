@@ -31,6 +31,7 @@ export { SECRET_ENV_NAMES, sha256File } from "./modules/core.mjs";
 export { validateProjectionReceipt } from "./modules/input-contracts.mjs";
 
 function assertExecutableIdentity(file, expectedDigest, label) {
+  requireCondition(typeof file === "string" && path.isAbsolute(file), `${label} executable path must be absolute`);
   requireCondition(statSync(file).isFile(), `${label} is missing`);
   requireCondition(sha256File(file) === normalizeSha256(expectedDigest, `${label} digest`), `${label} digest mismatch`);
 }
@@ -53,10 +54,13 @@ function executeAdapter({ adapter, expectedDigest, request, receiptPath, env, sp
   }
 }
 
-function executeAcceptance({ artifact, expected, targetUrl, handoffId, receiptPath, env, spawn = spawnSync }) {
+function executeAcceptance({ runtime, artifact, expected, targetUrl, handoffId, receiptPath, env, spawn = spawnSync }) {
+  assertExecutableIdentity(runtime.path, runtime.sha256, "acceptance runtime");
   const workspace = mkdtempSync(path.join(tmpdir(), "voice-ui-acceptance-run-"));
   try {
-    const result = spawn(process.execPath, [
+    // The separately approved apps runtime supplies its own fixed Node/browser
+    // closure. Do not fall back to the orchestrator's bare Node or inherited libs.
+    const result = spawn(runtime.path, [
       artifact.runtimeEntrypoint,
       "--artifact-root", artifact.root,
       "--url", targetUrl,
@@ -109,9 +113,11 @@ export function runTargetRuntime(request, options = {}) {
   const credential = effectEnv(env);
   requireCondition(credential.CLOUDFLARE_API_TOKEN, "effect capability is missing");
   requireCondition(credential.CLOUDFLARE_ACCOUNT_ID === expected.target.accountId, "effect account differs from approved target");
-  for (const label of ["deploy", "readback"]) {
-    assertExecutableIdentity(request.adapters[label].path, request.adapters[label].sha256, label);
-    requireCondition(path.isAbsolute(request.adapters[label].path), `${label} adapter path must be absolute`);
+  for (const label of ["deploy", "readback", "acceptance"]) {
+    const executable = request.adapters?.[label];
+    requireCondition(executable, `${label} executable is missing`);
+    exactObjectKeys(executable, ["path", "sha256"], `${label} executable`);
+    assertExecutableIdentity(executable.path, executable.sha256, label);
   }
 
   const output = path.resolve(request.output);
@@ -158,6 +164,7 @@ export function runTargetRuntime(request, options = {}) {
   for (let index = 0; index < 2; index += 1) {
     const handoffId = `dev/jev-api/${runToken}/run-${index + 1}`;
     const processProof = executeAcceptance({
+      runtime: request.adapters.acceptance,
       artifact,
       expected,
       targetUrl: deployReceipt.deployment.stableUrl,
@@ -191,6 +198,7 @@ export function runTargetRuntime(request, options = {}) {
       isolationVerdictSha256: `sha256:${sha256File(request.inputs.isolationVerdict)}`,
       deployAdapterSha256: `sha256:${normalizeSha256(request.adapters.deploy.sha256)}`,
       readbackAdapterSha256: `sha256:${normalizeSha256(request.adapters.readback.sha256)}`,
+      acceptanceRuntimeSha256: `sha256:${normalizeSha256(request.adapters.acceptance.sha256)}`,
     },
     target: expected.target,
     stages: {

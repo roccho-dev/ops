@@ -86,7 +86,12 @@ function fixture(t) {
       projectionReceiptSha256: sha256File(projectionPath), isolationVerdictSha256: sha256File(isolationPath),
       target: { provider: "cloudflare-pages", accountId: ACCOUNT_ID, project: "voice-ui", branch: "proposals" } },
     inputs: { artifactRoot, projectionReceipt: projectionPath, isolationVerdict: isolationPath },
-    adapters: { deploy: { path: deploy, sha256: sha256File(deploy) }, readback: { path: readback, sha256: sha256File(readback) } },
+    adapters: {
+      deploy: { path: deploy, sha256: sha256File(deploy) },
+      readback: { path: readback, sha256: sha256File(readback) },
+      // Explicit offline runtime only; physical use supplies apps' built closure.
+      acceptance: { path: process.execPath, sha256: sha256File(process.execPath) },
+    },
     output: path.join(root, "output") };
   return { root, artifactRoot, manifest, request, projectionPath, isolationPath, deploy, readback };
 }
@@ -121,6 +126,9 @@ for (const [name, mutate, message] of [
   ["isolation changed after approval", f=>{write(f.isolationPath,{...read(f.isolationPath),status:"RED"});}, /isolation verdict digest/],
   ["readback adapter changed", f=>{writeFileSync(f.readback,"// tampered");}, /readback digest mismatch/],
   ["deploy adapter changed", f=>{writeFileSync(f.deploy,"// tampered");}, /deploy digest mismatch/],
+  ["missing acceptance runtime", f=>{delete f.request.adapters.acceptance;}, /acceptance executable is missing/],
+  ["changed acceptance runtime", f=>{f.request.adapters.acceptance.sha256="f".repeat(64);}, /acceptance digest mismatch/],
+  ["relative acceptance runtime", f=>{f.request.adapters.acceptance.path="node";}, /acceptance executable path must be absolute/],
   ["no effect capability", (_f,e)=>{delete e.CLOUDFLARE_API_TOKEN;}, /effect capability/],
   ["wrong effect account", (_f,e)=>{e.CLOUDFLARE_ACCOUNT_ID="other";}, /effect account/],
   ["unlisted executable file", f=>{writeFileSync(path.join(f.artifactRoot,"unlisted.mjs"),"// extra");}, /unlisted files/],
@@ -146,9 +154,21 @@ test("real offline processes exercise CLI, readback and independent acceptance w
   const r=spawnSync(process.execPath,[CLI,"--request",req],{encoding:"utf8",env:{...effectEnv(),NEW_PROVIDER_TOKEN:"not-in-children"}});
   assert.equal(r.status,0,r.stderr);assert.doesNotMatch(r.stdout,/do-not-forward-effect-output/);
   const result=read(path.join(f.request.output,"receipt.json"));assert.equal(result.stages.acceptance.length,2);
+  assert.equal(result.sources.acceptanceRuntimeSha256,`sha256:${f.request.adapters.acceptance.sha256}`);
   const a=read(path.join(f.request.output,"acceptance-1.json")),b=read(path.join(f.request.output,"acceptance-2.json"));
   assert.notEqual(a.handoffId,b.handoffId);assert.notEqual(a.fixtureObservation.home,b.fixtureObservation.home);
   assert.equal(a.fixtureObservation.home,a.fixtureObservation.cwd);assert.equal(a.fixtureObservation.unknownSecret,null);
+});
+test("approved launcher, not the orchestrator Node, starts both acceptances", t=>{
+  const f=fixture(t),launcher=path.join(f.root,"acceptance-node");
+  writeFileSync(launcher,`#!/bin/sh\nexec '${process.execPath}' "$@"\n`,{mode:0o755});
+  f.request.adapters.acceptance={path:launcher,sha256:sha256File(launcher)};
+  const commands=[];
+  const result=runTargetRuntime(f.request,{env:effectEnv(),spawn:(command,args,options)=>{
+    commands.push(command);return spawnSync(command,args,options);
+  }});
+  assert.equal(result.status,"PASS");
+  assert.deepEqual(commands,[process.execPath,process.execPath,launcher,launcher]);
 });
 test("empty, duplicate and missing acceptance checks cannot become PASS", t=>{
   const f=fixture(t);runTargetRuntime(f.request,{env:effectEnv()});
