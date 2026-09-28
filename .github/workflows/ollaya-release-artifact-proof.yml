@@ -42,8 +42,6 @@ jobs:
 
           tar --zstd -xf "$root/$OLLAYA_ARCHIVE" -C "$root/runtime"
           test -x "$root/runtime/bin/ollaya"
-          "$root/runtime/bin/ollaya" --version | tee "$root/version.txt"
-          grep -F "0.7.5" "$root/version.txt"
 
       - name: Pull one Laya model into an isolated store
         env:
@@ -69,6 +67,13 @@ jobs:
             sleep 1
           done
           test "$ready" = 1
+
+          curl --fail --silent --show-error http://127.0.0.1:11435/api/version | tee "$root/version.json"
+          python3 - "$root/version.json" <<'PY'
+          import json, pathlib, sys
+          x = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert x["version"] == "0.7.5", x
+          PY
 
           curl --fail --silent --show-error             -H 'Content-Type: application/json'             -d '{"model":"laya:multilingual","stream":false}'             http://127.0.0.1:11435/api/pull | tee "$root/pull.json"
 
