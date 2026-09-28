@@ -1,0 +1,143 @@
+name: Jev vs Winnow E4B benchmark
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - ".github/workflows/jev-winnow-e4b-benchmark.yml"
+      - "experiments/jev-winnow-e4b/**"
+      - "packages/parallel-development/**"
+      - "packages/jev-review/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ollaya-winnow-e4b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record runner capacity
+        run: |
+          set -euo pipefail
+          free -h
+          df -h "$RUNNER_TEMP"
+
+      - name: Fetch and verify Ollaya v0.7.5
+        env:
+          OLLAYA_VERSION: v0.7.5
+          OLLAYA_ARCHIVE: ollaya-linux-amd64.tar.zst
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/ollaya"
+          mkdir -p "$root/runtime"
+          base="https://github.com/ollaya-dev/ollaya/releases/download/$OLLAYA_VERSION"
+          curl --fail --location --retry 3 --output "$root/$OLLAYA_ARCHIVE" "$base/$OLLAYA_ARCHIVE"
+          curl --fail --location --retry 3 --output "$root/sha256sum.txt" "$base/sha256sum.txt"
+          (
+            cd "$root"
+            grep -E "  $OLLAYA_ARCHIVE$" sha256sum.txt > selected.sha256
+            test -s selected.sha256
+            sha256sum -c selected.sha256
+          )
+          tar --zstd -xf "$root/$OLLAYA_ARCHIVE" -C "$root/runtime"
+          test -x "$root/runtime/bin/ollaya"
+
+      - name: Pull and warm Winnow E4B on CPU
+        env:
+          OLLAYA_HOST: 127.0.0.1:11435
+          OLLAYA_DEVICE: cpu
+          OLLAYA_KEEP_ALIVE: 30m
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/ollaya"
+          export OLLAYA_MODELS="$root/models"
+          export OLLAYA_LIBRARY_PATH="$root/runtime/lib/ollaya"
+          mkdir -p "$OLLAYA_MODELS"
+
+          "$root/runtime/bin/ollaya" serve >"$RUNNER_TEMP/ollaya-server.log" 2>&1 &
+          pid=$!
+          echo "$pid" > "$RUNNER_TEMP/ollaya.pid"
+          trap 'cat "$RUNNER_TEMP/ollaya-server.log"; kill "$pid" 2>/dev/null || true' EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11435/ >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+
+          curl --fail --silent --show-error --max-time 1800             -H 'Content-Type: application/json'             -d '{"model":"winnow:e4b","stream":false}'             http://127.0.0.1:11435/api/pull | tee "$RUNNER_TEMP/pull.json"
+          python3 - "$RUNNER_TEMP/pull.json" <<'PY'
+          import json, pathlib, sys
+          x = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert x["status"] == "success", x
+          PY
+
+          cat >"$RUNNER_TEMP/warm.json" <<'JSON'
+          {
+            "model": "ollaya.dev/library/winnow:e4b",
+            "state": "Warm the already-pulled local decision model.",
+            "questions": {
+              "ready": {
+                "type": "noul",
+                "instructions": "Is this a warm-up request?"
+              }
+            }
+          }
+          JSON
+          curl --fail --silent --show-error --max-time 300             -H 'Content-Type: application/json'             --data-binary @"$RUNNER_TEMP/warm.json"             http://127.0.0.1:11435/v1/systemone | tee "$RUNNER_TEMP/warm-response.json"
+          python3 - "$RUNNER_TEMP/warm-response.json" <<'PY'
+          import json, pathlib, sys
+          x = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          a = x["answers"]["ready"]
+          assert a["type"] == "noul"
+          assert 0 <= a["noul"] <= 1
+          PY
+          trap - EXIT
+
+      - name: Run frozen 18-case semantic benchmark
+        env:
+          BENCH_PROVIDER: ollaya
+          BENCH_MODEL: ollaya.dev/library/winnow:e4b
+          BENCH_ENDPOINT: http://127.0.0.1:11435/v1/systemone
+          BENCH_TIMEOUT_MS: "300000"
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence"
+          node experiments/jev-winnow-e4b/benchmark.mjs "$RUNNER_TEMP/evidence/ollaya-winnow-e4b.json"
+          python3 - "$RUNNER_TEMP/evidence/ollaya-winnow-e4b.json" <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib, sys
+          x = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          q, l = x["quality"], x["latencyMs"]
+          print("## Ollaya + Winnow E4B")
+          print()
+          print(f"- expected-order hits: **{q['expectedOrderHits']}/36**")
+          print(f"- stable cases: **{q['stableCases']}/18**")
+          print(f"- ties: **{q['ties']}**")
+          print(f"- latency p50/p95: **{l['p50']:.1f} / {l['p95']:.1f} ms**")
+          print(f"- observed models: `{', '.join(x['observedModels'])}`")
+          PY
+
+      - name: Stop Ollaya
+        if: always()
+        run: |
+          set +e
+          if test -f "$RUNNER_TEMP/ollaya.pid"; then
+            kill "$(cat "$RUNNER_TEMP/ollaya.pid")"
+          fi
+          tail -n 100 "$RUNNER_TEMP/ollaya-server.log" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-winnow-e4b-ollaya-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: warn
+          retention-days: 30
