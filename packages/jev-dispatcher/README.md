@@ -1,4 +1,131 @@
-# Jev dispatcher reader
+# Jev dispatcher
+
+## R/W advisory query — implementation candidate, not D completion
+
+This package is the implementation home for [ADRS #434](https://github.com/roccho-dev/adrs/issues/434).
+The semantic proposal and adopted job/completion contract remain outside this package;
+this README describes the provided implementation, not new policy authority.
+
+**Current boundary:** the query core, installed CLI, audited-turn extraction,
+same-sender reply packet and offline contract tests exist. Automatic reply delivery
+and same-stage resume in the fixed OCI actor sessions are **not yet connected**.
+`QUERY_PENDING` stops rather than pretending the query finished the work.
+Real R/W use, independent live semantic evaluation, recovery/monitoring completion,
+and total-cost improvement have not been proved by these unit tests.
+
+### One entry, two callers
+
+`nix build .#jev-dispatcher-query` provides `bin/jev-dispatcher-query`, the selected
+Git reader and shared Jev client, and this README plus `artifact.jsonl` under
+`share/jev-dispatcher`. `--help` returns the exact command contract.
+
+R/W provide one `{id, type, question, criteria?}` request. `type` is `noul`,
+`choice` (2–255 named string options), or `score` (2–10 string levels).
+A trusted launcher, not the request, supplies the exact policy commit, job/version,
+authenticated sender and source-record identity, and a current observation file.
+The CLI's `--sender` flag is **not authentication**: direct CLI use is a trusted
+supervisor interface, not a multi-tenant or untrusted-caller security boundary.
+
+Required launcher flags are `--repo ABS --commit SHA --r-id ID --contract-id ID
+--version VERSION --sender ID --source-record ID --observation ABS`.
+The installed wrapper supplies an exact Git executable; source use also requires
+`--git-bin ABS`. The request is one JSON value on stdin, never a shell command.
+
+Authentication follows the existing envs `envctl auth exec` route. Point its
+artifact input to `share/jev-dispatcher/artifact.jsonl`; the existing `jev-api`
+binding injects `JEV_API_KEY` into the child only. This package creates no credential
+or binding. Do not pass a key in flags, the question, observations or an actor message.
+
+### Explicit selected-job configuration
+
+The implementation accepts an optional `query` object on the single selected job.
+This is an **unadopted contract extension** until approved through the existing ADRS
+path; merely building/installing it or linking the proposal enables nothing.
+Missing/disabled configuration holds with zero model calls. Existing R/W roles and
+legacy jobs are unchanged.
+
+The configuration declares `enabled: true`, `mode: advisory`, allowed `senders`,
+`rule_ids`, `disclosure: selected-rules-and-observation`, a positive `timeout_ms`
+(no more than 120000), `max_input_bytes` (no more than 1048576), `max_calls: 1`, and
+`expected_model`. Each named rule must be active, selected by the existing reader,
+and contain a nonempty `rule` text. This does not forward the whole private policy,
+actor configuration, credentials or unrelated records to the model.
+
+The launcher observation has `job`, `state_version`, `text`, `refs`, and an integer
+`expires_at` in Unix milliseconds. It must match the job and remain unexpired.
+The observation file is bounded and opened without following a final symlink.
+References/hashes do not prove truth or an adoption decision: the existing source,
+admission and current-state checks remain the caller's responsibility.
+
+### Request, reply, and effect boundaries
+
+An actor may end an audited turn with exactly one `D-QUERY: {JSON request}` line.
+`queryTurn` accepts only an existing keyed CLEAN final, uses the actual session and
+final-record identity, and rejects quoted/tool/foreign-command content. The
+supervisor prepares its context through `prepareContext`, never from actor-supplied
+policy or permission fields. `nextStage` returns `QUERY_PENDING`, with no stage
+advance, when it sees this query. One invocation makes at most one provider request;
+there is no retry. **Cross-process deduplication and at-most-once delivery remain
+requirements of the existing transport, not claims made by an in-memory counter.**
+
+The shared core calls the existing Jev client. Replies are `ANSWER`, `HOLD` or
+`ERROR`, bound to request, job, sender, source record, policy/observation version and
+implementation. They always have `authority: false` and `effect: false`.
+`replyPacket` verifies this envelope and addresses `D-REPLY` only to the original
+sender. It constructs a packet; it does not send or resume a session.
+`consumeReply` validates an answer's binding and explicit adopt/reject/hold decision.
+That record alone proves neither independent judgement nor subsequent work.
+
+An answer does not become R's `ROUTE`, P's `GO`, a confidence threshold, or a work
+launch. R retains instruction/acceptance ownership. Deterministic permissions,
+STOP, effect-time state/version checks and independent review remain mandatory.
+A valid return or refusal may be useful; always choosing HOLD is not economic success.
+
+Exit 0 means an answer or help; exit 3 means hold; exit 2 means an input, authentication,
+provider, timeout, response, model-identity or policy-read error. The CLI emits one
+JSON line. No automatic retry or fallback model is hidden behind an error.
+
+The response identifies the model and hashes the successful raw provider bytes.
+A model name (including a mutable provider alias) does not pin unseen server weights.
+Hashes/JSON receipts are not signatures or independent truth. The existing authorized
+runner must retain raw evidence, verify actual use and record the exact configuration;
+the core does not create a second durable ledger. Monetary cost is null when unknown,
+not zero. Query elapsed time is not end-to-end work cost or human time.
+
+### Completion evidence, not a completion flag
+
+| ID | Required evidence | Supplied by this code / still required |
+|---|---|---|
+| K01 | Discoverable contract without conversation history | README/help; real cold-reader use still required |
+| K02 | Installed entry used by real R and W | Installed CLI test; fixed actors and live binding still required |
+| K03 | Request/sender/job/state/policy and answer/hold/error binding | Executable unit, CLI and tamper tests |
+| K04 | Independent unseen natural cases and rule-meaning contrasts | Live, preregistered evaluation still required |
+| K05 | Query cannot grant GO/ROUTE or fire work | No-effect core and QUERY_PENDING isolation tests |
+| K06 | Answer use linked to actual work and independent observation | Reply/use binding and ablation tests; real delivery/use still required |
+| K07 | Continuation, duplicate/crash recovery and P notification | Existing completion remains open; not invented by this CLI |
+| K08 | Final source/contract/artifact and evidence identity | Digests and coverage checker; verify referenced bytes/reviews separately |
+| K09 | Comparable quality, total work cost and owner involvement | Not measured; no unit test claims savings |
+| K10 | Related changes require recheck/return | Expiry/version/model/binding rejection tests; live recovery still required |
+
+`query.test.mjs` uses an injected provider and synthetic actor records. It does use
+real Git objects, the actual selector/client validators, and the installed CLI when
+`QUERY_BIN` is supplied. It is not live Jev or fixed R/W evidence.
+
+`proof.mjs EXPECTED.json EVIDENCE.jsonl` checks K01–K10 reference coverage for one
+explicit source/policy/implementation/artifact/surface/model binding. Missing,
+duplicate, non-PASS, mock-only, stale or creator-self-reviewed records are incomplete.
+Even structurally complete input yields only `READY_FOR_INDEPENDENT_REVIEW`, **never
+D_COMPLETE**. It does not fetch evidence, authenticate reviewers, assign the blind
+evaluator, certify expected behavior or grant adoption. Existing evidence records
+can be projected to this input; do not maintain a new editable status ledger.
+
+Keep query delivery, full OCI old-D replacement, adoption and economic usefulness
+separate. All adopted completion duties must still be evidenced; neither a new
+package output nor a single completed work item retires the old-D inventory.
+A relevant policy, model, runtime or consumer change requires scoped revalidation;
+reuse applicable exact evidence instead of declaring every previous result current.
+
+## Existing exact reader and staged executor
 
 `policy-select.mjs` is the deterministic read stage for a future Jev dispatcher. It reads an exact ADRS Git commit, validates every `policy/control.jsonl` row and the graph, runs the SQL embedded in that commit's `AGENTS.md` in memory, and resolves the selected R's `requires` to exact blobs. It does not call Jev, dispatch agents, or grant GO.
 

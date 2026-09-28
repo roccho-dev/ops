@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { select } from './policy-select.mjs';
+import { parseQueryMessage, query } from './query.mjs';
 
 const ownFile = fileURLToPath(import.meta.url);
 const OLD = 'policy.jev.d-replacement.oci.v1';
@@ -477,6 +478,18 @@ export const headerSnapshot = (rows, key) => {
   const second = firstText(found.rows[0]).split(/\r?\n/, 2)[1] ?? '';
   return / SNAPSHOT=([0-9a-f]{64})$/.exec(second)?.[1] ?? null;
 };
+// Query extraction reuses the existing keyed-turn and turn-audit boundary. No arbitrary
+// report text or tool result can request a model call, and this function cannot fire an actor.
+export async function queryTurn({ rows, key, auditSpec, context }, dependencies) {
+  const turn = keyedTurn(rows, key);
+  if (turn.state !== 'DUPLICATE' || auditTurn(rows, key, auditSpec) !== 'CLEAN')
+    fail('query turn is not audited CLEAN');
+  if (context.sender !== auditSpec.sessionId || context.source_record !== turn.final.id)
+    fail('query sender or source mismatch');
+  const request = parseQueryMessage(turn.final.text);
+  if (!request) fail('query requires one explicit final D-QUERY message');
+  return query(request, context, dependencies);
+}
 // Walks the keyed chain and returns the first stage whose key is ABSENT. It reads records only and
 // launches nothing; every completed stage on the path must audit CLEAN with its own capabilities.
 export const nextStage = (commit, label, job, rRows, wRows, auditSpecFor) => {
@@ -499,6 +512,7 @@ export const nextStage = (commit, label, job, rRows, wRows, auditSpecFor) => {
     const final = completed(stage, source);
     const id = stage === 'w' ? job.w : job.r;
     if (!final) return { ...(state ? { state } : {}), stage, id, source, prior };
+    if (parseQueryMessage(final.text)) return { state: 'QUERY_PENDING', stage, id, source, final_record: final.id };
     prior = final;
     source = final.id;
     state = undefined;
@@ -575,8 +589,8 @@ const runScoped = (mode, commit, job, label) => {
   if (use !== 'UNUSED_ELSEWHERE') return { ...base, state: use };
   const auditSpecFor = (stage) => stageCapabilities(job, stage, commit).audit;
   const found = nextStage(commit, label, job, rRows, wRows, auditSpecFor);
-  if (found.state === 'RETURN_P' || found.state === 'TERMINAL')
-    return { ...base, state: found.state, final_record: found.final };
+  if (['RETURN_P', 'TERMINAL', 'QUERY_PENDING'].includes(found.state))
+    return { ...base, state: found.state, final_record: found.final_record ?? found.final };
   const { stage, id, source, prior } = found;
   const caps = stageCapabilities(job, stage, commit);
   const key = keyFor(commit, id, source);
@@ -613,6 +627,8 @@ const runScoped = (mode, commit, job, label) => {
   let reply;
   try { reply = JSON.parse(child.stdout); } catch { return { ...fired, state: 'UNKNOWN', error: 'invalid Claude output' }; }
   if (reply.session_id !== id) return { ...fired, state: 'UNKNOWN', error: 'session mismatch' };
+  if (parseQueryMessage(turn.final.text))
+    return { ...fired, state: 'QUERY_PENDING', final_record: turn.final.id, snapshot: after };
   let route;
   if (stage !== 'w') {
     try { route = routeOf(turn.final.text); } catch { return { ...fired, state: 'STOP_INVALID_ROUTE' }; }

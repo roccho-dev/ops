@@ -39,6 +39,8 @@ jobs:
           if-no-files-found: error
   flake-check:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,6 +60,34 @@ jobs:
           git diff --exit-code -- flake.lock
       - name: Verify Git-bound governance golden fixture
         run: node packages/ops-package-responses/tests/governance-fixture-e2e.mjs --json
+      - name: Prove installed dispatcher query and record exact output
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/dispatcher-query-proof"
+          mkdir -p "$evidence"
+          git rev-parse HEAD > "$evidence/checkout.commit"
+          git rev-parse 'HEAD^{tree}' > "$evidence/checkout.tree"
+          printf '%s\n' "$EXPECTED_HEAD" > "$evidence/requested.commit"
+          git rev-parse "$EXPECTED_HEAD^{tree}" > "$evidence/requested.tree"
+          proof="$(nix build -L --no-link --print-out-paths .#checks.x86_64-linux.jev-dispatcher-query 2> >(tee "$evidence/build.log" >&2))"
+          cp "$proof" "$evidence/tests.tap"
+          sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g' "$evidence/tests.tap" > "$evidence/tests.plain"
+          grep -Eq '(^|[[:space:]])skipped 0([[:space:]]|$)' "$evidence/tests.plain"
+          artifact="$(nix build -L --no-link --print-out-paths .#jev-dispatcher-query 2> >(tee -a "$evidence/build.log" >&2))"
+          nix path-info --json "$artifact" > "$evidence/artifact.json"
+          cp "$artifact/share/jev-dispatcher/artifact.jsonl" "$evidence/auth-contract.jsonl"
+          cp "$artifact/share/jev-dispatcher/LIVE_E2E.md" "$evidence/LIVE_E2E.md"
+          "$artifact/bin/jev-dispatcher-live-e2e" --help > "$evidence/live-e2e.help"
+          cat "$evidence/tests.plain"
+      - name: Retain installed dispatcher query evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dispatcher-query-proof-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/dispatcher-query-proof/
+          if-no-files-found: error
       - name: Run flake check
         run: |
           set -euo pipefail

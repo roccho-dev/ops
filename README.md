@@ -67,6 +67,13 @@ GitHub workflows are replaceable compute/effect adapters, not authority.
 `ops` owns operational implementation, package execution, destructive proof, and
 receipt emission. `governance` owns reusable projection and final join behavior.
 
+## Dispatcher query
+
+The [jev-dispatcher package contract](packages/jev-dispatcher/README.md) is the
+R/W query implementation and completion-evidence entry. Its current limitations
+and remaining live-use requirements are recorded there; this index grants no
+authority and does not claim D completion.
+
 ## Locked browser artifacts
 
 `packages/artifact-assembly` composes browser artifacts from canonical JSONL locks without owning domain meaning or renderer implementation.
