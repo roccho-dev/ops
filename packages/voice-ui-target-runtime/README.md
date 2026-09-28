@@ -1,56 +1,38 @@
-# voice-ui target runtime
+# Voice UI consumer: real-environment waiting boundary
 
-This package owns exact input admission, deployment orchestration, public readback admission, and two independent invocations of the apps-owned acceptance entrypoint. It does not own secret authoring/projection, app behavior, or repository-wide workflow classification.
+## Responsibility
 
-## Inputs and authority
+Env supplies an approved non-secret projection receipt and target-native authentication. Apps produces immutable application bytes, a completed Worker and its acceptance/browser runtime. Ops deploys those same bytes, reads both public hosts back, then invokes the app acceptance twice with independent HOME/workspaces. Old credential revocation remains with the credential owner after new-use proof.
 
-The approved request binds:
+Normal execution does not check out envs, start its workflows, invoke envctl/auth exec, fetch auth bundles, decrypt SOPS, rebuild the app, or install packages.
 
-- exact `opsSha`, `envsSha`, `appsSha` and target identity;
-- `artifactManifestSha256` for the complete `voice-ui-dist/1` artifact;
-- `projectionReceiptSha256` for the accepted provider handoff;
-- `isolationVerdictSha256` for the accepted #436 source-isolation verdict;
-- SHA-256 identities for the deploy and public-readback adapter entry files.
+## One provisioned runtime
 
-Expected digests are approved inputs, not authority obtained by hashing an arbitrary incoming receipt. The orchestrator checks every input and both adapter identities before any provider mutation. The caller must provide a trusted, fixed runtime and approved adapter dependency closures; an entry-file hash alone does not authenticate imported code or external tools.
+The Nix `voice-ui-target-runtime` output includes the admitted app artifact, fixed Node/Wrangler, real deploy/readback adapters and the apps-owned Node/Playwright/Chromium runtime. The entire Nix store closure is provisioned and approved before credentials are available. The package does not rely on hashes of arbitrary caller-supplied scripts to authenticate their dependencies.
 
-Provider compatibility is reviewed against envs#16 at `d0bfafec05c467c8ebd89ed75c4abe8a6b8c8477`. This is a schema reference, not a requirement that a future real projection use that same commit. The receipt's actual exact projection SHA is supplied in the approved request.
+The app producer is pinned to accepted apps#30 merge `28c1eee878004c87fcef3aaa1955517c31f73829`. Provider receipt layout is based on envs#16; the actual projection SHA and approved receipt digest are run inputs, not frozen to the old schema-reference SHA.
 
-The current `envs.projectionReceipt.v1` has `projector.workflow` and `projector.adapter`. Provider source/workflow/adapter paths are non-executable evidence inside the pinned receipt. Ops neither opens these paths nor hardcodes envs' internal directory layout. The superseded `projector.script` shape is not a fallback.
+`voice-ui-target-runtime --describe` returns the installed ops/app identities and artifact manifest digest. The normal command is `voice-ui-target-runtime --request approved.json`. The approved request contains only:
 
-## Execution and evidence
+- kind `ops.voiceUiTargetRuntimeRequest.v1`;
+- expected ops/app identities from the installed package, actual envs SHA, approved projection-receipt and isolation-verdict SHA-256 digests, and target `{provider,accountId,project,branch}`;
+- inputs `{projectionReceipt,isolationVerdict}` as local non-secret file paths;
+- a new empty output directory.
 
-```text
-approved exact inputs
--> admit artifact closure, receipt identities, target and effect capability
--> deploy existing bytes
--> read back every site file and the Function route
--> apps acceptance in fresh process/workspace/HOME #1
--> apps acceptance in fresh process/workspace/HOME #2
--> NEW_PROJECTION_REAL_USE_PROVEN
-```
+Expected digests come from approval of the respective producer evidence, not from trusting arbitrary incoming bytes. The installed package selects its own immutable app/runtime/adapters. The user request cannot select executables or override provider hosts.
 
-Only the deploy process receives the Cloudflare effect capability. Other children receive an explicit non-secret environment allowlist. Existing HOME, arbitrary token names and loader-injection variables are not inherited. Raw effect-adapter stdout/stderr is not forwarded.
+`voice-ui-isolation-capture` is a build/review-time helper: `--root <exact clean ops checkout> --ops-sha <exact SHA> --output <new JSON>`. Its fixed Node/Git/yq runtime calls the single #436 checker, binding source and workflow-tree identities. Normal consumption receives that evidence as data and does not need the checkout.
 
-The output directory must be empty. A previous receipt, successful deploy without readback, an incomplete public-file set, empty/duplicate acceptance checks, or a second-run failure cannot create a new overall PASS.
+## Actual operations
 
-Readback receipts carry `publicBytes.files` as `{path, bytes, sha256}` rows for every `site/` file in the admitted manifest. These are adapter observations, not values to copy from the manifest without reading the target.
+Deploy checks the existing project and production branch, stages exact `site/` bytes plus the already compiled `worker/worker.mjs` as `_worker.js`, and invokes fixed Wrangler with `--no-bundle`. It uses Wrangler's structured output and a fresh API readback of exact deployment ID, source and complete success; terminal text or command exit alone cannot PASS.
 
-Normal execution does not check out envs, use envctl/auth exec, fetch an auth bundle, decrypt SOPS, or read an age identity. An approved receipt is consumed as data, not executable provider code.
+Readback has no credential. It verifies every public file on both deployment-specific and stable hosts and checks the Function's invalid-JSON rejection. Only then does the actual app acceptance run. A missing/invalid target, incomplete deploy, changed public byte, missing required app check, previous output or failed second run cannot produce `NEW_PROJECTION_REAL_USE_PROVEN`.
 
-## Isolation capture
+## CI versus real environment
 
-`capture-isolation.mjs` is build/review-time work, not runtime source checkout. It invokes the existing #436 classifier and records checker/intent/boundary digests plus the workflow Git tree identity. Capture requires exact Git HEAD and clean, tracked source inputs; an archive with a caller-supplied SHA is insufficient.
+The single ordinary Nix check runs existing destructive/unit tests, real adapter tests and an actual composed runtime proof. The latter uses the installed production code, real Wrangler, actual completed app artifact and real Chromium. Only provider/network transport is a controlled loopback fixture; it checks exact Worker upload bytes, all static-byte readbacks and two independent browser/API starts. The controlled application returns 503, so application RED and absence of overall PASS are required. It is not live Cloudflare/Jev or product-behavior success.
 
-```console
-node packages/voice-ui-target-runtime/capture-isolation.mjs --root . --ops-sha <exact-sha> --output <new-isolation.json>
-node packages/voice-ui-target-runtime/run.mjs --request <approved-request.json>
-```
+Source readiness requires this exact-candidate check to pass and the source to be reviewed/merged. A mere version command, fixture-only unit PASS or pending CI is insufficient.
 
-#436 static isolation is a pre-effect gate. Its remaining real-effect positive can use the same approved live voice-ui run; no obsolete Seq transport needs to be revived only to obtain a second proof. Source CI or a merged #438/#440 alone does not close #436.
-
-## Verification and remaining physical work
-
-The existing registered Node test entrypoint exercises native subprocess orchestration, current provider receipt shape, exact admission, artifact completeness, secret-input exclusion and destructive negative cases. All effect/acceptance processes in these tests are explicitly offline fixtures. They do not prove a real provider or app.
-
-Real completion additionally needs the configured target-native projection and approved handoff, approved real deploy/readback adapters and their complete runtime, the apps-owned acceptance runtime (including resolvable Playwright and Chromium), #436's required isolation evidence, and two successful real application runs. Missing inputs remain blockers; there is no archive, auth-exec, local mock or runtime-install fallback.
+After source/CI acceptance, the remaining inputs are physical: approved provider/effect credentials and Environment protection, actual target-native projection and its accepted handoff, then the existing command against live services. Real app success twice is still necessary to close #27/#435; #436 needs its approved live-effect positive. The same live deploy can supply both without resurrecting obsolete transports or adding another runner.
