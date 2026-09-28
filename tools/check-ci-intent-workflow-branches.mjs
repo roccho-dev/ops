@@ -144,8 +144,24 @@ function analyzeEffectWorkflow(relative, text, boundary) {
     issues.push("old envs/auth fallback marker is forbidden");
   }
 
-  const jobs = jobBlocks(text).filter((job) => hasProviderSecret(job.text));
+  const allJobs = jobBlocks(text);
+  const jobs = allJobs.filter((job) => hasProviderSecret(job.text));
   if (jobs.length === 0) issues.push("declared effect workflow has no provider-secret job");
+
+  // Every checkout/action in an effect-bearing workflow can feed a later secret effect.
+  // Bind the complete workflow closure, not only the step that directly reads the secret.
+  for (const job of allJobs) {
+    for (const ref of checkoutRefs(job.text)) {
+      if (!exactSourceRef(ref)) issues.push(`${job.name}: effect-workflow checkout is not bound to an exact source identity: ${ref}`);
+      if (/\bproposals\b|\bmain\b/.test(ref)) issues.push(`${job.name}: mutable branch checkout is forbidden in an effect workflow: ${ref}`);
+    }
+    for (const step of stepBlocks(job.text)) {
+      const uses = step.match(/uses:\s*([^\s]+)/);
+      if (!uses || uses[1].startsWith("./")) continue;
+      const ref = uses[1].split("@")[1] ?? "";
+      if (!SHA40.test(ref)) issues.push(`${job.name}: third-party action in effect workflow is not pinned by full SHA: ${uses[1]}`);
+    }
+  }
 
   for (const job of jobs) {
     const header = job.text.split(/^    steps:\s*$/m)[0];
@@ -194,6 +210,8 @@ function selftest() {
   const safe = `on:\n  pull_request:\n  workflow_dispatch:\njobs:\n  effect:\n    if: github.event_name == 'workflow_dispatch'\n    environment: cloudflare-production\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\n        with:\n          ref: \${{ github.sha }}\n      - env:\n          TOKEN: \${{ secrets.TOKEN }}\n        run: echo effect\n`;
   assert.deepEqual(analyzeEffectWorkflow("safe.yml", safe, contract), []);
 
+  const transitiveUnsafe = "on:\\n  workflow_dispatch:\\njobs:\\n  materialize:\\n    steps:\\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\\n        with:\\n          ref: proposals\\n  effect:\\n    needs: materialize\\n    environment: cloudflare-production\\n    steps:\\n      - env:\\n          TOKEN: ${{ secrets.TOKEN }}\\n        run: echo effect\\n";
+  assert.ok(analyzeEffectWorkflow("transitive-unsafe.yml", transitiveUnsafe, contract).some((value) => value.includes("mutable branch checkout")));
   const fallback = safe.replace("echo effect", "envctl auth exec echo effect");
   assert.ok(analyzeEffectWorkflow("fallback.yml", fallback, contract).some((value) => value.includes("fallback")));
 }
