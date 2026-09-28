@@ -1,0 +1,71 @@
+name: tmp prove current Mobile Agent Worker
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tmp-capture-mobile-agent-worker.yml'
+permissions:
+  contents: read
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Capture current public App bytes
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/public-app.json" "$RUNNER_TEMP/app.index.html" <<'PY'
+          import hashlib,json,pathlib,urllib.request,sys
+          expected_bytes=2_412_388
+          expected_sha='3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6'
+          bases=[
+            'https://mobile-agent.roccho.workers.dev/',
+            'https://stg-mobile-agent.pages.dev/',
+          ]
+          rows=[]
+          captured=None
+          exact=None
+          for base in bases:
+            for path in ('app/index.html','app/'):
+              url=base+path
+              try:
+                request=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'ops-mobile-agent-public-byte-probe/2'})
+                with urllib.request.urlopen(request,timeout=60) as response:
+                  data=response.read()
+                  row={'url':url,'status':response.status,'finalUrl':response.geturl(),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+                  if captured is None and response.status==200:
+                    captured=(url,data)
+              except Exception as error:
+                row={'url':url,'error':str(error)}
+                data=b''
+              row['exact']=len(data)==expected_bytes and hashlib.sha256(data).hexdigest()==expected_sha
+              rows.append(row)
+              if row['exact']:
+                exact=(url,data)
+          selected=exact or captured
+          if selected is None:
+            raise RuntimeError('no public App bytes were retrievable')
+          pathlib.Path(sys.argv[2]).write_bytes(selected[1])
+          receipt={
+            'schema':'ops.mobileAgentPublicAppProbe/2',
+            'status':'EXACT' if exact else 'CAPTURED_NON_EXACT',
+            'expectedBytes':expected_bytes,
+            'expectedSha256':expected_sha,
+            'selectedUrl':selected[0],
+            'selectedBytes':len(selected[1]),
+            'selectedSha256':hashlib.sha256(selected[1]).hexdigest(),
+            'probes':rows,
+          }
+          pathlib.Path(sys.argv[1]).write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(receipt,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: current-worker-behavior-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/public-app.json
+            ${{ runner.temp }}/app.index.html
+          if-no-files-found: error
+          retention-days: 1

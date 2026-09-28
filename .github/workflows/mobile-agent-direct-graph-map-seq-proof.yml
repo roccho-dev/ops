@@ -1,0 +1,223 @@
+name: Mobile Agent direct Graph Map Seq URL proof
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-direct-graph-map-seq-proof.yml'
+      - 'verification/mobile-agent-preset-app/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-agent-direct-gms-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ROOT: verification/mobile-agent-preset-app
+  PROJECT: stg-mobile-agent
+  PAGES_BRANCH: direct-gms-proof
+  BOOTSTRAP_BASE: https://mobile-agent.roccho.workers.dev/
+  BASE_APP_BYTES: '2026821'
+  BASE_APP_SHA256: c485381cd3e318d9cc4d1ed0257b19259b7d6539a948f7a6fcb7291ae9c039b4
+  PATCH_BYTES: '104802'
+  PATCH_SHA256: 75f044e9eaf256db27a0864e46c632f662c8a075267631a154453b00200f569a
+  APP_BYTES: '2412388'
+  APP_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+  APP_GIT_BLOB: ebdb39084fa3cc57b0295818f6f339f62f0fca90
+  DIST_TREE_SHA256: b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145
+
+jobs:
+  prove-deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Materialize exact 54-file final dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$ROOT"
+          site="$RUNNER_TEMP/site"
+          proof="$RUNNER_TEMP/proof"
+          overlay="$root/bootstrap-overlay/app/index.html"
+          mkdir -p "$(dirname "$overlay")" "$proof"
+
+          curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error \
+            -H 'Cache-Control: no-cache' -H 'User-Agent: ops-mobile-agent-direct-gms/3' \
+            "${BOOTSTRAP_BASE}app/" -o "$proof/base-app.html"
+          test "$(wc -c < "$proof/base-app.html")" -eq "$BASE_APP_BYTES"
+          test "$(sha256sum "$proof/base-app.html" | cut -d' ' -f1)" = "$BASE_APP_SHA256"
+
+          base64 --decode "$root/worker-to-exact.zst.b64" > "$proof/worker-to-exact.zst"
+          test "$(wc -c < "$proof/worker-to-exact.zst")" -eq "$PATCH_BYTES"
+          test "$(sha256sum "$proof/worker-to-exact.zst" | cut -d' ' -f1)" = "$PATCH_SHA256"
+          zstd -q -d --patch-from="$proof/base-app.html" "$proof/worker-to-exact.zst" -o "$overlay"
+
+          python3 - "$overlay" "$proof/app.json" <<'PY'
+          import hashlib,json,os,pathlib,sys
+          app=pathlib.Path(sys.argv[1]).read_bytes()
+          sha=hashlib.sha256(app).hexdigest()
+          blob=hashlib.sha1(f'blob {len(app)}\0'.encode()+app).hexdigest()
+          assert len(app)==int(os.environ['APP_BYTES']),len(app)
+          assert sha==os.environ['APP_SHA256'],sha
+          assert blob==os.environ['APP_GIT_BLOB'],blob
+          text=app.decode('utf-8')
+          for token in ('graph/1','map/1','seq/1','maxgraph'):
+              assert token.lower() in text.lower(),token
+          value={'status':'PASS_EXACT_APP','bytes':len(app),'sha256':sha,'gitBlob':blob}
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(value,sort_keys=True)+'\n')
+          print(json.dumps(value,sort_keys=True))
+          PY
+
+          python3 "$root/bootstrap.py" "$root/expected.json" "$BOOTSTRAP_BASE" "$site" "$proof/materialize.json"
+          python3 - "$site" "$root/expected.json" <<'PY'
+          import hashlib,json,os,pathlib,sys
+          root=pathlib.Path(sys.argv[1]); expected=json.load(open(sys.argv[2],encoding='utf-8'))
+          rows=[]
+          for rel,spec in sorted(expected['files'].items()):
+              data=(root/rel).read_bytes()
+              assert len(data)==spec['bytes'],rel
+              assert hashlib.sha256(data).hexdigest()==spec['sha256'],rel
+              rows.append({'path':rel,'bytes':len(data),'sha256':spec['sha256']})
+          actual=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file())
+          assert actual==sorted(expected['files'])
+          canonical=json.dumps(rows,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+          digest=hashlib.sha256(canonical).hexdigest()
+          assert digest==os.environ['DIST_TREE_SHA256'],digest
+          print(json.dumps({'status':'PASS_EXACT_DIST','files':len(rows),'distTreeSha256':digest}))
+          PY
+
+      - name: Prove exact Graph Map Seq locally in real Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/site" >/dev/null 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 100); do
+            curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break
+            sleep .2
+          done
+          node "$ROOT/generate-urls.mjs" "$RUNNER_TEMP/site" "$ROOT/manifest.json" \
+            http://127.0.0.1:4173/ "$RUNNER_TEMP/proof/local-urls.json"
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
+            "$RUNNER_TEMP/proof/local-urls.json" "$RUNNER_TEMP/proof/local-browser.json" "$RUNNER_TEMP/proof/local-shots"
+          python3 - "$RUNNER_TEMP/proof/local-browser.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert x['status']=='PASS'
+          assert [r['pattern'] for r in x['cases']]==['graph/1','map/1','seq/1']
+          assert all(r['status']=='PASS' and r['browserErrors']==0 and r['failedResponses']==0 for r in x['cases'])
+          seq=next(r for r in x['cases'] if r['id']=='seq')
+          assert seq['interaction']['changed']!=seq['interaction']['before']
+          assert seq['interaction']['restored']==seq['interaction']['before']
+          print(json.dumps({'status':'PASS_LOCAL_GMS'}))
+          PY
+
+      - name: Verify Pages project
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          code="$(curl -sS -o "$RUNNER_TEMP/proof/project.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT")"
+          test "$code" = 200
+
+      - name: Deploy the exact tested dist
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/site" \
+            --project-name "$PROJECT" \
+            --branch "$PAGES_BRANCH" \
+            --commit-hash "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --commit-message 'Direct exact Graph Map Seq proof' 2>&1)"
+          printf '%s\n' "$output"
+          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | head -n1)"
+          test -n "$deployment"
+          echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
+
+      - name: Read back 54 files and Chrome-prove three public URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          base="${{ steps.deploy.outputs.deployment_base }}"
+
+          READBACK_RECEIPT="$RUNNER_TEMP/proof/public-readback.json" \
+            python3 "$ROOT/readback.py" "$RUNNER_TEMP/site" "$base" \
+              "$ROOT/expected.json" "$ROOT/manifest.json" "${{ github.event.pull_request.head.sha || github.sha }}"
+
+          node "$ROOT/generate-urls.mjs" "$RUNNER_TEMP/site" "$ROOT/manifest.json" \
+            "$base" "$RUNNER_TEMP/proof/public-urls.json"
+          CHROME_BIN="$chrome" python3 "$ROOT/browser-smoke.py" \
+            "$RUNNER_TEMP/proof/public-urls.json" "$RUNNER_TEMP/proof/public-browser.json" "$RUNNER_TEMP/proof/public-shots"
+
+          python3 - "$RUNNER_TEMP/proof/public-browser.json" "$RUNNER_TEMP/proof/receipt.json" \
+            "${{ github.event.pull_request.head.sha || github.sha }}" "$base" <<'PY'
+          import json,pathlib,sys
+          browser=json.load(open(sys.argv[1]))
+          assert browser['status']=='PASS'
+          cases=browser['cases']
+          assert [x['pattern'] for x in cases]==['graph/1','map/1','seq/1']
+          assert all(x['status']=='PASS' and x['browserErrors']==0 and x['failedResponses']==0 for x in cases)
+          seq=next(x for x in cases if x['id']=='seq')
+          assert seq['interaction']['changed']!=seq['interaction']['before']
+          assert seq['interaction']['restored']==seq['interaction']['before']
+          out={
+            'schema':'ops.mobileAgentDirectGraphMapSeqProof/3',
+            'status':'PASS',
+            'head':sys.argv[3],
+            'deployment':sys.argv[4],
+            'app':{
+              'bytes':2412388,
+              'sha256':'sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6',
+            },
+            'dist':{
+              'files':54,
+              'treeSha256':'sha256:b0af2ab9a24865afcc73cbc8e8a95a43e2dd0c2c11f7dfe7925fa2f18a6da145',
+              'publicReadback':'PASS',
+            },
+            'models':{
+              x['pattern']:{
+                'url':x['url'],
+                'chrome':'PASS',
+                'browserErrors':x['browserErrors'],
+                'failedResponses':x['failedResponses'],
+              } for x in cases
+            },
+            'seqInteraction':'PASS',
+          }
+          pathlib.Path(sys.argv[2]).write_text(json.dumps(out,ensure_ascii=False,indent=2,sort_keys=True)+'\n')
+          print(json.dumps(out,ensure_ascii=False,sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-direct-graph-map-seq-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/proof/
+          if-no-files-found: error
+          retention-days: 30

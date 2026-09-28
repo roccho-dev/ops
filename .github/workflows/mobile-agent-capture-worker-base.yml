@@ -1,0 +1,33 @@
+name: Mobile Agent capture worker base
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mobile-agent-capture-worker-base.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Capture current worker App
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/base"
+          curl -fsSL --retry 10 --retry-delay 2 -H 'Cache-Control: no-cache' https://mobile-agent.roccho.workers.dev/app/ -o "$RUNNER_TEMP/base/app.html"
+          wc -c "$RUNNER_TEMP/base/app.html"
+          sha256sum "$RUNNER_TEMP/base/app.html"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-worker-base-${{ github.run_id }}
+          path: ${{ runner.temp }}/base/app.html
+          if-no-files-found: error
+          retention-days: 1
