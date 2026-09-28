@@ -33,6 +33,7 @@ export function analyzeEffectWorkflow(workflow, boundary) {
   const issues = [];
   try {
     need(workflow && typeof workflow === "object", "workflow must be an object");
+    need(!/envs-old|envctl\s+auth\s+exec|auth[-_]bundle|old private artifact/i.test(JSON.stringify(workflow)), "historical auth fallback forbidden");
     const events = typeof workflow.on === "string" ? [workflow.on]
       : Array.isArray(workflow.on) ? workflow.on : Object.keys(workflow.on ?? {});
     need(!events.includes("pull_request_target"), "pull_request_target forbidden");
@@ -112,6 +113,7 @@ export function selftest() {
     w=>{w.jobs.materialize.steps.push({run:"npx --yes untrusted@1.0.0"});},
     w=>{w.jobs.effect.steps[0]["continue-on-error"]=true;},
     w=>{w.on={pull_request_target:{}};},
+    w=>{w.jobs.effect.steps.at(-1).run="envctl auth exec node effect.mjs";},
   ];
   const commentWorkflow=structuredClone(safe);
   commentWorkflow.on={issue_comment:{}};commentWorkflow.jobs.effect.if="github.event_name == 'issue_comment'";
