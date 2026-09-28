@@ -6,7 +6,7 @@ let
   python = pkgs.python3.withPackages (ps: [ ps.playwright ]);
   runtime = pkgs.buildEnv {
     name = "ops-provider-effect-runtime";
-    paths = [ pkgs.nodejs python pkgs.chromium pkgs.wrangler pkgs.git pkgs.gh
+    paths = [ pkgs.nodejs_22 python pkgs.chromium pkgs.wrangler pkgs.git pkgs.gh
       pkgs.curl pkgs.jq pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.gnused
       pkgs.gawk pkgs.gnutar pkgs.gzip pkgs.bash ];
     pathsToLink = [ "/bin" ];
