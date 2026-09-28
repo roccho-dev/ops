@@ -1,0 +1,96 @@
+name: Repair exact Mobile Agent projection Carrier
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/proof-repair-mobile-agent-projection-carrier.yml'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TARGET_REF: projection/mobile-agent-preset-dist-b0af2ab9
+      EXPECTED_HEAD: 30009fa3d5a4ec1de50f449761cd080ca0f68c83
+      PART0: projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part00
+      PART1: projection/mobile-agent-preset-b0af2ab9/app-index.br.b64.part01
+      EXPECTED_HTML_BYTES: '2412388'
+      EXPECTED_HTML_SHA256: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+      EXPECTED_B64_BYTES: '30024'
+    steps:
+      - name: Reproject exact App Carrier and read it back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          observed="$(git ls-remote "$remote" "refs/heads/$TARGET_REF" | awk 'NR==1 {print $1}')"
+          test "$observed" = "$EXPECTED_HEAD"
+
+          git clone --quiet --depth=1 --branch "$TARGET_REF" "$remote" projection
+          node - "$PART0" "$PART1" "$EXPECTED_HTML_BYTES" "$EXPECTED_HTML_SHA256" "$EXPECTED_B64_BYTES" <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+          const [part0, part1, expectedBytesText, expectedSha, expectedB64Text] = process.argv.slice(2);
+          const expectedBytes = Number(expectedBytesText);
+          const expectedB64 = Number(expectedB64Text);
+          const paths = [part0, part1].map((value) => `projection/${value}`);
+          const texts = paths.map((value) => fs.readFileSync(value, 'utf8').replace(/\s+/gu, ''));
+          const candidates = [
+            { kind: 'joined-text', br: Buffer.from(texts.join(''), 'base64') },
+            { kind: 'decoded-parts', br: Buffer.concat(texts.map((value) => Buffer.from(value, 'base64'))) },
+          ];
+          let selected = null;
+          for (const candidate of candidates) {
+            try {
+              const html = zlib.brotliDecompressSync(candidate.br);
+              const sha = crypto.createHash('sha256').update(html).digest('hex');
+              if (html.length === expectedBytes && sha === expectedSha) {
+                selected = { ...candidate, html };
+                break;
+              }
+            } catch (_) {}
+          }
+          if (!selected) throw new Error('no exact App reconstruction matched fixed bytes and SHA');
+          const canonical = selected.br.toString('base64');
+          if (canonical.length !== expectedB64) throw new Error(`base64 length ${canonical.length} != ${expectedB64}`);
+          const split = Math.floor(canonical.length / 8) * 4;
+          if (split <= 0 || split >= canonical.length) throw new Error('invalid split');
+          fs.writeFileSync(paths[0], canonical.slice(0, split));
+          fs.writeFileSync(paths[1], canonical.slice(split));
+          console.log(JSON.stringify({ status: 'PASS', sourceKind: selected.kind, brotliBytes: selected.br.length, base64Bytes: canonical.length, split }));
+          JS
+
+          git -C projection diff --check
+          test "$(git -C projection diff --name-only | LC_ALL=C sort)" = "$(printf '%s\n%s\n' "$PART0" "$PART1" | LC_ALL=C sort)"
+          test "$(cat "projection/$PART0" "projection/$PART1" | wc -c)" -eq "$EXPECTED_B64_BYTES"
+          git -C projection config user.name github-actions[bot]
+          git -C projection config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C projection add "$PART0" "$PART1"
+          git -C projection commit --quiet -m 'fix: canonicalize exact existing App Carrier'
+          git -C projection push --quiet origin "$TARGET_REF"
+          new_head="$(git -C projection rev-parse HEAD)"
+
+          git clone --quiet --depth=1 --branch "$TARGET_REF" "$remote" readback
+          test "$(git -C readback rev-parse HEAD)" = "$new_head"
+          node - "$PART0" "$PART1" "$EXPECTED_HTML_BYTES" "$EXPECTED_HTML_SHA256" "$EXPECTED_B64_BYTES" <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+          const [part0, part1, expectedBytesText, expectedSha, expectedB64Text] = process.argv.slice(2);
+          const text = [part0, part1].map((value) => fs.readFileSync(`readback/${value}`, 'utf8')).join('');
+          if (text.length !== Number(expectedB64Text)) throw new Error('readback base64 length mismatch');
+          const html = zlib.brotliDecompressSync(Buffer.from(text, 'base64'));
+          const sha = crypto.createHash('sha256').update(html).digest('hex');
+          if (html.length !== Number(expectedBytesText) || sha !== expectedSha) throw new Error('readback App identity mismatch');
+          console.log(JSON.stringify({ status: 'PASS', htmlBytes: html.length, htmlSha256: sha }));
+          JS
+
+          gh pr comment "$GITHUB_EVENT_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Exact projection Carrier repaired and read back: \`$new_head\`. Only the two Carrier part files changed; reconstructed App remains \`$EXPECTED_HTML_BYTES\` bytes / \`$EXPECTED_HTML_SHA256\`."
