@@ -104,6 +104,43 @@ That proof recorded quality/stability but did not retain per-request latency, so
 
 A separate voice-ui live measurement records roughly 0.3 s median over 56 Jev v4 calls, but it is a different workload and is intentionally not used as the comparison score here.
 
+## Economic proxy
+
+Current public reference prices observed on 2026-09-29:
+
+- TypeSafe Jev input: **$0.042 / 1M input tokens**; output is unmetered.
+- RunPod RTX 4090 Secure Cloud: **$0.74 / hour**.
+- Ollaya's published Winnow E4B GPU latency is about **90 ms/request** on an RTX 4090-class measurement.
+
+Sources:
+
+- https://typesafe.ai/
+- https://typesafe.ai/blog/introducing-system-one-models-and-jev
+- https://www.runpod.io/pricing
+- https://ollaya.dev/library/winnow
+
+The frozen Winnow run reported **35,104 input tokens / 36 requests**, or about **975 input tokens/request**. Jev uses its own tokenizer, so reusing that token count is only a cost proxy, not a billed Jev receipt.
+
+Using that proxy:
+
+| quantity | Jev hosted | Winnow E4B on dedicated RTX 4090 |
+|---|---:|---:|
+| assumed tokens/request | 975 | n/a |
+| variable cost / 1,000 requests | **~$0.041** | **~$0.0185** at 90 ms/request |
+| judgments/request in this benchmark | 2 | 2 |
+| variable cost / 1,000 judgments | **~$0.0205** | **~$0.00925** |
+| idle capacity cost | none beyond API usage | **$0.74/hour** while provisioned |
+
+The dedicated-GPU number assumes continuous useful work. At 90 ms/request the theoretical single-stream ceiling is about **40,000 requests/hour**. Under the token proxy above, a $0.74/hour GPU needs roughly **18,100 requests/hour**, or about **45%** of that sequential capacity, before its raw compute cost falls below Jev's metered cost.
+
+Therefore:
+
+- **sporadic / bursty use:** Jev is economically simpler and likely cheaper because there is no idle GPU;
+- **sustained high-volume use:** Winnow on an already-busy GPU can have lower marginal compute cost;
+- **CPU local:** the observed ~34 s/request is too slow for an immediate CI semantic decision path regardless of marginal compute price.
+
+These are infrastructure economics only. They do not override the observed quality gap of Jev 36/36 vs Winnow 35/36.
+
 ## Interpretation boundary
 
 This result establishes, for this frozen ops workload:
