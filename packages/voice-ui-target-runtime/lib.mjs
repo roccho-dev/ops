@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -43,12 +43,10 @@ function executeAdapter({ adapter, expectedDigest, request, receiptPath, env, sp
     atomicJson(requestPath, request);
     const result = spawn(process.execPath, [adapter, "--request", requestPath, "--receipt", receiptPath], {
       cwd: directory,
-      env,
+      env: { ...env, HOME: directory, TMPDIR: directory },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.stderr) process.stderr.write(result.stderr);
     requireCondition(result.status === 0, `${label} adapter failed with exit ${result.status ?? "signal"}`);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -68,7 +66,7 @@ function executeAcceptance({ artifact, expected, targetUrl, handoffId, receiptPa
       "--receipt", receiptPath,
     ], {
       cwd: workspace,
-      env: sanitizedEnv(env),
+      env: { ...sanitizedEnv(env), HOME: workspace, TMPDIR: workspace },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -89,6 +87,8 @@ export function runTargetRuntime(request, options = {}) {
     envsSha: exactSha(request.expected?.envsSha, "expected envs SHA"),
     appsSha: exactSha(request.expected?.appsSha, "expected apps SHA"),
     artifactManifestSha256: normalizeSha256(request.expected?.artifactManifestSha256, "expected artifact manifest digest"),
+    projectionReceiptSha256: normalizeSha256(request.expected?.projectionReceiptSha256, "expected projection receipt digest"),
+    isolationVerdictSha256: normalizeSha256(request.expected?.isolationVerdictSha256, "expected isolation verdict digest"),
     target: request.expected?.target,
   };
   exactObjectKeys(expected.target, ["provider", "accountId", "project", "branch"], "expected target");
@@ -98,17 +98,29 @@ export function runTargetRuntime(request, options = {}) {
   requireCondition(expected.target.branch === "proposals", "expected target branch differs");
 
   const artifact = validateArtifact(request.inputs.artifactRoot, expected.appsSha, expected.artifactManifestSha256);
+  requireCondition(sha256File(request.inputs.projectionReceipt) === expected.projectionReceiptSha256, "projection receipt digest mismatch");
+  requireCondition(sha256File(request.inputs.isolationVerdict) === expected.isolationVerdictSha256, "isolation verdict digest mismatch");
   const projection = validateProjectionReceipt(loadJson(request.inputs.projectionReceipt, "projection receipt"), expected.envsSha);
   requireCondition(projection.target.account_id === expected.target.accountId, "projection/target account mismatch");
   const isolation = validateIsolationVerdict(loadJson(request.inputs.isolationVerdict, "isolation verdict"), expected.opsSha);
 
+  // Admit every executable and effect target before the first external mutation.
+  const env = options.env ?? process.env;
+  const credential = effectEnv(env);
+  requireCondition(credential.CLOUDFLARE_API_TOKEN, "effect capability is missing");
+  requireCondition(credential.CLOUDFLARE_ACCOUNT_ID === expected.target.accountId, "effect account differs from approved target");
+  for (const label of ["deploy", "readback"]) {
+    assertExecutableIdentity(request.adapters[label].path, request.adapters[label].sha256, label);
+    requireCondition(path.isAbsolute(request.adapters[label].path), `${label} adapter path must be absolute`);
+  }
+
   const output = path.resolve(request.output);
   mkdirSync(output, { recursive: true });
+  requireCondition(readdirSync(output).length === 0, "output must be empty; prior receipts are not evidence for a new run");
   const deployReceiptPath = path.join(output, "deploy.json");
   const readbackReceiptPath = path.join(output, "readback.json");
   const acceptancePaths = [path.join(output, "acceptance-1.json"), path.join(output, "acceptance-2.json")];
   const spawn = options.spawn ?? spawnSync;
-  const env = options.env ?? process.env;
 
   const adapterRequest = {
     kind: "ops.voiceUiEffectRequest.v1",
@@ -124,7 +136,7 @@ export function runTargetRuntime(request, options = {}) {
     expectedDigest: request.adapters.deploy.sha256,
     request: adapterRequest,
     receiptPath: deployReceiptPath,
-    env: effectEnv(env),
+    env: credential,
     spawn,
     label: "deploy",
   });
@@ -139,7 +151,7 @@ export function runTargetRuntime(request, options = {}) {
     spawn,
     label: "readback",
   });
-  const readbackReceipt = validateReadbackReceipt(loadJson(readbackReceiptPath, "readback receipt"), expected, deployReceipt.deployment);
+  const readbackReceipt = validateReadbackReceipt(loadJson(readbackReceiptPath, "readback receipt"), expected, deployReceipt.deployment, artifact);
 
   const acceptance = [];
   const runToken = randomUUID();

@@ -1,349 +1,187 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-
 import { captureIsolation } from "../capture-isolation.mjs";
+import { runTargetRuntime } from "../lib.mjs";
+import { sanitizedEnv, sha256File } from "../modules/core.mjs";
+import { validateArtifact, validateIsolationVerdict, validateProjectionReceipt } from "../modules/input-contracts.mjs";
+import { validateAcceptanceReceipt } from "../modules/result-contracts.mjs";
 
-import {
-  SECRET_ENV_NAMES,
-  runTargetRuntime,
-  sha256File,
-  validateProjectionReceipt,
-} from "../lib.mjs";
-
-const OPS_SHA = "1".repeat(40);
-const ENVS_SHA = "2".repeat(40);
-const APPS_SHA = "3".repeat(40);
-const ACCOUNT_ID = "account-dev-1";
-
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CLI = path.resolve(HERE, "../run.mjs");
+const OPS_SHA = "1".repeat(40), APPS_SHA = "3".repeat(40);
+// Reviewed provider-produced shape, NOT a real deployment receipt.
+// envs#16, d0bfafec05c467c8ebd89ed75c4abe8a6b8c8477:
+// adapters/jev_api.py::build_receipt. Dummy account, digest and run values only.
+const projection = () => JSON.parse(readFileSync(path.join(HERE, "fixtures/envs-projection.json"), "utf8"));
+const ENVS_SHA = projection().envs_sha;
+const ACCOUNT_ID = projection().target.account_id;
 const digest = value => createHash("sha256").update(value).digest("hex");
+const read = file => JSON.parse(readFileSync(file, "utf8"));
+function write(file, value) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`); }
+const effectEnv = () => ({ PATH: process.env.PATH, CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID, CLOUDFLARE_API_TOKEN: "offline-effect-fixture" });
 
-function writeJson(file, value) {
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+function isolation() {
+  return { kind: "ops.secretEffectBoundary.check.v1", status: "PASS", opsSha: OPS_SHA,
+    active: 2, secretBearingEffects: 1, obsolete: 6, unclassified: 0,
+    workflows: [{ path: ".github/workflows/check.yml", classification: "secret_free_verify" },
+      { path: ".github/workflows/effect.yml", classification: "secret_bearing_effect" }],
+    inputs: { checkerSha256: `sha256:${"5".repeat(64)}`, intentSha256: `sha256:${"6".repeat(64)}`,
+      boundarySha256: `sha256:${"7".repeat(64)}`, workflowTreeSha: "8".repeat(40) } };
 }
 
-function makeProjection() {
-  return {
-    kind: "envs.projectionReceipt.v1",
-    status: "PASS",
-    envs_sha: ENVS_SHA,
-    environment: "dev",
-    capability: "jev-api",
-    source: {
-      kind: "public_sops",
-      ref: "secrets/jev-api-key.sops.yaml",
-      sha256: `sha256:${"4".repeat(64)}`,
-    },
-    target: {
-      provider: "cloudflare-pages",
-      account_id: ACCOUNT_ID,
-      project: "voice-ui",
-      secret_name: "JEV_API_KEY",
-    },
-    projector: {
-      workflow: ".github/workflows/runtime-secret-projection.yml",
-      script: "scripts/runtime-secret-projection.sh",
-    },
-    effect: { operation: "cloudflare_pages_secret_put", status: "PASS" },
-    readback: { kind: "secret_name_presence", status: "PASS", present: true },
-    workflow: {
-      repository: "roccho-dev/envs",
-      ref: "proposals",
-      run_id: 123,
-      run_attempt: 1,
-    },
-    created_at: "2026-09-28T00:00:00Z",
-  };
-}
+// These are deterministic offline process fixtures, not provider adapters.
+const preamble = `import fs from "node:fs"; import path from "node:path";
+const args=Object.fromEntries(Array.from({length:(process.argv.length-2)/2},(_,i)=>[process.argv[2+i*2],process.argv[3+i*2]]));
+const save=value=>fs.writeFileSync(args["--receipt"],JSON.stringify(value));\n`;
+const acceptanceCode = preamble + `
+if (args["--handoff-id"].endsWith("run-2") && process.env.FAIL_SECOND) process.exit(9);
+save({kind:"voice-ui.runtimeAcceptanceReceipt.v1",status:"PASS",stage:"complete",handoffId:args["--handoff-id"],
+ target:{url:args["--url"]},sources:{apps:args["--expected-apps-sha"],artifactManifestSha256:args["--expected-manifest-sha256"]},
+ checks:["artifact-admission","secret-free-runtime","public-application-e2e"].map(id=>({id,status:"PASS"})),
+ dependencies:{envsRuntime:[],secretInputs:[]},process:{exitCode:0,independentProcess:true},
+ fixtureObservation:{home:process.env.HOME,cwd:process.cwd(),unknownSecret:process.env.NEW_PROVIDER_TOKEN??null,injection:process.env.NODE_OPTIONS??null}});
+`;
+const deployCode = preamble + `
+const r=JSON.parse(fs.readFileSync(args["--request"])),e=r.expected;
+save({kind:"ops.voiceUiDeployReceipt.v1",status:"PASS",opsSha:e.opsSha,appsSha:e.appsSha,artifactManifestSha256:e.artifactManifestSha256,target:e.target,
+ deployment:{id:"deployment-1",url:"https://deployment-1.voice-ui.pages.dev/",stableUrl:"https://voice-ui.pages.dev/",commitSha:e.appsSha},effect:{status:"PASS"}});
+console.log("do-not-forward-effect-output");
+`;
+const readbackCode = preamble + `
+const r=JSON.parse(fs.readFileSync(args["--request"])),e=r.expected;
+const files=JSON.parse(fs.readFileSync(path.join(r.artifactRoot,"manifest.json"))).files.filter(row=>row.path.startsWith("site/"));
+save({kind:"ops.voiceUiReadbackReceipt.v1",status:"PASS",opsSha:e.opsSha,appsSha:e.appsSha,artifactManifestSha256:e.artifactManifestSha256,
+ deploymentId:r.deployment.id,publicBytes:{status:"PASS",fileCount:files.length,files},function:{status:"PASS",path:"/api/jev"}});
+`;
 
-function makeFixture() {
-  const root = mkdtempSync(path.join(tmpdir(), "voice-ui-target-runtime-test-"));
+function fixture(t) {
+  const root = mkdtempSync(path.join(tmpdir(), "voice-ui-target-test-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   const artifactRoot = path.join(root, "artifact");
-  const files = new Map([
-    ["e2e/runtime-acceptance.mjs", "// exact acceptance entrypoint\n"],
-    ["e2e/public-e2e.mjs", "// exact public e2e\n"],
-    ["functions/api/jev.mjs", "export const onRequestPost = () => new Response();\n"],
-    ["site/index.html", "<!doctype html><title>voice-ui</title>\n"],
-    [".envs/artifact.jsonl", `${JSON.stringify({ artifact: "voice-ui", kind: "artifact.auth.v1", requiredCapabilities: ["jev-api"] })}\n`],
+  const contents = new Map([
+    ["e2e/runtime-acceptance.mjs", acceptanceCode], ["e2e/public-e2e.mjs", "// offline fixture\n"],
+    ["e2e/fixture.wav", "offline wav"], ["e2e/golden.json", "{}\n"],
+    ["functions/api/jev.mjs", "// offline Function\n"], ["site/index.html", "<!doctype html>\n"],
+    ["site/app.mjs", "// offline public code\n"],
+    [".envs/artifact.jsonl", JSON.stringify({ artifact: "voice-ui", kind: "artifact.auth.v1", requiredCapabilities: ["jev-api"] }) + "\n"],
   ]);
-  for (const [relative, content] of files) {
-    const file = path.join(artifactRoot, relative);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, content);
-  }
-  const manifest = {
-    schema: "voice-ui-dist/1",
-    sources: { apps: APPS_SHA, ops: OPS_SHA, ui: "5".repeat(40), system: "x86_64-linux" },
-    auth: ".envs/artifact.jsonl",
-    e2e: {
-      runtime_entrypoint: "e2e/runtime-acceptance.mjs",
-      public_entrypoint: "e2e/public-e2e.mjs",
-    },
-    files: [...files].map(([relative, content]) => ({
-      path: relative,
-      bytes: Buffer.byteLength(content),
-      sha256: digest(content),
-    })),
-  };
-  const manifestPath = path.join(artifactRoot, "manifest.json");
-  writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
-
-  const projectionPath = path.join(root, "projection.json");
-  writeJson(projectionPath, makeProjection());
-  const isolationPath = path.join(root, "isolation.json");
-  writeJson(isolationPath, {
-    kind: "ops.secretEffectBoundary.check.v1",
-    status: "PASS",
-    opsSha: OPS_SHA,
-    active: 2,
-    secretBearingEffects: 5,
-    obsolete: 6,
-    unclassified: 0,
-    workflows: [
-      { path: ".github/workflows/nix-check.yml", classification: "secret_free_verify" },
-      { path: ".github/workflows/voice-ui-target-runtime.yml", classification: "secret_bearing_effect" },
-    ],
-  });
-
-  const deployAdapter = path.join(root, "deploy-adapter.mjs");
-  const readbackAdapter = path.join(root, "readback-adapter.mjs");
-  writeFileSync(deployAdapter, "// exact deploy adapter\n");
-  writeFileSync(readbackAdapter, "// exact readback adapter\n");
-
-  const output = path.join(root, "output");
-  const request = {
-    kind: "ops.voiceUiTargetRuntimeRequest.v1",
-    expected: {
-      opsSha: OPS_SHA,
-      envsSha: ENVS_SHA,
-      appsSha: APPS_SHA,
-      artifactManifestSha256: sha256File(manifestPath),
-      target: {
-        provider: "cloudflare-pages",
-        accountId: ACCOUNT_ID,
-        project: "voice-ui",
-        branch: "proposals",
-      },
-    },
-    inputs: {
-      artifactRoot,
-      projectionReceipt: projectionPath,
-      isolationVerdict: isolationPath,
-    },
-    adapters: {
-      deploy: { path: deployAdapter, sha256: sha256File(deployAdapter) },
-      readback: { path: readbackAdapter, sha256: sha256File(readbackAdapter) },
-    },
-    output,
-  };
-  return { root, artifactRoot, projectionPath, isolationPath, deployAdapter, readbackAdapter, output, request, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  for (const [name, text] of contents) { const p = path.join(artifactRoot, name); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, text); }
+  const manifest = { schema: "voice-ui-dist/1", sources: { apps: APPS_SHA }, auth: ".envs/artifact.jsonl",
+    e2e: { runtime_entrypoint: "e2e/runtime-acceptance.mjs", public_entrypoint: "e2e/public-e2e.mjs", wav: "e2e/fixture.wav", golden: "e2e/golden.json" },
+    files: [...contents].map(([name, text]) => ({ path: name, bytes: Buffer.byteLength(text), sha256: digest(text) })) };
+  write(path.join(artifactRoot, "manifest.json"), manifest);
+  const projectionPath = path.join(root, "projection.json"), isolationPath = path.join(root, "isolation.json");
+  write(projectionPath, projection()); write(isolationPath, isolation());
+  const deploy = path.join(root, "deploy.mjs"), readback = path.join(root, "readback.mjs");
+  writeFileSync(deploy, deployCode); writeFileSync(readback, readbackCode);
+  const request = { kind: "ops.voiceUiTargetRuntimeRequest.v1",
+    expected: { opsSha: OPS_SHA, envsSha: ENVS_SHA, appsSha: APPS_SHA,
+      artifactManifestSha256: sha256File(path.join(artifactRoot, "manifest.json")),
+      projectionReceiptSha256: sha256File(projectionPath), isolationVerdictSha256: sha256File(isolationPath),
+      target: { provider: "cloudflare-pages", accountId: ACCOUNT_ID, project: "voice-ui", branch: "proposals" } },
+    inputs: { artifactRoot, projectionReceipt: projectionPath, isolationVerdict: isolationPath },
+    adapters: { deploy: { path: deploy, sha256: sha256File(deploy) }, readback: { path: readback, sha256: sha256File(readback) } },
+    output: path.join(root, "output") };
+  return { root, artifactRoot, manifest, request, projectionPath, isolationPath, deploy, readback };
+}
+function refreshArtifact(f) {
+  for (const row of f.manifest.files) { const bytes = readFileSync(path.join(f.artifactRoot, row.path)); row.bytes = bytes.length; row.sha256 = digest(bytes); }
+  write(path.join(f.artifactRoot, "manifest.json"), f.manifest);
+  f.request.expected.artifactManifestSha256 = sha256File(path.join(f.artifactRoot, "manifest.json"));
+}
+function beforeEffect(t, mutate, pattern) {
+  const f = fixture(t), env = effectEnv(); mutate(f, env); let calls = 0;
+  assert.throws(() => runTargetRuntime(f.request, { env, spawn: () => { calls++; return {status:0}; } }), pattern);
+  assert.equal(calls, 0);
 }
 
-function arg(args, name) {
-  const index = args.indexOf(name);
-  assert.notEqual(index, -1, `missing ${name}`);
-  return args[index + 1];
-}
+test("current envs#16 contract is accepted; provider-owned paths are opaque evidence", () => {
+  const r = projection(); assert.equal(validateProjectionReceipt(r, ENVS_SHA), r);
+  r.source.ref = "ciphertexts/renamed.sops.yaml"; r.projector.adapter = "adapters/renamed.py";
+  assert.equal(validateProjectionReceipt(r, ENVS_SHA), r); // admission separately pins whole receipt bytes
+});
+for (const [name, mutate, message] of [
+  ["old script schema", r => { r.projector.script = r.projector.adapter; delete r.projector.adapter; }, /projector fields/],
+  ["readback missing", r => {r.readback.present=false;}, /readback is not PASS/],
+  ["effect unexecuted", r => {r.effect.status="NOT_RUN";}, /effect is not PASS/],
+  ["branch instead of SHA", r => {r.envs_sha="proposals";}, /exact 40/],
+  ["wrong capability", r => {r.capability="other";}, /capability/],
+  ["source traversal", r => {r.source.ref="../secret";}, /evidence path/],
+]) test(`projection rejects ${name}`, () => { const r=projection(); mutate(r); assert.throws(()=>validateProjectionReceipt(r,ENVS_SHA),message); });
 
-function successfulSpawn(fixture, observations) {
-  return (_command, args, options) => {
-    if (args[0] === fixture.deployAdapter) {
-      const request = JSON.parse(readFileSync(arg(args, "--request"), "utf8"));
-      observations.deployEnv = options.env;
-      writeJson(arg(args, "--receipt"), {
-        kind: "ops.voiceUiDeployReceipt.v1",
-        status: "PASS",
-        opsSha: OPS_SHA,
-        appsSha: APPS_SHA,
-        artifactManifestSha256: `sha256:${fixture.request.expected.artifactManifestSha256}`,
-        target: fixture.request.expected.target,
-        deployment: {
-          id: "deployment-1",
-          url: "https://deployment-1.voice-ui.pages.dev/",
-          stableUrl: "https://voice-ui.pages.dev/",
-          commitSha: APPS_SHA,
-        },
-        effect: { status: "PASS" },
-      });
-      return { status: 0, stdout: "deploy PASS\n", stderr: "" };
-    }
-    if (args[0] === fixture.readbackAdapter) {
-      observations.readbackEnv = options.env;
-      writeJson(arg(args, "--receipt"), {
-        kind: "ops.voiceUiReadbackReceipt.v1",
-        status: "PASS",
-        opsSha: OPS_SHA,
-        appsSha: APPS_SHA,
-        artifactManifestSha256: fixture.request.expected.artifactManifestSha256,
-        deploymentId: "deployment-1",
-        publicBytes: { status: "PASS", fileCount: 1 },
-        function: { status: "PASS", path: "/api/jev" },
-      });
-      return { status: 0, stdout: "readback PASS\n", stderr: "" };
-    }
+for (const [name, mutate, message] of [
+  ["artifact digest mismatch", f=>{f.request.expected.artifactManifestSha256="f".repeat(64);}, /manifest digest/],
+  ["receipt changed after approval", f=>{const r=read(f.projectionPath);r.workflow.run_id++;write(f.projectionPath,r);}, /projection receipt digest/],
+  ["isolation changed after approval", f=>{write(f.isolationPath,{...read(f.isolationPath),status:"RED"});}, /isolation verdict digest/],
+  ["readback adapter changed", f=>{writeFileSync(f.readback,"// tampered");}, /readback digest mismatch/],
+  ["deploy adapter changed", f=>{writeFileSync(f.deploy,"// tampered");}, /deploy digest mismatch/],
+  ["no effect capability", (_f,e)=>{delete e.CLOUDFLARE_API_TOKEN;}, /effect capability/],
+  ["wrong effect account", (_f,e)=>{e.CLOUDFLARE_ACCOUNT_ID="other";}, /effect account/],
+  ["unlisted executable file", f=>{writeFileSync(path.join(f.artifactRoot,"unlisted.mjs"),"// extra");}, /unlisted files/],
+  ["artifact symlink", f=>{symlinkSync(path.join(f.artifactRoot,"site"),path.join(f.artifactRoot,"link"));}, /symlink forbidden/],
+  ["missing voice fixture declaration", f=>{delete f.manifest.e2e.wav;refreshArtifact(f);}, /wav fixture/],
+  ["previous PASS output", f=>{write(path.join(f.request.output,"receipt.json"),{status:"PASS"});}, /output must be empty/],
+]) test(`effect count is zero: ${name}`, t=>beforeEffect(t,mutate,message));
 
-    assert.equal(args[0], path.join(fixture.artifactRoot, "e2e/runtime-acceptance.mjs"));
-    observations.acceptanceEnvs.push(options.env);
-    observations.acceptanceCwds.push(options.cwd);
-    const receipt = arg(args, "--receipt");
-    const handoffId = arg(args, "--handoff-id");
-    writeJson(receipt, {
-      kind: "voice-ui.runtimeAcceptanceReceipt.v1",
-      status: "PASS",
-      stage: "complete",
-      target: { url: arg(args, "--url") },
-      handoffId,
-      sources: {
-        apps: APPS_SHA,
-        artifactManifestSha256: fixture.request.expected.artifactManifestSha256,
-      },
-      checks: [
-        { id: "artifact-admission", status: "PASS" },
-        { id: "secret-free-runtime", status: "PASS" },
-        { id: "public-application-e2e", status: "PASS" },
-      ],
-      dependencies: { envsRuntime: [], secretInputs: [] },
-      process: { exitCode: 0, independentProcess: true },
-      completedAt: handoffId.endsWith("run-1") ? "2026-09-28T00:00:01Z" : "2026-09-28T00:00:02Z",
-    });
-    return { status: 0, stdout: "acceptance PASS\n", stderr: "" };
-  };
-}
-
-
-
-test("isolation capture binds the checker result to exact ops source inputs", () => {
-  const root = mkdtempSync(path.join(tmpdir(), "voice-ui-isolation-test-"));
-  try {
-    const checker = path.join(root, "tools/check-ci-intent-workflow-branches.mjs");
-    const intent = path.join(root, "ci.intent.v1.jsonl");
-    const boundary = path.join(root, "contracts/secret-effect-boundary.v1.jsonl");
-    mkdirSync(path.dirname(checker), { recursive: true });
-    mkdirSync(path.dirname(boundary), { recursive: true });
-    writeFileSync(checker, "// checker\n");
-    writeFileSync(intent, "{}\n");
-    writeFileSync(boundary, "{}\n");
-    const output = path.join(root, "verdict.json");
-    const verdict = captureIsolation({
-      root,
-      opsSha: OPS_SHA,
-      output,
-      spawn: (command) => {
-        assert.equal(command, process.execPath);
-        return {
-          status: 0,
-          stdout: `${JSON.stringify({
-            kind: "ops.secretEffectBoundary.check.v1",
-            status: "PASS",
-            active: 2,
-            secretBearingEffects: 1,
-            obsolete: 0,
-            unclassified: 0,
-            workflows: [
-              { path: ".github/workflows/nix-check.yml", classification: "secret_free_verify" },
-              { path: ".github/workflows/effect.yml", classification: "secret_bearing_effect" },
-            ],
-          })}\n`,
-          stderr: "",
-        };
-      },
-    });
-    assert.equal(verdict.opsSha, OPS_SHA);
-    assert.match(verdict.inputs.checkerSha256, /^sha256:[0-9a-f]{64}$/);
-    assert.deepEqual(JSON.parse(readFileSync(output, "utf8")), verdict);
-    assert.throws(() => captureIsolation({ root, opsSha: "proposals", output, spawn: () => ({ status: 0 }) }), /exact 40-character/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+test("isolation count, unique paths and source evidence must agree", () => {
+  const r=isolation();r.secretBearingEffects=5;assert.throws(()=>validateIsolationVerdict(r,OPS_SHA),/count differs/);
+  r.secretBearingEffects=1;r.workflows[1].path=r.workflows[0].path;assert.throws(()=>validateIsolationVerdict(r,OPS_SHA),/not unique/);
+});
+test("only a bounded environment enters child processes", () => {
+  const env=sanitizedEnv({...effectEnv(),NEW_PROVIDER_TOKEN:"secret",NODE_OPTIONS:"--import x",HOME:"/owner",SOPS_AGE_KEY_FILE:"/key"});
+  assert.deepEqual(Object.keys(env),["PATH"]);
+});
+test("native CLI reaches argument admission rather than import failure", () => {
+  const r=spawnSync(process.execPath,[CLI],{encoding:"utf8",env:sanitizedEnv(process.env)});
+  assert.notEqual(r.status,0);assert.match(r.stderr,/--request is required/);assert.doesNotMatch(r.stderr,/SyntaxError/);
+});
+test("real offline processes exercise CLI, readback and independent acceptance without claiming a live provider", t => {
+  const f=fixture(t),req=path.join(f.root,"request.json");write(req,f.request);
+  const r=spawnSync(process.execPath,[CLI,"--request",req],{encoding:"utf8",env:{...effectEnv(),NEW_PROVIDER_TOKEN:"not-in-children"}});
+  assert.equal(r.status,0,r.stderr);assert.doesNotMatch(r.stdout,/do-not-forward-effect-output/);
+  const result=read(path.join(f.request.output,"receipt.json"));assert.equal(result.stages.acceptance.length,2);
+  const a=read(path.join(f.request.output,"acceptance-1.json")),b=read(path.join(f.request.output,"acceptance-2.json"));
+  assert.notEqual(a.handoffId,b.handoffId);assert.notEqual(a.fixtureObservation.home,b.fixtureObservation.home);
+  assert.equal(a.fixtureObservation.home,a.fixtureObservation.cwd);assert.equal(a.fixtureObservation.unknownSecret,null);
+});
+test("empty, duplicate and missing acceptance checks cannot become PASS", t=>{
+  const f=fixture(t);runTargetRuntime(f.request,{env:effectEnv()});
+  const r=read(path.join(f.request.output,"acceptance-1.json"));
+  for(const checks of [[],[{id:"public-application-e2e",status:"PASS"}],Array(3).fill({id:"artifact-admission",status:"PASS"})]) {
+    assert.throws(()=>validateAcceptanceReceipt({...r,checks},f.request.expected,r.target.url,r.handoffId),/required checks/);
   }
 });
-test("projection receipt presence is insufficient unless effect and readback are exact PASS", () => {
-  const receipt = makeProjection();
-  receipt.readback.present = false;
-  assert.throws(() => validateProjectionReceipt(receipt, ENVS_SHA), /readback is not PASS/);
-  receipt.readback.present = true;
-  receipt.effect.status = "NOT_RUN";
-  assert.throws(() => validateProjectionReceipt(receipt, ENVS_SHA), /effect is not PASS/);
+test("first PASS never masks a second process failure", t=>{
+  const f=fixture(t),p=path.join(f.artifactRoot,"e2e/runtime-acceptance.mjs");
+  writeFileSync(p,acceptanceCode.replace(' && process.env.FAIL_SECOND',''));refreshArtifact(f);
+  assert.throws(()=>runTargetRuntime(f.request,{env:effectEnv()}),/application acceptance failed/);
+  assert.throws(()=>read(path.join(f.request.output,"receipt.json")));
 });
-
-test("exact inputs drive deploy, public readback and two independent secret-free acceptances", () => {
-  const fixture = makeFixture();
-  try {
-    const observations = { acceptanceEnvs: [], acceptanceCwds: [] };
-    const env = {
-      PATH: process.env.PATH ?? "",
-      CLOUDFLARE_API_TOKEN: "effect-only-token",
-      CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID,
-      JEV_API_KEY: "must-not-reach-acceptance",
-    };
-    const result = runTargetRuntime(fixture.request, {
-      spawn: successfulSpawn(fixture, observations),
-      env,
-      completedAt: "2026-09-28T00:00:03Z",
-    });
-
-    assert.equal(result.status, "PASS");
-    assert.equal(result.claim, "NEW_PROJECTION_REAL_USE_PROVEN");
-    assert.equal(result.stages.acceptance.length, 2);
-    assert.notEqual(result.stages.acceptance[0].workspaceId, result.stages.acceptance[1].workspaceId);
-    assert.equal(observations.deployEnv.CLOUDFLARE_API_TOKEN, "effect-only-token");
-    assert.equal(observations.deployEnv.CLOUDFLARE_ACCOUNT_ID, ACCOUNT_ID);
-    assert.equal(observations.deployEnv.JEV_API_KEY, undefined);
-    assert.equal(observations.deployEnv.SOPS_AGE_KEY, undefined);
-    assert.equal(observations.readbackEnv.CLOUDFLARE_API_TOKEN, undefined);
-    assert.equal(observations.acceptanceCwds.length, 2);
-    assert.notEqual(observations.acceptanceCwds[0], observations.acceptanceCwds[1]);
-    for (const acceptedEnv of observations.acceptanceEnvs) {
-      for (const name of SECRET_ENV_NAMES) assert.equal(acceptedEnv[name], undefined, `${name} reached application acceptance`);
-    }
-
-    const finalReceipt = readFileSync(path.join(fixture.output, "receipt.json"), "utf8");
-    assert.equal(finalReceipt.includes("effect-only-token"), false);
-    assert.equal(finalReceipt.includes("must-not-reach-acceptance"), false);
-  } finally {
-    fixture.cleanup();
-  }
+test("partial public readback is not full deployment readback", t=>{
+  const f=fixture(t);writeFileSync(f.readback,readbackCode.replace('files.length,files','1,files:files.slice(0,1)'));
+  f.request.adapters.readback.sha256=sha256File(f.readback);
+  assert.throws(()=>runTargetRuntime(f.request,{env:effectEnv()}),/file set is incomplete/);
 });
-
-test("stale artifact digest fails before provider effect", () => {
-  const fixture = makeFixture();
-  try {
-    fixture.request.expected.artifactManifestSha256 = "f".repeat(64);
-    let calls = 0;
-    assert.throws(() => runTargetRuntime(fixture.request, { spawn: () => { calls += 1; return { status: 0 }; } }), /manifest digest mismatch/);
-    assert.equal(calls, 0);
-  } finally {
-    fixture.cleanup();
+test("Git-bound capture rejects archive claims and dirty or untracked workflows", t=>{
+  const root=mkdtempSync(path.join(tmpdir(),"isolation-source-"));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const output=path.join(root,"result.json");
+  assert.throws(()=>captureIsolation({root,opsSha:OPS_SHA,output}),/Git source checkout/);
+  for(const file of ["ci.intent.v1.jsonl","contracts/secret-effect-boundary.v1.jsonl",".github/workflows/check.yml"]) {
+    mkdirSync(path.dirname(path.join(root,file)),{recursive:true});writeFileSync(path.join(root,file),"{}\n");
   }
-});
-
-test("first acceptance PASS never masks a second acceptance failure", () => {
-  const fixture = makeFixture();
-  try {
-    const observations = { acceptanceEnvs: [], acceptanceCwds: [] };
-    let acceptanceCount = 0;
-    const baseSpawn = successfulSpawn(fixture, observations);
-    const spawn = (command, args, options) => {
-      if (args[0] === path.join(fixture.artifactRoot, "e2e/runtime-acceptance.mjs")) {
-        acceptanceCount += 1;
-        if (acceptanceCount === 2) return { status: 9, stdout: "", stderr: "second run failed\n" };
-      }
-      return baseSpawn(command, args, options);
-    };
-    assert.throws(() => runTargetRuntime(fixture.request, { spawn, env: { PATH: process.env.PATH ?? "" } }), /application acceptance failed/);
-    assert.equal(acceptanceCount, 2);
-    assert.equal(path.join(fixture.output, "receipt.json"), path.join(fixture.output, "receipt.json"));
-    assert.throws(() => readFileSync(path.join(fixture.output, "receipt.json"), "utf8"));
-  } finally {
-    fixture.cleanup();
-  }
+  const checker=path.join(root,"tools/check-ci-intent-workflow-branches.mjs");mkdirSync(path.dirname(checker));
+  writeFileSync(checker,`console.log(${JSON.stringify(JSON.stringify(isolation()))});\n`);
+  const git=(...args)=>{const p=spawnSync("git",["-C",root,...args],{encoding:"utf8"});assert.equal(p.status,0,p.stderr);return p.stdout.trim();};
+  git("init","-q");git("add",".");git("-c","user.name=fixture","-c","user.email=fixture@example.invalid","commit","-qm","fixture");
+  const opsSha=git("rev-parse","HEAD");assert.equal(captureIsolation({root,opsSha,output}).opsSha,opsSha);
+  writeFileSync(path.join(root,".github/workflows/extra.yml"),"{}\n");
+  assert.throws(()=>captureIsolation({root,opsSha,output}),/committed tree/);
+  rmSync(path.join(root,".github/workflows/extra.yml"));writeFileSync(checker,"// tampered\n");
+  assert.throws(()=>captureIsolation({root,opsSha,output}),/committed tree/);
 });

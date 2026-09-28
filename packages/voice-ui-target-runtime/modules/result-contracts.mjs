@@ -26,7 +26,7 @@ export function validateDeployReceipt(receipt, expected) {
   return receipt;
 }
 
-export function validateReadbackReceipt(receipt, expected, deployment) {
+export function validateReadbackReceipt(receipt, expected, deployment, artifact) {
   requireCondition(receipt?.kind === "ops.voiceUiReadbackReceipt.v1", "readback receipt kind differs");
   requireCondition(receipt.status === "PASS", "readback receipt is not PASS");
   requireCondition(receipt.opsSha === expected.opsSha, "readback ops SHA mismatch");
@@ -34,6 +34,17 @@ export function validateReadbackReceipt(receipt, expected, deployment) {
   requireCondition(normalizeSha256(receipt.artifactManifestSha256) === expected.artifactManifestSha256, "readback artifact digest mismatch");
   requireCondition(receipt.deploymentId === deployment.id, "readback deployment id mismatch");
   requireCondition(receipt.publicBytes?.status === "PASS" && Number.isSafeInteger(receipt.publicBytes.fileCount) && receipt.publicBytes.fileCount > 0, "public byte readback is not PASS");
+  const required = artifact.manifest.files.filter(row => row.path.startsWith("site/"));
+  const observed = receipt.publicBytes.files;
+  requireCondition(required.length > 0 && Array.isArray(observed) && observed.length === required.length
+    && receipt.publicBytes.fileCount === required.length, "public readback file set is incomplete");
+  const byPath = new Map(observed.map(row => [row.path, row]));
+  requireCondition(byPath.size === required.length, "public readback paths are duplicated");
+  for (const row of required) {
+    const actual = byPath.get(row.path);
+    requireCondition(actual && actual.bytes === row.bytes
+      && normalizeSha256(actual.sha256) === normalizeSha256(row.sha256), `public readback differs: ${row.path}`);
+  }
   requireCondition(receipt.function?.status === "PASS" && receipt.function.path === "/api/jev", "Function readback is not PASS");
   assertNoPrivateMaterial(receipt);
   return receipt;
@@ -47,7 +58,10 @@ export function validateAcceptanceReceipt(receipt, expected, targetUrl, handoffI
   requireCondition(normalizeSha256(receipt.sources?.artifactManifestSha256) === expected.artifactManifestSha256, "acceptance artifact digest mismatch");
   requireCondition(new URL(receipt.target?.url).href === new URL(targetUrl).href, "acceptance target differs");
   requireCondition(receipt.process?.independentProcess === true && receipt.process.exitCode === 0, "acceptance process proof differs");
-  requireCondition(receipt.checks?.every(row => row.status === "PASS"), "acceptance contains a non-PASS check");
+  const checks = ["artifact-admission", "secret-free-runtime", "public-application-e2e"];
+  requireCondition(Array.isArray(receipt.checks) && receipt.checks.length === checks.length
+    && checks.every(id => receipt.checks.filter(row => row.id === id && row.status === "PASS").length === 1),
+    "acceptance required checks are missing, duplicated or not PASS");
   requireCondition(Array.isArray(receipt.dependencies?.envsRuntime) && receipt.dependencies.envsRuntime.length === 0, "acceptance depends on envs runtime");
   requireCondition(Array.isArray(receipt.dependencies?.secretInputs) && receipt.dependencies.secretInputs.length === 0, "acceptance received secret inputs");
   assertNoPrivateMaterial(receipt);

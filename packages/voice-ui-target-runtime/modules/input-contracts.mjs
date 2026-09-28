@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -10,6 +10,12 @@ import {
   requireCondition,
   sha256File,
 } from "./core.mjs";
+
+function providerPath(value, label) {
+  requireCondition(typeof value === "string" && /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(value)
+    && value.split("/").every(part => part !== "." && part !== ".."), `${label} must be a repository-relative evidence path`);
+  // Evidence only. The approved receipt digest binds it; consumers never open it.
+}
 
 export function validateProjectionReceipt(receipt, expectedEnvsSha) {
   exactObjectKeys(receipt, [
@@ -25,7 +31,7 @@ export function validateProjectionReceipt(receipt, expectedEnvsSha) {
 
   exactObjectKeys(receipt.source, ["kind", "ref", "sha256"], "projection source");
   requireCondition(receipt.source.kind === "public_sops", "projection source kind differs");
-  requireCondition(receipt.source.ref === "secrets/jev-api-key.sops.yaml", "projection source ref differs");
+  providerPath(receipt.source.ref, "projection source ref");
   normalizeSha256(receipt.source.sha256, "projection ciphertext digest");
 
   exactObjectKeys(receipt.target, ["provider", "account_id", "project", "secret_name"], "projection target");
@@ -34,9 +40,9 @@ export function validateProjectionReceipt(receipt, expectedEnvsSha) {
   requireCondition(receipt.target.project === "voice-ui", "projection target project differs");
   requireCondition(receipt.target.secret_name === "JEV_API_KEY", "projection target secret differs");
 
-  exactObjectKeys(receipt.projector, ["workflow", "script"], "projection projector");
-  requireCondition(receipt.projector.workflow === ".github/workflows/runtime-secret-projection.yml", "projection workflow identity differs");
-  requireCondition(receipt.projector.script === "scripts/runtime-secret-projection.sh", "projection script identity differs");
+  exactObjectKeys(receipt.projector, ["workflow", "adapter"], "projection projector");
+  providerPath(receipt.projector.workflow, "projection workflow");
+  providerPath(receipt.projector.adapter, "projection adapter");
   exactObjectKeys(receipt.effect, ["operation", "status"], "projection effect");
   requireCondition(receipt.effect.operation === "cloudflare_pages_secret_put" && receipt.effect.status === "PASS", "projection effect is not PASS");
   exactObjectKeys(receipt.readback, ["kind", "status", "present"], "projection readback");
@@ -54,6 +60,7 @@ export function validateProjectionReceipt(receipt, expectedEnvsSha) {
 
 function resolveInside(root, relative, label) {
   requireCondition(typeof relative === "string" && relative.length > 0, `${label} is required`);
+  providerPath(relative, label);
   const absoluteRoot = path.resolve(root);
   const resolved = path.resolve(absoluteRoot, relative);
   requireCondition(resolved === absoluteRoot || resolved.startsWith(`${absoluteRoot}${path.sep}`), `${label} escapes artifact root`);
@@ -83,6 +90,25 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
     rows.set(row.path, row);
   }
 
+  const actual = [];
+  function walk(directory, prefix = "") {
+    for (const name of readdirSync(directory)) {
+      const relative = prefix ? `${prefix}/${name}` : name;
+      const info = lstatSync(path.join(directory, name));
+      requireCondition(!info.isSymbolicLink(), `artifact symlink forbidden: ${relative}`);
+      if (info.isDirectory()) walk(path.join(directory, name), relative);
+      else {
+        requireCondition(info.isFile(), `artifact entry is not a regular file: ${relative}`);
+        if (relative !== "manifest.json") actual.push(relative);
+      }
+    }
+  }
+  walk(artifactRoot);
+  requireCondition(JSON.stringify(actual.sort()) === JSON.stringify([...rows.keys()].sort()), "artifact has unlisted files");
+
+  for (const field of ["wav", "golden"]) {
+    requireCondition(typeof manifest.e2e?.[field] === "string" && rows.has(manifest.e2e[field]), `acceptance ${field} fixture is not bound to artifact closure`);
+  }
   const runtimeEntrypoint = manifest.e2e?.runtime_entrypoint;
   requireCondition(typeof runtimeEntrypoint === "string" && rows.has(runtimeEntrypoint), "runtime acceptance entrypoint is not bound to artifact closure");
   const publicEntrypoint = manifest.e2e?.public_entrypoint;
@@ -94,11 +120,9 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
   const authLines = readFileSync(authPath, "utf8").split(/\r?\n/).filter(line => line.trim());
   requireCondition(authLines.length === 1, "auth contract must contain exactly one record");
   const auth = JSON.parse(authLines[0]);
-  requireCondition(JSON.stringify(auth) === JSON.stringify({
-    artifact: "voice-ui",
-    kind: "artifact.auth.v1",
-    requiredCapabilities: ["jev-api"],
-  }), "artifact auth contract differs");
+  exactObjectKeys(auth, ["artifact", "kind", "requiredCapabilities"], "artifact auth contract");
+  requireCondition(auth.artifact === "voice-ui" && auth.kind === "artifact.auth.v1"
+    && JSON.stringify(auth.requiredCapabilities) === '["jev-api"]', "artifact auth contract differs");
 
   return {
     root: artifactRoot,
@@ -121,6 +145,11 @@ export function validateIsolationVerdict(verdict, expectedOpsSha) {
     requireCondition(row && typeof row.path === "string", "isolation workflow path missing");
     requireCondition(["secret_free_verify", "secret_bearing_effect"].includes(row.classification), "isolation classification invalid");
   }
+  requireCondition(new Set(verdict.workflows.map(row => row.path)).size === verdict.active, "isolation workflow paths are not unique");
+  requireCondition(verdict.workflows.filter(row => row.classification === "secret_bearing_effect").length === verdict.secretBearingEffects, "isolation effect count differs from inventory");
+  exactObjectKeys(verdict.inputs, ["checkerSha256", "intentSha256", "boundarySha256", "workflowTreeSha"], "isolation source inputs");
+  for (const name of ["checkerSha256", "intentSha256", "boundarySha256"]) normalizeSha256(verdict.inputs[name], "isolation input digest");
+  exactSha(verdict.inputs.workflowTreeSha, "isolation workflow tree SHA");
   assertNoPrivateMaterial(verdict);
   return verdict;
 }

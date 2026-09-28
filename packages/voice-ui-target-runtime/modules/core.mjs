@@ -11,7 +11,6 @@ import path from "node:path";
 
 const SHA40 = /^[0-9a-f]{40}$/;
 const SHA256 = /^(?:sha256:)?[0-9a-f]{64}$/;
-const URL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,239}$/;
 const FORBIDDEN_RECEIPT_KEYS = new Set([
   "secret",
   "secret_value",
@@ -97,15 +96,16 @@ export function exactObjectKeys(value, expected, label) {
 
 export function normalizedHttps(value, label) {
   const parsed = new URL(value);
-  requireCondition(parsed.protocol === "https:", `${label} must use https`);
+  requireCondition(parsed.protocol === "https:" && !parsed.username && !parsed.password, `${label} must use credential-free https`);
   parsed.hash = "";
   return parsed.href;
 }
 
 export function sanitizedEnv(env) {
-  const result = { ...env };
-  for (const name of SECRET_ENV_NAMES) delete result[name];
-  return result;
+  // A denylist cannot enumerate future credentials or code-injection variables.
+  const names = ["PATH", "LANG", "LC_ALL", "TZ", "CI", "PLAYWRIGHT_BROWSERS_PATH"];
+  return Object.fromEntries(names.filter(name => typeof env[name] === "string")
+    .map(name => [name, env[name]]));
 }
 
 export function effectEnv(env) {

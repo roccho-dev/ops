@@ -1,0 +1,38 @@
+{
+  "capability": "jev-api",
+  "created_at": "2026-09-28T00:00:00Z",
+  "effect": {
+    "operation": "cloudflare_pages_secret_put",
+    "status": "PASS"
+  },
+  "environment": "dev",
+  "envs_sha": "d0bfafec05c467c8ebd89ed75c4abe8a6b8c8477",
+  "kind": "envs.projectionReceipt.v1",
+  "projector": {
+    "adapter": "adapters/jev_api.py",
+    "workflow": ".github/workflows/project-dev-jev-api.yml"
+  },
+  "readback": {
+    "kind": "secret_name_presence",
+    "present": true,
+    "status": "PASS"
+  },
+  "source": {
+    "kind": "public_sops",
+    "ref": "ciphertexts/dev-jev-api.sops.yaml",
+    "sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "status": "PASS",
+  "target": {
+    "account_id": "account-dev-fixture",
+    "project": "voice-ui",
+    "provider": "cloudflare-pages",
+    "secret_name": "JEV_API_KEY"
+  },
+  "workflow": {
+    "ref": "proposals",
+    "repository": "roccho-dev/envs",
+    "run_attempt": 1,
+    "run_id": 1
+  }
+}

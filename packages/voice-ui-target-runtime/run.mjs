@@ -2,7 +2,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadJson, runTargetRuntime } from "./lib.mjs";
+import { runTargetRuntime } from "./lib.mjs";
+import { loadJson } from "./modules/core.mjs";
 
 function parseArgs(argv) {
   const values = {};
