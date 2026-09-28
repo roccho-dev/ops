@@ -106,7 +106,7 @@ jobs:
               "schema": "ops.ollayaReleaseArtifactProof/1",
               "ollayaVersion": "v0.7.5",
               "platform": "linux-amd64",
-              "model": "laya:multilingual",
+              "model": "ollaya.dev/library/laya:multilingual",
               "device": "cpu",
               "sourceArchiveSha256": source_sha,
               "consumerRepositoryCheckoutRequired": False,
@@ -186,7 +186,7 @@ jobs:
           x = json.loads(pathlib.Path(sys.argv[1]).read_text())
           rows = x.get("data", x.get("models", []))
           names = {row.get("id", row.get("name")) for row in rows}
-          assert "laya:multilingual" in names, x
+          assert "ollaya.dev/library/laya:multilingual" in names, x
           PY
 
           cat >"$RUNNER_TEMP/request.json" <<'JSON'
@@ -211,7 +211,7 @@ jobs:
           python3 - "$RUNNER_TEMP/decision.json" <<'PY'
           import json, pathlib, sys
           x = json.loads(pathlib.Path(sys.argv[1]).read_text())
-          assert x["model"] == "laya:multilingual", x
+          assert x["model"] == "ollaya.dev/library/laya:multilingual", x
           a = x["answers"]["intent"]
           assert a["type"] == "choice", a
           assert a["choice"] in {"refund", "other"}, a
