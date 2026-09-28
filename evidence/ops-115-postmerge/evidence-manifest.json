@@ -1,0 +1,51 @@
+{
+  "accepted_commit": "f8869d211a98549a5bcea1dee181b43d953084ec",
+  "accepted_tree": "ead57e18d7a70071d9eec9d7578c3ec421972d8d",
+  "artifact_id": 9343108657,
+  "authority_root_digest": "f6495ff4f7c972d8f0009482127e0d930961b75955c12bbc4c4d059824f03cfb",
+  "files": [
+    {
+      "bytes": 1005,
+      "path": "README.md",
+      "sha256": "16862826ae9c47c3ecadf9f7dabf381dfd1b339a1b22ac8f04313077aa3e66ed"
+    },
+    {
+      "bytes": 686,
+      "path": "artifact-origin.receipt.json",
+      "sha256": "0d08b41a01b5ddd338a1b5fe3d0566139cd9e4f8b6ab714f9123cbfbe024925b"
+    },
+    {
+      "bytes": 808,
+      "path": "human-review-request.md",
+      "sha256": "b3d85240ce1db4e6511f27167b1979f73d0a7ddd83ae6186ab40a33e3cb6a366"
+    },
+    {
+      "bytes": 2602,
+      "path": "independent-takeover.receipt.json",
+      "sha256": "41e8ac59cba9f7c3382180445a94952dfaabe61d053f28c80247db2cbe58533e"
+    },
+    {
+      "bytes": 5778,
+      "path": "proof-artifact.zip",
+      "sha256": "83bd117cacfe676611c7629e713973442db03ed0db174e5f5f83600c30b73990"
+    },
+    {
+      "bytes": 1917,
+      "path": "public-readback.receipt.json",
+      "sha256": "4df4ec81851f1ddcef319ec9be7c3579970948c904ad98cec8013b83f14454bb"
+    },
+    {
+      "bytes": 833,
+      "path": "release.receipt.json",
+      "sha256": "24aa6bfaabb98e67e8864f54bc3af8b0eb8e18ad4609a7ef18c5b9cfc0ace7ca"
+    },
+    {
+      "bytes": 2184,
+      "path": "technical-closure.receipt.json",
+      "sha256": "4927bb2be151d7e9c17b08176a753fd493b3f923a2b1366c710b63dd9b07d8f0"
+    }
+  ],
+  "schema": "ops.issue115PostmergeAdmissionManifest.v1",
+  "status": "PASS",
+  "workflow_run_id": 32187831835
+}

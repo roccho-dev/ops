@@ -1,0 +1,55 @@
+{
+  "accepted_commit": "f8869d211a98549a5bcea1dee181b43d953084ec",
+  "accepted_tree": "ead57e18d7a70071d9eec9d7578c3ec421972d8d",
+  "artifact_manifest_sha256": "cfd53586a2f7a49ba355cbcbea4d6dcc0ea9ed64b9c504b8fea5da77d0f70dca",
+  "authority_root_digest": "f6495ff4f7c972d8f0009482127e0d930961b75955c12bbc4c4d059824f03cfb",
+  "checkpoint_mixing": false,
+  "latest_used": false,
+  "query_count": 8,
+  "results": [
+    {
+      "query_id": "current_decisions",
+      "semantic_digest": "a8283b85ab1723144261edb77856d3caa787e20780a344a4112f13c268c44c52",
+      "status": "PASS"
+    },
+    {
+      "query_id": "trace_decision",
+      "semantic_digest": "16844a5107376b39e3553b4d55344fbe713b955856d57c0e601cb796f19656c3",
+      "status": "PASS"
+    },
+    {
+      "query_id": "impact_by_fact",
+      "semantic_digest": "c39fca4f4d0fe3dd2b35599a65cf67bab1f0d6a481f8c322cd624a74f01159c1",
+      "status": "PASS"
+    },
+    {
+      "query_id": "missing_outcomes",
+      "semantic_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "status": "PASS"
+    },
+    {
+      "query_id": "unresolved_conflicts",
+      "semantic_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "status": "PASS"
+    },
+    {
+      "query_id": "research_gaps",
+      "semantic_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "status": "PASS"
+    },
+    {
+      "query_id": "decision_timeline",
+      "semantic_digest": "77bb27e9c8b9e55fb9aadfe955f7a55c7a2aa44db644e95fda5161f96b0ea055",
+      "status": "PASS"
+    },
+    {
+      "query_id": "full_history_aggregate",
+      "semantic_digest": "02ea11bcdee30564de189dbbe62667107b74fccf584d6b5ecf4977d89951938f",
+      "status": "PASS"
+    }
+  ],
+  "schema": "ops.decisionPublicReadback.v1",
+  "semantic_mismatch_count": 0,
+  "status": "PASS",
+  "tag": "decision-checkpoint-f6495ff4f7c972d8-f8869d211a98"
+}

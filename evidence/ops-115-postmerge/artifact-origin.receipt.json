@@ -1,0 +1,16 @@
+{
+  "artifact_api_size_bytes": 5778,
+  "artifact_digest": "sha256:83bd117cacfe676611c7629e713973442db03ed0db174e5f5f83600c30b73990",
+  "artifact_id": 9343108657,
+  "artifact_name": "ops-115-postmerge-proof-v2-f8869d211a98549a5bcea1dee181b43d953084ec",
+  "created_at": "2026-08-18T21:28:03Z",
+  "downloaded_zip_bytes": 5778,
+  "downloaded_zip_sha256": "83bd117cacfe676611c7629e713973442db03ed0db174e5f5f83600c30b73990",
+  "expired_at_admission": false,
+  "expires_at": "2026-11-16T21:27:44Z",
+  "repository": "roccho-dev/ops",
+  "schema": "ops.actionsArtifactOrigin.v1",
+  "status": "PASS",
+  "workflow_name": "Temporary Issue 115 postmerge proof v2",
+  "workflow_run_id": 32187831835
+}
