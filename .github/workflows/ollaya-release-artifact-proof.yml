@@ -191,7 +191,7 @@ jobs:
 
           cat >"$RUNNER_TEMP/request.json" <<'JSON'
           {
-            "model": "laya:multilingual",
+            "model": "ollaya.dev/library/laya:multilingual",
             "state": "I was charged twice and want a refund.",
             "questions": {
               "intent": {
