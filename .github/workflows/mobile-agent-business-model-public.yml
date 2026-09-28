@@ -35,10 +35,10 @@ jobs:
       stable_base: ${{ steps.contract.outputs.stable_base }}
       tag: ${{ steps.pack.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.16.0'
 
@@ -194,7 +194,7 @@ jobs:
           cp -a "$RUNNER_TEMP/site" "$result/dist"
           cp "$RUNNER_TEMP"/{expected.json,publication.json,urls.json,local-proof.json} "$result/"
           cp verification/mobile-agent-business-model-public/manifest.json "$result/manifest.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mobile-agent-business-model-site-${{ github.run_id }}
           path: ${{ runner.temp }}/result/
@@ -208,14 +208,14 @@ jobs:
     timeout-minutes: 30
     environment: cloudflare-production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ needs.materialize.outputs.source_sha }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: mobile-agent-business-model-site-${{ github.run_id }}
           path: ${{ runner.temp }}/staged
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.16.0'
 
@@ -311,7 +311,7 @@ jobs:
               "$RUNNER_TEMP/$kind-urls.json" "$RUNNER_TEMP/$kind-proof.json"
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mobile-agent-business-model-deployment-${{ github.run_id }}
           path: |

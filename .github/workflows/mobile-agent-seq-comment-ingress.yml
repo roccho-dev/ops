@@ -63,14 +63,14 @@ jobs:
           for comment in comments:
               if comment.get('user',{}).get('login') != owner:
                   continue
-              body=str(comment.get('body','')).replace('\\r\\n','\\n').strip()
-              first,separator,rest=body.partition('\\n')
+              body=str(comment.get('body','')).replace('\r\n','\n').strip()
+              first,separator,rest=body.partition('\n')
               if not separator:
                   continue
               match=header.fullmatch(first.strip())
               if not match:
                   continue
-              payload=re.sub(r'\\s+','',rest)
+              payload=re.sub(r'\s+','',rest)
               assert re.fullmatch(r'[A-Za-z0-9+/=]+',payload),match.group(1)
               index=int(match.group(1))
               assert 0 <= index < total
