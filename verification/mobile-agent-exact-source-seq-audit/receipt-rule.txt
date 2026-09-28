@@ -1,0 +1,1 @@
+accepted receipt absent => verified URL count 0; accepted receipt PASS => report its stableUrl verbatim

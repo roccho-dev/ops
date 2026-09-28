@@ -1,0 +1,1 @@
+PASS receipt exists on accepted/mobile-agent-public-url and its stable seq/1 #smap URL passed stable+immutable exact-byte and real-Chrome proof.
