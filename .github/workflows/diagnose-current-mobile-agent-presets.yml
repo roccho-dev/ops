@@ -1,0 +1,47 @@
+name: Diagnose current Mobile Agent presets
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/diagnose-current-mobile-agent-presets.yml'
+      - '.github/transport/current-mobile-agent-url-seeds.json'
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PRODUCT_BRANCH: proposal/mobile-agent-preset-static-app-260821
+      BASE: https://mobile-agent.roccho.workers.dev/
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone product proof and construct URLs from exact existing seeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          git clone --quiet --depth=1 --branch "$PRODUCT_BRANCH" "$remote" product
+          python3 - .github/transport/current-mobile-agent-url-seeds.json "$BASE" > "$RUNNER_TEMP/urls.json" <<'PY'
+          import json,sys,urllib.parse
+          seeds=json.load(open(sys.argv[1],encoding='utf-8')); base=sys.argv[2]
+          cases=[]
+          for item in seeds['cases']:
+              url=urllib.parse.urljoin(base,'app')+'#'+item['hash']
+              cases.append({'id':item['id'],'url':url,'labels':item['labels'],'view':{'pattern':item['pattern']}})
+          print(json.dumps({'schema':'ops.mobileAgentPresetUrls/1','authority':False,'base':base,'cases':cases}))
+          PY
+      - name: Real Chrome maxGraph and interaction proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          CHROME_BIN="$chrome" python3 product/verification/mobile-agent-preset-app/browser-smoke.py "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/receipt.json" "$RUNNER_TEMP/shots"
+          cat "$RUNNER_TEMP/receipt.json"

@@ -1,0 +1,139 @@
+name: Refresh exact existing Mobile Agent App bootstrap
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/transport-mobile-agent-refresh-bootstrap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TARGET_BRANCH: proposal/mobile-agent-preset-static-app-260821
+      EXPECTED_TARGET_HEAD: 51580ba2dc6ec53237ee51c54782300db0f520e1
+      SOURCE_BASE: https://mobile-agent.roccho.workers.dev/
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Clone the exact product candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git"
+          test "$(git ls-remote "$remote" "refs/heads/$TARGET_BRANCH" | awk 'NR==1 {print $1}')" = "$EXPECTED_TARGET_HEAD"
+          git clone --quiet --depth=1 --branch "$TARGET_BRANCH" "$remote" product
+          test "$(git -C product rev-parse HEAD)" = "$EXPECTED_TARGET_HEAD"
+
+      - name: Observe and pin every existing public App byte
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=verification/mobile-agent-preset-app
+          dist="$RUNNER_TEMP/dist"
+          mkdir "$dist"
+          python3 - "$root/expected.json" "$SOURCE_BASE" "$dist" "$RUNNER_TEMP/observed.json" <<'PY'
+          import hashlib,json,pathlib,sys,urllib.parse,urllib.request
+          expected_path,base,out_path,receipt_path=sys.argv[1:]
+          previous=json.load(open(expected_path,encoding='utf-8'))
+          out=pathlib.Path(out_path)
+          files={}
+          for rel in sorted(previous['files']):
+              url=urllib.parse.urljoin(base,rel)
+              request=urllib.request.Request(url,headers={'User-Agent':'ops-mobile-agent-bootstrap-refresh/1','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(request,timeout=90) as response:
+                  data=response.read(); observed=response.geturl()
+              target=out/rel; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(data)
+              files[rel]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
+          actual=sorted(path.relative_to(out).as_posix() for path in out.rglob('*') if path.is_file())
+          assert actual==sorted(files)
+          value={'schema':'semantic-map-build-artifact/1','moduleCount':previous.get('moduleCount',185),'files':files}
+          pathlib.Path(expected_path).write_text(json.dumps(value,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          rows=[{'path':path,'bytes':spec['bytes'],'sha256':spec['sha256']} for path,spec in sorted(files.items())]
+          receipt={'schema':'ops.mobileAgentBootstrapRefresh/1','status':'PASS','authority':False,'sourceBase':base,'files':len(rows),'totalBytes':sum(row['bytes'] for row in rows),'rows':rows}
+          pathlib.Path(receipt_path).write_text(json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          print(json.dumps({'status':'PASS','files':len(rows),'bytes':receipt['totalBytes']}))
+          PY
+
+          archive="$RUNNER_TEMP/app.tar.gz"
+          carrier="$RUNNER_TEMP/app.tar.gz.b64.txt"
+          (cd "$dist" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          base64 -w0 "$archive" > "$carrier"
+          python3 - "$root/manifest.json" "$root/expected.json" "$archive" "$carrier" <<'PY'
+          import hashlib,json,pathlib,sys
+          manifest_path,expected_path,archive_path,carrier_path=map(pathlib.Path,sys.argv[1:])
+          app=json.loads(manifest_path.read_text(encoding='utf-8'))
+          expected=json.loads(expected_path.read_text(encoding='utf-8'))
+          rows=[{'path':path,'bytes':spec['bytes'],'sha256':spec['sha256']} for path,spec in sorted(expected['files'].items())]
+          canonical=json.dumps(rows,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()
+          tree=hashlib.sha256(canonical).hexdigest()
+          archive=archive_path.read_bytes(); carrier=carrier_path.read_bytes()
+          app['bootstrap']={
+            'kind':'verified-existing-static-projection',
+            'baseUrl':'https://mobile-agent.roccho.workers.dev/',
+            'allowedUntilSourceAuthorityPromotion':True,
+            'observedDistTreeDigest':'sha256:'+tree,
+            'allFilesHashPinned':True,
+          }
+          app['publication']={
+            'distTreeDigest':'sha256:'+tree,
+            'listedFiles':len(rows),
+            'totalBytes':sum(row['bytes'] for row in rows),
+            'tag':'mobile-agent-preset-'+tree,
+            'archive':{
+              'name':f'mobile-agent-preset.{tree}.tar.gz',
+              'bytes':len(archive),
+              'sha256':'sha256:'+hashlib.sha256(archive).hexdigest(),
+            },
+            'carrier':{
+              'name':f'mobile-agent-preset.{tree}.tar.gz.b64.txt',
+              'bytes':len(carrier),
+              'sha256':'sha256:'+hashlib.sha256(carrier).hexdigest(),
+              'codec':'standard-base64-no-whitespace',
+            },
+          }
+          app['status']='hash-locked-bootstrap'
+          manifest_path.write_text(json.dumps(app,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+          print(json.dumps({'tree':'sha256:'+tree,'archiveBytes':len(archive),'carrierBytes':len(carrier)}))
+          PY
+
+      - name: Prove the pinned App and existing presets in Chrome
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=verification/mobile-agent-preset-app
+          node "$root/generate-urls.mjs" "$RUNNER_TEMP/dist" "$root/manifest.json" "$SOURCE_BASE" "$RUNNER_TEMP/urls.json"
+          python3 -m pip install --quiet --disable-pip-version-check playwright==1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          CHROME_BIN="$chrome" python3 "$root/browser-smoke.py" "$RUNNER_TEMP/urls.json" "$RUNNER_TEMP/browser-receipt.json" "$RUNNER_TEMP/screenshots"
+          python3 - "$RUNNER_TEMP/browser-receipt.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert value['status']=='PASS'
+          assert [case['pattern'] for case in value['cases']]==['graph/1','map/1','seq/1']
+          assert all(case['maxGraph'] and case['browserErrors']==0 and case['failedResponses']==0 for case in value['cases'])
+          PY
+
+      - name: Commit only the observed byte lock
+        working-directory: product
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          test "$(git diff --name-only | LC_ALL=C sort | paste -sd, -)" = "verification/mobile-agent-preset-app/expected.json,verification/mobile-agent-preset-app/manifest.json"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add verification/mobile-agent-preset-app/expected.json verification/mobile-agent-preset-app/manifest.json
+          git commit -m 'fix: pin the current existing preset App bytes'
+          git push origin "$TARGET_BRANCH"
