@@ -1,0 +1,41 @@
+{
+  "schema": "ops.mobileAgentSeqCarrier/1",
+  "authority": false,
+  "status": "candidate",
+  "parts": [
+    ".github/transport/mobile-agent-seq-app.br.b64.part00",
+    ".github/transport/mobile-agent-seq-app.br.b64.part01",
+    ".github/transport/mobile-agent-seq-app.br.b64.part02",
+    ".github/transport/mobile-agent-seq-app.br.b64.part03",
+    ".github/transport/mobile-agent-seq-app.br.b64.part04"
+  ],
+  "brotli": {
+    "bytes": 382497,
+    "sha256": "sha256:4bf71a4ba919ec06c55b65eae31c350fcd2a0a9b091c116f270b7816491c6c97"
+  },
+  "app": {
+    "path": "app/index.html",
+    "bytes": 2412388,
+    "sha256": "sha256:3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6"
+  },
+  "runtime": {
+    "preset": "seq/1",
+    "renderer": "existing renderer-maxgraph",
+    "interactionShell": "existing",
+    "codec": "existing protocol-v3 #smap",
+    "case": "case.json"
+  },
+  "provider": {
+    "kind": "cloudflare-pages",
+    "project": "stg-mobile-agent",
+    "productionBranch": "proposals",
+    "stableBase": "https://stg-mobile-agent.pages.dev/"
+  },
+  "boundary": {
+    "sourceCloneUsed": false,
+    "sourceBuildUsed": false,
+    "customSeqImplementation": false,
+    "exampleHtmlIsProof": false,
+    "publicChromeRequired": true
+  }
+}

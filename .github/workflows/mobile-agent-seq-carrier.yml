@@ -1,0 +1,277 @@
+name: Mobile Agent seq Carrier
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-seq-carrier.yml'
+      - 'verification/mobile-agent-seq-carrier/**'
+  push:
+    branches: [proposals]
+    paths:
+      - '.github/workflows/mobile-agent-seq-carrier.yml'
+      - 'verification/mobile-agent-seq-carrier/**'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      archive_name: ${{ steps.identity.outputs.archive_name }}
+      release_tag: ${{ steps.identity.outputs.release_tag }}
+      app_sha: ${{ steps.identity.outputs.app_sha }}
+      app_bytes: ${{ steps.identity.outputs.app_bytes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+
+      - name: Reconstruct the exact existing preset App from GitHub blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROJECTION_REF: projection/mobile-agent-preset-app-3a8db870
+          PART0_PATH: projection/mobile-agent-preset-app-3a8db870/app-index.br.b64.part000
+          PART2_PATH: projection/mobile-agent-preset-app-3a8db870/app-index.br.b64.part002
+          CANDIDATE_A: ebdb39084fa3cc57b0295818f6f339f62f0fca90
+          CANDIDATE_B: 23fe5973dc2e875ef41cf0bbfe1101d4a080d6a8
+          EXPECTED_APP_BYTES: '2412388'
+          EXPECTED_APP_SHA: 3a8db8703aeb78ed2aded4292c554930daf16e6825dd1ccde83fd9bf680408d6
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          mkdir -p "$root/dist/app" "$root/chunks"
+          fetch_path() {
+            gh api -X GET "repos/$GITHUB_REPOSITORY/contents/$1" -f ref="$PROJECTION_REF" --jq .content \
+              | tr -d '\n' | base64 --decode > "$2"
+          }
+          fetch_blob() {
+            gh api "repos/$GITHUB_REPOSITORY/git/blobs/$1" --jq .content \
+              | tr -d '\n' | base64 --decode > "$2"
+          }
+          fetch_path "$PART0_PATH" "$root/chunks/part0"
+          fetch_path "$PART2_PATH" "$root/chunks/part2"
+          fetch_blob "$CANDIDATE_A" "$root/chunks/candidate-a"
+          fetch_blob "$CANDIDATE_B" "$root/chunks/candidate-b"
+          node - "$root" "$EXPECTED_APP_BYTES" "$EXPECTED_APP_SHA" <<'JS'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const zlib = require('node:zlib');
+          const path = require('node:path');
+          const [root, expectedBytesText, expectedSha] = process.argv.slice(2);
+          const expectedBytes = Number(expectedBytesText);
+          const names = ['part0', 'part2', 'candidate-a', 'candidate-b'];
+          const chunks = Object.fromEntries(names.map(name => [name, fs.readFileSync(path.join(root, 'chunks', name), 'utf8').replace(/\s+/gu, '')]));
+          function* permutations(values, prefix = []) {
+            if (values.length === 0) { yield prefix; return; }
+            for (let index = 0; index < values.length; index += 1) {
+              yield* permutations([...values.slice(0, index), ...values.slice(index + 1)], [...prefix, values[index]]);
+            }
+          }
+          const attempts = [];
+          let selected = null;
+          for (const order of permutations(names)) {
+            for (const mode of ['joined-base64', 'decoded-parts']) {
+              try {
+                const br = mode === 'joined-base64'
+                  ? Buffer.from(order.map(name => chunks[name]).join(''), 'base64')
+                  : Buffer.concat(order.map(name => Buffer.from(chunks[name], 'base64')));
+                const html = zlib.brotliDecompressSync(br);
+                const sha = crypto.createHash('sha256').update(html).digest('hex');
+                attempts.push({ order, mode, brBytes: br.length, htmlBytes: html.length, sha });
+                if (html.length === expectedBytes && sha === expectedSha) {
+                  selected = { order, mode, br, html, sha };
+                  break;
+                }
+              } catch (error) {
+                attempts.push({ order, mode, error: String(error.message || error) });
+              }
+            }
+            if (selected) break;
+          }
+          if (!selected) {
+            fs.writeFileSync(path.join(root, 'reconstruction-failure.json'), `${JSON.stringify({ names, chunkChars: Object.fromEntries(names.map(name => [name, chunks[name].length])), attempts }, null, 2)}\n`);
+            throw new Error('no GitHub blob ordering reconstructed the fixed existing App');
+          }
+          fs.writeFileSync(path.join(root, 'dist/app/index.html'), selected.html);
+          fs.writeFileSync(path.join(root, 'app.br'), selected.br);
+          fs.writeFileSync(path.join(root, 'reconstruction.json'), `${JSON.stringify({ schema: 'ops.mobileAgentSeqCarrierReconstruction/1', status: 'PASS', authority: false, order: selected.order, mode: selected.mode, brotliBytes: selected.br.length, appBytes: selected.html.length, appSha256: `sha256:${selected.sha}`, implementationRewritten: false }, null, 2)}\n`);
+          console.log(JSON.stringify({ status: 'PASS', order: selected.order, mode: selected.mode, appBytes: selected.html.length, appSha256: selected.sha }));
+          JS
+          test "$(wc -c < "$root/dist/app/index.html")" -eq "$EXPECTED_APP_BYTES"
+          test "$(sha256sum "$root/dist/app/index.html" | cut -d' ' -f1)" = "$EXPECTED_APP_SHA"
+          for marker in graph/1 map/1 seq/1 maxgraph; do grep -Fi "$marker" "$root/dist/app/index.html" >/dev/null; done
+          cp verification/mobile-agent-seq-carrier/cases.json "$root/cases.json"
+
+      - name: Prove seq/1, maxGraph and interaction locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/result/dist" > "$RUNNER_TEMP/result/http.log" 2>&1 &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 100); do curl -fsS http://127.0.0.1:4173/app/ >/dev/null && break; sleep .2; done
+          node verification/mobile-agent-seq-carrier/smoke.mjs "$RUNNER_TEMP/result/cases.json" http://127.0.0.1:4173/ "$chrome" "$RUNNER_TEMP/result/local-proof"
+          "$chrome" --version > "$RUNNER_TEMP/result/chrome-version.txt"
+
+      - name: Build immutable seq Carrier identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          mkdir -p "$root/carrier/dist/app"
+          cp "$root/dist/app/index.html" "$root/carrier/dist/app/index.html"
+          cp "$root/cases.json" "$root/carrier/cases.json"
+          cp "$root/reconstruction.json" "$root/carrier/reconstruction.json"
+          app_sha="$(sha256sum "$root/dist/app/index.html" | cut -d' ' -f1)"
+          app_bytes="$(wc -c < "$root/dist/app/index.html")"
+          python3 - "$root/carrier" "$app_sha" "$app_bytes" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          value={'schema':'mobile-agent-seq-carrier/1','authority':False,'status':'PASS','app':{'path':'dist/app/index.html','bytes':int(sys.argv[3]),'sha256':'sha256:'+sys.argv[2]},'preset':'seq/1','implementationRewritten':False,'sourceCloneUsed':False,'sourceBuildUsed':False,'stableBase':'https://stg-mobile-agent.pages.dev/'}
+          (root/'manifest.json').write_text(json.dumps(value,sort_keys=True,separators=(',',':'))+'\n',encoding='utf-8')
+          PY
+          archive="$root/mobile-agent-seq-carrier.tar.gz"
+          (cd "$root/carrier" && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX,go-s' -cf - .) | gzip -n > "$archive"
+          carrier_sha="$(sha256sum "$archive" | cut -d' ' -f1)"
+          name="mobile-agent-seq-carrier.$carrier_sha.tar.gz"
+          mv "$archive" "$root/$name"
+          echo "archive_name=$name" >> "$GITHUB_OUTPUT"
+          echo "release_tag=mobile-agent-seq-carrier-$carrier_sha" >> "$GITHUB_OUTPUT"
+          echo "app_sha=$app_sha" >> "$GITHUB_OUTPUT"
+          echo "app_bytes=$app_bytes" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile-agent-seq-carrier-${{ github.run_id }}
+          path: ${{ runner.temp }}/result/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-deploy:
+    needs: prove
+    if: github.event_name == 'push' && github.ref == 'refs/heads/proposals'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: cloudflare-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-agent-seq-carrier-${{ github.run_id }}
+          path: ${{ runner.temp }}/result
+
+      - name: Publish immutable GitHub seq Carrier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prove.outputs.release_tag }}
+          ARCHIVE_NAME: ${{ needs.prove.outputs.archive_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/result"
+          assets=("$root/$ARCHIVE_NAME" "$root/carrier/manifest.json" "$root/carrier/cases.json" "$root/carrier/reconstruction.json")
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Mobile Agent existing seq/1 Carrier' --notes 'Immutable non-authority Carrier for the existing seq/1 maxGraph App.' "${assets[@]}"
+          else
+            mkdir "$RUNNER_TEMP/release-readback"
+            for asset in "${assets[@]}"; do name="$(basename "$asset")"; gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/release-readback"; cmp "$asset" "$RUNNER_TEMP/release-readback/$name"; done
+          fi
+
+      - name: Create or verify stg-mobile-agent Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID"; test -n "$CLOUDFLARE_API_TOKEN"
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/stg-mobile-agent"
+          code="$(curl -sS -o "$RUNNER_TEMP/project.json" -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' "$api")"
+          if [ "$code" = 404 ]; then
+            npx --yes wrangler@4.112.0 pages project create stg-mobile-agent --production-branch proposals
+          elif [ "$code" = 200 ]; then
+            python3 - "$RUNNER_TEMP/project.json" <<'PY'
+          import json,sys
+          value=json.load(open(sys.argv[1])); assert value['success'] is True; assert value['result']['name']=='stg-mobile-agent'; assert value['result']['production_branch']=='proposals'
+          PY
+          else
+            cat "$RUNNER_TEMP/project.json" >&2; exit 1
+          fi
+
+      - name: Deploy the same seq Carrier App
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(npx --yes wrangler@4.112.0 pages deploy "$RUNNER_TEMP/result/carrier/dist" --project-name stg-mobile-agent --branch proposals --commit-hash "$GITHUB_SHA" --commit-message 'Existing seq/1 Carrier' 2>&1)"
+          printf '%s\n' "$output"
+          deployment="$(printf '%s\n' "$output" | grep -Eo 'https://[A-Za-z0-9.-]+\.pages\.dev' | grep -v '^https://stg-mobile-agent\.pages\.dev$' | head -n1)"
+          test -n "$deployment"
+          echo "stable_base=https://stg-mobile-agent.pages.dev/" >> "$GITHUB_OUTPUT"
+          echo "deployment_base=$deployment/" >> "$GITHUB_OUTPUT"
+
+      - name: Read back bytes and prove public seq URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          for entry in stable=${{ steps.deploy.outputs.stable_base }} immutable=${{ steps.deploy.outputs.deployment_base }}; do
+            name="${entry%%=*}"; base="${entry#*=}"
+            curl --fail-with-body --location --retry 5 --retry-all-errors --silent --show-error -H 'Cache-Control: no-cache' "${base}app/" -o "$RUNNER_TEMP/$name-app.html"
+            test "$(wc -c < "$RUNNER_TEMP/$name-app.html")" -eq "${{ needs.prove.outputs.app_bytes }}"
+            test "$(sha256sum "$RUNNER_TEMP/$name-app.html" | cut -d' ' -f1)" = "${{ needs.prove.outputs.app_sha }}"
+          done
+          npm install --ignore-scripts --no-save --no-audit --no-fund playwright-core@1.55.0
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"; test -n "$chrome"
+          node verification/mobile-agent-seq-carrier/smoke.mjs "$RUNNER_TEMP/result/carrier/cases.json" "${{ steps.deploy.outputs.stable_base }}" "$chrome" "$RUNNER_TEMP/result/stable-proof"
+          node verification/mobile-agent-seq-carrier/smoke.mjs "$RUNNER_TEMP/result/carrier/cases.json" "${{ steps.deploy.outputs.deployment_base }}" "$chrome" "$RUNNER_TEMP/result/immutable-proof"
+          "$chrome" --version > "$RUNNER_TEMP/result/public-chrome-version.txt"
+
+      - uses: actions/upload-artifact@v4
+        id: evidence
+        with:
+          name: mobile-agent-seq-public-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/result/stable-proof/
+            ${{ runner.temp }}/result/immutable-proof/
+            ${{ runner.temp }}/result/carrier/manifest.json
+            ${{ runner.temp }}/result/public-chrome-version.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record only the verified seq URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(cat "$RUNNER_TEMP/result/stable-proof/url.txt")"
+          body="## Existing seq/1 public URL — PASS
+
+$url
+
+- stable and deployment-specific Chrome readback: PASS
+- existing seq/1, maxGraph, edit→undo, Source, handoff and review: PASS
+- run: $RUN_URL
+- evidence: $ARTIFACT_ID / $ARTIFACT_DIGEST"
+          gh issue comment 242 --repo "$GITHUB_REPOSITORY" --body "$body"
