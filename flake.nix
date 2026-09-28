@@ -63,6 +63,10 @@
           provider-effect-runtime = import ./tools/provider-effect-runtime.nix {
             pkgs = nixpkgs.legacyPackages.${system};
           };
+          voice-ui-target-runtime = import ./packages/voice-ui-target-runtime {
+            pkgs = nixpkgs.legacyPackages.${system};
+            opsSha = self.rev or "working-tree";
+          };
           cdp-tty = nixpkgs.legacyPackages.${system}.callPackage ./packages/cdp-tty { };
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
@@ -144,6 +148,7 @@
           ops-cdp-core = existing.ops-cdp-core;
           cdp-tty = packages.${system}.cdp-tty.proof;
           provider-effect-runtime = packages.${system}.provider-effect-runtime.check;
+          voice-ui-target-runtime = packages.${system}.voice-ui-target-runtime.boundaryCheck;
           jev =
             let
               pkgs = nixpkgs.legacyPackages.${system};
