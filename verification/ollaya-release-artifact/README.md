@@ -52,7 +52,6 @@ TypeSafe-compatible typed decision
 
 This PR should remain a proof. If PASS, production publication should reuse an existing generic release/Carry path rather than create an Ollaya-specific deployment framework.
 
-
 ## Execution evidence
 
 Canonical PASS run:
@@ -95,3 +94,9 @@ The claim is proven for this fixed environment:
 > Ollaya v0.7.5 + a materialized Laya model store can be distributed as one Linux amd64 artifact and replayed on a fresh Ubuntu 24.04 CPU runner to serve a TypeSafe-compatible typed decision without repository source or a consumer-side model pull.
 
 This proves portability and runtime closure for the tested artifact. It does not prove production quality, cross-OS portability, or that Ollaya should replace Jev.
+
+## Final-tree boundary
+
+The proof workflow was intentionally transient. After the PASS above was recorded, `.github/workflows/ollaya-release-artifact-proof.yml` was removed from the final PR tree so a one-shot experiment does not become permanent CI or an Ollaya-specific deployment framework.
+
+Exact executed workflow source remains recoverable from Git history at `ec233cb689170b5cf2e3490beeb58200530d27a4` and from run `36407408386`.
