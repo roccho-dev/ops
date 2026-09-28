@@ -1,5 +1,5 @@
 import path from "node:path";
-import { loadJson, requireCondition as need, exactObjectKeys, sha256File } from "./modules/core.mjs";
+import { loadJson, requireCondition as need, exactObjectKeys, sha256File, exactSha } from "./modules/core.mjs";
 import { runTargetRuntime } from "./lib.mjs";
 
 // Called only by the generated entry in the immutable Nix package. There is no
@@ -10,6 +10,8 @@ export function main(config, root, argv = process.argv.slice(2)) {
     return;
   }
   need(argv.length === 2 && argv[0] === "--request", "usage: voice-ui-target-runtime --request approved.json | --describe");
+  // Input-overridden or unversioned Nix evaluations may run tests, never effects.
+  exactSha(config.opsSha, "installed ops revision");
   const request = loadJson(argv[1]);
   exactObjectKeys(request, ["kind", "expected", "inputs", "output"], "approved request");
   exactObjectKeys(request.inputs, ["projectionReceipt", "isolationVerdict"], "approved inputs");
