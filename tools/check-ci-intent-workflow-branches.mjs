@@ -1,291 +1,172 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import process from "node:process";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(process.argv[2] ?? ".");
-const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
-const loadJsonl = (relative) => read(relative)
-  .split(/\r?\n/)
-  .filter((line) => line.trim())
-  .map((line, index) => {
-    try {
-      return JSON.parse(line);
-    } catch (error) {
-      throw new Error(`${relative}:${index + 1}: ${error.message}`);
+const EXACT = "${{ github.sha }}";
+const hasSecret = value => /\bsecrets(?:\s*[.\[]|")/.test(JSON.stringify(value));
+const list = value => value === undefined ? [] : Array.isArray(value) ? value : [value];
+const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+const need = (ok, message) => { if (!ok) throw new Error(message); };
+
+// Deliberately bounded admission, not a general GitHub expression interpreter.
+// Unknown expression forms fail closed instead of being guessed safe.
+function guarded(job, events, allowed) {
+  const guard = typeof job.if === "string" ? job.if.trim().replace(/^\$\{\{\s*|\s*\}\}$/g, "") : "";
+  if (/[|!()?:]/.test(guard)) return false;
+  const parts = guard.split(/\s*&&\s*/);
+  return allowed.some(event => {
+    const eventOnly = events.length === 1 && events[0] === event;
+    if (!eventOnly && !parts.includes(`github.event_name == '${event}'`)) return false;
+    if (event === "issue_comment") {
+      return parts.includes("github.event.comment.user.login == github.repository_owner")
+        && parts.some(p => /^github\.event\.comment\.body == '[^']+'$/.test(p))
+        && parts.some(p => /^github\.event\.issue\.number == [0-9]+$/.test(p));
     }
+    return true;
   });
-
-const records = loadJsonl("ci.intent.v1.jsonl")
-  .filter((record) => record.kind === "ci.intent.v1" && record.provider === "github-actions");
-const boundaries = loadJsonl("contracts/secret-effect-boundary.v1.jsonl")
-  .filter((record) => record.kind === "ops.secretEffectBoundary.v1");
-const boundaryByPath = new Map(boundaries.map((record) => [record.path, record]));
-const failures = [];
-const indent = (line) => line.match(/^(\s*)/)[1].length;
-const SHA40 = /^[0-9a-f]{40}$/;
-
-function triggerBlock(text, trigger) {
-  const lines = text.split(/\r?\n/);
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(new RegExp(`^(\\s*)${trigger}:\\s*(?:#.*)?$`));
-    if (!match) continue;
-    const base = match[1].length;
-    const body = [];
-    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
-      const line = lines[cursor];
-      if (!line.trim() || line.trim().startsWith("#")) continue;
-      if (indent(line) <= base) break;
-      body.push(line);
-    }
-    return body;
-  }
-  return null;
 }
 
-function inlineArray(value, label) {
-  const match = value.trim().match(/^\[(.*)\]$/);
-  if (!match) throw new Error(`${label}: expected inline array`);
-  return match[1]
-    .split(",")
-    .map((part) => part.trim().replace(/^['\"]|['\"]$/g, ""))
-    .filter(Boolean);
-}
-
-function pushBranches(text, relative) {
-  const body = triggerBlock(text, "push");
-  if (!body) return null;
-  for (let index = 0; index < body.length; index += 1) {
-    const match = body[index].match(/^(\s*)branches:\s*(.*?)\s*$/);
-    if (!match) continue;
-    if (match[2]) return inlineArray(match[2], `${relative}:push.branches`);
-    const base = match[1].length;
-    const values = [];
-    for (let cursor = index + 1; cursor < body.length; cursor += 1) {
-      const line = body[cursor];
-      if (indent(line) <= base) break;
-      const item = line.match(/^\s*-\s*['\"]?([^'\"#]+?)['\"]?\s*(?:#.*)?$/);
-      if (!item) throw new Error(`${relative}:push.branches contains an unsupported line: ${line.trim()}`);
-      values.push(item[1].trim());
-    }
-    return values;
-  }
-  return ["*"];
-}
-
-const sameSet = (left, right) => {
-  const a = [...left].sort();
-  const b = [...right].sort();
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-};
-
-function jobBlocks(text) {
-  const lines = text.split(/\r?\n/);
-  const jobsIndex = lines.findIndex((line) => /^jobs:\s*$/.test(line));
-  if (jobsIndex < 0) return [];
-  const blocks = [];
-  for (let index = jobsIndex + 1; index < lines.length; index += 1) {
-    const match = lines[index].match(/^  ([A-Za-z0-9_-]+):\s*$/);
-    if (!match) continue;
-    const body = [lines[index]];
-    let cursor = index + 1;
-    while (cursor < lines.length && (!lines[cursor].trim() || indent(lines[cursor]) > 2)) {
-      body.push(lines[cursor]);
-      cursor += 1;
-    }
-    blocks.push({ name: match[1], text: body.join("\n") });
-    index = cursor - 1;
-  }
-  return blocks;
-}
-
-function stepBlocks(job) {
-  const lines = job.split(/\r?\n/);
-  const stepsIndex = lines.findIndex((line) => /^    steps:\s*$/.test(line));
-  if (stepsIndex < 0) return [];
-  const blocks = [];
-  for (let index = stepsIndex + 1; index < lines.length; index += 1) {
-    if (!/^      -\s+/.test(lines[index])) continue;
-    const body = [lines[index]];
-    let cursor = index + 1;
-    while (cursor < lines.length && (!lines[cursor].trim() || indent(lines[cursor]) > 6)) {
-      body.push(lines[cursor]);
-      cursor += 1;
-    }
-    blocks.push(body.join("\n"));
-    index = cursor - 1;
-  }
-  return blocks;
-}
-
-const hasProviderSecret = (text) => /\$\{\{\s*secrets\.[A-Za-z0-9_]+\s*\}\}/.test(text);
-
-function checkoutRefs(job) {
-  const refs = [];
-  for (const step of stepBlocks(job)) {
-    if (!/uses:\s*actions\/checkout@/.test(step)) continue;
-    const match = step.match(/^\s+ref:\s*(.+?)\s*$/m);
-    refs.push(match ? match[1].replace(/^['\"]|['\"]$/g, "") : "github.sha");
-  }
-  return refs;
-}
-
-function exactSourceRef(value) {
-  if (SHA40.test(value)) return true;
-  return /github\.sha|source_sha|source-sha|candidate_sha|candidate-sha|head_sha|head-sha/.test(value);
-}
-
-function analyzeEffectWorkflow(relative, text, boundary) {
+export function analyzeEffectWorkflow(workflow, boundary) {
   const issues = [];
-  if (/pull_request_target\s*:/.test(text)) issues.push("pull_request_target is forbidden");
-  if (/secrets\s*:\s*inherit/.test(text)) issues.push("secrets: inherit is forbidden");
-  if (/envs-old|envctl\s+auth\s+exec|auth[-_]bundle|old private artifact/i.test(text)) {
-    issues.push("old envs/auth fallback marker is forbidden");
-  }
-
-  const jobs = jobBlocks(text).filter((job) => hasProviderSecret(job.text));
-  if (jobs.length === 0) issues.push("declared effect workflow has no provider-secret job");
-
-  for (const job of jobs) {
-    const header = job.text.split(/^    steps:\s*$/m)[0];
-    if (hasProviderSecret(header)) issues.push(`${job.name}: provider secret is exposed at job scope`);
-
-    const allowed = boundary.allowedEvents ?? [];
-    if (allowed.length === 0) issues.push(`${job.name}: allowedEvents is empty`);
-    const eventGuarded = allowed.some((event) =>
-      new RegExp(`github\\.event_name\\s*==\\s*['\"]${event}['\"]`).test(job.text)
-      || (triggerBlock(text, event) !== null && ["issue_comment", "workflow_dispatch"].includes(event)
-        && triggerBlock(text, "pull_request") === null && triggerBlock(text, "push") === null
-        && triggerBlock(text, "workflow_run") === null));
-    if (!eventGuarded) issues.push(`${job.name}: provider-secret job is not limited to ${allowed.join("/")}`);
-    if (/github\.event_name\s*==\s*['\"](?:pull_request|push|workflow_run)['\"]/.test(job.text)) {
-      issues.push(`${job.name}: automatic event reaches provider-secret job`);
+  try {
+    need(workflow && typeof workflow === "object", "workflow must be an object");
+    need(!/envs-old|envctl\s+auth\s+exec|auth[-_]bundle|old private artifact/i.test(JSON.stringify(workflow)), "historical auth fallback forbidden");
+    const events = typeof workflow.on === "string" ? [workflow.on]
+      : Array.isArray(workflow.on) ? workflow.on : Object.keys(workflow.on ?? {});
+    need(!events.includes("pull_request_target"), "pull_request_target forbidden");
+    need(!hasSecret(workflow.env), "workflow-scoped secret forbidden");
+    const jobs = workflow.jobs ?? {};
+    const effectNames = Object.keys(jobs).filter(name => hasSecret(jobs[name]));
+    need(effectNames.length > 0, "declared effect workflow has no visible secret job");
+    const allowed = boundary.allowedEvents;
+    need(Array.isArray(allowed) && allowed.length > 0
+      && allowed.every(event => ["workflow_dispatch", "issue_comment"].includes(event)), "invalid effect event contract");
+    const contributing = new Set(), visiting = new Set();
+    function visit(name) {
+      need(typeof name === "string" && jobs[name], `missing upstream job: ${name}`);
+      need(!visiting.has(name), "job dependency cycle");
+      if (contributing.has(name)) return;
+      visiting.add(name);
+      for (const parent of list(jobs[name].needs)) visit(parent);
+      visiting.delete(name); contributing.add(name);
     }
-
-    const environment = boundary.environment;
-    const environmentPattern = new RegExp(`environment:\\s*(?:\\n\\s+name:\\s*)?${environment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`);
-    if (!environmentPattern.test(job.text)) issues.push(`${job.name}: static environment ${environment} is missing`);
-    if (/environment:\s*(?:\n\s+name:\s*)?\$\{\{/.test(job.text)) issues.push(`${job.name}: dynamic environment is forbidden`);
-
-    for (const ref of checkoutRefs(job.text)) {
-      if (!exactSourceRef(ref)) issues.push(`${job.name}: checkout is not bound to an exact source identity: ${ref}`);
-      if (/pull_request\.head|\bproposals\b|\bmain\b/.test(ref)) issues.push(`${job.name}: branch/PR-head checkout is forbidden after effect admission: ${ref}`);
+    for (const name of effectNames) {
+      const job = jobs[name];
+      need(guarded(job, events, allowed), `${name}: automatic or unsupported event guard`);
+      need((typeof job.environment === "string" ? job.environment : job.environment?.name) === boundary.environment,
+        `${name}: static Environment differs`);
+      need(!hasSecret(job.env), `${name}: job-scoped secret forbidden`);
+      need(!job.secrets, `${name}: inherited/reusable secrets forbidden`);
+      visit(name);
     }
-
-    for (const step of stepBlocks(job.text)) {
-      if (!hasProviderSecret(step)) continue;
-      const uses = step.match(/uses:\s*([^\s]+)/);
-      if (uses && !uses[1].startsWith("./")) {
-        const ref = uses[1].split("@")[1] ?? "";
-        if (!SHA40.test(ref)) issues.push(`${job.name}: third-party action receiving a secret is not pinned by full SHA: ${uses[1]}`);
+    for (const name of contributing) {
+      const job = jobs[name];
+      need(!job.uses && !job.strategy, `${name}: reusable jobs/matrix require explicit proof`);
+      need(!job["continue-on-error"], `${name}: continue-on-error forbidden`);
+      need(Array.isArray(job.steps) && job.steps.length > 0, `${name}: empty execution path`);
+      for (const step of job.steps) {
+        if (step.if === "github.event_name == 'pull_request'") {
+          need(!hasSecret(step), `${name}: PR-only step cannot receive a secret`);
+          continue; // all allowed effects above are manual or owner-command events
+        }
+        need(!step["continue-on-error"], `${name}: continued failure forbidden`);
+        if (step.uses) {
+          need(typeof step.uses === "string", `${name}: invalid action`);
+          const action = step.uses.match(/^([A-Za-z0-9_.\/-]+)@([0-9a-f]{40})$/);
+          need(action && !action[1].startsWith("./"), `${name}: all contributing Actions must use full SHA; local/reusable actions need expansion`);
+          if (action[1] === "actions/checkout") {
+            need((step.with?.ref ?? EXACT) === EXACT, `${name}: source must equal exact workflow revision, not a variable name or branch`);
+            need(!step.with?.repository || step.with.repository === "${{ github.repository }}", `${name}: external checkout requires separate artifact admission`);
+          }
+        }
+        if (step.run) {
+          need(typeof step.run === "string", `${name}: invalid run`);
+          need(!/\b(?:npx|npm\s+(?:install|ci)|pip\s+install)\b/.test(step.run),
+            `${name}: runtime package acquisition must move into an approved fixed closure`);
+          need(!/\b(?:git\s+(?:clone|fetch|checkout|switch)|curl[^\n]*\|\s*(?:ba)?sh)\b/.test(step.run),
+            `${name}: mutable source or downloaded executable inside effect path`);
+        }
       }
-      if (!/\brun:\s*[|>]?/.test(step) && !uses) issues.push(`${job.name}: secret-bearing step has no explicit executable`);
     }
-  }
-  return issues.map((message) => `${relative}: ${message}`);
+    return { issues, contributingJobs: [...contributing].sort() };
+  } catch (error) { issues.push(error.message); return { issues, contributingJobs: [] }; }
 }
 
-function selftest() {
-  const contract = { allowedEvents: ["workflow_dispatch"], environment: "cloudflare-production" };
-  const unsafe = `on:\n  pull_request:\njobs:\n  effect:\n    environment: cloudflare-production\n    env:\n      TOKEN: \${{ secrets.TOKEN }}\n    steps:\n      - uses: actions/checkout@v4\n      - run: echo effect\n`;
-  assert.ok(analyzeEffectWorkflow("unsafe.yml", unsafe, contract).length > 0);
-
-  const safe = `on:\n  pull_request:\n  workflow_dispatch:\njobs:\n  effect:\n    if: github.event_name == 'workflow_dispatch'\n    environment: cloudflare-production\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\n        with:\n          ref: \${{ github.sha }}\n      - env:\n          TOKEN: \${{ secrets.TOKEN }}\n        run: echo effect\n`;
-  assert.deepEqual(analyzeEffectWorkflow("safe.yml", safe, contract), []);
-
-  const fallback = safe.replace("echo effect", "envctl auth exec echo effect");
-  assert.ok(analyzeEffectWorkflow("fallback.yml", fallback, contract).some((value) => value.includes("fallback")));
+export function selftest() {
+  const action = "actions/checkout@" + "1".repeat(40);
+  const policy = {allowedEvents:["workflow_dispatch"],environment:"cloudflare-production"};
+  const safe = {on:{pull_request:{},workflow_dispatch:{}},jobs:{
+    materialize:{steps:[{uses:action,with:{ref:EXACT}},{run:"node checked-in-build.mjs"}]},
+    effect:{needs:["materialize"],if:"github.event_name == 'workflow_dispatch'",environment:"cloudflare-production",
+      steps:[{uses:action,with:{ref:EXACT}},{env:{TOKEN:"${{ secrets.TOKEN }}"},run:"node approved-effect.mjs"}]},
+  }};
+  assert.deepEqual(analyzeEffectWorkflow(safe,policy).issues,[]);
+  const cases = [
+    w=>{w.jobs.materialize.steps[0].uses="actions/checkout@v4";},
+    w=>{w.jobs.materialize.steps[0].with.ref="proposals";},
+    w=>{w.jobs.effect.steps[0].with.ref="${{ needs.materialize.outputs.source_sha }}";},
+    w=>{w.jobs.effect.if="github.event_name == 'workflow_dispatch' || true";},
+    w=>{w.jobs.effect.if="github.event_name == 'workflow_dispatch' && true ? true : true";},
+    w=>{w.jobs.effect.env={TOKEN:"${{ secrets.TOKEN }}"};},
+    w=>{w.jobs.effect.environment="${{ inputs.environment }}";},
+    w=>{w.jobs.effect.needs=["missing"];},
+    w=>{w.jobs.materialize.needs=["effect"];},
+    w=>{w.jobs.materialize.steps.push({uses:"./.github/actions/install"});},
+    w=>{w.jobs.materialize.steps.push({run:"npx --yes untrusted@1.0.0"});},
+    w=>{w.jobs.effect.steps[0]["continue-on-error"]=true;},
+    w=>{w.on={pull_request_target:{}};},
+    w=>{w.jobs.effect.steps.at(-1).run="envctl auth exec node effect.mjs";},
+  ];
+  const commentWorkflow=structuredClone(safe);
+  commentWorkflow.on={issue_comment:{}};commentWorkflow.jobs.effect.if="github.event_name == 'issue_comment'";
+  assert.ok(analyzeEffectWorkflow(commentWorkflow,{...policy,allowedEvents:["issue_comment"]}).issues.length);
+  for (const mutate of cases) {const w=structuredClone(safe);mutate(w);assert.ok(analyzeEffectWorkflow(w,policy).issues.length);}
+  const parity=structuredClone(safe);
+  parity.jobs.materialize.steps.push({if:"github.event_name == 'pull_request'",run:"git clone public-fixture"});
+  assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
+  parity.jobs.materialize.steps.at(-1).env={TOKEN:"${{ secrets.TOKEN }}"};
+  assert.ok(analyzeEffectWorkflow(parity,policy).issues.length);
+  return {positive:2,negative:cases.length+2};
 }
 
-selftest();
-
-const workflowDirectory = path.join(root, ".github/workflows");
-const activeWorkflows = fs.readdirSync(workflowDirectory)
-  .filter((name) => /\.ya?ml$/.test(name))
-  .map((name) => `.github/workflows/${name}`)
-  .sort();
-const activeSet = new Set(activeWorkflows);
-const intentSet = new Set(records.map((record) => record.path));
-const obsoleteSet = new Set(boundaries
-  .filter((record) => record.classification === "obsolete")
-  .map((record) => record.path));
-
-for (const [relative, boundary] of boundaryByPath) {
-  if (!relative || !["obsolete", "secret_bearing_effect"].includes(boundary.classification)) {
-    failures.push(`${relative || "<missing>"}: invalid secret-effect classification`);
+export function check(root) {
+  const read = p => fs.readFileSync(path.join(root,p),"utf8");
+  const jsonl = p => read(p).split(/\r?\n/).filter(s=>s.trim()).map(JSON.parse);
+  const intents = jsonl("ci.intent.v1.jsonl").filter(x=>x.kind==="ci.intent.v1" && x.provider==="github-actions");
+  const boundaries = jsonl("contracts/secret-effect-boundary.v1.jsonl");
+  need(new Set(intents.map(x=>x.path)).size===intents.length,"duplicate CI intents");
+  need(new Set(boundaries.map(x=>x.path)).size===boundaries.length,"duplicate effect contracts");
+  const byPath=new Map(boundaries.map(x=>[x.path,x]));
+  const names=fs.readdirSync(path.join(root,".github/workflows")).filter(n=>/\.ya?ml$/.test(n)).sort().map(n=>`.github/workflows/${n}`);
+  const workflows=[],failures=[];
+  for(const p of names) {
+    const parsed=spawnSync("yq",["-o=json",".",path.join(root,p)],{encoding:"utf8"});
+    need(parsed.status===0,`${p}: YAML parser failed; yq-go must be provided by the pinned check closure`);
+    const w=JSON.parse(parsed.stdout),intent=intents.find(x=>x.path===p),boundary=byPath.get(p);
+    need(intent,`${p}: no CI intent`);
+    const events=typeof w.on==="string"?[w.on]:Array.isArray(w.on)?w.on:Object.keys(w.on??{});
+    for(const event of intent.dispatch??[]) need(events.includes(event),`${p}: intent trigger ${event} absent`);
+    if(events.includes("push") && intent.dispatch.includes("push")) need(same(intent.push_branches??[],w.on.push?.branches??["*"]),`${p}: push branches differ`);
+    const secret=hasSecret(w);
+    if(secret) {
+      if(boundary?.classification!=="secret_bearing_effect") failures.push(`${p}: unclassified secret path`);
+      else failures.push(...analyzeEffectWorkflow(w,boundary).issues.map(s=>`${p}: ${s}`));
+    } else if(boundary?.classification==="secret_bearing_effect") failures.push(`${p}: effect declaration without secret job`);
+    if(boundary?.classification==="obsolete") failures.push(`${p}: obsolete workflow active`);
+    workflows.push({path:p,classification:secret?"secret_bearing_effect":"secret_free_verify"});
   }
-  if (boundary.classification === "obsolete" && activeSet.has(relative)) {
-    failures.push(`${relative}: obsolete workflow remains active`);
-  }
-  if (boundary.classification === "secret_bearing_effect" && !activeSet.has(relative)) {
-    failures.push(`${relative}: declared effect workflow is missing`);
-  }
+  for(const x of boundaries) need(x.kind==="ops.secretEffectBoundary.v1" && ["obsolete","secret_bearing_effect"].includes(x.classification),"invalid effect contract");
+  for(const i of intents) need(names.includes(i.path)||byPath.get(i.path)?.classification==="obsolete",`${i.path}: missing workflow`);
+  for(const b of boundaries.filter(b=>b.classification==="secret_bearing_effect")) need(names.includes(b.path),`${b.path}: missing declared effect`);
+  need(failures.length===0,failures.join("\n"));
+  return {kind:"ops.secretEffectBoundary.check.v1",status:"PASS",active:workflows.length,
+    secretBearingEffects:workflows.filter(w=>w.classification==="secret_bearing_effect").length,
+    obsolete:boundaries.filter(b=>b.classification==="obsolete").length,unclassified:0,workflows};
 }
-
-for (const relative of activeWorkflows) {
-  if (!intentSet.has(relative)) failures.push(`${relative}: active workflow has no ci.intent.v1 record`);
-  const text = read(relative);
-  const boundary = boundaryByPath.get(relative);
-  if (hasProviderSecret(text)) {
-    if (boundary?.classification !== "secret_bearing_effect") {
-      failures.push(`${relative}: provider-secret workflow is unclassified`);
-    } else {
-      failures.push(...analyzeEffectWorkflow(relative, text, boundary));
-    }
-  } else if (boundary?.classification === "secret_bearing_effect") {
-    failures.push(`${relative}: effect classification exists but provider secret is absent`);
-  }
+if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+  try {const tests=selftest();console.log(JSON.stringify(process.argv[2]==="--selftest"?tests:check(path.resolve(process.argv[2]??"."))));}
+  catch(error){console.error(`ci intent / effect path check failed\n${error.message}`);process.exitCode=1;}
 }
-
-for (const record of records) {
-  if (!record.path) {
-    failures.push("ci.intent.v1 record missing path");
-    continue;
-  }
-  if (!activeSet.has(record.path)) {
-    if (!obsoleteSet.has(record.path)) failures.push(`${record.path}: workflow file not readable and not classified obsolete`);
-    continue;
-  }
-  const workflow = read(record.path);
-  const dispatch = Array.isArray(record.dispatch) ? record.dispatch : [];
-  for (const trigger of ["pull_request", "workflow_dispatch"]) {
-    if (dispatch.includes(trigger) && triggerBlock(workflow, trigger) === null) {
-      failures.push(`${record.path}: intent declares ${trigger} but workflow lacks ${trigger} trigger`);
-    }
-  }
-  if (dispatch.includes("push")) {
-    const actual = pushBranches(workflow, record.path);
-    if (actual === null) {
-      failures.push(`${record.path}: intent declares push but workflow lacks push trigger`);
-      continue;
-    }
-    if (!Array.isArray(record.push_branches)) {
-      failures.push(`${record.path}: intent declares push but missing push_branches array; use ["*"] for no branch filter`);
-      continue;
-    }
-    if (!sameSet(record.push_branches, actual)) {
-      failures.push(`${record.path}: push branch mismatch: intent=${JSON.stringify(record.push_branches)} workflow=${JSON.stringify(actual)}`);
-    }
-  }
-}
-
-if (failures.length) {
-  console.error("ci intent / secret-effect boundary check failed");
-  for (const failure of failures) console.error(`- ${failure}`);
-  process.exit(1);
-}
-
-const classified = activeWorkflows.map((relative) => ({
-  path: relative,
-  classification: hasProviderSecret(read(relative)) ? "secret_bearing_effect" : "secret_free_verify",
-}));
-console.log(JSON.stringify({
-  kind: "ops.secretEffectBoundary.check.v1",
-  status: "PASS",
-  active: classified.length,
-  secretBearingEffects: classified.filter((item) => item.classification === "secret_bearing_effect").length,
-  obsolete: obsoleteSet.size,
-  unclassified: 0,
-  workflows: classified,
-}));

@@ -141,9 +141,7 @@ def main() -> None:
         raise RuntimeError("Cloudflare credentials are required")
 
     output = capture(
-        "npx",
-        "--yes",
-        "wrangler@4.112.0",
+        "wrangler",
         "pages",
         "deploy",
         str(staged / "site"),
