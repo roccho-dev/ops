@@ -210,7 +210,7 @@ function selftest() {
   const safe = `on:\n  pull_request:\n  workflow_dispatch:\njobs:\n  effect:\n    if: github.event_name == 'workflow_dispatch'\n    environment: cloudflare-production\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\n        with:\n          ref: \${{ github.sha }}\n      - env:\n          TOKEN: \${{ secrets.TOKEN }}\n        run: echo effect\n`;
   assert.deepEqual(analyzeEffectWorkflow("safe.yml", safe, contract), []);
 
-  const transitiveUnsafe = "on:\\n  workflow_dispatch:\\njobs:\\n  materialize:\\n    steps:\\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\\n        with:\\n          ref: proposals\\n  effect:\\n    needs: materialize\\n    environment: cloudflare-production\\n    steps:\\n      - env:\\n          TOKEN: ${{ secrets.TOKEN }}\\n        run: echo effect\\n";
+  const transitiveUnsafe = "on:\n  workflow_dispatch:\njobs:\n  materialize:\n    steps:\n      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262\n        with:\n          ref: proposals\n  effect:\n    needs: materialize\n    environment: cloudflare-production\n    steps:\n      - env:\n          TOKEN: ${{ secrets.TOKEN }}\n        run: echo effect\n";
   assert.ok(analyzeEffectWorkflow("transitive-unsafe.yml", transitiveUnsafe, contract).some((value) => value.includes("mutable branch checkout")));
   const fallback = safe.replace("echo effect", "envctl auth exec echo effect");
   assert.ok(analyzeEffectWorkflow("fallback.yml", fallback, contract).some((value) => value.includes("fallback")));
