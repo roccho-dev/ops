@@ -15,7 +15,7 @@ const need = (ok, message) => { if (!ok) throw new Error(message); };
 // Unknown expression forms fail closed instead of being guessed safe.
 function guarded(job, events, allowed) {
   const guard = typeof job.if === "string" ? job.if.trim().replace(/^\$\{\{\s*|\s*\}\}$/g, "") : "";
-  if (/[|!()]/.test(guard)) return false;
+  if (/[|!()?:]/.test(guard)) return false;
   const parts = guard.split(/\s*&&\s*/);
   return allowed.some(event => {
     const eventOnly = events.length === 1 && events[0] === event;
@@ -68,6 +68,10 @@ export function analyzeEffectWorkflow(workflow, boundary) {
       need(!job["continue-on-error"], `${name}: continue-on-error forbidden`);
       need(Array.isArray(job.steps) && job.steps.length > 0, `${name}: empty execution path`);
       for (const step of job.steps) {
+        if (step.if === "github.event_name == 'pull_request'") {
+          need(!hasSecret(step), `${name}: PR-only step cannot receive a secret`);
+          continue; // all allowed effects above are manual or owner-command events
+        }
         need(!step["continue-on-error"], `${name}: continued failure forbidden`);
         if (step.uses) {
           need(typeof step.uses === "string", `${name}: invalid action`);
@@ -105,6 +109,7 @@ export function selftest() {
     w=>{w.jobs.materialize.steps[0].with.ref="proposals";},
     w=>{w.jobs.effect.steps[0].with.ref="${{ needs.materialize.outputs.source_sha }}";},
     w=>{w.jobs.effect.if="github.event_name == 'workflow_dispatch' || true";},
+    w=>{w.jobs.effect.if="github.event_name == 'workflow_dispatch' && true ? true : true";},
     w=>{w.jobs.effect.env={TOKEN:"${{ secrets.TOKEN }}"};},
     w=>{w.jobs.effect.environment="${{ inputs.environment }}";},
     w=>{w.jobs.effect.needs=["missing"];},
@@ -119,7 +124,12 @@ export function selftest() {
   commentWorkflow.on={issue_comment:{}};commentWorkflow.jobs.effect.if="github.event_name == 'issue_comment'";
   assert.ok(analyzeEffectWorkflow(commentWorkflow,{...policy,allowedEvents:["issue_comment"]}).issues.length);
   for (const mutate of cases) {const w=structuredClone(safe);mutate(w);assert.ok(analyzeEffectWorkflow(w,policy).issues.length);}
-  return {positive:1,negative:cases.length+1};
+  const parity=structuredClone(safe);
+  parity.jobs.materialize.steps.push({if:"github.event_name == 'pull_request'",run:"git clone public-fixture"});
+  assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
+  parity.jobs.materialize.steps.at(-1).env={TOKEN:"${{ secrets.TOKEN }}"};
+  assert.ok(analyzeEffectWorkflow(parity,policy).issues.length);
+  return {positive:2,negative:cases.length+2};
 }
 
 export function check(root) {

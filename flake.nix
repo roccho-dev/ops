@@ -60,6 +60,7 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
+          provider-effect-runtime = import ./tools/provider-effect-runtime.nix { pkgs = nixpkgs.legacyPackages.${system}; };
           cdp-tty = nixpkgs.legacyPackages.${system}.callPackage ./packages/cdp-tty { };
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
@@ -140,6 +141,7 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           cdp-tty = packages.${system}.cdp-tty.proof;
+          provider-effect-runtime = packages.${system}.provider-effect-runtime.check;
           jev =
             let
               pkgs = nixpkgs.legacyPackages.${system};

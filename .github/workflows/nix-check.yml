@@ -39,29 +39,10 @@ jobs:
           if-no-files-found: error
   flake-check:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Capture public exact source inputs for this review
-        env:
-          CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/consumer-source-review"
-          git archive --format=tar.gz "$CANDIDATE" > "$RUNNER_TEMP/consumer-source-review/isolation.tar.gz"
-          git archive --format=tar.gz 447fe5eef7d726d738044620e6cc6dbac1ac7def > "$RUNNER_TEMP/consumer-source-review/consumer.tar.gz"
-          printf '%s\n' "$CANDIDATE" 447fe5eef7d726d738044620e6cc6dbac1ac7def > "$RUNNER_TEMP/consumer-source-review/commits.txt"
-          sha256sum "$RUNNER_TEMP/consumer-source-review/"*.tar.gz > "$RUNNER_TEMP/consumer-source-review/SHA256SUMS"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: consumer-source-review
-          path: ${{ runner.temp }}/consumer-source-review/
-          retention-days: 1
-          if-no-files-found: error
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |

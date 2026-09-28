@@ -1,11 +1,19 @@
-# Bounded secret-effect path admission (#436)
+# Secret-effect completion (#436)
 
-One CI intent inventory and one checker remain. PR #442's immutable Action pins and workflow-source repairs are preserved; PR #444 supersedes its regex-only checker and carries the remaining completion work. The #442 source history is retained as a merge parent, not merged to proposals.
+One CI intent inventory and one parsed-YAML checker remain. All retained effect jobs and their contributing inputs use the same exact workflow revision. Tools are resolved from the repository's existing nixpkgs lock before any credential is exposed; provider steps use the fixed binaries, not npx/pip at execution time.
 
-The checker parses YAML with the existing Nix check's pinned `yq-go` dependency and walks `needs` from visible secret-bearing jobs. It inspects earlier Actions and upstream jobs, not only the step receiving a secret. Unknown source expressions, reusable/local Actions and matrix paths fail closed. A variable named source_sha is not proof of its contents or approval.
+## Dispositions
 
-This is test-first migration work, not repository-wide PASS. The current legacy effect paths still require either justified retirement or migration to approved fixed executable closures. Do not remove a current consumer's only path solely to make a test Green, and do not weaken the checker to conceal the outstanding migration.
+| Entry | Disposition | Evidence / retained responsibility |
+|---|---|---|
+| artifact-runtime-static-host | Keep and fix | ops#230 owns a distinct content-addressed Artifact Runtime endpoint. Its secret-free PR source parity remains, explicitly separated from owner-command effect. |
+| mobile-agent-preset-static-host | Keep and fix | ops#242 owns the exact immutable existing-preset App publication. Remove its unreachable mutable bootstrap alternative; no replacement App is invented. |
+| mobile-agent-url-only-runtime | Keep and fix | Current deploy-once hosted compiler; builds the business-model presentation, tests 2/3/4 actors and publishes the compiler as well. |
+| mobile-agent-business-model-public | Retire active workflow | Older one-file publisher overlaps the presentation/test responsibility already executed by URL-only build.py and cannot coexist with its hosted compiler without overwrite. Keep source tests and immutable Release evidence. |
+| mobile-agent-seq-comment-ingress | Retire active workflow | One-shot historical comment-chunk transport, not a permanent consumer runtime. Keep Carrier/browser evidence and current preset/runtime paths; do not resurrect it for a safety checkbox. |
 
-The bounded YAML checker is not a proof of arbitrary called scripts, recursive imports or physical Environment approval/protected-ref configuration. Those remain separate closure conditions. A hash of an entry file is not the dependency-closure identity.
+Retirement removes entrypoints, not deployed sites, frozen Releases, or evidence. It does not mark old product goals as physically complete.
 
-Before merge: resolve the actual rejected paths, retain secret-free verification, bind the actual executable dependencies and target, test deliberate invalid paths, and run the full exact-candidate CI. Before Issue completion: also record the approved live-effect positive. The same voice-ui deployment may supply it; no obsolete Seq transport should be revived solely for a checkbox.
+The unchanged source lock supplies a single Nix tool closure to the retained paths. The new ordinary Nix check starts its real Python/Chromium runtime and Wrangler CLI without secrets. It does not exercise live provider effects.
+
+The bounded workflow checker is not a theorem about arbitrary programs. Exact source review, immutable runtime inputs, physical Environment/ref protection and a real approved effect remain distinct evidence. Unknown workflow forms stay RED. #435 may supply the same approved real deployment used as #436's positive, avoiding a circular wait and duplicated live deployment.
