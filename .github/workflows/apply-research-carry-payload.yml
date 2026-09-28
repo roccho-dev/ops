@@ -1,0 +1,171 @@
+name: Verify research decision stack carry payload
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - ".github/research-carry-xz/**"
+      - ".github/workflows/apply-research-carry-payload.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-research-decision-stack-carry-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PAYLOAD_COMMIT: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact payload commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.PAYLOAD_COMMIT }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify payload, materialize final tree, and run destructive tests
+        shell: bash
+        env:
+          PAYLOAD_SHA256: 2ade67fa23415b1b183f95a948ddf4cfc8c7a50260d9a10e31214a6d0cf7161d
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^{commit})" = "$PAYLOAD_COMMIT"
+          cat "$GITHUB_WORKSPACE"/.github/research-carry-xz/part-*.b64 > "$RUNNER_TEMP/research-carry-payload.b64"
+          base64 --decode "$RUNNER_TEMP/research-carry-payload.b64" > "$RUNNER_TEMP/research-carry-payload.tar.xz"
+          payload="$RUNNER_TEMP/research-carry-payload.tar.xz"
+          test "$(sha256sum "$payload" | cut -d' ' -f1)" = "$PAYLOAD_SHA256"
+          python3 - "$payload" "$GITHUB_WORKSPACE" <<'PY'
+          import hashlib,json,os,pathlib,sys,tarfile
+          archive_path=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2]).resolve()
+          with tarfile.open(archive_path,"r:xz") as archive:
+              members=archive.getmembers(); names=[m.name for m in members]
+              assert len(names)==len(set(names)) and "PAYLOAD-MANIFEST.json" in names
+              manifest=json.loads(archive.extractfile("PAYLOAD-MANIFEST.json").read())
+              assert manifest["kind"]=="ops.researchDecisionStackPayload.v1"
+              expected={row["path"]:row for row in manifest["files"]}
+              assert set(names)==set(expected)|{"PAYLOAD-MANIFEST.json"}
+              for member in members:
+                  if member.name=="PAYLOAD-MANIFEST.json":
+                      continue
+                  pure=pathlib.PurePosixPath(member.name)
+                  assert not pure.is_absolute() and all(part not in ("",".","..") for part in pure.parts) and member.isfile()
+                  data=archive.extractfile(member).read(); row=expected[member.name]
+                  assert len(data)==row["bytes"] and hashlib.sha256(data).hexdigest()==row["sha256"]
+                  target=root/member.name; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(data); os.chmod(target,int(row["mode"],8))
+          append_path=root/"ci.intent.append.jsonl"; catalog=root/"ci.intent.v1.jsonl"
+          original=catalog.read_text(encoding="utf-8")
+          current=[json.loads(line) for line in original.splitlines() if line.strip()]
+          addition_lines=[line for line in append_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+          additions=[json.loads(line) for line in addition_lines]
+          by_path={row["path"]:row for row in current}
+          assert len(by_path)==len(current)
+          new_lines=[]
+          for line,row in zip(addition_lines,additions):
+              existing=by_path.get(row["path"])
+              if existing is None:
+                  new_lines.append(line); by_path[row["path"]]=row
+              else:
+                  assert existing==row
+          if new_lines:
+              catalog.write_text(original.rstrip("\n")+"\n"+"\n".join(new_lines)+"\n",encoding="utf-8")
+          append_path.unlink()
+          for relative in manifest["deletePaths"]:
+              pure=pathlib.PurePosixPath(relative); assert not pure.is_absolute() and ".." not in pure.parts
+              target=root/relative
+              if target.exists() or target.is_symlink():
+                  target.unlink()
+          PY
+          rm -rf .github/research-carry-xz
+          rm -f .github/workflows/apply-research-carry-payload.yml
+          python3 -m py_compile packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py
+          rm -rf "$RUNNER_TEMP/ops-src-runtime-pack-tests"
+          python3 -S packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py packages/ops-src-runtime-pack "$RUNNER_TEMP/ops-src-runtime-pack-tests"
+          python3 - <<'PY'
+          import json,pathlib
+          rows=[json.loads(line) for line in pathlib.Path("ci.intent.v1.jsonl").read_text().splitlines() if line.strip()]
+          paths=[row["path"] for row in rows]
+          assert len(paths)==len(set(paths))
+          required={
+              ".github/workflows/proof-vim-nix-exact-runtime-current-sandbox.yml",
+              ".github/workflows/vim-hq-complete-carry-pr-dispatch.yml",
+              ".github/workflows/vim-hq-source-complete-target.yml",
+              ".github/workflows/vim-nix-current-runtime.yml",
+              ".github/workflows/research-decision-stack-carry.yml",
+          }
+          assert required.issubset(paths)
+          for forbidden in (
+              "docs/wip/research-decision-stack-carry-final-shape.md",
+              "packages/ops-src-runtime-pack/lib/cli.py",
+              ".github/research-carry-payload/part-00.b64",
+              ".github/workflows/apply-research-carry-payload.yml",
+              ".github/research-carry-xz/part-00.b64",
+          ):
+              assert not pathlib.Path(forbidden).exists(), forbidden
+          PY
+
+      - name: Build exact final-file artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="$RUNNER_TEMP/final-tree"
+          files="$artifact/files"
+          mkdir -p "$files"
+          paths=(
+            ".github/workflows/research-decision-stack-carry.yml"
+            "ci.intent.v1.jsonl"
+            "packages/ops-src-runtime-pack/README.md"
+            "packages/ops-src-runtime-pack/bin/ops-src-runtime-pack.py"
+            "packages/ops-src-runtime-pack/default.nix"
+            "packages/ops-src-runtime-pack/profiles.jsonl"
+            "packages/ops-src-runtime-pack/tests/test_ops_src_runtime_pack.py"
+          )
+          for path in "${paths[@]}"; do
+            mkdir -p "$files/$(dirname "$path")"
+            cp -p "$path" "$files/$path"
+          done
+          python3 - "$files" "$artifact/FINAL-MANIFEST.json" "$PAYLOAD_COMMIT" "$PAYLOAD_SHA256" <<'PY'
+          import hashlib,json,os,pathlib,sys
+          root,out,head,payload_sha=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]),sys.argv[3],sys.argv[4]
+          rows=[]
+          for path in sorted(root.rglob("*"),key=lambda p:p.relative_to(root).as_posix()):
+              if not path.is_file():
+                  continue
+              data=path.read_bytes()
+              rows.append({
+                  "path":path.relative_to(root).as_posix(),
+                  "mode":"100755" if os.access(path,os.X_OK) else "100644",
+                  "bytes":len(data),
+                  "sha256":hashlib.sha256(data).hexdigest(),
+              })
+          assert len(rows)==7
+          record={
+              "kind":"ops.researchDecisionStackFinalTree.v1",
+              "status":"PASS",
+              "parentCommit":head,
+              "payloadSha256":payload_sha,
+              "files":rows,
+              "deletePaths":[
+                  "docs/wip/research-decision-stack-carry-final-shape.md",
+                  "packages/ops-src-runtime-pack/lib/cli.py",
+                  ".github/research-carry-payload/part-00.b64",
+                  ".github/workflows/apply-research-carry-payload.yml",
+                  *[f".github/research-carry-xz/part-{i:02d}.b64" for i in range(15)],
+              ],
+          }
+          out.write_text(json.dumps(record,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          PY
+
+      - name: Upload exact verified final tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-decision-stack-final-tree-${{ env.PAYLOAD_COMMIT }}
+          path: ${{ runner.temp }}/final-tree/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
