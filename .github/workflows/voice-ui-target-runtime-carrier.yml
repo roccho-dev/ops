@@ -71,8 +71,8 @@ jobs:
           set -euo pipefail
           carried="$(cat "$RUNNER_TEMP/work/carried")"
           nix copy --to "file://$RUNNER_TEMP/work/full-cache?compression=zstd&compression-level=19&parallel-compression=false" "$carried"
-          python3 "$CARRIER_PY" pack --plan "$RUNNER_TEMP/work/plan.json" --cache "$RUNNER_TEMP/work/full-cache" --out dist
-          python3 "$CARRIER_PY" check-pack --plan "$RUNNER_TEMP/work/plan.json" dist
+          python3 "$CARRIER_PY" pack --plan "$RUNNER_TEMP/work/plan.json" --cache "$RUNNER_TEMP/work/full-cache" --out "$RUNNER_TEMP/release"
+          python3 "$CARRIER_PY" check-pack --plan "$RUNNER_TEMP/work/plan.json" "$RUNNER_TEMP/release"
       - name: Fresh-store consumer proof (positive and negatives)
         run: |
           set -euo pipefail
@@ -80,7 +80,7 @@ jobs:
           carried="$(cat "$RUNNER_TEMP/work/carried")"
           carrier="$RUNNER_TEMP/work/carrier"
           mkdir -p "$carrier"
-          tar -xf dist/voice-ui-target-runtime-carrier.tar -C "$carrier"
+          tar -xf "$RUNNER_TEMP/release/voice-ui-target-runtime-carrier.tar" -C "$carrier"
           # Phase A: realise exactly the carried path; no build is possible.
           phase_a() {
             nix-store --store "local?root=$1" --realise "$carried" \
@@ -111,7 +111,7 @@ jobs:
           reject() { label="$1"; shift; if "$@" > "$RUNNER_TEMP/work/$label.log" 2>&1; then echo "accepted: $label" >&2; exit 1; fi; echo "rejected: $label"; }
           flipped="$RUNNER_TEMP/work/flipped"
           mkdir -p "$flipped"
-          tar -xf dist/voice-ui-target-runtime-carrier.tar -C "$flipped"
+          tar -xf "$RUNNER_TEMP/release/voice-ui-target-runtime-carrier.tar" -C "$flipped"
           python3 - "$flipped" <<'PY'
           import pathlib, sys
           nar = next(pathlib.Path(sys.argv[1], 'nar').iterdir())
@@ -122,7 +122,7 @@ jobs:
           reject no-official-key phase_a "$RUNNER_TEMP/fresh-no-key" "$both" ""
           reject no-trusted phase_a "$RUNNER_TEMP/fresh-no-trusted" "https://cache.nixos.org file://$carrier" "$OFFICIAL_KEY"
           mkdir -p "$RUNNER_TEMP/work/extra"
-          python3 - dist/voice-ui-target-runtime-carrier.tar "$RUNNER_TEMP/work/extra" <<'PY'
+          python3 - "$RUNNER_TEMP/release/voice-ui-target-runtime-carrier.tar" "$RUNNER_TEMP/work/extra" <<'PY'
           import hashlib, importlib.util, pathlib, sys
           spec = importlib.util.spec_from_file_location('carrier', 'tools/voice-ui-target-runtime-carrier.py')
           carrier = importlib.util.module_from_spec(spec); spec.loader.exec_module(carrier)
@@ -156,17 +156,17 @@ jobs:
             --pr "$RUNNER_TEMP/pr.json" --reviews "$RUNNER_TEMP/reviews.json" \
             --head-tree "$(gh api "$api/git/commits/$head" --jq .tree.sha)" \
             --merge-sha "$EXACT_SHA" --merge-tree "$(git rev-parse 'HEAD^{tree}')" \
-            --out dist/merged-pr-proof.json
-          python3 "$CARRIER_PY" provenance --plan "$RUNNER_TEMP/work/plan.json" --dir dist --root . \
+            --out "$RUNNER_TEMP/release/merged-pr-proof.json"
+          python3 "$CARRIER_PY" provenance --plan "$RUNNER_TEMP/work/plan.json" --dir "$RUNNER_TEMP/release" --root . \
             --repository "$GITHUB_REPOSITORY" --sha "$EXACT_SHA" --tree "$(git rev-parse 'HEAD^{tree}')" \
             --workflow-ref "$GITHUB_WORKFLOW_REF" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
-            --out dist/provenance.json
-          python3 "$CARRIER_PY" verify dist --sha "$EXACT_SHA" --repository "$GITHUB_REPOSITORY"
+            --out "$RUNNER_TEMP/release/provenance.json"
+          python3 "$CARRIER_PY" verify "$RUNNER_TEMP/release" --sha "$EXACT_SHA" --repository "$GITHUB_REPOSITORY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: env.PUBLISH == 'true'
         with:
           name: voice-ui-target-runtime-carrier
-          path: dist/
+          path: ${{ runner.temp }}/release/
           if-no-files-found: error
 
   # Publishes only the bytes built and checked by build-test in this run.
