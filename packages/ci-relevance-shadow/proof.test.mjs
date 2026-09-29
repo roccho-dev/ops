@@ -44,6 +44,9 @@ for (const mode of ['paired', 'timeout', 'model-missing']) test(`offline proof a
     try { await exec(process.execPath, [join(root, 'packages/ci-relevance-shadow/proof.mjs'), out], { cwd: root, env }); }
     catch (error) { code = error.code; }
     const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'));
+    assert.equal(report.schema, 'ops.winnowCiRelevanceProof.v2');
+    assert.equal(report.referenceKind, 'bounded-ci-replay');
+    assert.deepEqual(report.referenceUniverse.map(x => x.name), ['cdp-tty-proof', 'flake-check']);
     assert.equal(report.result, 'UNKNOWN'); assert.equal(report.authority, false); assert.equal(report.effect, false);
     if (mode === 'model-missing') {
       assert.equal(code, 2); assert.equal(requests, 0); assert.equal(report.attemptedReferenceChecks, 0);
@@ -53,9 +56,29 @@ for (const mode of ['paired', 'timeout', 'model-missing']) test(`offline proof a
       assert.equal(readFileSync(join(out, 'calls'), 'utf8'), 'nix-build\nnix\n');
       assert.equal(code, mode === 'paired' ? 0 : 2);
       if (mode === 'paired') {
+        const paired = JSON.parse(readFileSync(join(out, 'paired.json'), 'utf8'));
+        assert.equal(paired.referenceKind, report.referenceKind);
+        assert.deepEqual(paired.referenceUniverse, report.referenceUniverse);
+        assert.ok(!Object.keys(paired).some(key => key.startsWith('fullCi')));
         assert.equal(report.observation, 'PAIRED'); assert.equal(report.cost.actualSavedExecutionMs, 0);
         assert.deepEqual(JSON.parse(readFileSync(join(out, 'shadow.json'), 'utf8')).wouldSelect, ['flake-check']);
-      } else assert.equal(report.reason, 'REFERENCE_NOT_EXECUTED');
+      } else {
+        assert.equal(report.reason, 'REFERENCE_NOT_EXECUTED');
+        assert.equal(report.observation, 'REFERENCE_INCOMPLETE');
+        assert.equal(report.completedReferenceChecks, 1);
+        assert.throws(() => readFileSync(join(out, 'paired.json')), /ENOENT/);
+      }
     }
   } finally { await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('successor CI keeps offline proof reachable without repeating the finite live experiment', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/nix-check.yml', import.meta.url), 'utf8');
+  assert.ok(workflow.includes('  ci-relevance-shadow-offline:'));
+  assert.ok(workflow.includes('node --test packages/ci-relevance-shadow/test.mjs packages/ci-relevance-shadow/proof.test.mjs'));
+  assert.ok(!workflow.includes('  winnow-relevance-proof:'));
+  assert.ok(!workflow.includes('node packages/ci-relevance-shadow/proof.mjs'));
+  assert.ok(!workflow.includes('Materialize experimental Ollaya'));
+  assert.ok(workflow.includes('  cdp-tty-proof:')); assert.ok(workflow.includes('  flake-check:'));
 });

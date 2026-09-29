@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const MODEL = 'ollaya.dev/library/winnow:e4b';
+export const REFERENCE_KIND = 'bounded-ci-replay';
 const isWinnow = (v) => v === MODEL || v === 'winnow:e4b';
 const exactSha = (v) => typeof v === 'string' && /^[0-9a-f]{40}$/u.test(v);
 const text = (v) => typeof v === 'string' && v.trim().length > 0;
@@ -107,10 +108,13 @@ function validateShadow(shadow) {
     && same(shadow.usage, shadow.response.usage ?? null), code);
 }
 
-export function joinFullCiReference(shadow, reference) {
+export function joinBoundedCiReference(shadow, reference) {
   validateShadow(shadow);
   requireThat(object(reference) && reference.headSha === shadow.headSha && Array.isArray(reference.checks), 'REFERENCE_MISMATCH');
-  requireThat(reference.checks.every(object) && sameSet(names(reference.checks), shadow.candidates), 'INCOMPLETE_FULL_CI_REFERENCE');
+  requireThat(reference.checks.every(object) && sameSet(names(reference.checks), shadow.candidates), 'INCOMPLETE_BOUNDED_CI_REFERENCE');
+  requireThat(reference.referenceKind === undefined || reference.referenceKind === REFERENCE_KIND, 'REFERENCE_SCOPE_MISMATCH');
+  const universe = shadow.input.candidates.map(({ name, script }) => ({ name, script }));
+  requireThat(reference.checks.every((row) => row.command === universe.find((candidate) => candidate.name === row.name).script), 'REFERENCE_COMMAND_MISMATCH');
   // A run's head_sha is not proof of its checkout. Each row must retain actual source readback.
   requireThat(reference.checks.every((row) => row.sourceSha === shadow.headSha && text(row.sourceReadback)), 'REFERENCE_SOURCE_UNVERIFIED');
   requireThat(reference.checks.every((row) => row.status === 'completed'
@@ -119,16 +123,16 @@ export function joinFullCiReference(shadow, reference) {
   const selected = new Set(shadow.wouldSelect);
   const failed = reference.checks.filter((row) => row.conclusion === 'failure');
   return {
-    schema: 'ops.winnowCiRelevanceJoin.v1', headSha: shadow.headSha,
-    authority: false, effect: false, referenceKind: 'full-ci', referenceIsGroundTruth: false,
+    schema: 'ops.winnowCiRelevanceJoin.v2', headSha: shadow.headSha,
+    authority: false, effect: false, referenceKind: REFERENCE_KIND, referenceUniverse: universe, referenceIsGroundTruth: false,
     observation: 'PAIRED', result: 'UNKNOWN', reason: 'Single bounded observation; incremental value is not established.',
     shadowSha256: digest(shadow), referenceSha256: digest(reference),
     selectedCount: selected.size, candidateCount: shadow.candidates.length,
     observedSelectedFailures: names(failed.filter((row) => selected.has(row.name))).sort(),
     observedOmittedFailures: names(failed.filter((row) => !selected.has(row.name))).sort(),
-    fullCiObservedFailures: names(failed).sort(),
-    fullCiMeasuredDurationMs: reference.checks.reduce((sum, row) => sum + row.durationMs, 0),
+    referenceObservedFailures: names(failed).sort(),
+    referenceMeasuredDurationMs: reference.checks.reduce((sum, row) => sum + row.durationMs, 0),
     durationMeaning: 'sum of check durations, not wall time, actual savings or billed cost',
-    claimCeiling: 'Observed pairing only; not semantic correctness, actual FP/FN, safety, test irrelevance, or skip authority. A failed check can be infrastructure/flaky/unrelated.',
+    claimCeiling: 'Only the declared referenceUniverse is paired; not repository-wide full CI. Observed pairing only; not semantic correctness, actual FP/FN, safety, test irrelevance, or skip authority. A failed check can be infrastructure/flaky/unrelated.',
   };
 }

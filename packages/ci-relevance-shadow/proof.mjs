@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { digest, runWinnowRelevance, joinFullCiReference } from './winnow.mjs';
+import { digest, REFERENCE_KIND, runWinnowRelevance, joinBoundedCiReference } from './winnow.mjs';
 
 const out = process.argv[2];
 if (!out || process.argv.length !== 3) throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY');
@@ -14,7 +14,7 @@ const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer
 const gitLine = (...args) => git(...args).trim();
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
 const requireThat = (condition, message) => { if (!condition) throw new Error(message); };
-const report = { schema: 'ops.winnowCiRelevanceProof.v1', authority: false, effect: false,
+const report = { schema: 'ops.winnowCiRelevanceProof.v2', authority: false, effect: false, referenceKind: REFERENCE_KIND,
   result: 'UNKNOWN', observation: 'NOT_RUN', providerAttempts: 0, attemptedReferenceChecks: 0, completedReferenceChecks: 0 };
 const port = Number(process.env.WINNOW_PORT ?? '11435');
 requireThat(Number.isInteger(port) && port > 0 && port <= 65535, 'INVALID_LOCAL_PORT');
@@ -46,6 +46,7 @@ try {
   requireThat(candidates.every((row) => workflow.includes(row.script)), 'REFERENCE_COMMAND_CHANGED');
   const input = { baseSha, headSha,
     changedPaths: git('diff', '--name-only', '-z', baseSha, headSha).split('\0').filter(Boolean), candidates, topK: 1 };
+  Object.assign(report, { headSha, baseSha, referenceUniverse: candidates });
   const source = { headSha, treeSha: gitLine('rev-parse', 'HEAD^{tree}'), eventBaseSha: process.env.PROOF_BASE, baseSha,
     workflowSha256: sha256(workflow), diffSha256: sha256(git('diff', '--binary', '--full-index', baseSha, headSha)),
     proofBlob: gitLine('hash-object', 'packages/ci-relevance-shadow/proof.mjs'),
@@ -69,7 +70,7 @@ try {
     manifestSha256: model.digest, version: runtimeVersion.version, runtimeFiles, loaded };
   report.observation = 'PROVIDER_EXECUTED_REFERENCE_PENDING';
   // Provider call completes BEFORE reference execution: no observed outcome can enter the request.
-  const reference = { headSha, source, sourceSha256: digest(source), checks: [] };
+  const reference = { headSha, referenceKind: REFERENCE_KIND, source, sourceSha256: digest(source), checks: [] };
   for (const candidate of candidates) {
     const before = gitLine('rev-parse', 'HEAD');
     const fd = openSync(join(out, `${candidate.name}.log`), 'wx');
@@ -93,16 +94,17 @@ try {
   }
   // Both run regardless of wouldSelect. This is a reference replay, never actual skipped CI.
   write('reference.json', reference);
-  const paired = joinFullCiReference(shadow, reference);
+  const paired = joinBoundedCiReference(shadow, reference);
   write('paired.json', paired);
   Object.assign(report, { observation: 'PAIRED', reason: paired.reason,
     headSha, inputSha256: shadow.inputSha256, pairedSha256: digest(paired),
     coverage: { naturalChanges: 1, independentCauseGroups: 1, provider: shadow.coverage, referenceChecks: reference.checks.length },
-    cost: { requestMs: shadow.elapsedMs, referenceJobSumMs: paired.fullCiMeasuredDurationMs,
+    cost: { requestMs: shadow.elapsedMs, referenceJobSumMs: paired.referenceMeasuredDurationMs,
       inputUsage: shadow.usage, billedMoney: null, humanAttentionMs: null, actualSavedExecutionMs: 0 },
     claimCeiling: paired.claimCeiling });
 } catch (error) {
   report.reason = error.message;
+  if (report.observation === 'PROVIDER_EXECUTED_REFERENCE_PENDING') report.observation = 'REFERENCE_INCOMPLETE';
   process.exitCode = 2; // Missing execution/readback is not a Green experiment.
 } finally {
   write('report.json', report);
