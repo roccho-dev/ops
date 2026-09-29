@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const MODEL = 'ollaya.dev/library/winnow:e4b';
+const isWinnow = (v) => v === MODEL || v === 'winnow:e4b';
 const exactSha = (v) => typeof v === 'string' && /^[0-9a-f]{40}$/u.test(v);
 const text = (v) => typeof v === 'string' && v.trim().length > 0;
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -38,7 +39,7 @@ function requestFor(input) {
 }
 
 function rankResponse(data, input, questions) {
-  requireThat(object(data) && data.model === MODEL && object(data.answers), 'INVALID_WINNOW_RESPONSE');
+  requireThat(object(data) && isWinnow(data.model) && object(data.answers), 'INVALID_WINNOW_RESPONSE');
   requireThat(sameSet(Object.keys(data.answers), Object.keys(questions)), 'INVALID_WINNOW_RESPONSE');
   requireThat(Object.values(data.answers).every((a) => object(a) && a.type === 'noul'
     && nonnegative(a.noul) && a.noul <= 1), 'INVALID_WINNOW_RESPONSE');
@@ -99,7 +100,7 @@ function validateShadow(shadow) {
     && same(shadow.candidates, names(shadow.input.candidates)) && shadow.topK === shadow.input.topK
     && same(shadow.ranked, ranked) && same(shadow.wouldSelect, names(ranked.slice(0, shadow.topK)))
     && same(shadow.wouldOmit, names(ranked.slice(shadow.topK))), code);
-  requireThat(shadow.requestedModel === MODEL && shadow.observedModel === MODEL
+  requireThat(shadow.requestedModel === MODEL && shadow.observedModel === shadow.response.model && isWinnow(shadow.observedModel)
     && ['live-http', 'injected-transport'].includes(shadow.executionKind)
     && nonnegative(shadow.elapsedMs) && shadow.requestBytes === Buffer.byteLength(JSON.stringify(request))
     && same(shadow.coverage, { requests: 1, questions: ranked.length, answers: ranked.length })
