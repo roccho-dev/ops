@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +10,6 @@ import { captureIsolation } from "../capture-isolation.mjs";
 import { runTargetRuntime } from "../lib.mjs";
 import { sanitizedEnv, sha256File } from "../modules/core.mjs";
 import { validateArtifact, validateIsolationVerdict, validateProjectionReceipt } from "../modules/input-contracts.mjs";
-import { validateAcceptanceReceipt } from "../modules/result-contracts.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(HERE, "../run.mjs");
@@ -39,14 +38,9 @@ function isolation() {
 const preamble = `import fs from "node:fs"; import path from "node:path";
 const args=Object.fromEntries(Array.from({length:(process.argv.length-2)/2},(_,i)=>[process.argv[2+i*2],process.argv[3+i*2]]));
 const save=value=>fs.writeFileSync(args["--receipt"],JSON.stringify(value));\n`;
-const acceptanceCode = preamble + `
-if (args["--handoff-id"].endsWith("run-2") && process.env.FAIL_SECOND) process.exit(9);
-save({kind:"voice-ui.runtimeAcceptanceReceipt.v1",status:"PASS",stage:"complete",handoffId:args["--handoff-id"],
- target:{url:args["--url"]},sources:{apps:args["--expected-apps-sha"],artifactManifestSha256:args["--expected-manifest-sha256"]},
- checks:["artifact-admission","secret-free-runtime","public-application-e2e"].map(id=>({id,status:"PASS"})),
- dependencies:{envsRuntime:[],secretInputs:[]},process:{exitCode:0,independentProcess:true},
- fixtureObservation:{home:process.env.HOME,cwd:process.cwd(),unknownSecret:process.env.NEW_PROVIDER_TOKEN??null,injection:process.env.NODE_OPTIONS??null}});
-`;
+// The artifact's acceptance entrypoint is data to ops. If anything ever
+// executes it, it leaves this marker, and the tests below fail.
+const sentinelCode = marker => `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(marker)}, "executed");\n`;
 const deployCode = preamble + `
 const r=JSON.parse(fs.readFileSync(args["--request"])),e=r.expected;
 save({kind:"ops.voiceUiDeployReceipt.v1",status:"PASS",opsSha:e.opsSha,appsSha:e.appsSha,artifactManifestSha256:e.artifactManifestSha256,target:e.target,
@@ -63,12 +57,12 @@ save({kind:"ops.voiceUiReadbackReceipt.v1",status:"PASS",opsSha:e.opsSha,appsSha
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), "voice-ui-target-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const artifactRoot = path.join(root, "artifact");
+  const artifactRoot = path.join(root, "artifact"), marker = path.join(root, "artifact-code-executed");
   const contents = new Map([
-    ["e2e/runtime-acceptance.mjs", acceptanceCode], ["e2e/public-e2e.mjs", "// offline fixture\n"],
+    ["e2e/runtime-acceptance.mjs", sentinelCode(marker)], ["e2e/public-e2e.mjs", sentinelCode(marker)],
     ["e2e/fixture.wav", "offline wav"], ["e2e/golden.json", "{}\n"],
-    ["functions/api/jev.mjs", "// offline Function\n"], ["site/index.html", "<!doctype html>\n"],
-    ["site/app.mjs", "// offline public code\n"],
+    ["functions/api/jev.mjs", sentinelCode(marker)], ["site/index.html", "<!doctype html>\n"],
+    ["site/app.mjs", sentinelCode(marker)],
     [".envs/artifact.jsonl", JSON.stringify({ artifact: "voice-ui", kind: "artifact.auth.v1", requiredCapabilities: ["jev-api"] }) + "\n"],
   ]);
   for (const [name, text] of contents) { const p = path.join(artifactRoot, name); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, text); }
@@ -89,11 +83,9 @@ function fixture(t) {
     adapters: {
       deploy: { path: deploy, sha256: sha256File(deploy) },
       readback: { path: readback, sha256: sha256File(readback) },
-      // Explicit offline runtime only; physical use supplies apps' built closure.
-      acceptance: { path: process.execPath, sha256: sha256File(process.execPath) },
     },
     output: path.join(root, "output") };
-  return { root, artifactRoot, manifest, request, projectionPath, isolationPath, deploy, readback };
+  return { root, artifactRoot, marker, manifest, request, projectionPath, isolationPath, deploy, readback };
 }
 function refreshArtifact(f) {
   for (const row of f.manifest.files) { const bytes = readFileSync(path.join(f.artifactRoot, row.path)); row.bytes = bytes.length; row.sha256 = digest(bytes); }
@@ -126,9 +118,9 @@ for (const [name, mutate, message] of [
   ["isolation changed after approval", f=>{write(f.isolationPath,{...read(f.isolationPath),status:"RED"});}, /isolation verdict digest/],
   ["readback adapter changed", f=>{writeFileSync(f.readback,"// tampered");}, /readback digest mismatch/],
   ["deploy adapter changed", f=>{writeFileSync(f.deploy,"// tampered");}, /deploy digest mismatch/],
-  ["missing acceptance runtime", f=>{delete f.request.adapters.acceptance;}, /acceptance executable is missing/],
-  ["changed acceptance runtime", f=>{f.request.adapters.acceptance.sha256="f".repeat(64);}, /acceptance digest mismatch/],
-  ["relative acceptance runtime", f=>{f.request.adapters.acceptance.path="node";}, /acceptance executable path must be absolute/],
+  ["acceptance runtime supplied", f=>{f.request.adapters.acceptance={path:process.execPath,sha256:sha256File(process.execPath)};}, /runtime adapters fields differ/],
+  ["extra executable supplied", f=>{f.request.adapters.build={path:process.execPath,sha256:sha256File(process.execPath)};}, /runtime adapters fields differ/],
+  ["missing readback adapter", f=>{delete f.request.adapters.readback;}, /runtime adapters fields differ/],
   ["no effect capability", (_f,e)=>{delete e.CLOUDFLARE_API_TOKEN;}, /effect capability/],
   ["wrong effect account", (_f,e)=>{e.CLOUDFLARE_ACCOUNT_ID="other";}, /effect account/],
   ["unlisted executable file", f=>{writeFileSync(path.join(f.artifactRoot,"unlisted.mjs"),"// extra");}, /unlisted files/],
@@ -149,39 +141,26 @@ test("native CLI reaches argument admission rather than import failure", () => {
   const r=spawnSync(process.execPath,[CLI],{encoding:"utf8",env:sanitizedEnv(process.env)});
   assert.notEqual(r.status,0);assert.match(r.stderr,/--request is required/);assert.doesNotMatch(r.stderr,/SyntaxError/);
 });
-test("real offline processes exercise CLI, readback and independent acceptance without claiming a live provider", t => {
+test("real offline processes exercise CLI, deploy and readback without claiming acceptance or a live provider", t => {
   const f=fixture(t),req=path.join(f.root,"request.json");write(req,f.request);
   const r=spawnSync(process.execPath,[CLI,"--request",req],{encoding:"utf8",env:{...effectEnv(),NEW_PROVIDER_TOKEN:"not-in-children"}});
   assert.equal(r.status,0,r.stderr);assert.doesNotMatch(r.stdout,/do-not-forward-effect-output/);
-  const result=read(path.join(f.request.output,"receipt.json"));assert.equal(result.stages.acceptance.length,2);
-  assert.equal(result.sources.acceptanceRuntimeSha256,`sha256:${f.request.adapters.acceptance.sha256}`);
-  const a=read(path.join(f.request.output,"acceptance-1.json")),b=read(path.join(f.request.output,"acceptance-2.json"));
-  assert.notEqual(a.handoffId,b.handoffId);assert.notEqual(a.fixtureObservation.home,b.fixtureObservation.home);
-  assert.equal(a.fixtureObservation.home,a.fixtureObservation.cwd);assert.equal(a.fixtureObservation.unknownSecret,null);
+  const result=read(path.join(f.request.output,"receipt.json"));
+  assert.equal(result.claim,"DEPLOY_READBACK_PASS");
+  assert.deepEqual(Object.keys(result.stages).sort(),["deploy","isolation","projection","readback"]);
+  assert.equal(result.sources.acceptanceRuntimeSha256,undefined);
+  assert.deepEqual(readdirSync(f.request.output).sort(),["deploy.json","readback.json","receipt.json"]);
+  assert.equal(existsSync(f.marker),false,"artifact code must never be executed");
 });
-test("approved launcher, not the orchestrator Node, starts both acceptances", t=>{
-  const f=fixture(t),launcher=path.join(f.root,"acceptance-node");
-  writeFileSync(launcher,`#!/bin/sh\nexec '${process.execPath}' "$@"\n`,{mode:0o755});
-  f.request.adapters.acceptance={path:launcher,sha256:sha256File(launcher)};
+test("only the package's deploy and readback adapters are started; artifact bytes stay data", t=>{
+  const f=fixture(t);
   const commands=[];
   const result=runTargetRuntime(f.request,{env:effectEnv(),spawn:(command,args,options)=>{
-    commands.push(command);return spawnSync(command,args,options);
+    commands.push([command,args[0]]);return spawnSync(command,args,options);
   }});
   assert.equal(result.status,"PASS");
-  assert.deepEqual(commands,[process.execPath,process.execPath,launcher,launcher]);
-});
-test("empty, duplicate and missing acceptance checks cannot become PASS", t=>{
-  const f=fixture(t);runTargetRuntime(f.request,{env:effectEnv()});
-  const r=read(path.join(f.request.output,"acceptance-1.json"));
-  for(const checks of [[],[{id:"public-application-e2e",status:"PASS"}],Array(3).fill({id:"artifact-admission",status:"PASS"})]) {
-    assert.throws(()=>validateAcceptanceReceipt({...r,checks},f.request.expected,r.target.url,r.handoffId),/required checks/);
-  }
-});
-test("first PASS never masks a second process failure", t=>{
-  const f=fixture(t),p=path.join(f.artifactRoot,"e2e/runtime-acceptance.mjs");
-  writeFileSync(p,acceptanceCode.replace(' && process.env.FAIL_SECOND',''));refreshArtifact(f);
-  assert.throws(()=>runTargetRuntime(f.request,{env:effectEnv()}),/application acceptance failed/);
-  assert.throws(()=>read(path.join(f.request.output,"receipt.json")));
+  assert.deepEqual(commands,[[process.execPath,f.deploy],[process.execPath,f.readback]]);
+  assert.equal(existsSync(f.marker),false,"artifact code must never be executed");
 });
 test("partial public readback is not full deployment readback", t=>{
   const f=fixture(t);writeFileSync(f.readback,readbackCode.replace('files.length,files','1,files:files.slice(0,1)'));

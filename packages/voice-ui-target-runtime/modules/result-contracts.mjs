@@ -49,21 +49,3 @@ export function validateReadbackReceipt(receipt, expected, deployment, artifact)
   assertNoPrivateMaterial(receipt);
   return receipt;
 }
-
-export function validateAcceptanceReceipt(receipt, expected, targetUrl, handoffId) {
-  requireCondition(receipt?.kind === "voice-ui.runtimeAcceptanceReceipt.v1", "acceptance receipt kind differs");
-  requireCondition(receipt.status === "PASS" && receipt.stage === "complete", "acceptance receipt is not complete PASS");
-  requireCondition(receipt.handoffId === handoffId, "acceptance handoff id mismatch");
-  requireCondition(receipt.sources?.apps === expected.appsSha, "acceptance apps SHA mismatch");
-  requireCondition(normalizeSha256(receipt.sources?.artifactManifestSha256) === expected.artifactManifestSha256, "acceptance artifact digest mismatch");
-  requireCondition(new URL(receipt.target?.url).href === new URL(targetUrl).href, "acceptance target differs");
-  requireCondition(receipt.process?.independentProcess === true && receipt.process.exitCode === 0, "acceptance process proof differs");
-  const checks = ["artifact-admission", "secret-free-runtime", "public-application-e2e"];
-  requireCondition(Array.isArray(receipt.checks) && receipt.checks.length === checks.length
-    && checks.every(id => receipt.checks.filter(row => row.id === id && row.status === "PASS").length === 1),
-    "acceptance required checks are missing, duplicated or not PASS");
-  requireCondition(Array.isArray(receipt.dependencies?.envsRuntime) && receipt.dependencies.envsRuntime.length === 0, "acceptance depends on envs runtime");
-  requireCondition(Array.isArray(receipt.dependencies?.secretInputs) && receipt.dependencies.secretInputs.length === 0, "acceptance received secret inputs");
-  assertNoPrivateMaterial(receipt);
-  return receipt;
-}

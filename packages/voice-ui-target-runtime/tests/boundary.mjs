@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { fork, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -75,7 +75,7 @@ if(mode==="--server") {
     save(output,result);
   } catch(error) {console.error(error.message);process.exitCode=1;}
 } else {
-  const [runtime,artifact,acceptance,wrangler]=process.argv.slice(2);
+  const [runtime,artifact,wrangler]=process.argv.slice(2);
   const root=path.join(runtime,"share/voice-ui-target-runtime"),config=read(path.join(root,"configuration.json"));
   const {runTargetRuntime}=await import(pathToFileURL(path.join(root,"lib.mjs")));
   const work=mkdtempSync(path.join(tmpdir(),"voice-ui-composed-ci-"));
@@ -116,33 +116,27 @@ if(mode==="--server") {
         artifactManifestSha256:config.artifactManifestSha256,projectionReceiptSha256:hash(readFileSync(projectionPath)),isolationVerdictSha256:hash(readFileSync(isolationPath)),
         target:{provider:"cloudflare-pages",accountId,project:"voice-ui",branch:"proposals"}},
         inputs:{artifactRoot:artifact,projectionReceipt:projectionPath,isolationVerdict:isolationPath},
-        adapters:{deploy:executable(path.join(root,"deploy.mjs")),readback:executable(path.join(root,"readback.mjs")),acceptance:executable(acceptance)},output};
-      let observedError;
-      try {runTargetRuntime(request,{env:{PATH:process.env.PATH,CLOUDFLARE_ACCOUNT_ID:accountId,CLOUDFLARE_API_TOKEN:"test-effect-token"},
+        adapters:{deploy:executable(path.join(root,"deploy.mjs")),readback:executable(path.join(root,"readback.mjs"))},output};
+      const started=[];
+      const result=runTargetRuntime(request,{env:{PATH:process.env.PATH,CLOUDFLARE_ACCOUNT_ID:accountId,CLOUDFLARE_API_TOKEN:"test-effect-token"},
         spawn:(command,args,options)=>{
-          if(args[0]===request.adapters.deploy.path||args[0]===request.adapters.readback.path) {
-            const which=args[0]===request.adapters.deploy.path?"deploy":"readback";
-            const result=spawnSync(process.execPath,[SELF,"--adapter",which,testConfig,...args.slice(1)],{...options,timeout:180000,maxBuffer:4*1024*1024});
-            assert.equal(result.status,0,result.stderr);return result;
-          }
-          assert.equal(command,acceptance);
-          const actual=[...args];actual[actual.indexOf("--url")+1]=base+"/";
-          const result=spawnSync(command,actual,{...options,timeout:120000,maxBuffer:4*1024*1024});
-          assert.equal(result.status,1,result.stderr);assert.doesNotMatch(result.stderr,/ERR_MODULE_NOT_FOUND|browserType.launch|Executable doesn't exist/);
-          return result;
+          // Only the package's own adapters may start; the artifact is data.
+          assert.ok(args[0]===request.adapters.deploy.path||args[0]===request.adapters.readback.path,`unexpected executable: ${command} ${args[0]}`);
+          const which=args[0]===request.adapters.deploy.path?"deploy":"readback";started.push(which);
+          const child=spawnSync(process.execPath,[SELF,"--adapter",which,testConfig,...args.slice(1)],{...options,timeout:180000,maxBuffer:4*1024*1024});
+          assert.equal(child.status,0,child.stderr);return child;
         }});
-      } catch(error) {observedError=error;}
-      assert.match(observedError?.message??"",/application acceptance failed/);
+      assert.deepEqual(started,["deploy","readback"]);
+      assert.equal(result.status,"PASS");assert.equal(result.claim,"DEPLOY_READBACK_PASS");
       assert.equal(read(path.join(output,"deploy.json")).status,"PASS");
       assert.equal(read(path.join(output,"readback.json")).status,"PASS");
-      const application=read(path.join(output,"acceptance-1.json"));
-      assert.equal(application.status,"RED");assert.equal(application.stage,"application-e2e");
-      assert.throws(()=>read(path.join(output,"receipt.json")),"overall PASS must not exist");
+      assert.deepEqual(readdirSync(output).sort(),["deploy.json","readback.json","receipt.json"]);
+      assert.equal(read(path.join(output,"receipt.json")).stages.acceptance,undefined);
     }
     const stats=await (await fetch(base+"/__stats")).json();
-    assert.deepEqual(stats.unexpected,[]);assert.equal(stats.deployments,2);assert.equal(stats.workerBytesMatched,2);assert.equal(stats.rejectedAppCalls,2);
+    assert.deepEqual(stats.unexpected,[]);assert.equal(stats.deployments,2);assert.equal(stats.workerBytesMatched,2);assert.equal(stats.rejectedAppCalls,0);
     assert.ok(stats.publicReads>0);
-    console.log(JSON.stringify({kind:"ops.voiceUiCiBoundary.v1",status:"PASS",actualWranglerStarts:2,exactWorkerUploads:2,realBrowserStarts:2,
-      allFileReadbackHosts:4,sourceIdentity:exactSource?"EXACT":"UNVERSIONED_NON_DEPLOYABLE",applicationResult:"RED_EXPECTED",provider:"controlled_fixture",liveEffects:0}));
+    console.log(JSON.stringify({kind:"ops.voiceUiCiBoundary.v1",status:"PASS",actualWranglerStarts:2,exactWorkerUploads:2,appExecutablesStarted:0,
+      allFileReadbackHosts:4,sourceIdentity:exactSource?"EXACT":"UNVERSIONED_NON_DEPLOYABLE",applicationResult:"NOT_RUN_BY_OPS",provider:"controlled_fixture",liveEffects:0}));
   } finally {server.kill("SIGTERM");rmSync(work,{recursive:true,force:true});}
 }
