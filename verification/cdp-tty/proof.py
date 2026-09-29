@@ -80,10 +80,13 @@ class Controller:
 
 @contextlib.contextmanager
 def browser(scale=1):
+    import sys
+
     binary = os.environ.get("CHROME_BIN") or shutil.which("chromium") or shutil.which("google-chrome")
     assert binary, "real Chrome is REQUIRED; missing browser is not a skip"
     with tempfile.TemporaryDirectory(prefix="cdp-tty-proof-") as d:
-        with open(Path(d) / "chrome.log", "wb") as log:
+        chrome_log = Path(d) / "chrome.log"
+        with open(chrome_log, "wb") as log:
             process = subprocess.Popen([binary, "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
                 "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--remote-debugging-port=0",
                 f"--user-data-dir={d}/profile", "--window-size=800,600",
@@ -91,12 +94,75 @@ def browser(scale=1):
                 stdout=log, stderr=log, start_new_session=True)
             try:
                 active = Path(d) / "profile/DevToolsActivePort"
-                eventually(lambda: active.exists() and len(active.read_text().splitlines()) >= 2)
-                debug = int(active.read_text().splitlines()[0])
-                def target():
-                    rows = json.load(urllib.request.urlopen(f"http://127.0.0.1:{debug}/json/list", timeout=2))
-                    return next((r for r in rows if r["type"] == "page" and r["url"] == "about:blank"), None)
-                page = eventually(target)
+                deadline = time.monotonic() + 8
+                readiness = "devtools_active_port_absent"
+                page = None
+                debug = None
+
+                def bounded(value, limit=240):
+                    value = str(value).replace("\r", "\\r").replace("\n", "\\n")
+                    return value if len(value) <= limit else value[:limit] + "..."
+
+                def active_port_state():
+                    if not active.exists():
+                        return None, "devtools_active_port_absent"
+                    try:
+                        lines = active.read_text().splitlines()
+                    except OSError as error:
+                        return None, f"devtools_active_port_malformed:read:{type(error).__name__}:{bounded(error)}"
+                    try:
+                        candidate = int(lines[0])
+                        if not 0 < candidate < 65536:
+                            raise ValueError("port is outside 1..65535")
+                        if len(lines) < 2 or not lines[1].strip():
+                            raise ValueError("browser endpoint line is absent")
+                    except (IndexError, ValueError) as error:
+                        return None, f"devtools_active_port_malformed:{type(error).__name__}:{bounded(error)}"
+                    return candidate, None
+
+                def startup_error():
+                    return_code = process.poll()
+                    if return_code is not None:
+                        observed = "early_exit"
+                    else:
+                        final_port, final_state = active_port_state()
+                        observed = final_state or readiness
+                        if final_port is not None and not observed.startswith("alive_not_ready"):
+                            observed = f"alive_not_ready:port={final_port}:target_absent"
+                    try:
+                        raw_tail = chrome_log.read_bytes()[-4096:]
+                        log_tail = raw_tail.decode(errors="replace")
+                    except OSError as error:
+                        log_tail = f"unavailable:{type(error).__name__}:{bounded(error)}"
+                    evidence = {
+                        "return_code": return_code,
+                        "readiness": bounded(observed),
+                        "chrome_log_tail": log_tail,
+                    }
+                    return AssertionError(f"Chrome startup failed: {json.dumps(evidence, ensure_ascii=False)}")
+
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        raise startup_error()
+                    candidate, port_state = active_port_state()
+                    if port_state is not None:
+                        readiness = port_state
+                    else:
+                        debug = candidate
+                        readiness = f"alive_not_ready:port={debug}:target_absent"
+                        try:
+                            remaining = max(.001, min(2, deadline - time.monotonic()))
+                            rows = json.load(urllib.request.urlopen(
+                                f"http://127.0.0.1:{debug}/json/list", timeout=remaining))
+                            page = next((r for r in rows
+                                if r["type"] == "page" and r["url"] == "about:blank"), None)
+                        except (OSError, ValueError, websocket.WebSocketException) as error:
+                            readiness = f"alive_not_ready:{type(error).__name__}:{bounded(error)}"
+                        if page:
+                            break
+                    time.sleep(min(.02, max(0, deadline - time.monotonic())))
+                if not page:
+                    raise startup_error()
                 ctl = Controller(page["webSocketDebuggerUrl"])
                 frame_id = ctl.call("Page.getFrameTree")["frameTree"]["frame"]["id"]
                 ctl.call("Page.setDocumentContent", {"frameId": frame_id, "html": PAGE.decode()})
@@ -105,12 +171,36 @@ def browser(scale=1):
                 yield page, ctl, process, debug, 0
                 ctl.close()
             finally:
-                os.killpg(process.pid, signal.SIGTERM)
+                primary = sys.exc_info()[1]
+                cleanup_errors = []
+                if process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    except Exception as error:
+                        cleanup_errors.append(error)
                 try:
                     process.wait(timeout=4)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    process.wait(timeout=4)
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except Exception as error:
+                        cleanup_errors.append(error)
+                    try:
+                        process.wait(timeout=4)
+                    except Exception as error:
+                        cleanup_errors.append(error)
+                except Exception as error:
+                    cleanup_errors.append(error)
+                if cleanup_errors:
+                    detail = "; ".join(
+                        f"{type(error).__name__}:{bounded(error)}" for error in cleanup_errors)
+                    if primary is not None:
+                        if hasattr(primary, "add_note"):
+                            primary.add_note(f"Chrome cleanup failure: {bounded(detail)}")
+                        else:
+                            print(f"Chrome cleanup failure: {bounded(detail)}", file=sys.stderr)
+                    else:
+                        raise cleanup_errors[0]
 
 # Test-only RFC 6455 envelope. The PRODUCT delegates WebSockets to libcurl.
 class Audit(socketserver.ThreadingTCPServer):
