@@ -2,7 +2,7 @@
 """Write and verify the hayamimi-web release record.
 
 proof       merged-PR proof from GitHub API JSON (pull and its reviews); the
-            latest review on the exact head must declare ROUND_n_GREEN
+            latest non-dismissed review on the exact head must be Green
 selftest    verdict-rule cases
 provenance  provenance for the packaged zip
 verify      check a release directory holds exactly the published set and
@@ -14,6 +14,7 @@ ZIP = 'hayamimi-web.zip'
 ASSETS = {ZIP, ZIP + '.sha256', 'provenance.json', 'merged-pr-proof.json'}
 DIGEST = re.compile(r'[0-9a-f]{64}')
 GREEN = re.compile(r'\bROUND_\d+_GREEN\b')
+CORRECTIONS = re.compile(r'\bROUND_\d+_CORRECTIONS\b')
 
 
 def sha256(path):
@@ -33,33 +34,48 @@ def write(path, value):
 
 
 def green_verdict(reviews, head):
-    """URL of the latest review on the exact head, which must declare ROUND_n_GREEN.
+    """URL of the latest non-dismissed review on the exact head, which must be Green.
 
-    This is verdict evidence, not reviewer identity: the review token is the
-    only machine-readable signal, and a later non-Green review on the same
-    head withdraws it.
+    Green means the body has exactly one distinct ROUND_<n>_GREEN token and no
+    ROUND_<n>_CORRECTIONS token, so a Corrections review that names the future
+    Green token does not count. This is verdict evidence, not reviewer
+    identity: the token is the only machine-readable signal, and a later
+    non-Green review on the same head withdraws it.
     """
-    on_head = sorted((r for r in reviews if r.get('commit_id') == head and r.get('submitted_at')),
-                     key=lambda r: r['submitted_at'])
+    on_head = sorted((r for r in reviews if r.get('commit_id') == head and r.get('submitted_at')
+                      and r.get('state') != 'DISMISSED'), key=lambda r: r['submitted_at'])
     if not on_head:
-        raise SystemExit('no review recorded on the exact reviewed head')
+        raise SystemExit('no non-dismissed review recorded on the exact reviewed head')
     latest = on_head[-1]
-    if not GREEN.search(latest.get('body') or '') or not latest.get('html_url'):
+    body = latest.get('body') or ''
+    if len(set(GREEN.findall(body))) != 1 or CORRECTIONS.search(body) or not latest.get('html_url'):
         raise SystemExit('latest review on the exact reviewed head is not a ROUND_n_GREEN verdict')
     return latest['html_url']
 
 
 def selftest(a):
     head = 'a' * 40
-    review = lambda body, at, commit=head: {'commit_id': commit, 'submitted_at': at, 'body': body, 'html_url': f'u/{at}'}
-    assert green_verdict([review('Verdict: `ROUND_2_GREEN`.', 't2')], head) == 'u/t2'
-    assert green_verdict([review('ROUND_1_CORRECTIONS', 't1'), review('ROUND_2_GREEN', 't2')], head) == 'u/t2'
+    review = lambda body, at, commit=head, state='COMMENTED': {
+        'commit_id': commit, 'submitted_at': at, 'body': body, 'html_url': f'u/{at}', 'state': state}
+    good = [
+        [review('Verdict: `ROUND_2_GREEN`.', 't2')],
+        [review('ROUND_1_CORRECTIONS', 't1'), review('ROUND_2_GREEN', 't2')],
+        [review('ROUND_1_GREEN', 't1', state='DISMISSED'), review('ROUND_2_GREEN', 't2')],
+        [review('ROUND_2_GREEN', 't1'), review('ROUND_2_CORRECTIONS', 't2', state='DISMISSED')],
+    ]
+    for reviews in good:
+        assert green_verdict(reviews, head) == [r for r in reviews if r['state'] != 'DISMISSED'][-1]['html_url'], reviews
     bad = [
         [review('Verdict: `ROUND_1_CORRECTIONS`.', 't1')],
         [review('ROUND_1_GREEN', 't1'), review('ROUND_2_CORRECTIONS', 't2')],
         [],
         [review('ROUND_1_GREEN', 't1', commit='b' * 40)],
         [review('green, looks fine', 't1')],
+        [review('ROUND_2_CORRECTIONS; post ROUND_2_GREEN only after CI', 't1')],
+        [review('ROUND_3_GREEN. The earlier ROUND_2_CORRECTIONS items are closed.', 't1')],
+        [review('ROUND_2_GREEN', 't1', state='DISMISSED')],
+        [review('ROUND_1_GREEN then ROUND_2_GREEN', 't1')],
+        [review('round_2_green, ROUND_2_GREENISH, xROUND_2_GREEN', 't1')],
     ]
     for reviews in bad:
         try:
@@ -67,7 +83,7 @@ def selftest(a):
         except SystemExit:
             continue
         raise AssertionError(f'accepted a non-Green verdict: {reviews}')
-    print(json.dumps({'verdict': {'positive': 2, 'negative': len(bad)}}))
+    print(json.dumps({'verdict': {'positive': len(good), 'negative': len(bad)}}))
 
 
 def proof(a):
