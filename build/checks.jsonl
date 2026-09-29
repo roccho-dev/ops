@@ -13,7 +13,7 @@
 {"deps":["nodejs","hq-source-evidence-runtime"],"kind":"check","name":"hq-source-evidence-runtime-validator","script":"packages/hq-source-evidence-runtime/tests/source-validator.mjs"}
 {"deps":["nodejs","hq-source-evidence-runtime"],"kind":"check","name":"hq-source-evidence-runtime-receipt-writer","script":"packages/hq-source-evidence-runtime/tests/source-receipt-writer.mjs"}
 {"deps":["nodejs","model-source-reconcile","hq-source-evidence-runtime"],"kind":"check","name":"model-source-reconcile-checker","script":"packages/model-source-reconcile/tests/reconcile-checker.mjs"}
-{"deps":["nodejs","model-source-reconcile","hq-source-evidence-runtime"],"kind":"check","name":"model-source-reconcile-projection","script":"packages/model-source-reconcile/tests/reconcile-projection.mjs"}
+{"deps":["nodejs","model-source-reconcile","hq-source-evidence-runtime"],"kind":"check","name":"model-source-reconcile-projection","script":"packages/model-source-reconcile/tests/source-reconcile-projection.mjs"}
 {"deps":["nodejs","go","coreutils","gosh"],"kind":"check","name":"gosh-v0","script":"packages/gosh/tests/e2e.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"excalidraw-dist-current","script":"packages/excalidraw/tests/dist-current.mjs"}
 {"deps":["nodejs","python3","dist-runner"],"kind":"check","name":"dist-runner","script":"packages/dist-runner/tests/e2e.mjs"}
@@ -37,3 +37,4 @@
 {"deps":["nodejs"],"kind":"check","name":"parallel-development-jev-phases","script":"packages/parallel-development/tests/run.mjs"}
 {"deps":["nodejs","jev-review"],"kind":"check","name":"jev-review","script":"packages/jev-review/tests/run.mjs"}
 {"deps":["nodejs","jev-review"],"kind":"check","name":"jev-arbitrary-iteration","script":"experiments/jev-iteration/test.mjs"}
+{"deps":["nodejs"],"kind":"check","name":"ci-relevance-shadow","script":"packages/ci-relevance-shadow/test.mjs"}
