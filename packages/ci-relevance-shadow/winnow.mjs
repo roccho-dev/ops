@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 
 export const MODEL = 'ollaya.dev/library/winnow:e4b';
 export const REFERENCE_KIND = 'bounded-ci-replay';
+export const REFERENCE_UNIVERSE = Object.freeze([
+  { name: 'cdp-tty-proof', script: 'nix-build packages/cdp-tty/proof.nix --no-out-link' },
+  { name: 'flake-check', script: 'nix flake check --show-trace' },
+].map(Object.freeze));
 const isWinnow = (v) => v === MODEL || v === 'winnow:e4b';
 const exactSha = (v) => typeof v === 'string' && /^[0-9a-f]{40}$/u.test(v);
 const text = (v) => typeof v === 'string' && v.trim().length > 0;

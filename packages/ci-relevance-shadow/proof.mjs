@@ -4,10 +4,11 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { digest, REFERENCE_KIND, runWinnowRelevance, joinBoundedCiReference } from './winnow.mjs';
+import { digest, REFERENCE_KIND, REFERENCE_UNIVERSE, runWinnowRelevance, joinBoundedCiReference } from './winnow.mjs';
 
 const out = process.argv[2];
-if (!out || process.argv.length !== 3) throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY');
+const providerOnly = process.argv[3] === 'provider-only';
+if (!out || process.argv.length !== (providerOnly ? 4 : 3)) throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY [provider-only]');
 mkdirSync(out, { recursive: true });
 const write = (name, data) => writeFileSync(join(out, name), JSON.stringify(data, null, 2) + '\n', { flag: 'wx' });
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -39,10 +40,7 @@ try {
   requireThat(!git('status', '--porcelain', '--untracked-files=no'), 'DIRTY_SOURCE');
   const baseSha = gitLine('merge-base', process.env.PROOF_BASE, headSha);
   const workflow = readFileSync('.github/workflows/nix-check.yml', 'utf8');
-  const candidates = [
-    { name: 'cdp-tty-proof', script: 'nix-build packages/cdp-tty/proof.nix --no-out-link' },
-    { name: 'flake-check', script: 'nix flake check --show-trace' },
-  ];
+  const candidates = structuredClone(REFERENCE_UNIVERSE);
   requireThat(candidates.every((row) => workflow.includes(row.script)), 'REFERENCE_COMMAND_CHANGED');
   const input = { baseSha, headSha,
     changedPaths: git('diff', '--name-only', '-z', baseSha, headSha).split('\0').filter(Boolean), candidates, topK: 1 };
@@ -68,6 +66,10 @@ try {
   requireThat(model.digest === modelAfter.digest, 'MODEL_CHANGED_DURING_REQUEST');
   report.provider = { requestedModel: shadow.requestedModel, observedModel: shadow.observedModel,
     manifestSha256: model.digest, version: runtimeVersion.version, runtimeFiles, loaded };
+  if (providerOnly) {
+    report.observation = 'PROVIDER_EXECUTED';
+    report.reason = 'Separate-runner observation; no reference execution or join in this process.';
+  } else {
   report.observation = 'PROVIDER_EXECUTED_REFERENCE_PENDING';
   // Provider call completes BEFORE reference execution: no observed outcome can enter the request.
   const reference = { headSha, referenceKind: REFERENCE_KIND, source, sourceSha256: digest(source), checks: [] };
@@ -102,6 +104,7 @@ try {
     cost: { requestMs: shadow.elapsedMs, referenceJobSumMs: paired.referenceMeasuredDurationMs,
       inputUsage: shadow.usage, billedMoney: null, humanAttentionMs: null, actualSavedExecutionMs: 0 },
     claimCeiling: paired.claimCeiling });
+  }
 } catch (error) {
   report.reason = error.message;
   if (report.observation === 'PROVIDER_EXECUTED_REFERENCE_PENDING') report.observation = 'REFERENCE_INCOMPLETE';
