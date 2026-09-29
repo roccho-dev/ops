@@ -75,3 +75,93 @@ jobs:
           name: nix-flake-check-log
           path: nix-flake-check.log
           if-no-files-found: ignore
+
+  # Bounded Lane A experiment only. Existing jobs above remain unchanged.
+  winnow-relevance-proof:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 450
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Prove Lane A core and offline adapter on exact head
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lane-a-evidence"
+          git rev-parse HEAD | tee "$RUNNER_TEMP/lane-a-evidence/source.commit"
+          node --test packages/ci-relevance-shadow/test.mjs packages/ci-relevance-shadow/proof.test.mjs | tee "$RUNNER_TEMP/lane-a-evidence/tests.tap"
+      - name: Materialize experimental Ollaya and Winnow
+        env:
+          OLLAYA_HOST: 127.0.0.1:11435
+          OLLAYA_DEVICE: cpu
+          OLLAYA_KEEP_ALIVE: 30m
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/lane-a-ollaya"
+          evidence="$RUNNER_TEMP/lane-a-evidence"
+          started="$(date +%s%3N)"
+          mkdir -p "$root/runtime" "$root/models"
+          base="https://github.com/ollaya-dev/ollaya/releases/download/v0.7.5"
+          archive="ollaya-linux-amd64.tar.zst"
+          curl --fail --location --retry 3 --max-time 600 -o "$root/$archive" "$base/$archive"
+          curl --fail --location --retry 3 --max-time 60 -o "$root/sha256sum.txt" "$base/sha256sum.txt"
+          (cd "$root"; grep -E "  $archive$" sha256sum.txt > selected.sha256; test -s selected.sha256; sha256sum -c selected.sha256)
+          cp "$root/selected.sha256" "$evidence/runtime-checksum.txt"
+          tar --zstd -xf "$root/$archive" -C "$root/runtime"
+          test -x "$root/runtime/bin/ollaya"
+          export OLLAYA_MODELS="$root/models"
+          export OLLAYA_LIBRARY_PATH="$root/runtime/lib/ollaya"
+          "$root/runtime/bin/ollaya" serve >"$evidence/server.log" 2>&1 &
+          echo "$!" > "$root/server.pid"
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11435/ >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          curl --fail --silent --show-error --max-time 1200 -H 'Content-Type: application/json' \
+            -d '{"model":"winnow:e4b","stream":false}' http://127.0.0.1:11435/api/pull > "$evidence/pull.json"
+          python3 - "$root" "$evidence" "$started" <<'PY'
+          import hashlib, json, pathlib, sys, time
+          root, out = map(pathlib.Path, sys.argv[1:3])
+          assert json.loads((out / 'pull.json').read_text())['status'] == 'success'
+          def digest(p):
+              with p.open('rb') as f: return hashlib.file_digest(f, 'sha256').hexdigest()
+          data = dict(version='v0.7.5', archiveSha256=digest(root / 'ollaya-linux-amd64.tar.zst'),
+                      binarySha256=digest(root / 'runtime/bin/ollaya'), setupMs=time.time_ns() // 1000000 - int(sys.argv[3]))
+          (out / 'runtime-files.json').write_text(json.dumps(data) + '\n')
+          PY
+      - name: Observe Winnow then replay every declared reference check
+        env:
+          PROOF_HEAD: ${{ github.event.pull_request.head.sha }}
+          PROOF_BASE: ${{ github.event.pull_request.base.sha }}
+        run: node packages/ci-relevance-shadow/proof.mjs "$RUNNER_TEMP/lane-a-evidence"
+      - name: Retain explicit incomplete result and stop owned experiment runtime
+        if: always()
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/lane-a-evidence"
+          mkdir -p "$evidence"
+          if test ! -f "$evidence/report.json"; then
+            printf '%s\n' '{"schema":"ops.winnowCiRelevanceProof.v1","result":"UNKNOWN","observation":"NOT_RUN","reason":"SETUP_OR_EXECUTION_INCOMPLETE_SEE_JOB_LOG","authority":false,"effect":false}' > "$evidence/report.json"
+          fi
+          if test -f "$RUNNER_TEMP/lane-a-ollaya/server.pid"; then
+            kill "$(cat "$RUNNER_TEMP/lane-a-ollaya/server.pid")" 2>/dev/null || true
+          fi
+          cat "$evidence/report.json" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lane-a-winnow-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lane-a-evidence/
+          if-no-files-found: error
+          retention-days: 30
