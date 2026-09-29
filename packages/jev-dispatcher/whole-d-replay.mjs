@@ -16,8 +16,9 @@ export async function runWholeDReplay(inputPath, outputPath, { sourceHead, key, 
     if (!row || Object.keys(row).sort().join(',') !== 'id,input,reference' || typeof row.id !== 'string'
       || !row.id.trim() || row.id.length > 128 || ids.has(row.id)) throw new Error('INVALID_REPLAY_CASE');
     ids.add(row.id);
-    projectWholeDInput(row.input);
-    const bound = compareWholeD({ policySha256: row.input.policy.sha256, observationSha256: row.input.observation.sha256 }, row.reference);
+    const projected = projectWholeDInput(row.input);
+    const bound = compareWholeD({ policySha256: row.input.policy.sha256, observationSha256: row.input.observation.sha256,
+      candidatesSha256: sha256(projected.candidates) }, row.reference);
     if (bound.status === 'BLOCK') throw new Error(bound.reason);
   }
   // Reserve before provider calls; refuse to overwrite evidence or pay twice.

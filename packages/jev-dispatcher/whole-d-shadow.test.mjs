@@ -11,6 +11,9 @@ import { runWholeDReplay } from './whole-d-replay.mjs';
 // This is a synthetic plumbing fixture, NOT accepted ADRS policy or live-D truth.
 const policy = 'Synthetic test policy only: choose the next D candidate from external observations. Unknown or inconsistent effects require holding; completed work requires exact readback before terminal. This fixture confers no authority.';
 const head = '1'.repeat(40);
+const candidate = (kind, target = {}, interpretation = kind === 'effect-interpretation' ? 'applied' : null) => ({
+  kind, target: { actor: 'worker', thread: 'thread', generation: 2, head, effectId: kind === 'effect-interpretation' ? 'e1' : null, ...target }, interpretation,
+});
 function fixture(edit = () => {}) {
   const state = { generation: 2, identity: { actor: 'worker', thread: 'thread' }, refs: { head, observedHead: head },
     active: [], duplicates: [], effects: [{ id: 'e1', generation: 2, status: 'succeeded' }],
@@ -18,21 +21,23 @@ function fixture(edit = () => {}) {
     history: [{ seq: 1, generation: 2, event: 'requested', actor: 'worker', thread: 'thread', head }] };
   edit(state);
   return { policy: { ref: 'fixture:synthetic-policy', sha256: sha256(policy), content: policy },
-    observation: { ref: 'fixture:observation', sha256: sha256(state), state } };
+    observation: { ref: 'fixture:observation', sha256: sha256(state), state }, candidates: decisionKinds.map((kind) => candidate(kind)) };
 }
-const answer = (scores = {}) => async (_state, questions) => ({ model: 'jev-1.13.0',
-  answers: Object.fromEntries(Object.keys(questions).map((key, i) => [key, { type: 'noul', noul: scores[decisionKinds[i]] ?? 0.05 }])),
+const answer = (scores = {}) => async (state, questions) => ({ model: 'jev-1.13.0',
+  answers: Object.fromEntries(Object.keys(questions).map((key, i) => [key, { type: 'noul', noul: (typeof scores === 'function' ? scores(state.candidates[i], i) : scores[state.candidates[i].kind]) ?? 0.05 }])),
   usage: { input_tokens: 12, output_tokens: 8 } });
 function reference(input, decision = 'hold') {
   const content = 'Preregistered synthetic sequence readback; no live effects occurred.';
   return { kind: 'preregistered-fixture', policySha256: input.policy.sha256, observationSha256: input.observation.sha256,
-    decision, readback: { ref: 'fixture:readback', sha256: sha256(content), content } };
+    candidatesSha256: sha256(projectWholeDInput(input).candidates),
+    decision: typeof decision === 'string' ? input.candidates.find((x) => x.kind === decision) : decision,
+    readback: { ref: 'fixture:readback', sha256: sha256(content), content } };
 }
 
 for (const kind of decisionKinds) test(`whole-D plumbing preserves ${kind}, coverage and zero authority`, async () => {
   const input = fixture(); const before = JSON.stringify(input);
   const result = await reviewWholeDDecisionPlane(input, answer({ [kind]: 0.95 }));
-  assert.equal(result.status, 'CANDIDATE'); assert.equal(result.decision, kind);
+  assert.equal(result.status, 'CANDIDATE'); assert.deepEqual(result.decision, candidate(kind));
   assert.equal(result.evaluated, 8); assert.equal(result.callsCompleted, 1); assert.equal(result.callsAttempted, 1);
   assert.equal(result.authority, false); assert.equal(result.effect, false); assert.equal(result.referenceIsGroundTruth, false);
   assert.equal(result.observationSha256, input.observation.sha256); assert.equal(JSON.stringify(input), before);
@@ -53,13 +58,34 @@ for (const inject of [
   await assert.rejects(reviewWholeDDecisionPlane(fixture(inject), answer()), /INVALID_OBSERVATION/);
 });
 
-test('identity and provenance text cannot carry comparator answers to model', () => {
-  const input = fixture((s) => { s.identity.actor = 'SECRET_ANSWER_TERMINAL'; s.history[0].actor = s.identity.actor; });
-  input.observation.ref = 'SECRET_ANSWER_TERMINAL'; input.policy.ref = 'SECRET_ANSWER_TERMINAL';
-  const projected = projectWholeDInput(input);
-  assert.ok(!JSON.stringify(projected).includes('SECRET_ANSWER_TERMINAL'));
-  assert.equal(projected.observed.identity.actor, projected.observed.history[0].actor);
-  assert.equal(projected.observed.refs.head, projected.observed.refs.observedHead);
+test('material identities preserve policy relations; provenance and comparator labels remain excluded', async () => {
+  const input = fixture((s) => {
+    s.identity = { actor: 'org/reviewer:alpha', thread: 'work/452:alpha' };
+    s.active = [{ ...s.identity, generation: 2 }];
+    s.duplicates = [{ actor: 'org/reviewer:beta', thread: 'work/452:beta', generation: 1 }];
+    s.effects[0].id = 'effect/452:alpha'; s.readback[0].effectId = s.effects[0].id;
+    Object.assign(s.history[0], s.identity);
+  });
+  input.policy.content = `Synthetic only: org/reviewer:alpha reviews work/452:alpha at ${head}; org/reviewer:beta is different. effect/452:alpha belongs to work/452:alpha. No authority.`;
+  input.policy.sha256 = sha256(input.policy.content);
+  input.candidates = [candidate('route', { ...input.observation.state.identity }), candidate('route', { actor: 'org/reviewer:beta', thread: 'work/452:beta' })];
+  input.observation.ref = 'COMPARATOR_ONLY'; input.policy.ref = 'COMPARATOR_ONLY';
+  const result = await reviewWholeDDecisionPlane(input, async (visible, questions) => {
+    assert.equal(visible.policy, input.policy.content);
+    assert.deepEqual(visible.observed, input.observation.state);
+    assert.notEqual(visible.observed, input.observation.state);
+    assert.equal(visible.candidates[0].target.actor, visible.observed.identity.actor);
+    assert.equal(visible.candidates[0].target.thread, visible.observed.active[0].thread);
+    assert.equal(visible.candidates[1].target.actor, visible.observed.duplicates[0].actor);
+    assert.ok(visible.policy.includes(visible.observed.refs.head));
+    assert.ok(visible.policy.includes(visible.observed.effects[0].id));
+    assert.equal(visible.observed.effects[0].id, visible.observed.readback[0].effectId);
+    assert.ok(!JSON.stringify(visible).includes('COMPARATOR_ONLY'));
+    assert.ok(Object.values(questions).every((q, i) => q.instructions.includes(JSON.stringify(visible.candidates[i]))));
+    return answer()(visible, questions);
+  });
+  assert.equal(result.callsCompleted, 1); // An assertion inside ask must not be swallowed as UNKNOWN.
+  // Preserving real identity does not prove IDs/prose free from semantic leakage.
 });
 
 test('getter and sparse array are rejected without executing accessors', () => {
@@ -158,4 +184,117 @@ test('replay stops on provider failure and refuses unbound reference before any 
   row.reference.observationSha256 = 'wrong'; fs.writeFileSync(file, JSON.stringify(row) + '\n');
   await assert.rejects(runWholeDReplay(file, path.join(dir, 'bad.jsonl'), { sourceHead: head, ask }), /UNBOUND_REFERENCE/);
   assert.equal(calls, 1);
+});
+
+// The mock supplies scores, never an oracle for actual D behavior.
+for (const kind of ['route', 'refire', 'duplicate-suppression', 'terminal']) {
+  for (const [field, value] of Object.entries({ actor: 'worker-b', thread: 'thread-b', generation: 3, head: '2'.repeat(40), effectId: 'effect-b' })) {
+    test(`${kind}: changing only target.${field} cannot become a category-only MATCH`, async () => {
+      const input = fixture(); const first = candidate(kind); const second = candidate(kind, { [field]: value });
+      input.candidates = [first, second];
+      const result = await reviewWholeDDecisionPlane(input, answer((_candidate, i) => i === 1 ? 0.95 : 0.05));
+      assert.equal(result.status, 'CANDIDATE'); assert.deepEqual(result.decision, second);
+      assert.equal(result.evaluated, 2); assert.equal(result.candidates, 2);
+      assert.equal(result.candidatesSha256, sha256(projectWholeDInput(input).candidates));
+      assert.equal(new Set(result.ranked[0].findings.map((x) => x.subject[1])).size, 2);
+      assert.equal(compareWholeD(result, reference(input, first)).status, 'DIFFER');
+      assert.equal(compareWholeD(result, reference(input, second)).status, 'MATCH');
+    });
+  }
+}
+
+test('effect interpretation compares both exact effect identity and interpretation', async () => {
+  const input = fixture(); const applied = candidate('effect-interpretation');
+  const absent = candidate('effect-interpretation', {}, 'absent');
+  const other = candidate('effect-interpretation', { effectId: 'e2' }, 'absent');
+  input.candidates = [applied, absent, other];
+  const result = await reviewWholeDDecisionPlane(input, answer((_candidate, i) => i === 1 ? 0.95 : 0.05));
+  assert.deepEqual(result.decision, absent); assert.equal(result.evaluated, 3);
+  assert.equal(compareWholeD(result, reference(input, applied)).status, 'DIFFER');
+  assert.equal(compareWholeD(result, reference(input, other)).status, 'DIFFER');
+  assert.equal(compareWholeD(result, reference(input, absent)).status, 'MATCH');
+});
+
+test('field order is immaterial, but duplicate material candidates are rejected before ask', async () => {
+  const input = fixture(); const selected = input.candidates[0];
+  const reordered = { interpretation: selected.interpretation, target: Object.fromEntries(Object.entries(selected.target).reverse()), kind: selected.kind };
+  const originalProjection = projectWholeDInput(input); input.candidates[0] = reordered;
+  assert.deepEqual(projectWholeDInput(input), originalProjection);
+  const result = await reviewWholeDDecisionPlane(input, answer({ route: 0.95 }));
+  assert.equal(compareWholeD(result, reference(input, reordered)).status, 'MATCH');
+  input.candidates.push(selected); let calls = 0;
+  await assert.rejects(reviewWholeDDecisionPlane(input, async () => { calls++; }), /DUPLICATE_CANDIDATE/);
+  assert.equal(calls, 0);
+});
+
+test('invalid, vague, sparse or comparator-labelled candidates fail before provider calls', async () => {
+  const bad = [[], [candidate('hold')], Array.from({ length: 33 }, () => candidate('hold')), new Array(2),
+    ['route', 'terminal'], [candidate('route'), { kind: 'terminal' }],
+    [candidate('route'), candidate('terminal', { head: 'proposals' })],
+    [candidate('route'), candidate('terminal', { actor: '' })],
+    [candidate('route'), candidate('terminal', { generation: -1 })],
+    [candidate('route'), { ...candidate('terminal'), expected: true }],
+    [candidate('route'), candidate('terminal', { answer: 'terminal' })],
+    [candidate('route'), candidate('effect-interpretation', { effectId: null })],
+    [candidate('route'), candidate('terminal', {}, 'applied')],
+    [candidate('route'), candidate('effect-interpretation', {}, 'execute-now')]];
+  let calls = 0;
+  for (const candidates of bad) await assert.rejects(reviewWholeDDecisionPlane({ ...fixture(), candidates }, async () => { calls++; }), /INVALID_CANDIDATES/);
+  const accessor = fixture(); let invoked = false;
+  Object.defineProperty(accessor.candidates[0].target, 'actor', { enumerable: true, get() { invoked = true; return 'worker'; } });
+  await assert.rejects(reviewWholeDDecisionPlane(accessor, async () => { calls++; }), /INVALID_CANDIDATES/);
+  assert.equal(invoked, false); assert.equal(calls, 0);
+});
+
+test('same-shaped states with materially different identities cannot collapse under aliasing', () => {
+  const a = fixture();
+  const b = fixture((s) => { s.identity.actor = 'reviewer'; s.history[0].actor = 'reviewer'; });
+  assert.notEqual(sha256(projectWholeDInput(a)), sha256(projectWholeDInput(b)));
+  const crossed = fixture((s) => { s.identity.thread = s.identity.actor; });
+  const projected = projectWholeDInput(crossed);
+  assert.equal(projected.observed.identity.actor, projected.observed.identity.thread);
+});
+
+test('same-kind target ties abstain; a missing reference target is not silently replaced', async () => {
+  const input = fixture(); input.candidates = [candidate('route'), candidate('route', { actor: 'worker-b' })];
+  const tied = await reviewWholeDDecisionPlane(input, answer({ route: 0.95 }));
+  assert.equal(tied.status, 'UNKNOWN'); assert.equal(tied.decision, null);
+  const definite = await reviewWholeDDecisionPlane(input, answer((_candidate, i) => i === 0 ? 0.95 : 0.05));
+  const absent = candidate('route', { actor: 'not-in-universe' });
+  assert.equal(compareWholeD(definite, reference(input, absent)).status, 'DIFFER');
+  const categoryOnly = reference(input, absent); categoryOnly.decision = 'route';
+  assert.equal(compareWholeD(definite, categoryOnly).status, 'BLOCK');
+});
+
+test('candidate universe is exact-bound; stale or missing universe cannot be MATCH', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'whole-d-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const input = fixture(); const ref = reference(input);
+  input.candidates[0].target.actor = 'worker-b';
+  const result = await reviewWholeDDecisionPlane(input, answer({ hold: 0.95 }));
+  assert.equal(compareWholeD(result, ref).status, 'BLOCK');
+  const missing = reference(input); delete missing.candidatesSha256;
+  assert.equal(compareWholeD(result, missing).status, 'BLOCK');
+  const file = path.join(dir, 'cases.jsonl'); const out = path.join(dir, 'result.jsonl');
+  fs.writeFileSync(file, JSON.stringify({ id: 'stale', input, reference: ref }) + '\n');
+  let calls = 0;
+  await assert.rejects(runWholeDReplay(file, out, { sourceHead: head, ask: async () => { calls++; } }), /UNBOUND_REFERENCE/);
+  assert.equal(calls, 0); assert.equal(fs.existsSync(out), false);
+});
+
+test('changing only the external comparator cannot change model input or candidate targets', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'whole-d-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const input = fixture(); input.candidates = [candidate('route'), candidate('route', { actor: 'worker-b' })];
+  const before = JSON.stringify(input); const seen = []; const comparisons = [];
+  for (const [i, decision] of [...input.candidates, candidate('route', { actor: 'COMPARATOR_SECRET' })].entries()) {
+    const file = path.join(dir, `case-${i}.jsonl`);
+    fs.writeFileSync(file, JSON.stringify({ id: `synthetic-${i}`, input, reference: reference(input, decision) }) + '\n');
+    const rows = await runWholeDReplay(file, path.join(dir, `result-${i}.jsonl`), { sourceHead: head,
+      ask: async (state, questions) => { seen.push(JSON.stringify({ state, questions })); return answer((_c, index) => index === 0 ? 0.95 : 0.05)(state, questions); } });
+    comparisons.push(rows[1].comparison.status);
+    assert.deepEqual(rows[1].result.decision, input.candidates[0]);
+    assert.equal(rows[1].result.authority, false); assert.equal(rows.at(-1).liveEffectCalls, 0);
+  }
+  assert.equal(seen.length, 3); assert.equal(new Set(seen).size, 1);
+  assert.ok(!seen[0].includes('COMPARATOR_SECRET')); assert.deepEqual(comparisons, ['MATCH', 'DIFFER', 'DIFFER']);
+  assert.equal(JSON.stringify(input), before);
 });
