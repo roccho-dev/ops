@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Write and verify the hayamimi-web release record.
 
-proof       merged-PR proof from GitHub API JSON (pull and its reviews)
+proof       merged-PR proof from GitHub API JSON (pull and its reviews); the
+            latest review on the exact head must declare ROUND_n_GREEN
+selftest    verdict-rule cases
 provenance  provenance for the packaged zip
 verify      check a release directory holds exactly the published set and
             that its digests, provenance and proof agree with one exact SHA
@@ -11,6 +13,7 @@ import argparse, hashlib, json, pathlib, re
 ZIP = 'hayamimi-web.zip'
 ASSETS = {ZIP, ZIP + '.sha256', 'provenance.json', 'merged-pr-proof.json'}
 DIGEST = re.compile(r'[0-9a-f]{64}')
+GREEN = re.compile(r'\bROUND_\d+_GREEN\b')
 
 
 def sha256(path):
@@ -29,20 +32,56 @@ def write(path, value):
     pathlib.Path(path).write_text(json.dumps(value, indent=2, sort_keys=True) + '\n')
 
 
+def green_verdict(reviews, head):
+    """URL of the latest review on the exact head, which must declare ROUND_n_GREEN.
+
+    This is verdict evidence, not reviewer identity: the review token is the
+    only machine-readable signal, and a later non-Green review on the same
+    head withdraws it.
+    """
+    on_head = sorted((r for r in reviews if r.get('commit_id') == head and r.get('submitted_at')),
+                     key=lambda r: r['submitted_at'])
+    if not on_head:
+        raise SystemExit('no review recorded on the exact reviewed head')
+    latest = on_head[-1]
+    if not GREEN.search(latest.get('body') or '') or not latest.get('html_url'):
+        raise SystemExit('latest review on the exact reviewed head is not a ROUND_n_GREEN verdict')
+    return latest['html_url']
+
+
+def selftest(a):
+    head = 'a' * 40
+    review = lambda body, at, commit=head: {'commit_id': commit, 'submitted_at': at, 'body': body, 'html_url': f'u/{at}'}
+    assert green_verdict([review('Verdict: `ROUND_2_GREEN`.', 't2')], head) == 'u/t2'
+    assert green_verdict([review('ROUND_1_CORRECTIONS', 't1'), review('ROUND_2_GREEN', 't2')], head) == 'u/t2'
+    bad = [
+        [review('Verdict: `ROUND_1_CORRECTIONS`.', 't1')],
+        [review('ROUND_1_GREEN', 't1'), review('ROUND_2_CORRECTIONS', 't2')],
+        [],
+        [review('ROUND_1_GREEN', 't1', commit='b' * 40)],
+        [review('green, looks fine', 't1')],
+    ]
+    for reviews in bad:
+        try:
+            green_verdict(reviews, head)
+        except SystemExit:
+            continue
+        raise AssertionError(f'accepted a non-Green verdict: {reviews}')
+    print(json.dumps({'verdict': {'positive': 2, 'negative': len(bad)}}))
+
+
 def proof(a):
     pr = json.loads(pathlib.Path(a.pr).read_text())
     reviews = json.loads(pathlib.Path(a.reviews).read_text())
     head = pr['head']['sha']
     if not pr.get('merged_at') or pr['base']['ref'] != 'proposals' or pr.get('merge_commit_sha') != a.merge_sha:
         raise SystemExit('source is not an exact merged proposals PR for this SHA')
-    verdicts = [r for r in reviews if r.get('commit_id') == head and r.get('html_url')]
-    if not verdicts:
-        raise SystemExit('no review recorded on the exact reviewed head')
+    verdict = green_verdict(reviews, head)
     if a.head_tree != a.merge_tree:
         raise SystemExit('reviewed tree differs from merge tree; an R re-review of the merge SHA is required')
     write(a.out, {
         'pr_number': pr['number'],
-        'r_exact_head_verdict_ref': max(verdicts, key=lambda r: r.get('submitted_at') or '')['html_url'],
+        'r_exact_head_verdict_ref': verdict,
         'merged_at': pr['merged_at'],
         'base': 'proposals',
         'reviewed_head': head,
@@ -100,6 +139,7 @@ def verify(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest='cmd', required=True)
+    sub.add_parser('selftest')
     p = sub.add_parser('proof')
     for k in ('--pr', '--reviews', '--head-tree', '--merge-sha', '--merge-tree', '--out'):
         p.add_argument(k, required=True)
@@ -111,7 +151,7 @@ def main():
     for k in ('--sha', '--repository'):
         p.add_argument(k, required=True)
     a = ap.parse_args()
-    {'proof': proof, 'provenance': provenance, 'verify': verify}[a.cmd](a)
+    {'selftest': selftest, 'proof': proof, 'provenance': provenance, 'verify': verify}[a.cmd](a)
 
 
 if __name__ == '__main__':

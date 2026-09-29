@@ -2,13 +2,20 @@
 """Lint the hayamimi-web release workflow.
 
 Reads the workflow as JSON on stdin (`yq -o=json . <workflow>`) and fails on:
-unpinned actions, any Nix in a contents:write job, or a publish guard that is
-not exactly the proposals-only manual publish condition.
+unpinned actions, any Nix or indirect execution in the contents:write job, or
+a publish guard that is not exactly the proposals-only manual publish condition.
+The write job may only use the pinned checkout and download-artifact actions,
+run steps scanned for Nix, and the default or bash shell.
 """
 import copy, json, re, sys
 
 PIN = re.compile(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}$')
 NIX = re.compile(r'(?<![\w.-])(?:nix|nix-build|nix-shell|nix-store|nix-env|nix-instantiate)(?![\w.-])')
+WRITE_USES = {
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+}
+SHELLS = {None, 'bash'}
 GUARD = {
     "github.event_name == 'workflow_dispatch'",
     'inputs.publish',
@@ -38,11 +45,16 @@ def lint(workflow):
         job = jobs[name]
         if job.get('container') or job.get('services'):
             errors.append(f'{name}: contents:write job may not use a container or services')
+        for scope, defaults in (('workflow', workflow.get('defaults')), (name, job.get('defaults'))):
+            if ((defaults or {}).get('run') or {}).get('shell') not in SHELLS:
+                errors.append(f'{scope}: defaults.run.shell must be unset or bash for the contents:write job')
         for i, step in enumerate(job.get('steps') or []):
             if NIX.search(step.get('run') or ''):
                 errors.append(f'{name}[{i}]: contents:write job runs Nix')
-            if re.search(r'nix|cachix', step.get('uses') or '', re.I):
-                errors.append(f'{name}[{i}]: contents:write job installs Nix')
+            if step.get('shell') not in SHELLS:
+                errors.append(f'{name}[{i}]: contents:write job step shell must be unset or bash')
+            if 'uses' in step and step['uses'] not in WRITE_USES:
+                errors.append(f'{name}[{i}]: contents:write job may only use pinned checkout and download-artifact')
         guard = str(job.get('if') or '').strip()
         if set(p.strip() for p in guard.split('&&')) != GUARD or guard.count('&&') != len(GUARD) - 1:
             errors.append(f'{name}: guard must be exactly {" && ".join(sorted(GUARD))}')
@@ -61,7 +73,7 @@ def selftest():
                 'needs': 'build-test',
                 'if': ' && '.join(sorted(GUARD)),
                 'permissions': {'contents': 'write'},
-                'steps': [{'uses': pin}, {'run': 'gh release create "$TAG"'}],
+                'steps': [{'uses': sorted(WRITE_USES)[0]}, {'run': 'gh release create "$TAG"', 'shell': 'bash'}],
             },
         },
     }
@@ -76,6 +88,10 @@ def selftest():
         lambda w: w['jobs']['publish'].pop('needs'),
         lambda w: w.__setitem__('permissions', 'write-all'),
         lambda w: w['jobs']['build-test'].__setitem__('permissions', {'contents': 'write'}),
+        lambda w: w['jobs']['publish']['steps'][1].__setitem__('shell', 'nix shell nixpkgs#bash -c bash {0}'),
+        lambda w: w['jobs']['publish'].__setitem__('defaults', {'run': {'shell': 'nix develop -c bash {0}'}}),
+        lambda w: w.__setitem__('defaults', {'run': {'shell': 'nix-shell --run {0}'}}),
+        lambda w: w['jobs']['publish']['steps'].append({'uses': 'actions/github-script@' + 'c' * 40, 'with': {'script': "require('child_process').execSync('nix build')"}}),
     ]
     for mutate in bad:
         w = copy.deepcopy(good)
