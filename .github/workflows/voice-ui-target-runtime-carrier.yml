@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'packages/voice-ui-target-runtime/**'
+      - 'tools/voice-ui-target-runtime-carrier.py'
       - 'flake.lock'
       - '.github/workflows/voice-ui-target-runtime-carrier.yml'
   workflow_dispatch:
@@ -30,7 +31,7 @@ jobs:
       EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals' }}
       OFFICIAL_KEY: cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-      CARRIER_PY: packages/voice-ui-target-runtime/carrier.py
+      CARRIER_PY: tools/voice-ui-target-runtime-carrier.py
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -49,7 +50,7 @@ jobs:
             yq -o=json . .github/workflows/voice-ui-target-runtime-carrier.yml | python3 packages/hayamimi-web/build/check-release-workflow.py
             python3 packages/hayamimi-web/build/check-release-workflow.py --selftest
             python3 packages/hayamimi-web/build/release-provenance.py selftest
-            python3 packages/voice-ui-target-runtime/carrier.py selftest'
+            python3 tools/voice-ui-target-runtime-carrier.py selftest'
       - name: Build the runtime and its boundary check
         run: |
           set -euo pipefail
@@ -122,9 +123,9 @@ jobs:
           reject no-trusted phase_a "$RUNNER_TEMP/fresh-no-trusted" "https://cache.nixos.org file://$carrier" "$OFFICIAL_KEY"
           mkdir -p "$RUNNER_TEMP/work/extra"
           python3 - dist/voice-ui-target-runtime-carrier.tar "$RUNNER_TEMP/work/extra" <<'PY'
-          import hashlib, pathlib, sys
-          sys.path.insert(0, 'packages/voice-ui-target-runtime')
-          import carrier
+          import hashlib, importlib.util, pathlib, sys
+          spec = importlib.util.spec_from_file_location('carrier', 'tools/voice-ui-target-runtime-carrier.py')
+          carrier = importlib.util.module_from_spec(spec); spec.loader.exec_module(carrier)
           members = carrier.read_archive(sys.argv[1])
           narinfo = next(k for k in members if k.endswith('.narinfo'))
           members['0' * 32 + '.narinfo'] = members[narinfo]
@@ -182,7 +183,7 @@ jobs:
     env:
       EXACT_SHA: ${{ github.sha }}
       TAG: voice-ui-target-runtime-carrier-${{ github.sha }}
-      CARRIER_PY: packages/voice-ui-target-runtime/carrier.py
+      CARRIER_PY: tools/voice-ui-target-runtime-carrier.py
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
