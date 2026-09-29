@@ -42,9 +42,14 @@ node packages/repo-health/design/artifact-lint.mjs INPUT.json NEW_REPORT.jsonl
 
 Ordinary `repo-health` checks import the offline tests through `design/test.mjs`.
 They require no credentials or network. No workflow or CI selection is changed.
-The one-shot CLI consumes `JEV_API_KEY` only through the existing authorized envs
-boundary. It refuses inherited SOPS decryption capability, uses the existing fixed
-Jev endpoint/model/budgets/timeout, and does not provision credentials or retry.
+The one-shot CLI consumes an already-projected target-native `JEV_API_KEY`. It does
+not start/wait for envs, dispatch an envs workflow, parent through envctl, obtain a
+GitHub Environment source secret, or fall back to envs-old. This follows the current
+`envs@4f240930db946124e70af4a43ee94bbb73b9f8ed/contracts/provider-consumer.jsonl`
+normal consumer boundary, not the historical envs authenticated-runner description
+still present in older ops experiment docs. It refuses inherited SOPS decryption
+capability, uses the existing fixed Jev endpoint/model/budgets/timeout, and does not
+provision credentials or retry.
 
 The output is created exclusively (existing output is never overwritten) and contains
 manifest, result and summary rows. The manifest binds runtime, implementation-file
@@ -83,7 +88,7 @@ by a threshold or converted into an execution error. This one contrast does not
 validate the other five categories, natural cases, real FP/FN or economic usefulness.
 
 Each JSONL line is a complete CLI input. Extract each into its own input file and run
-once into a distinct new report through the existing envs runner. Retain both exact
+once into a distinct new report where target-native auth is already provisioned. Retain both exact
 reports before comparing the raw `contradiction` scores. A partial/missing pair is
 UNKNOWN, not a successful contrast or NO_EFFECT. No live result is bundled here.
 
@@ -93,3 +98,31 @@ review of this PR is not automatically such a natural-case reference. No indepen
 natural comparison, usefulness or adoption claim has been established by offline tests.
 Stop/continue and adoption remain P decisions; unavailable execution is an explicit
 unresolved BLOCK, not W authority to declare the portfolio complete.
+
+## Retained observation: source capture succeeded, provider execution blocked
+
+`artifact-lint.observed-block.jsonl` is the write-once three-row output of the real
+CLI at ops `f3cc00394b46825c4435e3082e2ed8e327374111`, Node v22.16.0/Linux/x64.
+This is **not a live Jev result**, not a natural-case quality comparison, and not a
+fixture answer. The current process had no target-native JEV_API_KEY.
+
+The source is the complete, public, exact-revision provider-consumer contract above.
+It was fetched through GitHub and its 2,289 UTF-8 bytes independently matched Git blob
+`ff7e7c7898191bd691dc645e2de2710d3961d5e5` before execution. Its content digest is
+`sha256:d18800430e3672885b72c67157272aa0d40e67294cce5472601fa354ec78706a`.
+The generic adapter still says NOT_VERIFIED: this external capture/readback is the
+additional provenance observation, not a stronger guarantee added to every input.
+
+Readback: all three object seals and manifest/result/summary links matched. Terminal
+status = BLOCK / JEV_API_KEY_REQUIRED, validated calls = 0, HTTP attempts = 0,
+evaluated questions = 0, semantic result = UNKNOWN. Raw error bodies and credentials
+are absent. The report file SHA-256 is
+`ea712d55b212ebc34c1df2065c1ffe075e8c3670816bbcf00db9389c5d40628c`.
+The source input file can be reconstructed as `JSON.stringify(result.source) + '\n'`
+from the result envelope. No provider response or usefulness score is inferred.
+
+At that envs revision, dev authoring/projection are declared NOT_CONFIGURED and the
+normal consumer path explicitly forbids source-secret and old-runner fallbacks.
+Those repository declarations do not authenticate any external target's current
+state. No permitted target credential/receipt was supplied to this execution. W did
+not configure authoring, perform projection, dispatch envs or change that authority.
