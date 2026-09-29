@@ -261,7 +261,13 @@ test('same-kind target ties abstain; a missing reference target is not silently 
   assert.equal(tied.status, 'UNKNOWN'); assert.equal(tied.decision, null);
   const definite = await reviewWholeDDecisionPlane(input, answer((_candidate, i) => i === 0 ? 0.95 : 0.05));
   const absent = candidate('route', { actor: 'not-in-universe' });
-  assert.equal(compareWholeD(definite, reference(input, absent)).status, 'DIFFER');
+  for (const result of [definite, tied]) {
+    const before = JSON.stringify(result);
+    const comparison = compareWholeD(result, reference(input, absent));
+    assert.equal(comparison.status, 'BLOCK'); assert.equal(comparison.reason, 'CANDIDATE_UNIVERSE_INCOMPLETE');
+    assert.equal(comparison.referenceIsGroundTruth, false); assert.deepEqual(comparison.decision, absent);
+    assert.equal(JSON.stringify(result), before); // Never add the missing reference target.
+  }
   const categoryOnly = reference(input, absent); categoryOnly.decision = 'route';
   assert.equal(compareWholeD(definite, categoryOnly).status, 'BLOCK');
 });
@@ -291,10 +297,120 @@ test('changing only the external comparator cannot change model input or candida
     const rows = await runWholeDReplay(file, path.join(dir, `result-${i}.jsonl`), { sourceHead: head,
       ask: async (state, questions) => { seen.push(JSON.stringify({ state, questions })); return answer((_c, index) => index === 0 ? 0.95 : 0.05)(state, questions); } });
     comparisons.push(rows[1].comparison.status);
-    assert.deepEqual(rows[1].result.decision, input.candidates[0]);
-    assert.equal(rows[1].result.authority, false); assert.equal(rows.at(-1).liveEffectCalls, 0);
+    if (i < 2) {
+      assert.deepEqual(rows[1].result.decision, input.candidates[0]);
+      assert.equal(rows[1].result.authority, false);
+    } else {
+      assert.equal(rows[1].execution, 'NOT_RUN'); assert.equal(rows[1].callsAttempted, 0);
+      assert.equal(rows[1].result, undefined);
+      assert.equal(rows[1].comparison.reason, 'CANDIDATE_UNIVERSE_INCOMPLETE');
+      assert.deepEqual(rows[1].inputEvidence.candidateUniverse, input.candidates);
+    }
+    assert.equal(rows.at(-1).liveEffectCalls, 0);
   }
-  assert.equal(seen.length, 3); assert.equal(new Set(seen).size, 1);
-  assert.ok(!seen[0].includes('COMPARATOR_SECRET')); assert.deepEqual(comparisons, ['MATCH', 'DIFFER', 'DIFFER']);
+  assert.equal(seen.length, 2); assert.equal(new Set(seen).size, 1);
+  assert.ok(!seen[0].includes('COMPARATOR_SECRET')); assert.deepEqual(comparisons, ['MATCH', 'DIFFER', 'BLOCK']);
   assert.equal(JSON.stringify(input), before);
+});
+
+
+test('serialized evidence retains the exact offered universe and its decision keys without input aliasing', async () => {
+  const input = fixture(); const expected = projectWholeDInput(input).candidates; let offered;
+  const ref = reference(input);
+  const result = await reviewWholeDDecisionPlane(input, async (state, questions) => {
+    offered = structuredClone(state.candidates); return answer({ hold: 0.95 })(state, questions);
+  });
+  assert.equal(result.callsCompleted, 1); assert.equal(result.schema, 'ops.wholeDShadow.v4');
+  assert.deepEqual(result.candidateUniverse, offered); assert.deepEqual(result.candidateUniverse, expected);
+  assert.equal(result.candidatesSha256, sha256(expected)); assert.equal(result.candidates, expected.length);
+  assert.deepEqual(result.ranked[0].findings.map((x) => x.subject[1]).sort(), expected.map(sha256).sort());
+  input.candidates[0].target.actor = 'MUTATED_AFTER_CALL';
+  assert.deepEqual(result.candidateUniverse, expected);
+  const restored = JSON.parse(JSON.stringify(result));
+  assert.equal(compareWholeD(restored, ref).status, 'MATCH');
+  const failed = await reviewWholeDDecisionPlane(fixture(), async () => { throw new Error('JEV_HTTP_503'); });
+  assert.equal(failed.status, 'UNKNOWN'); assert.deepEqual(failed.candidateUniverse, expected);
+  assert.equal(compareWholeD(failed, ref).status, 'UNKNOWN');
+});
+
+test('missing, altered, reordered, duplicate or malformed retained universe is BLOCK even with matching reference digest', async () => {
+  const input = fixture(); const result = await reviewWholeDDecisionPlane(input, answer({ hold: 0.95 }));
+  const ref = reference(input);
+  const edits = [
+    (r) => { delete r.candidateUniverse; },
+    (r) => { r.candidateUniverse[0].target.actor = 'not-offered'; },
+    (r) => { r.candidateUniverse.reverse(); },
+    (r) => { r.candidateUniverse = r.candidateUniverse.slice(1); },
+    (r) => { r.candidateUniverse.push(r.candidateUniverse[0]); },
+    (r) => { r.candidateUniverse = ['route', 'terminal']; },
+    (r) => { r.candidateUniverse = new Array(2); },
+    (r) => { r.candidates++; },
+    (r) => { r.candidateUniverse[0].target.actor = 'not-offered'; r.candidatesSha256 = sha256(r.candidateUniverse); },
+  ];
+  for (const edit of edits) {
+    const changed = structuredClone(result); edit(changed);
+    assert.equal(compareWholeD(changed, ref).status, 'BLOCK');
+  }
+  const accessor = structuredClone(result); let invoked = false;
+  Object.defineProperty(accessor.candidateUniverse[0].target, 'actor', { enumerable: true, get() { invoked = true; return 'worker'; } });
+  assert.equal(compareWholeD(accessor, ref).status, 'BLOCK'); assert.equal(invoked, false);
+  // Object field order is not a material change; universe order remains digest-bound.
+  const reordered = structuredClone(result);
+  reordered.candidateUniverse[0].target = Object.fromEntries(Object.entries(reordered.candidateUniverse[0].target).reverse());
+  assert.equal(compareWholeD(reordered, ref).status, 'MATCH');
+});
+
+test('out-of-universe references across every kind and target coordinate are incomparable, never provider DIFFER', async () => {
+  const input = fixture(); const result = await reviewWholeDDecisionPlane(input, answer({ hold: 0.95 }));
+  const before = JSON.stringify(result);
+  for (const kind of decisionKinds) {
+    for (const [field, value] of Object.entries({ actor: 'unoffered-actor', thread: 'unoffered-thread', generation: 99, head: 'f'.repeat(40), effectId: 'unoffered-effect' })) {
+      const ref = reference(input, candidate(kind, { [field]: value })); ref.kind = 'observed-D';
+      const comparison = compareWholeD(result, ref);
+      assert.equal(comparison.status, 'BLOCK', `${kind}/${field}`);
+      assert.equal(comparison.reason, 'CANDIDATE_UNIVERSE_INCOMPLETE');
+    }
+  }
+  const interpretation = compareWholeD(result, reference(input, candidate('effect-interpretation', {}, 'absent')));
+  assert.equal(interpretation.status, 'BLOCK'); assert.equal(interpretation.reason, 'CANDIDATE_UNIVERSE_INCOMPLETE');
+  assert.equal(JSON.stringify(result), before);
+});
+
+test('a forged selected decision outside the retained universe is not a semantic MATCH or DIFFER', async () => {
+  const input = fixture(); const result = await reviewWholeDDecisionPlane(input, answer({ hold: 0.95 }));
+  result.decision = candidate('hold', { actor: 'not-offered' });
+  const comparison = compareWholeD(result, reference(input));
+  assert.equal(comparison.status, 'BLOCK'); assert.equal(comparison.reason, 'UNBOUND_SELECTED_DECISION');
+});
+
+test('incomplete-universe preflight persists exact evidence, stops the whole finite replay before calls, and exits nonzero', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'whole-d-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const input = fixture(); const missing = reference(input, candidate('route', { actor: 'COMPARATOR_ONLY_ABSENT' }));
+  const cases = path.join(dir, 'cases.jsonl'); const output = path.join(dir, 'blocked.jsonl');
+  const bytes = [
+    { id: 'offered', input, reference: reference(input) },
+    { id: 'missing', input, reference: missing },
+  ].map(JSON.stringify).join('\n') + '\n';
+  fs.writeFileSync(cases, bytes); let calls = 0;
+  const rows = await runWholeDReplay(cases, output, { sourceHead: head, ask: async () => { calls++; throw new Error('MUST_NOT_CALL'); } });
+  const saved = fs.readFileSync(output, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(saved, rows); assert.equal(calls, 0); assert.equal(fs.readFileSync(cases, 'utf8'), bytes);
+  assert.equal(rows[0].inputSha256, sha256(bytes)); assert.equal(rows[0].sourceHead, head);
+  assert.equal(rows[1].id, 'missing'); assert.equal(rows[1].status, 'BLOCK'); assert.equal(rows[1].execution, 'NOT_RUN');
+  assert.equal(rows[1].callsAttempted, 0); assert.equal(rows[1].result, undefined);
+  assert.deepEqual(rows[1].inputEvidence.candidateUniverse, projectWholeDInput(input).candidates);
+  assert.equal(rows[1].inputEvidence.candidatesSha256, missing.candidatesSha256);
+  assert.equal(compareWholeD(rows[1].inputEvidence, missing).reason, 'CANDIDATE_UNIVERSE_INCOMPLETE');
+  assert.equal(rows[1].comparison.reason, 'CANDIDATE_UNIVERSE_INCOMPLETE');
+  assert.deepEqual(rows[1].comparison.decision, missing.decision);
+  assert.equal(rows.at(-1).status, 'BLOCK'); assert.equal(rows.at(-1).recordedCases, 0);
+  assert.equal(rows.at(-1).semanticPassClaim, false); assert.equal(rows.at(-1).liveEffectCalls, 0);
+  const originalOutput = fs.readFileSync(output, 'utf8');
+  await assert.rejects(runWholeDReplay(cases, output, { sourceHead: head, ask: async () => { calls++; } }), /EEXIST/);
+  assert.equal(calls, 0); assert.equal(fs.readFileSync(output, 'utf8'), originalOutput);
+  const cliOutput = path.join(dir, 'cli.jsonl');
+  const cli = spawnSync(process.execPath, [fileURLToPath(new URL('./whole-d-replay.mjs', import.meta.url)), cases, cliOutput],
+    { env: { ...process.env, OPS_SOURCE_HEAD: head, JEV_API_KEY: '' }, encoding: 'utf8' });
+  assert.equal(cli.status, 2); assert.match(cli.stdout, /BLOCK_OR_UNKNOWN/);
+  assert.match(fs.readFileSync(cliOutput, 'utf8'), /CANDIDATE_UNIVERSE_INCOMPLETE/);
 });
