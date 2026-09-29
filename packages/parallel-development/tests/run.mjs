@@ -1,3 +1,4 @@
+import '../natural-case/check.mjs';
 import '../contract-drift-shadow.test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
