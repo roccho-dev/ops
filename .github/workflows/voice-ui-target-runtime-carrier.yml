@@ -96,7 +96,9 @@ jobs:
           assert info['narHash'] == plan['narHash'] and info['narSize'] == plan['narSize'], info
           print('Phase A readback: narHash and narSize equal the plan')
           PY
-          nix store verify --store "local?root=$RUNNER_TEMP/fresh-positive" --sigs-needed 0 "$carried"
+          # Content check only: the carried path is unsigned by design, so a
+          # trust check (even with --sigs-needed 0) reports it untrusted.
+          nix store verify --store "local?root=$RUNNER_TEMP/fresh-positive" --no-trust "$carried"
           # Phase B: exact dry-run set, only official-signed fetches.
           nix build --store "local?root=$RUNNER_TEMP/fresh-positive" --dry-run --no-link \
             --option fallback false --option require-sigs true \
