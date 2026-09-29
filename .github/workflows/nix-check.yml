@@ -6,6 +6,45 @@ on:
     branches: [proposals]
 
 jobs:
+  parallel-development-jev-phases:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Prove registered parallel-development Jev check at exact head
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          receipt="$RUNNER_TEMP/parallel-development-jev-phases"
+          mkdir -p "$receipt"
+          git rev-parse HEAD | tee "$receipt/source.commit"
+          test "$(cat "$receipt/source.commit")" = "$SOURCE_SHA"
+          check=checks.x86_64-linux.parallel-development-jev-phases
+          printf '%s\n' "$check" > "$receipt/check"
+          nix build ".#$check" --no-link --no-update-lock-file --json --print-build-logs > "$receipt/build.json" 2> >(tee "$receipt/build.log" >&2)
+          out="$(jq -er '.[0].outputs.out' "$receipt/build.json")"
+          test -f "$out/ok"
+          nix log "$(jq -er '.[0].drvPath' "$receipt/build.json")" > "$receipt/test.log" 2>&1
+          cat "$receipt/test.log"
+          nix path-info --json "$out" > "$receipt/output.json"
+          git diff --exit-code -- flake.lock
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parallel-development-jev-phases-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/parallel-development-jev-phases/
+          if-no-files-found: error
   cdp-tty-proof:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
