@@ -1,0 +1,230 @@
+name: voice-ui target runtime carrier
+on:
+  pull_request:
+    paths:
+      - 'packages/voice-ui-target-runtime/**'
+      - 'flake.lock'
+      - '.github/workflows/voice-ui-target-runtime-carrier.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# cache.nixos.org does not serve wrangler-4.62.0 for this nixpkgs pin and
+# building it needs npm. This workflow carries exactly the paths the official
+# cache cannot supply (asserted to be {wrangler-4.62.0}) as an unsigned native
+# file:// binary cache, pinned by digest, provenance and merged-PR proof.
+# See packages/voice-ui-target-runtime/README.md for the consumer contract.
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals' }}
+      OFFICIAL_KEY: cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+      CARRIER_PY: packages/voice-ui-target-runtime/carrier.py
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Lint workflow and selftests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          nix --version
+          nix shell --inputs-from . nixpkgs#yq-go nixpkgs#python3 -c sh -c '
+            yq -o=json . .github/workflows/voice-ui-target-runtime-carrier.yml | python3 packages/hayamimi-web/build/check-release-workflow.py
+            python3 packages/hayamimi-web/build/check-release-workflow.py --selftest
+            python3 packages/hayamimi-web/build/release-provenance.py selftest
+            python3 packages/voice-ui-target-runtime/carrier.py selftest'
+      - name: Build the runtime and its boundary check
+        run: |
+          set -euo pipefail
+          nix build -L --no-link .#voice-ui-target-runtime .#checks.x86_64-linux.voice-ui-target-runtime
+      - name: Flake check at the exact publish SHA
+        if: env.PUBLISH == 'true'
+        run: |
+          set -euo pipefail
+          nix flake check -L --no-write-lock-file
+      - name: Compute the missing set
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/work"
+          python3 "$CARRIER_PY" plan --flake . --out "$RUNNER_TEMP/work/plan.json"
+          python3 -c 'import json,sys; print("/nix/store/" + json.load(open(sys.argv[1]))["carried"]["path"])' "$RUNNER_TEMP/work/plan.json" > "$RUNNER_TEMP/work/carried"
+      - name: Build, prune and pack the file cache
+        run: |
+          set -euo pipefail
+          carried="$(cat "$RUNNER_TEMP/work/carried")"
+          nix copy --to "file://$RUNNER_TEMP/work/full-cache?compression=zstd&compression-level=19&parallel-compression=false" "$carried"
+          python3 "$CARRIER_PY" pack --plan "$RUNNER_TEMP/work/plan.json" --cache "$RUNNER_TEMP/work/full-cache" --out dist
+          python3 "$CARRIER_PY" check-pack --plan "$RUNNER_TEMP/work/plan.json" dist
+      - name: Fresh-store consumer proof (positive and negatives)
+        run: |
+          set -euo pipefail
+          unset NIX_CONFIG
+          carried="$(cat "$RUNNER_TEMP/work/carried")"
+          carrier="$RUNNER_TEMP/work/carrier"
+          mkdir -p "$carrier"
+          tar -xf dist/voice-ui-target-runtime-carrier.tar -C "$carrier"
+          # Phase A: realise exactly the carried path; no build is possible.
+          phase_a() {
+            nix-store --store "local?root=$1" --realise "$carried" \
+              --option max-jobs 0 --option fallback false --option require-sigs true \
+              --option substituters "$2" --option trusted-public-keys "$3"
+          }
+          both="https://cache.nixos.org file://$carrier?trusted=true"
+          phase_a "$RUNNER_TEMP/fresh-positive" "$both" "$OFFICIAL_KEY"
+          nix path-info --store "local?root=$RUNNER_TEMP/fresh-positive" --json "$carried" > "$RUNNER_TEMP/work/readback.json"
+          python3 - "$RUNNER_TEMP/work/plan.json" "$RUNNER_TEMP/work/readback.json" "$carried" <<'PY'
+          import json, sys
+          plan, info, path = json.load(open(sys.argv[1]))['carried'], json.load(open(sys.argv[2])), sys.argv[3]
+          info = info.get(path) or next(iter(info.values()))
+          assert info['narHash'] == plan['narHash'] and info['narSize'] == plan['narSize'], info
+          print('Phase A readback: narHash and narSize equal the plan')
+          PY
+          nix store verify --store "local?root=$RUNNER_TEMP/fresh-positive" --sigs-needed 0 "$carried"
+          # Phase B: exact dry-run set, only official-signed fetches.
+          nix build --store "local?root=$RUNNER_TEMP/fresh-positive" --dry-run --no-link \
+            --option fallback false --option require-sigs true \
+            --option substituters "$both" --option trusted-public-keys "$OFFICIAL_KEY" \
+            .#voice-ui-target-runtime .#checks.x86_64-linux.voice-ui-target-runtime 2> "$RUNNER_TEMP/work/dry-run.log"
+          cat "$RUNNER_TEMP/work/dry-run.log"
+          python3 "$CARRIER_PY" dry-run-check --log "$RUNNER_TEMP/work/dry-run.log"
+          # Each negative must fail in its own fresh store.
+          reject() { label="$1"; shift; if "$@" > "$RUNNER_TEMP/work/$label.log" 2>&1; then echo "accepted: $label" >&2; exit 1; fi; echo "rejected: $label"; }
+          flipped="$RUNNER_TEMP/work/flipped"
+          mkdir -p "$flipped"
+          tar -xf dist/voice-ui-target-runtime-carrier.tar -C "$flipped"
+          python3 - "$flipped" <<'PY'
+          import pathlib, sys
+          nar = next(pathlib.Path(sys.argv[1], 'nar').iterdir())
+          data = bytearray(nar.read_bytes()); data[len(data) // 2] ^= 0xff; nar.write_bytes(bytes(data))
+          PY
+          reject flipped-nar phase_a "$RUNNER_TEMP/fresh-flipped" "https://cache.nixos.org file://$flipped?trusted=true" "$OFFICIAL_KEY"
+          reject no-carrier phase_a "$RUNNER_TEMP/fresh-no-carrier" "https://cache.nixos.org" "$OFFICIAL_KEY"
+          reject no-official-key phase_a "$RUNNER_TEMP/fresh-no-key" "$both" ""
+          reject no-trusted phase_a "$RUNNER_TEMP/fresh-no-trusted" "https://cache.nixos.org file://$carrier" "$OFFICIAL_KEY"
+          mkdir -p "$RUNNER_TEMP/work/extra"
+          python3 - dist/voice-ui-target-runtime-carrier.tar "$RUNNER_TEMP/work/extra" <<'PY'
+          import hashlib, pathlib, sys
+          sys.path.insert(0, 'packages/voice-ui-target-runtime')
+          import carrier
+          members = carrier.read_archive(sys.argv[1])
+          narinfo = next(k for k in members if k.endswith('.narinfo'))
+          members['0' * 32 + '.narinfo'] = members[narinfo]
+          out = pathlib.Path(sys.argv[2]); carrier.write_archive(out / carrier.ARCHIVE, members)
+          digest = hashlib.sha256((out / carrier.ARCHIVE).read_bytes()).hexdigest()
+          (out / (carrier.ARCHIVE + '.sha256')).write_text(f'{digest}  {carrier.ARCHIVE}\n')
+          PY
+          reject extra-narinfo python3 "$CARRIER_PY" check-pack --plan "$RUNNER_TEMP/work/plan.json" "$RUNNER_TEMP/work/extra"
+          # Informational only; never selects the consumer path.
+          if nix copy --store "local?root=$RUNNER_TEMP/fresh-copy" --from "file://$carrier" --no-check-sigs "$carried" > "$RUNNER_TEMP/work/plain-copy.log" 2>&1; then
+            echo "informational: plain nix copy --from succeeded"
+          else
+            echo "informational: plain nix copy --from failed"
+          fi
+      - name: Record merged-PR proof and provenance
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          # shellcheck disable=SC2016 # $ENV is read by the jq filter, not the shell
+          pr="$(gh api "$api/commits/$EXACT_SHA/pulls" --jq '[.[] | select(.merged_at != null and .base.ref == "proposals" and .merge_commit_sha == $ENV.EXACT_SHA)] | if length == 1 then .[0].number else error("need exactly one merged proposals PR") end')"
+          gh api "$api/pulls/$pr" > "$RUNNER_TEMP/pr.json"
+          gh api "$api/pulls/$pr/reviews?per_page=100" > "$RUNNER_TEMP/reviews.json"
+          head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["head"]["sha"])' "$RUNNER_TEMP/pr.json")"
+          python3 packages/hayamimi-web/build/release-provenance.py proof \
+            --pr "$RUNNER_TEMP/pr.json" --reviews "$RUNNER_TEMP/reviews.json" \
+            --head-tree "$(gh api "$api/git/commits/$head" --jq .tree.sha)" \
+            --merge-sha "$EXACT_SHA" --merge-tree "$(git rev-parse 'HEAD^{tree}')" \
+            --out dist/merged-pr-proof.json
+          python3 "$CARRIER_PY" provenance --plan "$RUNNER_TEMP/work/plan.json" --dir dist --root . \
+            --repository "$GITHUB_REPOSITORY" --sha "$EXACT_SHA" --tree "$(git rev-parse 'HEAD^{tree}')" \
+            --workflow-ref "$GITHUB_WORKFLOW_REF" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --out dist/provenance.json
+          python3 "$CARRIER_PY" verify dist --sha "$EXACT_SHA" --repository "$GITHUB_REPOSITORY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: env.PUBLISH == 'true'
+        with:
+          name: voice-ui-target-runtime-carrier
+          path: dist/
+          if-no-files-found: error
+
+  # Publishes only the bytes built and checked by build-test in this run.
+  # Runs no Nix; check-release-workflow.py enforces that and the guard.
+  # A rerun after a partial publish fails closed: the tag or release already
+  # exists, so nothing is recreated, and consumers pin every asset digest.
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals'
+    needs: build-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      EXACT_SHA: ${{ github.sha }}
+      TAG: voice-ui-target-runtime-carrier-${{ github.sha }}
+      CARRIER_PY: packages/voice-ui-target-runtime/carrier.py
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: voice-ui-target-runtime-carrier
+          path: release
+      - name: Verify release set
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          python3 "$CARRIER_PY" verify release --sha "$EXACT_SHA" --repository "$GITHUB_REPOSITORY"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          status() { curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" "$1"; }
+          # gh release create reuses an existing tag and ignores --target, so both must be absent.
+          test "$(status "$api/git/ref/tags/$TAG")" = 404
+          test "$(status "$api/releases/tags/$TAG")" = 404
+          gh release create "$TAG" \
+            release/voice-ui-target-runtime-carrier.tar release/voice-ui-target-runtime-carrier.tar.sha256 \
+            release/provenance.json release/merged-pr-proof.json \
+            --title "$TAG" --notes "voice-ui-target-runtime carrier (wrangler-4.62.0 only) built from $EXACT_SHA" \
+            --target "$EXACT_SHA" --repo "$GITHUB_REPOSITORY"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')" = "commit $EXACT_SHA"
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | sort | join(" ")')" \
+            = "$(cd release && find . -type f -printf '%f\n' | sort | paste -sd ' ')"
+      - name: Anonymously fetch the public locators and compare bytes
+        run: |
+          set -euo pipefail
+          readback="$(mktemp -d)"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          # No token, netrc or git credentials: this is the URL consumers pin.
+          fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
+          for f in release/*; do
+            name="$(basename "$f")"
+            fetch "$base/$name" "$readback/$name"
+            cmp "$f" "$readback/$name"
+          done
+          locator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["locator"])' release/provenance.json)"
+          test "$locator" = "$base/voice-ui-target-runtime-carrier.tar"
+          python3 "$CARRIER_PY" verify "$readback" --sha "$EXACT_SHA" --repository "$GITHUB_REPOSITORY"

@@ -36,3 +36,32 @@ The single ordinary Nix check runs existing destructive/unit tests, real adapter
 Source readiness requires this exact-candidate check to pass and the source to be reviewed/merged. A mere version command, fixture-only unit PASS or pending CI is insufficient.
 
 After source/CI acceptance, the remaining inputs are physical: approved provider/effect credentials and Environment protection, actual target-native projection and its accepted handoff, then the existing command against live services. #436 needs its approved live-effect positive. Real application acceptance twice (apps#27) remains OPEN: it must obtain an apps acceptance-runtime artifact artifact-only, run in a separate credential-free process tree and correlate to this exact deploy/readback receipt. This runtime does not execute that join.
+
+## Runtime carrier (closed-network provisioning)
+
+`cache.nixos.org` does not serve `wrangler-4.62.0` for this repository's nixpkgs pin, and building it needs `registry.npmjs.org`. A consumer on a closed network therefore cannot provision this runtime from the official cache alone. `.github/workflows/voice-ui-target-runtime-carrier.yml` publishes exactly the paths the official signed cache cannot supply as an unsigned native `file://` binary cache.
+
+`carrier.py` is a release helper only; it is not part of the runtime output or closure.
+
+- **Missing set.** Eight derivations are classified local by exact name: the apps fetches `voice-ui-dist.zip`, `merged-pr-proof.json` and `provenance.json`; the roots `check-voice-ui-release.py`, `voice-ui-dist-release`, `voice-ui-target-runtime` and `voice-ui-target-runtime-boundary`; and the nixpkgs wrapper `nodejs-24.14.1` (drv `8l6p07vmrcj7lsry0jz2ayp1rmpyjdai`, out `785jidgnryzj566s25s3rb262d4g5znb`), which sets `allowSubstitutes` false. Any other local-only input derivation is a STOP. After that classification, the external inputs absent from the official signed cache must be exactly `{wrangler-4.62.0}`, the lock-pinned `nixpkgs#wrangler.outPath`, and every reference of it must be signed on the official cache.
+- **Carrier.** `nix copy --to file://…?compression=zstd&compression-level=19&parallel-compression=false` of that path, pruned by its parsed narinfo to exactly `nix-cache-info`, the carried narinfo and the NAR named by its `URL:`. StorePath, References, NarHash/NarSize, FileHash/FileSize and the absence of `Sig:` are checked; no listing, log, debug info, realisation or other narinfo may survive. It is packed into one deterministic tar that must be below 2,147,483,648 bytes, or the run stops.
+- **Release.** Tag `voice-ui-target-runtime-carrier-<full merge sha>` with exactly `voice-ui-target-runtime-carrier.tar`, its `.sha256`, `provenance.json` and `merged-pr-proof.json`. The provenance records the source commit and tree, the `flake.lock` digest, the Nix version, the eight local derivations, the carried path and narinfo, every external reference with its official signature and NarHash, the archive digest and the locator, with `cross_host_bytes_reproducible: false`. The proof requires the latest non-dismissed review on the exact PR head to carry exactly one `ROUND_<n>_GREEN` token and no `ROUND_<n>_CORRECTIONS` token, with equal reviewed and merge trees. Publication runs only from an explicit proposals dispatch, in a job that runs no Nix.
+
+### Consumer contract
+
+Run as root or a single-user Nix owner, with `NIX_CONFIG` unset and every option on the command line; no global Nix configuration is changed. Record the Nix version.
+
+1. Fetch the four assets anonymously and require their pinned sha256 digests. Run `carrier.py verify <dir> --sha <merge sha> --repository roccho-dev/ops` from that exact source commit; it checks the asset set, archive digest and size, the exact archive members, the narinfo fields, FileHash/FileSize, the provenance and the proof without Nix or network. Extract the archive to `$CARRIER`.
+2. **Phase A** realises exactly the carried path; no build or fallback is possible:
+
+   ```sh
+   nix-store --realise /nix/store/4wg6l17z27a2hpw6wz21pxy7cm43zj8l-wrangler-4.62.0 \
+     --option max-jobs 0 --option fallback false --option require-sigs true \
+     --option substituters "https://cache.nixos.org file://$CARRIER?trusted=true" \
+     --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+   ```
+
+   `trusted=true` exempts only that pinned local store from signature checks; Nix still checks the carried NAR against its NarHash, and every other path must carry the official signature. Then compare `nix path-info --json` NarHash/NarSize with the provenance and run `nix store verify --sigs-needed 0` on the carried path.
+3. **Phase B** runs `nix build --dry-run` of `github:roccho-dev/ops/<sha>#voice-ui-target-runtime` and `#checks.x86_64-linux.voice-ui-target-runtime` with the same substituters, keys, `require-sigs true` and `fallback false`, and checks it with `carrier.py dry-run-check --log <stderr>`. `will be built` must be exactly the seven other local derivations and may additionally contain the exact `nodejs-24.14.1` wrapper, nothing else. `will be fetched` may contain only paths signed on the official cache. Neither `wrangler-4.62.0` nor `wrangler-pnpm-deps` may appear. Then build with the same options and sandboxing; the boundary check must report `CI_BOUNDARY_PASS` / `LIVE_PROVIDER_NOT_RUN`, and only allowlisted hosts may be contacted, with no npm or DNS attempt.
+
+Plain `nix copy --from file://…` is informational only and never selects the consumer path. The producer runs the same Phase A and Phase B in fresh stores, and rejects a flipped NAR, an extra narinfo, an omitted carrier, an omitted official key and an omitted `trusted=true`. The authoritative proof is a fresh clean OCI.
