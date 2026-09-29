@@ -1,3 +1,4 @@
+import '../contract-drift-shadow.test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { JEV_MODEL } from '../../jev-review/core.mjs';
