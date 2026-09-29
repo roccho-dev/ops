@@ -22,10 +22,11 @@ export function main(config, root, argv = process.argv.slice(2)) {
     const p = path.join(root, name);
     return {path:p,sha256:sha256File(p)};
   };
+  // Only the package's own deploy/readback adapters run. The apps artifact is
+  // staged data; its acceptance runtime is not part of this closure.
   const result = runTargetRuntime({ ...request,
     inputs: { ...request.inputs, artifactRoot: config.artifactRoot },
-    adapters: { deploy: executable("deploy.mjs"), readback: executable("readback.mjs"),
-      acceptance: {path:config.acceptance,sha256:sha256File(config.acceptance)} },
+    adapters: { deploy: executable("deploy.mjs"), readback: executable("readback.mjs") },
   });
   process.stdout.write(JSON.stringify({ status: result.status, claim: result.claim, runtimeRoot: root }) + "\n");
 }

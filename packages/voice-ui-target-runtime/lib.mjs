@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -22,7 +21,6 @@ import {
   validateProjectionReceipt,
 } from "./modules/input-contracts.mjs";
 import {
-  validateAcceptanceReceipt,
   validateDeployReceipt,
   validateReadbackReceipt,
 } from "./modules/result-contracts.mjs";
@@ -51,35 +49,6 @@ function executeAdapter({ adapter, expectedDigest, request, receiptPath, env, sp
     requireCondition(result.status === 0, `${label} adapter failed with exit ${result.status ?? "signal"}`);
   } finally {
     rmSync(directory, { recursive: true, force: true });
-  }
-}
-
-function executeAcceptance({ runtime, artifact, expected, targetUrl, handoffId, receiptPath, env, spawn = spawnSync }) {
-  assertExecutableIdentity(runtime.path, runtime.sha256, "acceptance runtime");
-  const workspace = mkdtempSync(path.join(tmpdir(), "voice-ui-acceptance-run-"));
-  try {
-    // The separately approved apps runtime supplies its own fixed Node/browser
-    // closure. Do not fall back to the orchestrator's bare Node or inherited libs.
-    const result = spawn(runtime.path, [
-      artifact.runtimeEntrypoint,
-      "--artifact-root", artifact.root,
-      "--url", targetUrl,
-      "--expected-apps-sha", expected.appsSha,
-      "--expected-manifest-sha256", expected.artifactManifestSha256,
-      "--handoff-id", handoffId,
-      "--receipt", receiptPath,
-    ], {
-      cwd: workspace,
-      env: { ...sanitizedEnv(env), HOME: workspace, TMPDIR: workspace },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    if (result.stdout) process.stdout.write(result.stdout);
-    if (result.stderr) process.stderr.write(result.stderr);
-    requireCondition(result.status === 0, `application acceptance failed with exit ${result.status ?? "signal"}`);
-    return { workspaceId: path.basename(workspace) };
-  } finally {
-    rmSync(workspace, { recursive: true, force: true });
   }
 }
 
@@ -113,7 +82,10 @@ export function runTargetRuntime(request, options = {}) {
   const credential = effectEnv(env);
   requireCondition(credential.CLOUDFLARE_API_TOKEN, "effect capability is missing");
   requireCondition(credential.CLOUDFLARE_ACCOUNT_ID === expected.target.accountId, "effect account differs from approved target");
-  for (const label of ["deploy", "readback", "acceptance"]) {
+  // Only deploy and readback may run. Application acceptance belongs to apps
+  // (apps#27) and is never an input, executable or result of this runtime.
+  exactObjectKeys(request.adapters, ["deploy", "readback"], "runtime adapters");
+  for (const label of ["deploy", "readback"]) {
     const executable = request.adapters?.[label];
     requireCondition(executable, `${label} executable is missing`);
     exactObjectKeys(executable, ["path", "sha256"], `${label} executable`);
@@ -125,7 +97,6 @@ export function runTargetRuntime(request, options = {}) {
   requireCondition(readdirSync(output).length === 0, "output must be empty; prior receipts are not evidence for a new run");
   const deployReceiptPath = path.join(output, "deploy.json");
   const readbackReceiptPath = path.join(output, "readback.json");
-  const acceptancePaths = [path.join(output, "acceptance-1.json"), path.join(output, "acceptance-2.json")];
   const spawn = options.spawn ?? spawnSync;
 
   const adapterRequest = {
@@ -159,36 +130,11 @@ export function runTargetRuntime(request, options = {}) {
   });
   const readbackReceipt = validateReadbackReceipt(loadJson(readbackReceiptPath, "readback receipt"), expected, deployReceipt.deployment, artifact);
 
-  const acceptance = [];
-  const runToken = randomUUID();
-  for (let index = 0; index < 2; index += 1) {
-    const handoffId = `dev/jev-api/${runToken}/run-${index + 1}`;
-    const processProof = executeAcceptance({
-      runtime: request.adapters.acceptance,
-      artifact,
-      expected,
-      targetUrl: deployReceipt.deployment.stableUrl,
-      handoffId,
-      receiptPath: acceptancePaths[index],
-      env,
-      spawn,
-    });
-    const receipt = validateAcceptanceReceipt(loadJson(acceptancePaths[index], `acceptance ${index + 1}`), expected, deployReceipt.deployment.stableUrl, handoffId);
-    acceptance.push({
-      run: index + 1,
-      handoffId,
-      workspaceId: processProof.workspaceId,
-      receiptSha256: `sha256:${sha256File(acceptancePaths[index])}`,
-      status: receipt.status,
-    });
-  }
-  requireCondition(acceptance[0].workspaceId !== acceptance[1].workspaceId, "acceptance workspaces are not independent");
-  requireCondition(acceptance[0].receiptSha256 !== acceptance[1].receiptSha256, "acceptance receipts are not independent");
-
   const result = {
     kind: "ops.voiceUiTargetRuntimeReceipt.v1",
     status: "PASS",
-    claim: "NEW_PROJECTION_REAL_USE_PROVEN",
+    // Deploy and readback only; application acceptance is not claimed here.
+    claim: "DEPLOY_READBACK_PASS",
     sources: {
       opsSha: expected.opsSha,
       envsSha: expected.envsSha,
@@ -198,7 +144,6 @@ export function runTargetRuntime(request, options = {}) {
       isolationVerdictSha256: `sha256:${sha256File(request.inputs.isolationVerdict)}`,
       deployAdapterSha256: `sha256:${normalizeSha256(request.adapters.deploy.sha256)}`,
       readbackAdapterSha256: `sha256:${normalizeSha256(request.adapters.readback.sha256)}`,
-      acceptanceRuntimeSha256: `sha256:${normalizeSha256(request.adapters.acceptance.sha256)}`,
     },
     target: expected.target,
     stages: {
@@ -206,7 +151,6 @@ export function runTargetRuntime(request, options = {}) {
       projection: projection.status,
       deploy: deployReceipt.status,
       readback: readbackReceipt.status,
-      acceptance,
     },
     dependencies: {
       envsRuntime: [],
