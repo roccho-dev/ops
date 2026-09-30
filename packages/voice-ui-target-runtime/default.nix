@@ -138,15 +138,13 @@ in runtime // {
     node ${./.}/tests/run.test.mjs
     node ${./.}/tests/pages.test.mjs
     node ${./tests/boundary.mjs} ${runtime} ${artifact} ${pkgs.wrangler}/bin/wrangler
-    # cf checkpoint: in this build sandbox only loopback exists, so any request cf makes can reach the recording
-    # fixture only. The receipt keeps the requests, the native deploy event and the uploaded byte digests.
+    # cf checkpoint. --require-isolation fails the check unless the kernel shows a loopback-only network namespace
+    # (only lo, and a TEST-NET-1 connect fails with ENETUNREACH), so a passing check means no request could leave
+    # loopback. An unsandboxed build therefore fails here; run tests/workers.test.mjs directly for an UNISOLATED grade.
     ${cf}/bin/cf --version
-    node ${./tests/workers.test.mjs} ${cf}/bin/cf ${cf.nodeModules}/node_modules ${artifact} > cf-checkpoint.json
+    node ${./tests/workers.test.mjs} ${cf}/bin/cf ${cf.nodeModules}/node_modules ${artifact} --require-isolation > cf-checkpoint.json
     mkdir -p "$out"
     cp runtime.json cf-checkpoint.json "$out/"
-    printf 'CI_BOUNDARY_PASS\nCF_CHECKPOINT_OFFLINE_PASS\nLIVE_PROVIDER_NOT_RUN\n' > "$out/status"
-    # Recorded, not asserted: a sandboxed build has no resolver, so no request could have left loopback. An
-    # unsandboxed build proves only what reached the fixture.
-    if [ -e /etc/resolv.conf ]; then echo CF_CHECKPOINT_EGRESS_UNISOLATED; else echo CF_CHECKPOINT_EGRESS_SANDBOXED; fi >> "$out/status"
+    printf 'CI_BOUNDARY_PASS\nCF_CHECKPOINT_OFFLINE_PASS_ISOLATED\nLIVE_PROVIDER_NOT_RUN\n' > "$out/status"
   '';
 }
