@@ -478,7 +478,7 @@ def run():
                     record("real-utf8-physical-key-select-all", dpr=scale)
                     p.frame()
                     assert p.command("wheel 400 400 80")[0] == 0
-                    eventually(lambda: ctl.evaluate("events.some(e=>e.type==='wheel' && e.dy===80)"))
+                    eventually(lambda: ctl.evaluate("events.some(e=>e.type==='wheel' && e.dy===80) && scrollY===80"))
                     ctl.evaluate("scrollTo(0,0)")
                     eventually(lambda: ctl.evaluate("scrollY===0"))
                     record("real-wheel", dpr=scale)
