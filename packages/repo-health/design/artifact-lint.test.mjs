@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { CONCERNS, SCOPES, digest, reviewSemanticArtifact } from './artifact-lint.mjs';
+import { CONCERNS, SCOPES, digest, reviewSemanticArtifact, reviewSourceArtifact } from './artifact-lint.mjs';
 import { JEV_MODEL } from '../../jev-review/core.mjs';
 
 const done = [];
@@ -133,6 +133,8 @@ await check('LD08-cli-missing-auth-write-once-and-readback', () => {
     assert.equal(rows.length, 3); verifySeal(rows[0]); verifySeal(rows[1]); verifySeal(rows[1].result);
     assert.equal(rows[1].manifestDigest, rows[0].evidenceDigest);
     assert.equal(rows[1].result.execution.mode, 'live'); assert.equal(rows[2].status, 'BLOCK');
+    assert.equal(rows[1].result.generation.plan.method, 'raw-fragments-pairs.v1');
+    assert.ok(rows[1].result.findingEvidence.candidates.length > 6);
     assert.equal(rows[2].reason, 'JEV_API_KEY_REQUIRED'); assert.equal(rows[2].calls, 0); assert.equal(rows[2].httpRequests, 0);
     assert.equal(rows[2].evidenceDigest, rows[1].evidenceDigest);
     assert.equal(spawnSync(process.execPath, command, { env, encoding: 'utf8' }).status, 1);
@@ -332,5 +334,198 @@ await check('LD16-no-root-input-extension-or-provider-invented-finding', async (
   assert.equal(other.findingEvidence.proposalDigest, r.findingEvidence.proposalDigest);
   assert.equal(other.questionContractDigest, r.questionContractDigest);
   assert.equal(r.comparison.status, 'UNKNOWN'); verifySeal(r);
+});
+
+// Development-only source enumeration. No retired root, oracle, real provider or new dataset.
+await check('LD17-source-only-all-kinds-and-byte-spans', async () => {
+  for (const kind of Object.keys(SCOPES)) {
+    const input = inputFor(kind, 'step');
+    const r = await reviewSourceArtifact(input, ask);
+    assert.equal(r.execution.status, 'OBSERVED'); assert.equal(r.generation.status, 'GENERATED');
+    assert.equal(r.generation.planDigest, digest(r.generation.plan));
+    assert.equal(r.findingEvidence.proposalDigest, digest(r.findingEvidence.candidates));
+    assert.equal(r.request.state.artifact.content, input.content);
+    assert.equal(r.coverage.evaluated, r.generation.plan.candidateCount);
+    assert.equal(r.findingEvidence.findings.length, r.coverage.evaluated);
+    for (const candidate of r.findingEvidence.candidates) {
+      for (const span of candidate.locations) {
+        assert.equal(Buffer.from(input.content).subarray(span.startByte, span.endByte).toString('utf8'), span.quote);
+      }
+      assert.ok(candidate.correctionEffect.startsWith('If confirmed,'));
+      for (const key of ['accepted', 'material', 'referenceId', 'actualCorrectionEffect']) assert.ok(!Object.hasOwn(candidate, key));
+    }
+    assert.equal(r.comparison.status, 'UNKNOWN'); assert.equal(r.effectAuthority, 0); verifySeal(r);
+  }
+});
+await check('LD18-complete-local-and-nonadjacent-relational-universe', async () => {
+  const input = inputFor('contract', '甲。\n乙。\n丙。');
+  const r = await reviewSourceArtifact(input, ask), candidates = r.findingEvidence.candidates;
+  assert.equal(r.generation.plan.fragments.length, 3); assert.equal(candidates.length, 27);
+  assert.equal(candidates.filter(c => c.locations.length === 1).length, 18);
+  assert.equal(candidates.filter(c => c.locations.length === 2).length, 9);
+  const fragments = r.generation.plan.fragments;
+  for (const span of fragments) {
+    assert.deepEqual(candidates.filter(c => c.locations.length === 1 && c.locations[0].startByte === span.startByte)
+      .map(c => c.defectKind).sort(), CONCERNS.map(c => c.id).sort());
+  }
+  for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) {
+    assert.deepEqual(candidates.filter(c => c.locations.length === 2
+      && c.locations[0].startByte === fragments[i].startByte && c.locations[1].startByte === fragments[j].startByte)
+      .map(c => c.defectKind).sort(), ['closure', 'contradiction', 'responsibility']);
+  }
+  assert.equal(new Set(candidates.map(c => c.id)).size, 27);
+  assert.equal(r.coverage.evaluated, 27); assert.equal(r.findingEvidence.findings.length, 27);
+  assert.ok(candidates.some(c => c.defectKind === 'omission' && c.locations.length === 1));
+  verifySeal(r);
+});
+await check('LD19-generation-before-score-topk-and-mutation-independent', async () => {
+  const input = inputFor('contract', 'First. Second.');
+  const frozen = await reviewSourceArtifact({ ...input, topK: 0 }, never);
+  const zero = await reviewSourceArtifact({ ...input, topK: 1 }, async (_, q) => reply(q, 0));
+  const one = await reviewSourceArtifact(input, async (state, q) => {
+    assert.deepEqual(Object.keys(state), ['artifact']);
+    assert.ok(Object.values(q).every(v => !v.instructions.includes(input.sourceRef)));
+    assert.equal(Object.keys(q).length, frozen.generation.plan.candidateCount);
+    state.artifact.content = 'MUTATED'; input.content = 'MUTATED';
+    const response = reply(q, 1); response.findings = [{ id: 'FAKE', accepted: true }]; delete q.q0;
+    return response;
+  });
+  for (const r of [zero, one]) {
+    assert.equal(r.generation.planDigest, frozen.generation.planDigest);
+    assert.equal(r.findingEvidence.proposalDigest, frozen.findingEvidence.proposalDigest);
+    assert.equal(r.questionContractDigest, frozen.questionContractDigest);
+    assert.deepEqual(r.findingEvidence.candidates, frozen.findingEvidence.candidates);
+    assert.equal(r.findingEvidence.findings.length, 15); assert.equal(r.raw.length, 15);
+    assert.ok(!JSON.stringify(r.findingEvidence).includes('MUTATED'));
+    assert.ok(!JSON.stringify(r.findingEvidence).includes('FAKE'));
+    assert.equal(r.comparison.status, 'UNKNOWN'); verifySeal(r);
+  }
+  assert.equal(zero.ranked[0].findings.length, 1); // Display only, not candidate/score loss.
+  assert.ok(zero.findingEvidence.findings.every(c => c.noul === 0));
+  const renamed = await reviewSourceArtifact({ ...frozen.source, sourceRef: 'different', revision: 'different' }, never);
+  assert.equal(renamed.generation.planDigest, frozen.generation.planDigest);
+  assert.notEqual(renamed.findingEvidence.proposalDigest, frozen.findingEvidence.proposalDigest);
+});
+await check('LD20-enumeration-overflow-is-block-not-a-sampled-universe', async () => {
+  let calls = 0;
+  const r = await reviewSourceArtifact(inputFor('contract', 'a.\n'.repeat(12)), () => { calls++; throw Error('unexpected'); });
+  assert.equal(calls, 0); assert.equal(r.execution.status, 'BLOCK');
+  assert.equal(r.execution.reason, 'SOURCE_CANDIDATE_BUDGET_EXCEEDED');
+  assert.equal(r.generation.plan.fragments.length, 12); assert.equal(r.generation.plan.candidateCount, 270);
+  assert.equal(r.generation.planDigest, digest(r.generation.plan)); assert.equal(r.generation.materialized, false);
+  assert.equal(r.findingEvidence.candidates, null); assert.equal(r.findingEvidence.proposalDigest, null);
+  assert.equal(r.findingEvidence.findings, null); assert.equal(r.request, null);
+  assert.deepEqual(r.coverage, { candidates: 270, evaluated: 0, returned: 0 }); verifySeal(r);
+});
+await check('LD21-whole-request-budget-rejects-with-all-candidates-retained', async () => {
+  const input = inputFor('contract', `${'x'.repeat(2500)}.\n${'y'.repeat(2500)}.`);
+  let calls = 0;
+  const r = await reviewSourceArtifact(input, () => { calls++; throw Error('unexpected'); });
+  assert.equal(calls, 0); assert.equal(r.execution.status, 'BLOCK');
+  assert.equal(r.execution.reason, 'JEV_BUDGET_EXCEEDED'); assert.equal(r.generation.materialized, true);
+  assert.equal(r.findingEvidence.candidates.length, 15); assert.equal(r.questionContract.items.length, 15);
+  assert.equal(r.findingEvidence.proposalDigest, digest(r.findingEvidence.candidates));
+  assert.equal(r.source.content, input.content); assert.equal(r.coverage.evaluated, 0);
+  assert.equal(r.findingEvidence.findings, null); verifySeal(r);
+  const sourceBudget = await reviewSourceArtifact(inputFor('contract', 'x'.repeat(28000)), never);
+  assert.equal(sourceBudget.execution.reason, 'JEV_BUDGET_EXCEEDED');
+  assert.equal(sourceBudget.generation.plan.fragments, null); assert.equal(sourceBudget.coverage.candidates, null);
+});
+await check('LD22-source-empty-invalid-disabled-missing-response-stay-unknown', async () => {
+  const empty = await reviewSourceArtifact(inputFor('contract', ' \n '), never);
+  assert.equal(empty.execution.reason, 'NO_FINDING_PROPOSALS'); assert.equal(empty.execution.status, 'UNKNOWN');
+  assert.equal(empty.findingEvidence.findings, null); assert.equal(empty.generation.plan.candidateCount, 0);
+  const invalid = await reviewSourceArtifact(inputFor('contract', '\ud800'), never);
+  assert.equal(invalid.execution.status, 'BLOCK'); assert.equal(invalid.execution.reason, 'SOURCE_TEXT_NOT_WELL_FORMED');
+  const input = inputFor('contract', 'one. two.');
+  await assert.rejects(() => reviewSourceArtifact({ ...input, content: 'changed' }, never), /SOURCE_DIGEST_MISMATCH/);
+  await assert.rejects(() => reviewSourceArtifact({ ...input, proposals: {} }, never), /INVALID_ARTIFACT_INPUT/);
+  const disabled = await reviewSourceArtifact({ ...input, topK: 0 }, never);
+  assert.equal(disabled.execution.reason, 'DISABLED'); assert.equal(disabled.generation.materialized, true);
+  for (const ask of [() => { throw new DOMException('private', 'TimeoutError'); },
+    async (_, q) => { const r = reply(q); delete r.answers.q0; return r; },
+    async (_, q) => ({ ...reply(q), model: 'wrong' })]) {
+    const r = await reviewSourceArtifact(input, ask);
+    assert.equal(r.execution.status, 'UNKNOWN'); assert.equal(r.coverage.evaluated, 0);
+    assert.equal(r.findingEvidence.proposalDigest, disabled.findingEvidence.proposalDigest);
+    assert.equal(r.findingEvidence.findings, null); assert.equal(r.comparison.status, 'UNKNOWN'); verifySeal(r);
+  }
+});
+await check('LD23-literal-boundaries-and-count-invariants-not-quality-proof', async () => {
+  for (let n = 1; n <= 12; n++) {
+    const input = inputFor('contract', Array.from({ length: n }, () => '同。').join('\r\n'));
+    const r = await reviewSourceArtifact({ ...input, topK: 0 }, never);
+    assert.equal(r.generation.plan.candidateCount, 6 * n + 3 * n * (n - 1) / 2);
+    assert.equal(r.generation.plan.fragments.length, n);
+    assert.equal(r.generation.materialized, n < 12);
+    if (r.generation.materialized) {
+      assert.equal(r.findingEvidence.candidates.length, r.generation.plan.candidateCount);
+      assert.equal(new Set(r.findingEvidence.candidates.map(c => c.id)).size, r.generation.plan.candidateCount);
+    }
+  }
+  const content = '  😀 one.\r\n二。\\nthree; four!  ';
+  const r = await reviewSourceArtifact({ ...inputFor('contract', content), topK: 0 }, never);
+  const bytes = Buffer.from(content); let offset = 0;
+  for (const span of r.generation.plan.fragments) {
+    assert.equal(bytes.subarray(offset, span.startByte).toString('utf8').trim(), '');
+    assert.equal(bytes.subarray(span.startByte, span.endByte).toString('utf8'), span.quote);
+    offset = span.endByte;
+  }
+  assert.equal(bytes.subarray(offset).toString('utf8').trim(), '');
+  assert.equal(r.comparison.status, 'UNKNOWN');
+});
+await check('LD24-cli-source-path-and-overflow-seal-without-provider', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-d-source-'));
+  try {
+    const input = path.join(dir, 'input.json'), output = path.join(dir, 'output.jsonl');
+    fs.writeFileSync(input, JSON.stringify(inputFor('contract', 'a.\n'.repeat(12))));
+    const env = { ...process.env };
+    for (const key of ['JEV_API_KEY', 'SOPS_AGE_KEY', 'SOPS_AGE_KEY_FILE', 'SOPS_AGE_KEY_CMD']) delete env[key];
+    const child = spawnSync(process.execPath, [fileURLToPath(new URL('./artifact-lint.mjs', import.meta.url)), input, output],
+      { env, encoding: 'utf8', timeout: 5000 });
+    assert.equal(child.status, 1, child.stderr); assert.equal(child.stderr, '');
+    const rows = fs.readFileSync(output, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(rows.length, 3); verifySeal(rows[0]); verifySeal(rows[1]); verifySeal(rows[1].result);
+    assert.equal(rows[1].result.generation.plan.method, 'raw-fragments-pairs.v1');
+    assert.equal(rows[1].result.generation.plan.candidateCount, 270);
+    assert.equal(rows[1].manifestDigest, rows[0].evidenceDigest);
+    assert.equal(rows[2].evidenceDigest, rows[1].evidenceDigest);
+    assert.equal(rows[2].reason, 'SOURCE_CANDIDATE_BUDGET_EXCEEDED');
+    assert.equal(rows[2].httpRequests, 0); assert.equal(rows[2].semanticResult, 'UNKNOWN');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+await check('LD25-cli-persists-full-universe-before-mocked-transport', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lane-d-pre-score-'));
+  try {
+    const input = path.join(dir, 'input.json'), output = path.join(dir, 'report.jsonl');
+    fs.writeFileSync(input, JSON.stringify(inputFor('contract', 'Alpha. Beta.')));
+    const preload = `import fs from 'node:fs'; import assert from 'node:assert/strict';
+      let calls = 0; globalThis.fetch = async (url, options) => {
+        assert.equal(++calls, 1); assert.equal(url, 'https://api.typesafe.ai/v1/systemone');
+        const rows = fs.readFileSync(${JSON.stringify(output)}, 'utf8').trim().split('\\n').map(JSON.parse);
+        assert.equal(rows.length, 1); assert.equal(rows[0].kind, 'manifest');
+        assert.equal(rows[0].candidateUniverse.generation.materialized, true);
+        assert.equal(rows[0].candidateUniverse.candidates.length, 15);
+        const request = JSON.parse(options.body); assert.equal(Object.keys(request.questions).length, 15);
+        return { ok: true, json: async () => ({ model: request.model,
+          answers: Object.fromEntries(Object.keys(request.questions).map(k => [k, { type: 'noul', noul: 0 }])) }) };
+      };`;
+    const env = { ...process.env, JEV_API_KEY: 'DEVELOPMENT_MOCK_NOT_A_CREDENTIAL' };
+    for (const key of ['SOPS_AGE_KEY', 'SOPS_AGE_KEY_FILE', 'SOPS_AGE_KEY_CMD']) delete env[key];
+    const child = spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`,
+      fileURLToPath(new URL('./artifact-lint.mjs', import.meta.url)), input, output], { env, encoding: 'utf8', timeout: 5000 });
+    assert.equal(child.status, 0, child.stderr); assert.equal(child.stderr, '');
+    const rows = fs.readFileSync(output, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(rows.length, 3); verifySeal(rows[0]); verifySeal(rows[1]); verifySeal(rows[1].result);
+    const universe = rows[0].candidateUniverse, result = rows[1].result;
+    assert.deepEqual(universe.generation, result.generation);
+    assert.deepEqual(universe.candidates, result.findingEvidence.candidates);
+    assert.equal(universe.proposalDigest, result.findingEvidence.proposalDigest);
+    assert.equal(universe.questionContractDigest, result.questionContractDigest);
+    assert.equal(result.findingEvidence.findings.length, 15); assert.equal(result.comparison.status, 'UNKNOWN');
+    assert.equal(rows[1].manifestDigest, rows[0].evidenceDigest); assert.equal(rows[2].evidenceDigest, rows[1].evidenceDigest);
+    // Adapter counts the mocked fetch; no HTTP request leaves this test process.
+    assert.equal(rows[2].calls, 1); assert.equal(rows[2].semanticResult, 'UNKNOWN');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 console.log(JSON.stringify({ semanticLintShadowContract: 'PASS', tests: done, concernCandidates: CONCERNS.length, liveProviderExecuted: false }));

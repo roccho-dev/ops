@@ -1,4 +1,4 @@
-# Lane D: one exact artifact, six non-authority concern hypotheses
+# Lane D: one exact artifact, source-only non-authority hypotheses
 
 Refs: ops#449 / #453. Reuses `jev-review/{review,rank,jev,core}.mjs` and
 `design/lint.mjs` structural observations. No second HTTP client, portfolio state,
@@ -77,7 +77,7 @@ value remain UNKNOWN regardless of execution success. Authority/effect remain ze
 The six concern categories are a bounded search space, not exhaustive coverage;
 ranked category scores are hypotheses, not localized diagnoses or forced edits.
 
-## Preregistered contrast, not natural-case ground truth
+## Historical category contrast, not natural-case ground truth
 
 `artifact-lint.cases.jsonl` has two neutral-ID, fixed Issue snapshots. Before any live
 execution, the sole gold relation is: contradiction score for 02 should exceed 01.
@@ -87,10 +87,10 @@ here, outside the input and request. Ties/reversals are recorded as such, not hi
 by a threshold or converted into an execution error. This one contrast does not
 validate the other five categories, natural cases, real FP/FN or economic usefulness.
 
-Each JSONL line is a complete CLI input. Extract each into its own input file and run
-once into a distinct new report where target-native auth is already provisioned. Retain both exact
-reports before comparing the raw `contradiction` scores. A partial/missing pair is
-UNKNOWN, not a successful contrast or NO_EFFECT. No live result is bundled here.
+These are legacy category-mode development inputs, retained unchanged with LD09.
+The current CLI uses source-only enumeration, not that historical category protocol.
+Do not rerun or reinterpret old reports with the new implementation. A partial or
+missing historical pair remains UNKNOWN, not a successful contrast or NO_EFFECT.
 
 Natural comparison needs an independently captured R observation **before** revealing
 lint, exact later revision/readback and measured attention/usage. Implementation R
@@ -127,15 +127,13 @@ Those repository declarations do not authenticate any external target's current
 state. No permitted target credential/receipt was supplied to this execution. W did
 not configure authoring, perform projection, dispatch envs or change that authority.
 
-## Source-bound finding proposals: partial offline correction
+## Retained caller-proposal API: source-bound identity
 
-Control `3ec15b2b473be9465fa32d94851c8ab09d1c62b9`; product-R review
-`5365255667`; authority comment `5910294374`. This is a library-level binding and
-scoring correction, not automatic discovery or v2 completion. No evaluation data
-contract, root input, CLI option, candidate generator or provider response type is
-introduced. The existing CLI still uses category mode and is NOT defect-level
-completion evidence. ROOT_001/v3 remains consumed, NOT_COMPARABLE and retired; no
-command shown here authorizes its retry or replaces its historical evidence.
+The partial binding primitive at `57d1a01` was accepted by product R review
+`5366275863`. Its library behavior below remains available. The current CLI now
+uses the source-only method described next. Neither path is v2 completion evidence.
+ROOT_001/v3 remains consumed, NOT_COMPARABLE and retired; no command shown here
+authorizes its retry or replaces its historical evidence.
 
 `reviewSemanticArtifact(input, ask, proposals)` may receive explicit caller-produced
 semantic hypotheses as its third method argument. They are not reference answers.
@@ -144,8 +142,8 @@ it is still rejected. No file, root history, oracle or other artifact is fetched
 The full artifact content remains the only state. The existing evaluator asks one
 Noul question per unique proposal; its model, budgets, timeout and no-retry behavior
 are unchanged. `ask` remains optional; offline tests supply it and never prove live
-provider ability. Authoring or wiring proposals into a real evaluation is not done
-by this correction and must respect the separately authorized input-only W boundary.
+provider ability. Caller-supplied known defects are not source-only discovery evidence;
+that separate library API must not be substituted for confirmation discovery.
 
 The method argument contains exactly `contentSha256` and `candidates` (0–6 entries).
 Each candidate contains exactly `locations`, `defectKind`, `defect` and
@@ -193,8 +191,70 @@ inflight mutation; empty/disabled/budget/error handling; rejection of root-input
 extensions and provider-invented finding identities. These are not new prospective
 cases, an oracle or a semantic-quality experiment.
 
-Still unproved: source-only proposal discovery, proposal independence, live Jev
-quality, independent defect matching, accepted corrections, review/rework savings,
-full cost and 4/4 reproducibility. The current CLI cannot close that gap by receiving
-a key. If a generator, new evaluation input surface or shared provider-output change
-is needed, return that exact need to R/P; do not expand this bounded offline cut.
+## Current CLI: fixed source-only enumeration
+
+Control `3ec15b2b473be9465fa32d94851c8ab09d1c62b9`; product-R boundary
+`5912749233`; P boundary `5911937839` and existing authority `5910294374`.
+`reviewSourceArtifact(input, ask)` and the unchanged two-argument CLI derive their
+candidates only from the seven-field artifact and fixed local implementation rules.
+No external proposals, hidden oracle, other-lane output, later correction, source
+checkout, provider text-generation protocol or additional runtime is consulted.
+The legacy `reviewSemanticArtifact` API and its previous assertions remain intact.
+
+The `raw-fragments-pairs.v1` method splits the ORIGINAL content at CR/LF, Japanese
+sentence endings, semicolons, literal backslash-n, and `.?!` followed by whitespace,
+JSON closing punctuation or end of content. It trims only edge whitespace, retains
+nonempty UTF-8 spans and exact quotations, and never decodes or rewrites JSON text.
+These are lexical fragments, not a semantic parser: code, escaped strings and JSON
+scaffolding can yield noisy boundaries. The entire unchanged content is still state.
+Each fragment gets all six concern hypotheses; every unordered pair, including
+nonadjacent fragments, gets contradiction/responsibility/closure hypotheses evaluated
+in both directions. For n fragments, the complete rule-defined universe contains
+`6*n + 3*n*(n-1)/2` candidates. No keyword, label, score or known defect selects them.
+Omission hypotheses cite existing context, not invented missing bytes. Pair
+hypotheses have two source locations. `correctionEffect` is explicitly conditional
+("If confirmed"), never the actual effect used in final v2 reference deduplication.
+
+The generated plan records the method, exact separators/templates/effect hypotheses,
+all fragments, expected count and a plan digest BEFORE scoring. Up to 256 generated
+candidates are materialized and bound by the existing identity primitive; this is a
+finite allocation limit, not a change to the shared Jev byte budgets or the reference
+defect universe. Above it, the plan and all fragments remain, candidates/proposalDigest
+are null, materialized=false and the case is BLOCK/SOURCE_CANDIDATE_BUDGET_EXCEEDED.
+No partial candidate list or hash of one is represented as the full universe.
+An oversized source or ill-formed UTF-16 blocks earlier, with fragment/count unknown.
+For an enumerated universe, the full normalized candidate list and proposal digest
+are retained before the existing one-request evaluator checks the complete question
+budget. A byte-budget failure retains every candidate and evaluates none; there is
+no sampling, batching, fallback or retry. Empty context remains UNKNOWN, not clean.
+
+The CLI persists this pre-score plan, candidates/proposal digest and question-contract
+digest INSIDE its sealed manifest, before any transport invocation. Result and summary
+still complete the same three-row file. Manifest/result data must match on readback;
+a manifest alone, incomplete output, timeout or missing response is never success.
+The source-only library returns the same pre-score data but does not perform file I/O.
+For source-only output, findingEvidence.findings retains ALL scored hypotheses,
+including zero scores; topK (still 0-6) only bounds the ranked display, with 0 disabling
+evaluation. Scores cannot alter membership, locations or IDs. Generation time is
+reported separately from evaluation time; neither is total P/R/W time or cost.
+
+The full *rule-defined* universe is not the full set of true defects. Generic lens
+hypotheses may be unhelpful, fragment boundaries may miss relationships, a relation
+may need more than two locations, and multiple true defects may share a coarse
+candidate. R must independently determine matching, materiality, semantic duplicates
+and actual correction effects from source/correction/check/readback; a high score or
+candidate ID cannot supply those facts. Recall/precision and reference denominators
+must not be derived from candidate counts or capped at 6 or 256. No false-positive,
+omission-coverage, accepted-correction, value or v2 completion claim is made here.
+
+LD17-LD25 add provider-free development checks for byte spans in all input kinds,
+complete singleton/pair counts, source/score/topK separation, immutable full universes,
+allocation and request-budget rejection, empty/invalid/missing results, literal
+boundaries, CLI source-only wiring and manifest-before-transport ordering. The last
+check replaces fetch inside a test child with a fixed response and a fake test key;
+its adapter counters are mock observations, not real HTTP or provider evidence.
+All prior LD01-LD16 assertions remain. No retired root, new prospective case or oracle
+is executed. Still unproved: semantic discovery quality, independent reference
+matching, actual corrections, live provider execution, full cost/time, 4/4 independent
+reproducibility and -D contribution. No current agreement authorizes root/provider
+execution, credential changes, manual CI, merge, adoption or retired-root rescue.

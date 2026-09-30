@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { JEV_MODEL } from '../../jev-review/core.mjs';
+import { JEV_MODEL, validateJevBudget } from '../../jev-review/core.mjs';
 import { askJev, validateJevResponse } from '../../jev-review/jev.mjs';
 import { evaluate } from '../../jev-review/review.mjs';
 import { rankJudgments } from '../../jev-review/rank.mjs';
@@ -28,7 +28,7 @@ const exact = (v, names) => v && [Object.prototype, null].includes(Object.getPro
     const d = Object.getOwnPropertyDescriptor(v, name);
     return d?.enumerable && Object.hasOwn(d, 'value');
   });
-const list = (v) => Array.isArray(v) && v.length <= CONCERNS.length
+const list = (v, limit = CONCERNS.length) => Array.isArray(v) && v.length <= limit
   && Reflect.ownKeys(v).length === v.length + 1
   && Array.from({ length: v.length }, (_, i) => Object.getOwnPropertyDescriptor(v, String(i)))
     .every((d) => d && Object.hasOwn(d, 'value'));
@@ -66,10 +66,10 @@ export function validateArtifact(input) {
 
 // Bind explicit caller proposals, never manufacture defect identities from category scores.
 // This verifies byte locations and identity, NOT semantic truth or proposal independence.
-function bindFindingProposals(source, proposals) {
+function bindFindingProposals(source, proposals, limit = CONCERNS.length) {
   if (proposals === undefined) return null;
   const bad = () => { throw new Error('INVALID_FINDING_PROPOSALS'); };
-  if (!exact(proposals, ['contentSha256', 'candidates']) || !list(proposals.candidates)) bad();
+  if (!exact(proposals, ['contentSha256', 'candidates']) || !list(proposals.candidates, limit)) bad();
   if (proposals.contentSha256 !== source.contentSha256) throw new Error('FINDING_SOURCE_MISMATCH');
   if (!source.content.isWellFormed()) bad();
   const bytes = Buffer.from(source.content, 'utf8'), byId = new Map();
@@ -98,15 +98,79 @@ function bindFindingProposals(source, proposals) {
   return [...byId.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
+// Fixed lexical universe, not an oracle or a claim of semantic exhaustiveness.
+const SOURCE_CANDIDATE_LIMIT = 256;
+const SOURCE_EFFECTS = Object.freeze({
+  omission: 'If confirmed, supply the missing information required by this cited context.',
+  contradiction: 'If confirmed, reconcile the incompatible requirements at the cited locations.',
+  responsibility: 'If confirmed, clarify ownership at the cited locations without duplicating authority.',
+  closure: 'If confirmed, connect the cited completion or output to its required consumer outcome.',
+  scope: 'If confirmed, constrain the cited behavior to the declared scope and authority.',
+  acceptance: 'If confirmed, strengthen the cited acceptance evidence to require the stated outcome.',
+});
+function sourceProposals(source, state) {
+  const started = performance.now();
+  const separator = /\r\n|[\r\n。！？;；]|[.!?](?=\s|["}\]]|$)|\\n/gu;
+  const relations = ['contradiction', 'responsibility', 'closure'];
+  const plan = { method: 'raw-fragments-pairs.v1', contentSha256: source.contentSha256,
+    separator: separator.source, local: CONCERNS, relations, effects: SOURCE_EFFECTS,
+    fragments: null, candidateCount: null, materializationLimit: SOURCE_CANDIDATE_LIMIT };
+  const finish = (reason, candidates = null) => ({
+    evidence: { status: reason ? 'BLOCK' : 'GENERATED', reason, plan, planDigest: digest(plan),
+      materialized: candidates !== null, ms: Math.round(performance.now() - started) },
+    proposals: candidates === null ? undefined : { contentSha256: source.contentSha256, candidates },
+  });
+  // Reject, never truncate, an unrepresentable source before quadratic enumeration.
+  if (!source.content.isWellFormed()) return finish('SOURCE_TEXT_NOT_WELL_FORMED');
+  try { validateJevBudget(state, {}); } catch (error) { return finish(safeError(error)); }
+  const fragments = [];
+  let start = 0, offset = 0;
+  const append = (end) => {
+    const part = source.content.slice(start, end), quote = part.trim();
+    if (quote) {
+      const leading = part.slice(0, part.length - part.trimStart().length);
+      const startByte = offset + Buffer.byteLength(leading, 'utf8');
+      fragments.push({ startByte, endByte: startByte + Buffer.byteLength(quote, 'utf8'), quote });
+    }
+    offset += Buffer.byteLength(part, 'utf8'); start = end;
+  };
+  for (const match of source.content.matchAll(separator)) append(match.index + match[0].length);
+  append(source.content.length);
+  plan.fragments = fragments;
+  plan.candidateCount = fragments.length * CONCERNS.length + relations.length * fragments.length * (fragments.length - 1) / 2;
+  if (plan.candidateCount > SOURCE_CANDIDATE_LIMIT) return finish('SOURCE_CANDIDATE_BUDGET_EXCEEDED');
+  const candidates = [];
+  const add = (locations, theme) => candidates.push({ locations, defectKind: theme.id,
+    defect: `Hypothesis at the cited ${locations.length === 1 ? 'context' : 'pair (both directions)'}: ${theme.concern}`,
+    correctionEffect: SOURCE_EFFECTS[theme.id] });
+  fragments.forEach((span, i) => {
+    for (const theme of CONCERNS) add([span], theme);
+    for (const other of fragments.slice(i + 1)) {
+      for (const theme of CONCERNS.filter((t) => relations.includes(t.id))) add([span, other], theme);
+    }
+  });
+  return finish(null, candidates);
+}
+
+// Legacy category/caller-proposal API remains separate from source-only discovery.
 export async function reviewSemanticArtifact(input, ask, proposals) {
+  return reviewArtifact(input, ask, proposals, false);
+}
+export async function reviewSourceArtifact(input, ask) {
+  return reviewArtifact(input, ask, undefined, true);
+}
+async function reviewArtifact(input, ask, proposals, sourceOnly, beforeEvaluate) {
   const { source, observations } = validateArtifact(input);
   if (ask !== undefined && typeof ask !== 'function') throw new Error('INVALID_ARTIFACT_INPUT');
-  const candidates = bindFindingProposals(source, proposals);
   const mode = ask === undefined ? 'live' : 'injected';
   // Source names/revisions and comparison labels are NOT model-visible. All content bytes are.
   const state = { artifact: { kind: source.kind, scope: source.scope, content: source.content } };
+  const generated = sourceOnly ? sourceProposals(source, state) : null;
+  const generation = generated?.evidence;
+  const candidates = generation?.status === 'BLOCK' ? null
+    : bindFindingProposals(source, generated ? generated.proposals : proposals, sourceOnly ? SOURCE_CANDIDATE_LIMIT : CONCERNS.length);
   const themes = ['semantic-lint'];
-  const items = candidates === null
+  const items = generation?.status === 'BLOCK' ? [] : candidates === null
     ? CONCERNS.map(({ id, concern }) => ({ theme: themes[0], subject: ['artifact', id],
       concern: `For the whole supplied artifact (the second target element names the concern lens): ${concern}` }))
     : candidates.map((candidate) => ({ theme: themes[0], subject: ['artifact', candidate.id],
@@ -123,13 +187,19 @@ export async function reviewSemanticArtifact(input, ask, proposals) {
     execution: { mode, status: 'UNKNOWN', reason: null, calls: 0, transportInvocations: 0,
       httpRequests: mode === 'live' ? 0 : null, ms: 0 },
     observedModel: null, request: null, response: null, raw: [], ranked: [],
-    coverage: { candidates: items.length, evaluated: 0, returned: 0 }, usage: {},
+    coverage: { candidates: generation ? generation.plan.candidateCount : items.length, evaluated: 0, returned: 0 }, usage: {},
+    ...(generation ? { generation } : {}),
     findingEvidence: { status: candidates === null ? 'UNAVAILABLE' : 'NOT_EVALUATED',
-      reason: candidates === null ? 'CATEGORY_ONLY_OUTPUT' : null,
+      reason: candidates === null ? (generation?.reason ?? 'CATEGORY_ONLY_OUTPUT') : null,
       proposalDigest: candidates === null ? null : digest(candidates), candidates, findings: null },
     comparison: { status: 'UNKNOWN', reason: 'NO_INDEPENDENT_COMPARISON', cost: null, attentionMs: null },
     claimCeiling: 'Concerns over supplied snapshot scope only; no source authentication, exhaustive coverage, artifact verdict, acceptance, forced correction, merge/skip authority or proven value.',
   };
+  beforeEvaluate?.(record); // The CLI persists the complete pre-score universe in its manifest.
+  if (generation?.status === 'BLOCK') {
+    record.execution.status = 'BLOCK'; record.execution.reason = generation.reason;
+    return seal(record);
+  }
   if (source.topK === 0) {
     record.execution.reason = 'DISABLED';
     record.ranked = rankJudgments([], { topK: 0, themes, items });
@@ -168,7 +238,7 @@ export async function reviewSemanticArtifact(input, ask, proposals) {
     if (candidates !== null) {
       const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
       record.findingEvidence.status = 'SCORED_PROPOSALS';
-      record.findingEvidence.findings = record.ranked[0].findings.map(({ subject, noul }) => ({
+      record.findingEvidence.findings = (sourceOnly ? record.raw : record.ranked[0].findings).map(({ subject, noul }) => ({
         ...copy(byId.get(subject[1])), noul,
       }));
     }
@@ -187,18 +257,24 @@ async function main() {
   if (!inputFile || !outputFile || extra) throw new Error('USAGE');
   const fd = fs.openSync(outputFile, 'wx', 0o600);
   const append = (row) => fs.writeSync(fd, `${JSON.stringify(row)}\n`);
+  let manifest, manifestWritten = false;
+  const retainManifest = (record) => {
+    if (record) manifest.candidateUniverse = { generation: copy(record.generation),
+      candidates: copy(record.findingEvidence.candidates), proposalDigest: record.findingEvidence.proposalDigest,
+      questionContractDigest: record.questionContractDigest };
+    append(seal(manifest)); manifestWritten = true;
+  };
   try {
     const raw = fs.readFileSync(inputFile, 'utf8');
     const sources = ['./artifact-lint.mjs', './lint.mjs', '../../jev-review/core.mjs', '../../jev-review/jev.mjs', '../../jev-review/review.mjs', '../../jev-review/rank.mjs'];
     const closure = Object.fromEntries(sources.map((p) => [p, digest(fs.readFileSync(new URL(p, import.meta.url), 'utf8'))]));
-    const manifest = { kind: 'manifest', mode: 'live', inputFileDigest: digest(raw), implementation: closure,
+    manifest = { kind: 'manifest', mode: 'live', inputFileDigest: digest(raw), implementation: closure,
       runtime: { node: process.version, platform: process.platform, arch: process.arch },
       opsSha: /^[a-f0-9]{40}$/u.test(process.env.OPS_SHA ?? '') ? process.env.OPS_SHA : null,
       endpoint: ENDPOINT, model: JEV_MODEL, effectAuthority: 0 };
-    append(seal(manifest));
     let input;
     try { input = JSON.parse(raw); } catch { throw new Error('INVALID_ARTIFACT_INPUT'); }
-    const result = await reviewSemanticArtifact(input);
+    const result = await reviewArtifact(input, undefined, undefined, true, retainManifest);
     const envelope = seal({ kind: 'result', manifestDigest: digest(manifest), result });
     append(envelope);
     const summary = { kind: 'summary', status: result.execution.status, reason: result.execution.reason,
@@ -207,6 +283,7 @@ async function main() {
     append(summary); console.log(JSON.stringify(summary));
     if (result.execution.status !== 'OBSERVED') process.exitCode = 1;
   } catch (error) {
+    if (manifest && !manifestWritten) retainManifest();
     const summary = { kind: 'summary', status: 'BLOCK', reason: safeError(error), semanticResult: 'UNKNOWN', effectAuthority: 0 };
     append(summary); console.log(JSON.stringify(summary)); process.exitCode = 1;
   } finally { fs.closeSync(fd); }
