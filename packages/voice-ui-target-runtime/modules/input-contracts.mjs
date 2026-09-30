@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -17,6 +18,22 @@ function providerPath(value, label) {
   // Evidence only. The approved receipt digest binds it; consumers never open it.
 }
 
+// The approved Workers target. The URL is owner-approved data bound by the approved request's digests, not a
+// provider-verified route.
+export function validateWorkersTarget(target) {
+  exactObjectKeys(target, ["provider", "accountId", "workerName", "url"], "expected target");
+  requireCondition(target.provider === "cloudflare-workers", "expected target provider differs");
+  requireCondition(/^[0-9a-f]{32}$/.test(target.accountId ?? ""), "expected target account id invalid");
+  requireCondition(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(target.workerName ?? ""), "expected target Worker name invalid");
+  let url;
+  try { url = new URL(target.url); } catch { throw new Error("expected target URL invalid"); }
+  requireCondition(url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash
+    && url.pathname === "/" && url.href === target.url, "expected target URL must be a bare https origin with no userinfo, query or fragment");
+  return target;
+}
+
+// ops' expectation of an envs-owned handoff for a Workers target. envs does not produce this shape today, so a real
+// run is NOT_CONFIGURED until the envs owner agrees it; secret-name presence read later is never this authority.
 export function validateProjectionReceipt(receipt, expectedEnvsSha) {
   exactObjectKeys(receipt, [
     "kind", "status", "envs_sha", "environment", "capability", "source", "target",
@@ -34,17 +51,17 @@ export function validateProjectionReceipt(receipt, expectedEnvsSha) {
   providerPath(receipt.source.ref, "projection source ref");
   normalizeSha256(receipt.source.sha256, "projection ciphertext digest");
 
-  exactObjectKeys(receipt.target, ["provider", "account_id", "project", "secret_name"], "projection target");
-  requireCondition(receipt.target.provider === "cloudflare-pages", "projection target provider differs");
+  exactObjectKeys(receipt.target, ["provider", "account_id", "worker_name", "secret_name"], "projection target");
+  requireCondition(receipt.target.provider === "cloudflare-workers", "projection target provider differs");
   requireCondition(typeof receipt.target.account_id === "string" && receipt.target.account_id.length > 0, "projection account id missing");
-  requireCondition(receipt.target.project === "voice-ui", "projection target project differs");
+  requireCondition(typeof receipt.target.worker_name === "string" && receipt.target.worker_name.length > 0, "projection Worker name missing");
   requireCondition(receipt.target.secret_name === "JEV_API_KEY", "projection target secret differs");
 
   exactObjectKeys(receipt.projector, ["workflow", "adapter"], "projection projector");
   providerPath(receipt.projector.workflow, "projection workflow");
   providerPath(receipt.projector.adapter, "projection adapter");
   exactObjectKeys(receipt.effect, ["operation", "status"], "projection effect");
-  requireCondition(receipt.effect.operation === "cloudflare_pages_secret_put" && receipt.effect.status === "PASS", "projection effect is not PASS");
+  requireCondition(receipt.effect.operation === "cloudflare_workers_secret_put" && receipt.effect.status === "PASS", "projection effect is not PASS");
   exactObjectKeys(receipt.readback, ["kind", "status", "present"], "projection readback");
   requireCondition(receipt.readback.kind === "secret_name_presence" && receipt.readback.status === "PASS" && receipt.readback.present === true, "projection readback is not PASS");
 
@@ -73,7 +90,7 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
   const manifestDigest = sha256File(manifestPath);
   requireCondition(manifestDigest === normalizeSha256(expectedManifestSha256, "expected artifact manifest digest"), "artifact manifest digest mismatch");
   const manifest = loadJson(manifestPath, "artifact manifest");
-  requireCondition(manifest.schema === "voice-ui-dist/1", "artifact manifest schema differs");
+  requireCondition(manifest.schema === "voice-ui-dist/2", "artifact manifest schema differs");
   requireCondition(manifest.sources?.apps === exactSha(expectedAppsSha, "expected apps SHA"), "artifact apps SHA mismatch");
   requireCondition(Array.isArray(manifest.files) && manifest.files.length > 0, "artifact file closure missing");
 
@@ -113,7 +130,13 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
   requireCondition(typeof runtimeEntrypoint === "string" && rows.has(runtimeEntrypoint), "runtime acceptance entrypoint is not bound to artifact closure");
   const publicEntrypoint = manifest.e2e?.public_entrypoint;
   requireCondition(typeof publicEntrypoint === "string" && rows.has(publicEntrypoint), "public acceptance entrypoint is not bound to artifact closure");
-  requireCondition(rows.has("functions/api/jev.mjs"), "Jev Function is missing from artifact closure");
+  // The product's declared Worker runtime (apps voice-ui-dist/2): exactly this block, bound to listed files.
+  requireCondition(JSON.stringify(manifest.runtime) === JSON.stringify({
+    assets: { binding: "ASSETS", directory: "site" }, compatibility_date: "2026-09-01", compatibility_flags: [],
+    main_module: "worker/worker.mjs", secrets: [{ capability: "jev-api", name: "JEV_API_KEY" }],
+  }), "declared Worker runtime differs");
+  requireCondition(rows.has(manifest.runtime.main_module), "compiled Worker is missing from artifact closure");
+  requireCondition([...rows.keys()].some(p => p.startsWith(`${manifest.runtime.assets.directory}/`)), "static assets are missing from artifact closure");
 
   const authPath = resolveInside(artifactRoot, ".envs/artifact.jsonl", "auth contract path");
   requireCondition(rows.has(".envs/artifact.jsonl"), "auth contract is not bound to artifact closure");
@@ -131,6 +154,50 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
     manifestDigest,
     runtimeEntrypoint: resolveInside(artifactRoot, runtimeEntrypoint, "runtime entrypoint"),
   };
+}
+
+const PRODUCT_FILES = ["merged-pr-proof.json", "provenance.json", "voice-ui-dist.zip"];
+
+// Admits the canonical apps PRODUCT operand once, against the installed pin (reviewed data): the exact release zip,
+// its merged-PR proof and provenance, all naming one reviewed merge; then unpacks it with the fixed native unzip into
+// a fresh directory and validates the manifest, declared runtime and compiled Worker. There is no other admission.
+export function admitProduct({ directory, pin, unzip, workdir }) {
+  const dir = path.resolve(directory);
+  requireCondition(JSON.stringify(readdirSync(dir).sort()) === JSON.stringify(PRODUCT_FILES),
+    "product operand must hold exactly the release zip, merged-PR proof and provenance");
+  for (const name of PRODUCT_FILES) requireCondition(lstatSync(path.join(dir, name)).isFile(), `product operand entry is not a regular file: ${name}`);
+  const zip = path.join(dir, "voice-ui-dist.zip");
+  requireCondition(statSync(zip).size === pin.zip.bytes && sha256File(zip) === pin.zip.sha256, "product zip differs from the pinned release");
+  requireCondition(sha256File(path.join(dir, "merged-pr-proof.json")) === pin.proofSha256, "merged-PR proof differs from the pinned release");
+  requireCondition(sha256File(path.join(dir, "provenance.json")) === pin.provenanceSha256, "provenance differs from the pinned release");
+  const proof = loadJson(path.join(dir, "merged-pr-proof.json"), "merged-PR proof");
+  const provenance = loadJson(path.join(dir, "provenance.json"), "provenance");
+  exactObjectKeys(proof, [...Object.keys(pin.proof), "merged_at"], "merged-PR proof");
+  requireCondition(Object.entries(pin.proof).every(([key, value]) => proof[key] === value)
+    && proof.reviewed_tree === proof.merge_tree && typeof proof.merged_at === "string" && proof.merged_at, "merged-PR proof differs from the reviewed merge");
+  const locator = name => `${pin.base}/${name}`;
+  requireCondition(provenance.schema === "roccho.voice-ui-dist.release-provenance/2", "provenance schema differs");
+  requireCondition(provenance.source?.repository === "roccho-dev/apps" && provenance.source.commit === proof.merge_sha
+    && provenance.source.tree === proof.merge_tree, "provenance source differs from the merged-PR proof");
+  requireCondition(provenance.producer?.repository === "roccho-dev/apps"
+    && provenance.producer.workflow_ref === "roccho-dev/apps/.github/workflows/voice-ui-release.yml@refs/heads/proposals", "provenance producer differs");
+  requireCondition(provenance.artifact?.name === "voice-ui-dist.zip" && provenance.artifact.sha256 === pin.zip.sha256
+    && provenance.artifact.bytes === pin.zip.bytes && provenance.locator === locator("voice-ui-dist.zip")
+    && provenance.cross_host_bytes_reproducible === false, "provenance artifact differs from the pinned zip");
+  const acceptance = provenance.acceptance ?? {};
+  requireCondition(acceptance.sha256 === pin.acceptance.sha256 && acceptance.bytes === pin.acceptance.bytes
+    && acceptance.root === pin.acceptance.root && acceptance.entry === `${pin.acceptance.root}/${pin.acceptance.entry}`
+    && acceptance.closure?.length === pin.acceptance.paths && acceptance.locator === locator("voice-ui-acceptance-runtime.nix-export"),
+    "provenance acceptance record differs from the pin");
+  requireCondition(path.isAbsolute(unzip ?? ""), "fixed unzip executable required");
+  const out = path.join(path.resolve(workdir), "product");
+  const unpacked = spawnSync(unzip, ["-q", zip, "-d", out], { encoding: "utf8", env: {}, stdio: ["ignore", "pipe", "pipe"] });
+  requireCondition(unpacked.status === 0, "product zip does not unpack");
+  requireCondition(JSON.stringify(readdirSync(out)) === '["voice-ui-dist"]', "product zip must hold exactly voice-ui-dist/");
+  const artifact = validateArtifact(path.join(out, "voice-ui-dist"), proof.merge_sha, pin.manifestSha256);
+  requireCondition(artifact.manifest.files.find(row => row.path === artifact.manifest.runtime.main_module)?.sha256 === pin.workerSha256,
+    "compiled Worker differs from the pinned release");
+  return artifact;
 }
 
 export function validateIsolationVerdict(verdict, expectedOpsSha) {

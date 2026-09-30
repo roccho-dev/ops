@@ -2,15 +2,15 @@
   "capability": "jev-api",
   "created_at": "2026-09-28T00:00:00Z",
   "effect": {
-    "operation": "cloudflare_pages_secret_put",
+    "operation": "cloudflare_workers_secret_put",
     "status": "PASS"
   },
   "environment": "dev",
-  "envs_sha": "d0bfafec05c467c8ebd89ed75c4abe8a6b8c8477",
+  "envs_sha": "0000000000000000000000000000000000000000",
   "kind": "envs.projectionReceipt.v1",
   "projector": {
-    "adapter": "adapters/jev_api.py",
-    "workflow": ".github/workflows/project-dev-jev-api.yml"
+    "adapter": "adapters/never-issued-fixture.py",
+    "workflow": ".github/workflows/never-issued-fixture.yml"
   },
   "readback": {
     "kind": "secret_name_presence",
@@ -19,15 +19,15 @@
   },
   "source": {
     "kind": "public_sops",
-    "ref": "ciphertexts/dev-jev-api.sops.yaml",
+    "ref": "ciphertexts/never-issued-fixture.sops.yaml",
     "sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
   },
   "status": "PASS",
   "target": {
-    "account_id": "account-dev-fixture",
-    "project": "voice-ui",
-    "provider": "cloudflare-pages",
-    "secret_name": "JEV_API_KEY"
+    "account_id": "00000000000000000000000000000001",
+    "provider": "cloudflare-workers",
+    "secret_name": "JEV_API_KEY",
+    "worker_name": "voice-ui-nonproduct-fixture"
   },
   "workflow": {
     "ref": "proposals",

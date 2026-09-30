@@ -1,22 +1,36 @@
-// Native cf checkpoint (C3/C4) for the future Workers adapter. Offline only: a genuine, pinned `cf deploy --prebuilt`
-// against a loopback provider fixture that records every request, with an account and token that were never issued.
-// It proves only what the pinned CLI does with a Build Output made from the admitted artifact's unchanged bytes; the
-// Worker metadata below is an explicitly NON_PRODUCT fixture, not the product's declared requirements.
-// Usage: node workers.test.mjs <cf executable> <cf node_modules directory> <admitted artifact root> [--require-isolation]
-// With --require-isolation (the Nix check) it fails before running cf unless the kernel shows a loopback-only network
-// namespace. Run directly without it, the result is graded UNISOLATED: only requests that reached the fixture are proven.
+// The Workers deploy check and the fresh-consumer gate program: one loopback provider fixture that records every
+// request, an account and token that were never issued, and the installed runtime's own cf, adapters and entries.
+// C3/C4 characterise the pinned `cf deploy --prebuilt` with an explicitly NON_PRODUCT Worker config. The installed
+// stage then runs the installed runtime (INSTALLED_ADAPTER_LOOPBACK_HARNESS): its lib through the private spawn seam
+// and its workers.mjs with the loopback api/fetcher options, which no request or environment field can set.
+// Usage: node workers.test.mjs --runtime <installed runtime> --product <release zip/proof/provenance directory>
+//          [--acceptance-node <ACCEPTANCE runtime entry>] [--require-isolation]
+// With --require-isolation (the Nix check and the gate) it fails before any request unless the kernel shows a
+// loopback-only network namespace. Run directly without it, the result is graded UNISOLATED.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const [cfBin, nodeModules, artifact, mode] = process.argv.slice(2);
-assert.ok(cfBin && nodeModules && artifact && (mode === undefined || mode === "--require-isolation"),
-  "usage: workers.test.mjs <cf> <node_modules> <artifact> [--require-isolation]");
+const SELF = fileURLToPath(import.meta.url);
+// The two harness children: `--run` calls the installed lib, `--adapter` runs the installed workers.mjs.
+if (process.argv[2] === "--run" || process.argv[2] === "--adapter") {
+  await harnessChild(process.argv[2], process.argv.slice(3));
+  process.exit();
+}
+const option = (name) => { const i = process.argv.indexOf(name); return i > 1 ? process.argv[i + 1] : undefined; };
+const runtimeRoot = option("--runtime"), product = option("--product"), acceptanceNode = option("--acceptance-node");
+const requireIsolation = process.argv.includes("--require-isolation");
+assert.ok(runtimeRoot && product && path.isAbsolute(runtimeRoot) && path.isAbsolute(product),
+  "usage: workers.test.mjs --runtime <root> --product <dir> [--acceptance-node <bin>] [--require-isolation]");
+const share = path.join(runtimeRoot, "share/voice-ui-target-runtime");
+const installed = JSON.parse(fs.readFileSync(path.join(share, "configuration.json"), "utf8"));
+const cfBin = installed.cf, nodeModules = installed.buildOutputUtils;
 
 // Kernel evidence of isolation: the only interface is lo, and a connect to a TEST-NET-1 literal (RFC 5737, never
 // routed publicly; no service or credential involved) fails with ENETUNREACH instead of being routed.
@@ -29,7 +43,12 @@ const connectError = await new Promise((ok) => {
 });
 const isolation = { interfaces, connect_192_0_2_1: connectError,
   grade: interfaces.join(",") === "lo" && connectError === "ENETUNREACH" ? "ISOLATED" : "UNISOLATED" };
-if (mode === "--require-isolation") assert.equal(isolation.grade, "ISOLATED", `network is not loopback-only: ${JSON.stringify(isolation)}`);
+if (requireIsolation) assert.equal(isolation.grade, "ISOLATED", `network is not loopback-only: ${JSON.stringify(isolation)}`);
+// The canonical PRODUCT operand, admitted by the installed runtime's own admission against its installed pin.
+const { admitProduct } = await import(path.join(share, "modules/input-contracts.mjs"));
+const admitted = admitProduct({ directory: product, pin: installed.product, unzip: installed.unzip,
+  workdir: fs.mkdtempSync(path.join(os.tmpdir(), "cf-product-")) });
+const artifact = admitted.root;
 const { writeAssets, writeRootConfig, writeWorkerConfig, getWorkerBundleDir, readBuildOutput } =
   await import(path.join(nodeModules, "@cloudflare/build-output-utils/dist/index.mjs"));
 const { InputWorkerSchema } = await import(path.join(nodeModules, "@cloudflare/config/dist/index.mjs"));
@@ -80,6 +99,49 @@ let uploadedModules = {};
 let assetManifest = null;
 let uploadedAssets = new Map();
 const resetCaptures = () => { versionId = null; uploadedModules = {}; assetManifest = null; uploadedAssets = new Map(); };
+// Installed stage: the deployment the fixture reports as active, the fixture phase, and what reached the site.
+let activeDeployment = null;
+let phase = null;
+const siteRequests = [];
+const violations = [];
+// Never-issued fixture value, only ever the Worker's JEV_API_KEY in PRESET_SECRET_FIXTURE; valid JSON is refused there.
+const fixtureJevValue = `never-issued-jev-${crypto.randomBytes(12).toString("hex")}`;
+const TYPES = { ".html": "text/html; charset=utf-8", ".mjs": "text/javascript; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8", ".css": "text/css; charset=utf-8", ".wasm": "application/wasm", ".md": "text/plain; charset=utf-8" };
+let worker = null;
+// FIXTURE_SERVED: the site is answered by executing the uploaded Worker module, with ASSETS serving the uploaded asset
+// bytes by manifest path. Every provider-bound fetch from the Worker is counted and refused.
+async function serveSite(req, res, body) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const moduleBytes = uploadedModules["worker.mjs"];
+  if (!moduleBytes || !assetManifest) { res.writeHead(503); return res.end(); }
+  const digest = sha256(moduleBytes);
+  if (worker?.digest !== digest) {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "uploaded-worker-")), `worker-${digest}.mjs`);
+    fs.writeFileSync(file, moduleBytes);
+    worker = { digest, module: (await import(pathToFileURL(file))).default };
+  }
+  const row = { phase, method: req.method, path: url.pathname, origin: req.headers.origin ?? null, fetchSite: req.headers["sec-fetch-site"] ?? null };
+  if (url.pathname === "/api/jev" && phase === "PRESET_SECRET_FIXTURE") {
+    let json = true;
+    try { JSON.parse(body.toString()); } catch { json = false; }
+    if (json) { violations.push("valid JSON reached /api/jev while the fixture secret was set"); res.writeHead(409); return res.end(); }
+  }
+  const headers = new Headers();
+  for (const name of ["content-type", "origin", "sec-fetch-site", "accept"]) if (typeof req.headers[name] === "string") headers.set(name, req.headers[name]);
+  const assets = { fetch(request) {
+    const pathname = new URL(request.url).pathname, key = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
+    const bytes = assetManifest[key] && uploadedAssets.get(assetManifest[key].hash);
+    return bytes ? new Response(bytes, { headers: { "content-type": TYPES[path.extname(key)] ?? "application/octet-stream" } })
+      : new Response("not found", { status: 404 });
+  } };
+  const env = { ASSETS: assets, ...(phase === "PRESET_SECRET_FIXTURE" ? { JEV_API_KEY: fixtureJevValue } : {}) };
+  const response = await worker.module.fetch(new Request(url, { method: req.method, headers,
+    body: ["GET", "HEAD"].includes(req.method) ? undefined : body }), env);
+  if (url.pathname === "/api/jev") siteRequests.push({ ...row, status: response.status });
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
+}
 function multipart(req, body) {
   const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(req.headers["content-type"] ?? "");
   const parts = {};
@@ -96,6 +158,9 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     const body = Buffer.concat(chunks);
     const url = new URL(req.url, "http://127.0.0.1");
+    if (!url.pathname.startsWith("/client/v4/")) {
+      return serveSite(req, res, body).catch((error) => { violations.push(`site: ${error.message}`); res.writeHead(500); res.end(); });
+    }
     requests.push({ method: req.method, path: url.pathname, auth: req.headers.authorization ?? null, bytes: body.length,
       sentinel: body.includes(SENTINEL) || String(req.headers.authorization ?? "").includes(SENTINEL),
       fixture_secret: body.includes(fixtureSecret) || req.url.includes(fixtureSecret) });
@@ -123,9 +188,14 @@ const server = http.createServer((req, res) => {
       return reply(200, { id: versionId, number: 2, metadata: {}, resources: { bindings: [], script: { etag: "fixture" },
         script_runtime: { usage_model: "standard" } }, startup_time_ms: 1 });
     }
-    if (existing && req.method === "POST" && p === `${script}/deployments`)
-      return reply(200, { id: "fixture-deployment-2", source: "wrangler", strategy: "percentage",
-        versions: [{ version_id: versionId, percentage: 100 }] });
+    if (existing && req.method === "POST" && p === `${script}/deployments`) {
+      activeDeployment = { id: `fixture-deployment-${crypto.randomUUID()}`, source: "wrangler", strategy: "percentage",
+        versions: [{ version_id: versionId, percentage: 100 }] };
+      return reply(200, activeDeployment);
+    }
+    // Secret names only, never values: the preflight the installed adapter runs before any mutating call.
+    if (existing && req.method === "GET" && p === `${script}/secrets`)
+      return reply(200, presetSecret ? [{ name: "JEV_API_KEY", type: "secret_text" }] : []);
     if (req.method === "PUT" && (p === script || p === `${script}/versions`)) {
       uploadedModules = multipart(req, body);
       versionId = crypto.randomUUID();
@@ -145,7 +215,7 @@ const server = http.createServer((req, res) => {
       return reply(200, { bindings: [...(presetSecret ? [{ name: "JEV_API_KEY", type: "secret_text" }] : []), { name: "ASSETS", type: "assets" }],
         compatibility_date: "2026-09-01", compatibility_flags: [] });
     if (existing && req.method === "GET" && p === `${script}/deployments`)
-      return reply(200, { deployments: [{ id: "fixture-deployment", source: "wrangler", strategy: "percentage",
+      return reply(200, { deployments: [activeDeployment ?? { id: "fixture-deployment", source: "wrangler", strategy: "percentage",
         versions: [{ version_id: "fixture-preset-version", percentage: 100 }] }] });
     // A script that does not exist yet, as the provider reports it (workers.api.error.script_not_found).
     if (req.method === "GET" && p.startsWith(`${script}`)) return reply(404, null, 10007);
@@ -249,8 +319,6 @@ receipt.preset_secret = preset;
 receipt.all_requests = { count: requests.length, auth_only_fixture_token: authOk(requests),
   sentinel_seen_by_provider: requests.some((r) => r.sentinel),
   sentinel_in_any_output: [c3, c4a, c4b].some((r) => r.out.includes(SENTINEL)) || Object.values(preset).some((r) => r.sentinel_in_output) };
-server.close();
-console.log(JSON.stringify(receipt, null, 1));
 assert.notEqual(c4a.code, 0, "C4a deployed a Worker that declares a secret without its value");
 assert.ok(receipt.c4a.refused_missing_secret && !receipt.c4a.script_uploaded, "C4a did not refuse natively before uploading the script");
 assert.equal(c4b.code, 0, `C4b deploy failed:\n${c4b.out}`);
@@ -284,3 +352,185 @@ assert.deepEqual(pc.c4e_secret_missing.bindings, ["JEV_API_KEY:inherit", "ASSETS
 assert.deepEqual(receipt.all_requests, { count: requests.length, auth_only_fixture_token: true, sentinel_seen_by_provider: false,
   sentinel_in_any_output: false }, "some request used a token other than the never-issued fixture token, or the planted .env was used");
 console.error(`PASS cf checkpoint (${isolation.grade}): C3 prebuilt dry run, 0 requests; C4a new Worker with a declared secret refused without its value, .env unused; C4b exact Worker module, bindings, date and asset paths and bytes, native version id equals the issued one; C4c for an existing Worker, with no Jev value in the deploy context, the CLI sends an inherit binding (provider preservation not proven); C4d no --keep-vars; C4e missing existing secret is not checked by the CLI`);
+
+// ---- Installed runtime (INSTALLED_ADAPTER_LOOPBACK_HARNESS) against the same server ----
+const execute = (command, args, env, options = {}) => new Promise((ok) => {
+  const child = spawn(command, args, { env, stdio: ["ignore", "pipe", "pipe"], ...options });
+  let stdout = "", stderr = "";
+  const timer = setTimeout(() => { try { process.kill(options.detached ? -child.pid : child.pid, "SIGKILL"); } catch {} }, 600000);
+  child.stdout.on("data", (c) => { stdout += c; });
+  child.stderr.on("data", (c) => { stderr += c; });
+  child.on("close", (code) => { clearTimeout(timer); ok({ code, stdout, stderr }); });
+});
+const HERE = path.dirname(SELF);
+const work = fs.mkdtempSync(path.join(os.tmpdir(), "installed-"));
+const writeJson = (name, value) => { const p = path.join(work, name); fs.writeFileSync(p, `${JSON.stringify(value, null, 2)}\n`); return p; };
+// Never-issued, Workers-shaped EXTERNAL EXPECTATION of the envs handoff (see fixtures/envs-projection.json).
+const projectionPath = writeJson("projection.json", JSON.parse(fs.readFileSync(path.join(HERE, "fixtures/envs-projection.json"), "utf8")));
+const projection = JSON.parse(fs.readFileSync(projectionPath, "utf8"));
+const isolationPath = writeJson("isolation.json", { kind: "ops.secretEffectBoundary.check.v1", status: "PASS", opsSha: installed.opsSha,
+  active: 1, secretBearingEffects: 0, obsolete: 0, unclassified: 0,
+  workflows: [{ path: ".github/workflows/fixture.yml", classification: "secret_free_verify" }],
+  inputs: { checkerSha256: `sha256:${"5".repeat(64)}`, intentSha256: `sha256:${"6".repeat(64)}`,
+    boundarySha256: `sha256:${"7".repeat(64)}`, workflowTreeSha: "8".repeat(40) } });
+const target = { provider: "cloudflare-workers", accountId: ACCOUNT, workerName: "voice-ui-nonproduct-fixture",
+  url: "https://voice-ui-nonproduct-fixture.invalid/" };
+const approved = (output) => ({ kind: "ops.voiceUiTargetRuntimeRequest.v2",
+  expected: { opsSha: installed.opsSha, envsSha: projection.envs_sha, appsSha: installed.product.proof.merge_sha,
+    artifactManifestSha256: installed.product.manifestSha256, projectionReceiptSha256: sha256(fs.readFileSync(projectionPath)),
+    isolationVerdictSha256: sha256(fs.readFileSync(isolationPath)), target },
+  inputs: { product, projectionReceipt: projectionPath, isolationVerdict: isolationPath }, output });
+const entry = path.join(runtimeRoot, "bin/voice-ui-target-runtime");
+const providerCount = () => requests.length;
+const installedReceipt = {};
+
+// Ordinary entries: --describe names the gate without running it; --request without a credential refuses before any
+// provider call.
+const entryFrom = providerCount();
+const described = await execute(entry, ["--describe"], { PATH: "" });
+assert.equal(described.code, 0, described.stderr);
+const describedConfig = JSON.parse(described.stdout);
+assert.equal(describedConfig.product.tag, installed.product.tag);
+assert.equal(describedConfig.gate.programSha256, sha256(fs.readFileSync(installed.gate.program)));
+const refused = await execute(entry, ["--request", writeJson("approved.json", approved(path.join(work, "refused")))], { PATH: "" });
+assert.ok(refused.code !== 0 && /effect capability is missing/.test(refused.stderr), `no-credential request: ${refused.stderr}`);
+assert.equal(providerCount(), entryFrom, "an ordinary entry reached the provider");
+installedReceipt.normal_entries = { describe: "PASS", no_credential_request: "REFUSED_BEFORE_PROVIDER", provider_requests: 0 };
+
+// The installed lib and adapters, through the private spawn seam only.
+const adapters = Object.fromEntries(["deploy", "readback"].map((name) => {
+  const p = path.join(share, `${name}.mjs`);
+  return [name, { path: p, sha256: sha256(fs.readFileSync(p)) }];
+}));
+let providerFetches = 0;
+globalThis.fetch = () => { providerFetches++; throw new Error("fixture: provider fetch refused"); };
+async function installedRun(label) {
+  resetCaptures();
+  const from = providerCount(), output = path.join(work, label);
+  const request = { ...approved(output), installed: { product: installed.product, unzip: installed.unzip }, adapters };
+  const run = await execute(process.execPath, [SELF, "--run", runtimeRoot, writeJson(`${label}.json`, request), base],
+    { PATH: process.env.PATH ?? "", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN });
+  const rs = requests.slice(from);
+  const firstMutation = rs.findIndex((r) => r.method !== "GET");
+  return { run, output, requests: rs.map((r) => `${r.method} ${r.path}`), mutations: rs.filter((r) => r.method !== "GET").length,
+    preflight_before_mutation: rs.findIndex((r) => r.method === "GET" && r.path.endsWith("/secrets")) >= 0
+      && (firstMutation < 0 || rs.findIndex((r) => r.path.endsWith("/secrets")) < firstMutation),
+    auth_only_fixture_token: authOk(rs), sentinel: rs.some((r) => r.sentinel) };
+}
+
+// PRESET_SECRET_FIXTURE: the secret name is listed, and the executed Worker holds the never-issued fixture value. The
+// production readback's invalid-JSON probe gets the Worker's own 400 before any provider call; valid JSON is refused.
+phase = "PRESET_SECRET_FIXTURE"; presetSecret = true; activeDeployment = null;
+let apiFrom = siteRequests.length;
+const positive = await installedRun("preset");
+assert.equal(positive.run.code, 0, `installed runtime run failed:\n${positive.run.stderr}`);
+const result = JSON.parse(positive.run.stdout);
+const deployed = JSON.parse(fs.readFileSync(path.join(positive.output, "deploy.json"), "utf8"));
+const readBack = JSON.parse(fs.readFileSync(path.join(positive.output, "readback.json"), "utf8"));
+const md = JSON.parse(uploadedModules.metadata.toString());
+const sitePathsNow = listFiles(site).map((f) => `/${f.split(path.sep).join("/")}`).sort();
+const sent = {
+  modules: Object.fromEntries(Object.entries(uploadedModules).filter(([k]) => k !== "metadata").map(([k, v]) => [k, sha256(v)])),
+  main_module: md.main_module, compatibility_date: md.compatibility_date, compatibility_flags: md.compatibility_flags ?? [],
+  bindings: (md.bindings ?? []).map((b) => `${b.name}:${b.type}${b.text ? ":value" : ""}`),
+  manifest_equals_site: JSON.stringify(Object.keys(assetManifest).sort()) === JSON.stringify(sitePathsNow),
+  asset_bytes_exact: Object.entries(assetManifest).every(([p, m]) => uploadedAssets.get(m.hash)?.equals(fs.readFileSync(path.join(site, p.slice(1))))),
+};
+installedReceipt.preset = { result: { status: result.status, claim: result.claim, limits: result.limits },
+  version_id: deployed.deployment.versionId, issued_version_id: versionId, requests: positive.requests,
+  preflight_before_mutation: positive.preflight_before_mutation, cli_sent: sent,
+  readback: { files: readBack.publicBytes.fileCount, function: readBack.function, stored_module_bytes: readBack.storedModuleBytes },
+  api: siteRequests.slice(apiFrom) };
+assert.deepEqual(installedReceipt.preset.result, { status: "PASS", claim: "DEPLOY_READBACK_PASS",
+  limits: { secretPresence: "NAME_PRESENT_NOT_AUTHORITY", inheritPreservation: "NOT_PROVEN", storedModuleBytes: "NO_CAPABILITY_NOT_RUN" } });
+assert.ok(positive.preflight_before_mutation && positive.auth_only_fixture_token && !positive.sentinel, "preflight order or authentication differs");
+assert.equal(deployed.deployment.versionId, versionId, "deploy receipt version differs from the one the fixture issued");
+// CLI_SENT_EXACT: the one module is the admitted Worker; the bindings and date are the product's declared runtime.
+assert.deepEqual(sent, { modules: { "worker.mjs": installed.product.workerSha256 }, main_module: "worker.mjs",
+  compatibility_date: "2026-09-01", compatibility_flags: [], bindings: ["JEV_API_KEY:inherit", "ASSETS:assets"],
+  manifest_equals_site: true, asset_bytes_exact: true }, "installed deploy did not send exactly the admitted product");
+assert.equal(readBack.publicBytes.fileCount, sitePathsNow.length);
+assert.deepEqual(siteRequests.slice(apiFrom).map((r) => [r.method, r.status]), [["POST", 400]], "readback probe differs");
+
+// Preflight negative: the Worker lists no JEV_API_KEY, so the adapter fails before any mutating call.
+phase = "PREFLIGHT_SECRET_ABSENT"; presetSecret = false;
+const absent = await installedRun("preflight-absent");
+assert.ok(absent.run.code !== 0 && /deploy adapter failed/.test(absent.run.stderr), `preflight did not refuse:\n${absent.run.stderr}`);
+assert.equal(absent.mutations, 0, "a mutating provider call happened without the required secret name");
+installedReceipt.preflight_absent = { refused: true, requests: absent.requests, mutations: 0 };
+
+// SECRET_ABSENT_FIXTURE: the name is listed but the executed Worker has no value (e.g. `inherit` did not keep it). The
+// same uploaded bytes answer the probe 503, so the production readback is RED.
+phase = "SECRET_ABSENT_FIXTURE"; presetSecret = true; apiFrom = siteRequests.length;
+const red = await installedRun("secret-absent");
+assert.ok(red.run.code !== 0 && /readback adapter failed/.test(red.run.stderr), `readback did not go RED:\n${red.run.stderr}`);
+// The production readback retries a 5xx a bounded four times before it fails.
+assert.deepEqual(siteRequests.slice(apiFrom).map((r) => [r.method, r.status]), Array(4).fill(["POST", 503]), "absent-secret probe differs");
+installedReceipt.secret_absent = { readback: "RED", api: siteRequests.slice(apiFrom) };
+
+// NO_SECRET_ACCEPTANCE: the imported ACCEPTANCE runtime, in its own credential-free process tree, runs the product's
+// acceptance entry against the same uploaded bytes; the page's own /api/jev call gets 503 and ends RED_EXPECTED.
+if (acceptanceNode) {
+  phase = "NO_SECRET_ACCEPTANCE"; apiFrom = siteRequests.length;
+  const origin = `http://127.0.0.1:${server.address().port}`, home = path.join(work, "acceptance");
+  fs.mkdirSync(home);
+  const accepted = await execute(acceptanceNode, [path.join(artifact, admitted.manifest.e2e.runtime_entrypoint),
+    "--artifact-root", artifact, "--url", `${origin}/`, "--expected-apps-sha", installed.product.proof.merge_sha,
+    "--expected-manifest-sha256", installed.product.manifestSha256, "--handoff-id", "gate/1", "--receipt", path.join(home, "receipt.json")],
+    { PATH: process.env.PATH ?? "", HOME: home, TMPDIR: home, LANG: "C.UTF-8" }, { cwd: home, detached: true });
+  const r = fs.existsSync(path.join(home, "receipt.json")) ? JSON.parse(fs.readFileSync(path.join(home, "receipt.json"), "utf8")) : null;
+  installedReceipt.acceptance = { exit: accepted.code, status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs,
+    reason: /NOT_RUN: jev_unavailable/.test(accepted.stderr) ? "NOT_RUN: jev_unavailable" : null, api: siteRequests.slice(apiFrom) };
+  assert.equal(accepted.code, 1, accepted.stderr);
+  assert.deepEqual({ status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs, reason: installedReceipt.acceptance.reason },
+    { status: "RED", stage: "application-e2e", secret_inputs: [], reason: "NOT_RUN: jev_unavailable" }, accepted.stderr);
+  assert.deepEqual(siteRequests.slice(apiFrom).map((a) => [a.method, a.origin, a.fetchSite, a.status]),
+    [["POST", origin, "same-origin", 503]], "acceptance must make exactly one same-origin page request to /api/jev");
+}
+installedReceipt.provider_fetches_from_worker = providerFetches;
+installedReceipt.violations = violations;
+assert.equal(providerFetches, 0, "the executed Worker tried to call a provider");
+assert.deepEqual(violations, [], "fixture violations");
+receipt.installed = installedReceipt;
+receipt.grades = { isolation: isolation.grade, harness: "INSTALLED_ADAPTER_LOOPBACK_HARNESS", module_and_assets: "CLI_SENT_EXACT",
+  site: "FIXTURE_SERVED", stored_module_bytes: "NO_CAPABILITY_NOT_RUN", acceptance: acceptanceNode ? "RED_EXPECTED" : "NOT_RUN_HERE",
+  live_provider: "NOT_RUN" };
+server.close();
+console.log(JSON.stringify(receipt, null, 1));
+console.error(`PASS installed runtime (${isolation.grade}): ordinary entries make no provider call; secret-name preflight before any mutation; exact admitted module/assets/bindings sent; fixture 400 readback; absent name refused before mutation; absent value makes readback RED; acceptance ${receipt.grades.acceptance}; Worker provider calls 0`);
+
+// Harness children. `--run <runtime> <request> <base>`: the installed lib, with the private spawn seam pointing each
+// adapter start at `--adapter`. `--adapter <runtime> <base> <adapter> --request r --receipt p`: the installed
+// workers.mjs with the loopback api (deploy) or fetcher (readback). Neither is reachable from an ordinary entry.
+async function harnessChild(mode, args) {
+  try {
+    if (mode === "--run") {
+      const [root, requestPath, loopback] = args;
+      const { runTargetRuntime } = await import(path.join(root, "share/voice-ui-target-runtime/lib.mjs"));
+      const result = runTargetRuntime(JSON.parse(fs.readFileSync(requestPath, "utf8")), {
+        spawn: (command, adapterArgs, options) => spawnSync(command, [SELF, "--adapter", root, loopback, ...adapterArgs], options) });
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+      return;
+    }
+    const [root, loopback, adapter, flag, requestPath, receiptFlag, receiptPath] = args;
+    const dir = path.join(root, "share/voice-ui-target-runtime");
+    assert.ok(flag === "--request" && receiptFlag === "--receipt" && [path.join(dir, "deploy.mjs"), path.join(dir, "readback.mjs")].includes(adapter));
+    const workers = await import(path.join(dir, "workers.mjs"));
+    const { atomicJson } = await import(path.join(dir, "modules/core.mjs"));
+    const config = JSON.parse(fs.readFileSync(path.join(dir, "configuration.json"), "utf8"));
+    const request = JSON.parse(fs.readFileSync(requestPath, "utf8"));
+    const targetOrigin = new URL(request.expected.target.url).origin, loopOrigin = new URL(loopback).origin;
+    const fetcher = (url, options) => {
+      const u = new URL(url);
+      assert.equal(u.origin, targetOrigin, "readback left the approved target");
+      return fetch(new URL(u.pathname + u.search, loopOrigin), options);
+    };
+    const result = path.basename(adapter) === "deploy.mjs"
+      ? await workers.deploy(request, { cf: config.cf, buildOutputUtils: config.buildOutputUtils, env: process.env, api: loopback })
+      : await workers.readback(request, { fetcher });
+    atomicJson(receiptPath, result);
+  } catch (error) {
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = 1;
+  }
+}

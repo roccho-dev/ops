@@ -16,9 +16,10 @@ import {
   sha256File,
 } from "./modules/core.mjs";
 import {
-  validateArtifact,
+  admitProduct,
   validateIsolationVerdict,
   validateProjectionReceipt,
+  validateWorkersTarget,
 } from "./modules/input-contracts.mjs";
 import {
   validateDeployReceipt,
@@ -53,8 +54,10 @@ function executeAdapter({ adapter, expectedDigest, request, receiptPath, env, sp
 }
 
 export function runTargetRuntime(request, options = {}) {
-  requireCondition(request?.kind === "ops.voiceUiTargetRuntimeRequest.v1", "request kind differs");
-  exactObjectKeys(request, ["kind", "expected", "inputs", "adapters", "output"], "runtime request");
+  requireCondition(request?.kind === "ops.voiceUiTargetRuntimeRequest.v2", "request kind differs");
+  exactObjectKeys(request, ["kind", "expected", "inputs", "installed", "adapters", "output"], "runtime request");
+  exactObjectKeys(request.inputs, ["product", "projectionReceipt", "isolationVerdict"], "runtime inputs");
+  exactObjectKeys(request.installed, ["product", "unzip"], "installed runtime data");
   const expected = {
     opsSha: exactSha(request.expected?.opsSha, "expected ops SHA"),
     envsSha: exactSha(request.expected?.envsSha, "expected envs SHA"),
@@ -62,20 +65,29 @@ export function runTargetRuntime(request, options = {}) {
     artifactManifestSha256: normalizeSha256(request.expected?.artifactManifestSha256, "expected artifact manifest digest"),
     projectionReceiptSha256: normalizeSha256(request.expected?.projectionReceiptSha256, "expected projection receipt digest"),
     isolationVerdictSha256: normalizeSha256(request.expected?.isolationVerdictSha256, "expected isolation verdict digest"),
-    target: request.expected?.target,
+    target: validateWorkersTarget(request.expected?.target),
   };
-  exactObjectKeys(expected.target, ["provider", "accountId", "project", "branch"], "expected target");
-  requireCondition(expected.target.provider === "cloudflare-pages", "expected target provider differs");
-  requireCondition(typeof expected.target.accountId === "string" && expected.target.accountId.length > 0, "expected target account id missing");
-  requireCondition(expected.target.project === "voice-ui", "expected target project differs");
-  requireCondition(expected.target.branch === "proposals", "expected target branch differs");
+  const pin = request.installed.product;
+  requireCondition(expected.appsSha === pin.proof.merge_sha && expected.artifactManifestSha256 === pin.manifestSha256,
+    "approved apps identity differs from the installed product pin");
 
-  const artifact = validateArtifact(request.inputs.artifactRoot, expected.appsSha, expected.artifactManifestSha256);
   requireCondition(sha256File(request.inputs.projectionReceipt) === expected.projectionReceiptSha256, "projection receipt digest mismatch");
   requireCondition(sha256File(request.inputs.isolationVerdict) === expected.isolationVerdictSha256, "isolation verdict digest mismatch");
   const projection = validateProjectionReceipt(loadJson(request.inputs.projectionReceipt, "projection receipt"), expected.envsSha);
   requireCondition(projection.target.account_id === expected.target.accountId, "projection/target account mismatch");
+  requireCondition(projection.target.worker_name === expected.target.workerName, "projection/target Worker mismatch");
   const isolation = validateIsolationVerdict(loadJson(request.inputs.isolationVerdict, "isolation verdict"), expected.opsSha);
+  // The product operand is admitted once against the installed pin, before any effect capability is read.
+  const workdir = mkdtempSync(path.join(tmpdir(), "voice-ui-product-"));
+  try {
+    const artifact = admitProduct({ directory: request.inputs.product, pin, unzip: request.installed.unzip, workdir });
+    return runAdmitted(request, expected, artifact, projection, isolation, options);
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
+  }
+}
+
+function runAdmitted(request, expected, artifact, projection, isolation, options) {
 
   // Admit every executable and effect target before the first external mutation.
   const env = options.env ?? process.env;
@@ -100,7 +112,7 @@ export function runTargetRuntime(request, options = {}) {
   const spawn = options.spawn ?? spawnSync;
 
   const adapterRequest = {
-    kind: "ops.voiceUiEffectRequest.v1",
+    kind: "ops.voiceUiEffectRequest.v2",
     expected,
     artifactRoot: artifact.root,
     projection: {
@@ -140,6 +152,7 @@ export function runTargetRuntime(request, options = {}) {
       envsSha: expected.envsSha,
       appsSha: expected.appsSha,
       artifactManifestSha256: `sha256:${expected.artifactManifestSha256}`,
+      productZipSha256: `sha256:${request.installed.product.zip.sha256}`,
       projectionReceiptSha256: `sha256:${sha256File(request.inputs.projectionReceipt)}`,
       isolationVerdictSha256: `sha256:${sha256File(request.inputs.isolationVerdict)}`,
       deployAdapterSha256: `sha256:${normalizeSha256(request.adapters.deploy.sha256)}`,
@@ -151,6 +164,12 @@ export function runTargetRuntime(request, options = {}) {
       projection: projection.status,
       deploy: deployReceipt.status,
       readback: readbackReceipt.status,
+    },
+    // What this receipt cannot prove with the native CLI.
+    limits: {
+      secretPresence: "NAME_PRESENT_NOT_AUTHORITY",
+      inheritPreservation: "NOT_PROVEN",
+      storedModuleBytes: "NO_CAPABILITY_NOT_RUN",
     },
     dependencies: {
       envsRuntime: [],

@@ -4,6 +4,7 @@ import { runTargetRuntime } from "./lib.mjs";
 
 // Called only by the generated entry in the immutable Nix package. There is no
 // executable path, provider host or runtime-install override in the user request.
+// Neither mode executes the separately installed gate program; --describe only names it.
 export function main(config, root, argv = process.argv.slice(2)) {
   if (argv.length === 1 && argv[0] === "--describe") {
     process.stdout.write(JSON.stringify({ ...config, runtimeRoot: root }, null, 2) + "\n");
@@ -14,18 +15,19 @@ export function main(config, root, argv = process.argv.slice(2)) {
   exactSha(config.opsSha, "installed ops revision");
   const request = loadJson(argv[1]);
   exactObjectKeys(request, ["kind", "expected", "inputs", "output"], "approved request");
-  exactObjectKeys(request.inputs, ["projectionReceipt", "isolationVerdict"], "approved inputs");
-  for (const key of ["opsSha", "appsSha", "artifactManifestSha256"]) {
-    need(request.expected[key] === config[key], `approved ${key} differs from installed runtime`);
+  exactObjectKeys(request.inputs, ["product", "projectionReceipt", "isolationVerdict"], "approved inputs");
+  const installed = { opsSha: config.opsSha, appsSha: config.product.proof.merge_sha, artifactManifestSha256: config.product.manifestSha256 };
+  for (const key of Object.keys(installed)) {
+    need(request.expected[key] === installed[key], `approved ${key} differs from installed runtime`);
   }
   const executable = name => {
     const p = path.join(root, name);
     return {path:p,sha256:sha256File(p)};
   };
-  // Only the package's own deploy/readback adapters run. The apps artifact is
-  // staged data; its acceptance runtime is not part of this closure.
+  // Only the package's own deploy/readback adapters run. The apps PRODUCT is a
+  // data operand admitted against the installed pin; its acceptance runtime is not part of this closure.
   const result = runTargetRuntime({ ...request,
-    inputs: { ...request.inputs, artifactRoot: config.artifactRoot },
+    installed: { product: config.product, unzip: config.unzip },
     adapters: { deploy: executable("deploy.mjs"), readback: executable("readback.mjs") },
   });
   process.stdout.write(JSON.stringify({ status: result.status, claim: result.claim, runtimeRoot: root }) + "\n");
