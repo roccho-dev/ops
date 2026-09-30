@@ -70,6 +70,8 @@ fs.writeFileSync(path.join(root, ".env"), `CLOUDFLARE_API_TOKEN=${SENTINEL}\nCLO
 
 // Loopback provider fixture: records every request; answers only the endpoints a Workers deploy with assets needs.
 // `existing` switches it to a Worker that already exists (for the preset-secret case). Captures reset per deploy.
+// The never-issued Jev fixture value C4b supplies; every request records whether it carries it.
+const fixtureSecret = `never-issued-secret-${crypto.randomBytes(12).toString("hex")}`;
 const requests = [];
 let versionId = null;
 let existing = false;
@@ -95,7 +97,8 @@ const server = http.createServer((req, res) => {
     const body = Buffer.concat(chunks);
     const url = new URL(req.url, "http://127.0.0.1");
     requests.push({ method: req.method, path: url.pathname, auth: req.headers.authorization ?? null, bytes: body.length,
-      sentinel: body.includes(SENTINEL) || String(req.headers.authorization ?? "").includes(SENTINEL) });
+      sentinel: body.includes(SENTINEL) || String(req.headers.authorization ?? "").includes(SENTINEL),
+      fixture_secret: body.includes(fixtureSecret) || req.url.includes(fixtureSecret) });
     const reply = (status, result, code = 10000 + status) => {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(status < 400 ? { success: true, errors: [], messages: [], result }
@@ -185,7 +188,6 @@ receipt.c4a = { exit: c4a.code, refused_missing_secret: /required secrets have n
   script_uploaded: versionId !== null, sentinel_seen_by_provider: requests.some((r) => r.sentinel), sentinel_in_output: c4a.out.includes(SENTINEL),
   auth_only_fixture_token: authOk(requests) };
 // C4b: the same deploy with an explicit secrets file holding a never-issued fixture value.
-const fixtureSecret = `never-issued-secret-${crypto.randomBytes(12).toString("hex")}`;
 const secretsFile = path.join(home, "fixture-secrets.json");
 fs.writeFileSync(secretsFile, JSON.stringify({ JEV_API_KEY: fixtureSecret }));
 const before = requests.length;
@@ -220,10 +222,13 @@ const assetMismatches = [...uploadedAssets].filter(([hash, bytes]) =>
   !hashToPath.has(hash) || !bytes.equals(fs.readFileSync(path.join(site, hashToPath.get(hash).slice(1))))).map(([h]) => h);
 receipt.c4b.assets = { manifest_equals_site: JSON.stringify(manifestPaths) === JSON.stringify(sitePaths),
   every_manifest_hash_uploaded: [...hashToPath.keys()].every((h) => uploadedAssets.has(h)), mismatched_or_foreign: assetMismatches.length };
+// The only Jev value this test ever wrote is C4b's fixture secrets file; remove it before the existing-Worker runs.
+fs.rmSync(secretsFile);
+receipt.c4b.secrets_file_removed = !fs.existsSync(secretsFile);
 
-// C4c/C4d: an existing Worker whose JEV_API_KEY secret was preset earlier, deployed with no Jev value anywhere (no
-// secrets file, no environment variable, no request field). Records whether the pinned CLI asks the provider to keep
-// the secret; the fixture never assumes a provider default.
+// C4c/C4d: an existing Worker whose JEV_API_KEY secret was preset earlier, deployed with no Jev value in the deploy
+// context: no --secrets-file, no Jev environment variable, the test's fixture secrets file removed, and no request
+// carrying the fixture value. Records what the pinned CLI sends; the fixture never assumes a provider default.
 existing = true;
 const preset = {};
 for (const [label, extra, secretPreset] of [["c4c", [], true], ["c4d_keep_vars", ["--keep-vars"], true], ["c4e_secret_missing", [], false]]) {
@@ -236,6 +241,7 @@ for (const [label, extra, secretPreset] of [["c4c", [], true], ["c4d_keep_vars",
     requests: requests.slice(from).map((r) => `${r.method} ${r.path}`),
     bindings: md && (md.bindings ?? []).map((b) => `${b.name}:${b.type}${b.text ? ":value" : ""}`),
     keep_bindings: md ? (md.keep_bindings ?? null) : undefined, sentinel_in_output: run.out.includes(SENTINEL),
+    fixture_secret_sent: requests.slice(from).some((r) => r.fixture_secret),
     out_tail: run.out.split("\n").filter((l) => /rror|nknown|secret|keep/i.test(l)).slice(-4) };
 }
 receipt.preset_secret = preset;
@@ -260,10 +266,14 @@ assert.deepEqual(receipt.c4b.uploaded_bindings, [{ name: "JEV_API_KEY", type: "s
 assert.equal(receipt.c4b.compatibility_date, "2026-09-01", "C4b compatibility date differs");
 assert.deepEqual(receipt.c4b.assets, { manifest_equals_site: true, every_manifest_hash_uploaded: true, mismatched_or_foreign: 0 },
   "C4b assets differ from exactly the site files and bytes");
-// Existing Worker, no Jev value anywhere: the CLI declares JEV_API_KEY as an explicit `inherit` binding (no value, no
-// keep_bindings); --keep-vars does not exist on this path; and when the Worker has no such secret the CLI still sends
-// `inherit` (it does not check), so failing closed there is not the CLI's, and must come from a pre-deploy check.
+// Existing Worker, no Jev value in the deploy context: the CLI sends JEV_API_KEY as an explicit `inherit` binding (no
+// value, no keep_bindings); whether the provider keeps the preset secret is not proven here. --keep-vars does not exist
+// on this path; and when the Worker has no such secret the CLI still sends `inherit` (it does not check), so failing
+// closed there is not the CLI's, and must come from a pre-deploy check.
 const pc = receipt.preset_secret;
+assert.ok(receipt.c4b.secrets_file_removed, "C4b fixture secrets file still exists before the existing-Worker runs");
+assert.ok(receipt.c4b.requests.length > 0 && requests.some((r) => r.fixture_secret), "C4b never sent the fixture value; the detector is blind");
+assert.ok(Object.values(pc).every((r) => r.fixture_secret_sent === false), "an existing-Worker run sent the C4b fixture value");
 assert.equal(pc.c4c.exit, 0, "C4c existing-Worker deploy without a Jev value failed");
 assert.deepEqual(pc.c4c.bindings, ["JEV_API_KEY:inherit", "ASSETS:assets"], "C4c did not inherit the preset secret explicitly");
 assert.equal(pc.c4c.keep_bindings, null, "C4c unexpectedly sent keep_bindings");
@@ -273,4 +283,4 @@ assert.deepEqual(pc.c4e_secret_missing.bindings, ["JEV_API_KEY:inherit", "ASSETS
   "C4e: the CLI now treats a missing existing secret differently; re-evaluate");
 assert.deepEqual(receipt.all_requests, { count: requests.length, auth_only_fixture_token: true, sentinel_seen_by_provider: false,
   sentinel_in_any_output: false }, "some request used a token other than the never-issued fixture token, or the planted .env was used");
-console.error(`PASS cf checkpoint (${isolation.grade}): C3 prebuilt dry run, 0 requests; C4a new Worker with a declared secret refused without its value, .env unused; C4b exact Worker module, bindings, date and asset paths and bytes, native version id equals the issued one; C4c existing Worker inherits the preset secret with no value; C4d no --keep-vars; C4e missing existing secret is not checked by the CLI`);
+console.error(`PASS cf checkpoint (${isolation.grade}): C3 prebuilt dry run, 0 requests; C4a new Worker with a declared secret refused without its value, .env unused; C4b exact Worker module, bindings, date and asset paths and bytes, native version id equals the issued one; C4c for an existing Worker, with no Jev value in the deploy context, the CLI sends an inherit binding (provider preservation not proven); C4d no --keep-vars; C4e missing existing secret is not checked by the CLI`);
