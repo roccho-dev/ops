@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { digest, MODEL, joinBoundedCiReference, runWinnowRelevance } from './winnow.mjs';
+import { digest, MODEL, prepareWinnowRelevance, joinBoundedCiReference, runWinnowRelevance } from './winnow.mjs';
 
 const input = () => ({ baseSha: '1'.repeat(40), headSha: '2'.repeat(40), changedPaths: ['packages/a/a.mjs'], topK: 1,
   candidates: [{ name: 'a-check', script: 'packages/a/test.mjs' }, { name: 'b-check', script: 'packages/b/test.mjs' }] });
@@ -144,4 +144,98 @@ test('preregistered terminal readback remains UNKNOWN, without another provider 
   assert.ok(!('paired.json' in receipt.memberSha256));
   // Applying the corrected pure join to the SAME retained reference must still reject it.
   assert.throws(() => joinBoundedCiReference(s, r), /REFERENCE_NOT_EXECUTED/);
+});
+
+// Development mocks only: no retired root, prospective case, oracle or provider execution.
+const detachedInput = () => ({ ...input(), treeSha: '4'.repeat(40),
+  patches: [{ filename: 'packages/a/a.mjs', patch: '@@ -1 +1 @@\n-before\n+after\n' }],
+  beforeFacts: null,
+  candidates: [{ id: 'mock-workflow-a/job-test', name: 'test' }, { id: 'mock-workflow-b/job-test', name: 'test' }],
+});
+const detachedReference = i => ({ headSha: i.headSha, treeSha: i.treeSha,
+  checks: i.candidates.map(c => ({ name: c.id, command: c.script, status: 'completed', conclusion: 'success',
+    sourceSha: i.headSha, sourceTreeSha: i.treeSha, sourceReadback: 'development fixture only', durationMs: 1 })),
+});
+
+test('detached preparation preserves all identities, exact patches and explicit unknown facts without transport', () => {
+  const i = detachedInput(); i.candidates.push({ id: 'mock-workflow-c/job-test', name: 'test' });
+  i.patches[0].patch += '+ 日本語 \r\n';
+  const original = structuredClone(i), prepared = prepareWinnowRelevance(i);
+  assert.deepEqual(prepared.input, original);
+  assert.deepEqual(prepared.request.state.candidates, original.candidates);
+  assert.deepEqual(prepared.request.state.patches, original.patches);
+  assert.equal(prepared.request.state.treeSha, i.treeSha); assert.equal(prepared.request.state.beforeFacts, null);
+  assert.equal(Object.keys(prepared.request.questions).length, 3);
+  assert.equal(prepared.inputSha256, digest(i)); assert.equal(prepared.requestSha256, digest(prepared.request));
+  assert.equal(prepared.requestBytes, Buffer.byteLength(prepared.requestBody));
+  assert.ok(prepared.request.state.candidates.every(c => !Object.hasOwn(c, 'script')));
+  i.candidates.reverse(); i.patches[0].patch = 'changed after preparation';
+  assert.deepEqual(prepared.input, original); assert.deepEqual(prepared.request.state.patches, original.patches);
+});
+
+test('identity-only mock scoring uses ids rather than duplicate labels and never invents commands', async () => {
+  const i = detachedInput(), s = await runWinnowRelevance(i, { fetchImpl: fake() });
+  assert.deepEqual(s.candidates, i.candidates.map(c => c.id));
+  assert.deepEqual(s.wouldSelect, [i.candidates[0].id]); assert.deepEqual(s.wouldOmit, [i.candidates[1].id]);
+  assert.equal(s.treeSha, i.treeSha); assert.equal(s.executionKind, 'injected-transport');
+  assert.equal(s.authority, false); assert.equal(s.effect, false);
+  // Missing declared commands must not pass via undefined === undefined.
+  assert.throws(() => joinBoundedCiReference(s, detachedReference(i)), /REFERENCE_COMMAND_UNAVAILABLE/);
+});
+
+test('prepared and scored requests use one serialization path', async () => {
+  const i = detachedInput(); i.beforeFacts = 'frozen mock pre-change fact';
+  const p = prepareWinnowRelevance(i);
+  assert.equal(p.request.state.beforeFacts, i.beforeFacts);
+  const s = await runWinnowRelevance(i, { fetchImpl: async (_url, request) => {
+    assert.equal(request.body, p.requestBody);
+    return { ok: true, json: async () => response() };
+  } });
+  assert.equal(s.requestSha256, p.requestSha256); assert.equal(s.inputSha256, p.inputSha256);
+});
+
+for (const [name, mutate, error] of [
+  ['missing tree', i => { delete i.treeSha; }, /INVALID_DETACHED_INPUT/],
+  ['branch instead of tree', i => { i.treeSha = 'main'; }, /INVALID_DETACHED_INPUT/],
+  ['missing patch', i => { delete i.patches; }, /INVALID_DETACHED_INPUT/],
+  ['path mismatch', i => { i.patches[0].filename = 'different'; }, /INVALID_DETACHED_INPUT/],
+  ['duplicate patch', i => { i.patches.push(i.patches[0]); }, /INVALID_DETACHED_INPUT/],
+  ['unknown facts omitted', i => { delete i.beforeFacts; }, /INVALID_DETACHED_INPUT/],
+  ['reference accidentally supplied', i => { i.reference = { conclusion: 'failure' }; }, /INVALID_DETACHED_INPUT/],
+  ['outcome in candidate', i => { i.candidates[0].conclusion = 'success'; }, /INVALID_DETACHED_INPUT/],
+  ['duplicate identity', i => { i.candidates[1].id = i.candidates[0].id; }, /INVALID_DETACHED_INPUT/],
+  ['identity missing', i => { delete i.candidates[0].id; }, /INVALID_DETACHED_INPUT/],
+  ['blank declared command', i => { i.candidates[0].script = ' '; }, /INVALID_DETACHED_INPUT/],
+  ['inferred topK prohibited', i => { delete i.topK; }, /INVALID_RELEVANCE_INPUT/],
+  ['out of budget patch', i => { i.patches[0].patch = 'x'.repeat(32768); }, /WINNOW_INPUT_BUDGET_EXCEEDED/],
+]) test(`detached fail before transport: ${name}`, async () => {
+  const i = detachedInput(); mutate(i); let calls = 0;
+  assert.throws(() => prepareWinnowRelevance(i), error);
+  await assert.rejects(runWinnowRelevance(i, { fetchImpl: async () => { calls++; throw new Error('unexpected transport'); } }), error);
+  assert.equal(calls, 0);
+});
+
+test('entire supplied candidate universe stays bounded, without silent truncation to legacy two', () => {
+  const i = detachedInput(); i.candidates = Array.from({ length: 64 }, (_, k) => ({ id: `mock-${k}`, name: 'test' }));
+  assert.equal(prepareWinnowRelevance(i).request.state.candidates.length, 64);
+  i.candidates.push({ id: 'mock-65', name: 'test' });
+  assert.throws(() => prepareWinnowRelevance(i), /INVALID_RELEVANCE_INPUT/);
+});
+
+test('detached bounded join binds ids, commands and tree without claiming full-CI completion', async () => {
+  const i = detachedInput(); for (const c of i.candidates) c.script = `test ${c.id}`;
+  const s = await runWinnowRelevance(i, { fetchImpl: fake() }), r = detachedReference(i);
+  const paired = joinBoundedCiReference(s, r);
+  assert.deepEqual(paired.referenceUniverse, i.candidates); assert.equal(paired.treeSha, i.treeSha);
+  assert.equal(paired.result, 'UNKNOWN'); assert.equal(paired.referenceKind, 'bounded-ci-replay');
+  assert.equal(paired.authority, false); assert.equal(paired.effect, false);
+  for (const mutate of [r => { r.treeSha = '5'.repeat(40); }, r => { delete r.checks[0].sourceTreeSha; },
+    r => { r.checks[0].command = 'other'; }, r => { r.checks.pop(); },
+    r => { r.checks[0].name = 'test'; }, r => { r.checks[0].conclusion = 'timed_out'; }]) {
+    const altered = structuredClone(r); mutate(altered); assert.throws(() => joinBoundedCiReference(s, altered));
+  }
+  for (const mutate of [s => { s.treeSha = '5'.repeat(40); }, s => { s.input.patches[0].patch = 'changed'; },
+    s => { s.input.beforeFacts = 'changed'; }, s => { s.input.candidates[0].id = 'changed'; }]) {
+    const altered = structuredClone(s); mutate(altered); assert.throws(() => joinBoundedCiReference(altered, r));
+  }
 });

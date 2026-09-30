@@ -4,11 +4,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
-import { digest, REFERENCE_KIND, REFERENCE_UNIVERSE, runWinnowRelevance, joinBoundedCiReference } from './winnow.mjs';
+import { digest, REFERENCE_KIND, REFERENCE_UNIVERSE, prepareWinnowRelevance, runWinnowRelevance, joinBoundedCiReference } from './winnow.mjs';
 
 const out = process.argv[2];
 const providerOnly = process.argv[3] === 'provider-only';
-if (!out || process.argv.length !== (providerOnly ? 4 : 3)) throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY [provider-only]');
+const prepareOnly = process.argv[3] === 'prepare-input';
+if (!out || process.argv.length !== (prepareOnly ? 6 : providerOnly ? 4 : 3))
+  throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY [provider-only | prepare-input INPUT_JSON SHA256]');
 mkdirSync(out, { recursive: true });
 const write = (name, data) => writeFileSync(join(out, name), JSON.stringify(data, null, 2) + '\n', { flag: 'wx' });
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -18,7 +20,7 @@ const requireThat = (condition, message) => { if (!condition) throw new Error(me
 const report = { schema: 'ops.winnowCiRelevanceProof.v2', authority: false, effect: false, referenceKind: REFERENCE_KIND,
   result: 'UNKNOWN', observation: 'NOT_RUN', providerAttempts: 0, attemptedReferenceChecks: 0, completedReferenceChecks: 0 };
 const port = Number(process.env.WINNOW_PORT ?? '11435');
-requireThat(Number.isInteger(port) && port > 0 && port <= 65535, 'INVALID_LOCAL_PORT');
+if (!prepareOnly) requireThat(Number.isInteger(port) && port > 0 && port <= 65535, 'INVALID_LOCAL_PORT');
 const origin = `http://127.0.0.1:${port}`;
 const json = async (path, filename) => {
   const response = await fetch(`${origin}${path}`, { signal: AbortSignal.timeout(10000), redirect: 'error' });
@@ -34,6 +36,19 @@ const modelFrom = (tags) => {
 };
 
 try {
+  if (prepareOnly) {
+    // No checkout, provider or command execution. This does not activate a case.
+    const bytes = readFileSync(process.argv[4]);
+    requireThat(/^[0-9a-f]{64}$/u.test(process.argv[5]) && sha256(bytes) === process.argv[5], 'INPUT_BYTES_MISMATCH');
+    const prepared = prepareWinnowRelevance(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+    requireThat(prepared.input.treeSha !== undefined, 'DETACHED_INPUT_REQUIRED');
+    write('prepared.json', prepared);
+    Object.assign(report, { observation: 'INPUT_PREPARED', reason: 'Offline I/O validation only; no case or execution admission.',
+      headSha: prepared.input.headSha, treeSha: prepared.input.treeSha, baseSha: prepared.input.baseSha,
+      inputBytesSha256: sha256(bytes), inputSha256: prepared.inputSha256, requestSha256: prepared.requestSha256,
+      referenceUniverse: prepared.input.candidates, providerOutput: null, wouldSelect: null, wouldOmit: null,
+      pairAdmissible: false });
+  } else {
   const headSha = gitLine('rev-parse', 'HEAD');
   requireThat(/^[0-9a-f]{40}$/u.test(process.env.PROOF_BASE ?? ''), 'EXACT_BASE_REQUIRED');
   requireThat(headSha === process.env.PROOF_HEAD, 'HEAD_MISMATCH');
@@ -104,6 +119,7 @@ try {
     cost: { requestMs: shadow.elapsedMs, referenceJobSumMs: paired.referenceMeasuredDurationMs,
       inputUsage: shadow.usage, billedMoney: null, humanAttentionMs: null, actualSavedExecutionMs: 0 },
     claimCeiling: paired.claimCeiling });
+  }
   }
 } catch (error) {
   report.reason = error.message;

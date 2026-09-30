@@ -82,3 +82,55 @@ test('successor CI keeps offline proof reachable without repeating the finite li
   assert.ok(!workflow.includes('Materialize experimental Ollaya'));
   assert.ok(workflow.includes('  cdp-tty-proof:')); assert.ok(workflow.includes('  flake-check:'));
 });
+
+for (const mode of ['prepared', 'tampered', 'invalid-json', 'invalid-utf8', 'null-command', 'over-budget'])
+test(`detached prepare-input is provider/process-free: ${mode}`, async () => {
+  const { createHash } = await import('node:crypto');
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-detached-')), out = join(root, 'out');
+  const h = b => createHash('sha256').update(b).digest('hex');
+  // Developer fixture only; unrelated to any evaluation root or hidden oracle.
+  const i = { baseSha: '6'.repeat(40), headSha: '7'.repeat(40), treeSha: '8'.repeat(40),
+    changedPaths: ['mock.txt'], patches: [{ filename: 'mock.txt', patch: '@@ -1 +1 @@\n-before\n+after\n' }],
+    beforeFacts: null, candidates: [{ id: 'mock-workflow/job', name: 'check' }], topK: 1 };
+  if (mode === 'null-command') i.candidates[0].script = null;
+  if (mode === 'over-budget') i.patches[0].patch = 'x'.repeat(32768);
+  const bytes = mode === 'invalid-json' ? Buffer.from('{') : mode === 'invalid-utf8' ? Buffer.from([0xff]) : Buffer.from(JSON.stringify(i));
+  const expected = mode === 'tampered' ? '0'.repeat(64) : h(bytes);
+  try {
+    const inputPath = join(root, 'input.json'); writeFileSync(inputPath, bytes);
+    const guard = `import cp from 'node:child_process';
+      import { syncBuiltinESMExports } from 'node:module';
+      import { pathToFileURL } from 'node:url';
+      const forbidden = () => { throw new Error('provider/process forbidden'); };
+      globalThis.fetch = forbidden; cp.execFileSync = forbidden; cp.spawnSync = forbidden;
+      syncBuiltinESMExports();
+      const [proof, ...args] = process.argv.slice(1); process.argv = [process.execPath, proof, ...args];
+      await import(pathToFileURL(proof).href);`;
+    const args = ['--input-type=module', '-e', guard, join(here, 'proof.mjs'), out, 'prepare-input', inputPath, expected];
+    let exitCode = 0;
+    try { await exec(process.execPath, args, { cwd: root, env: { ...process.env, PATH: '', WINNOW_PORT: 'not-used' } }); }
+    catch (e) { exitCode = e.code; }
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'));
+    assert.equal(report.result, 'UNKNOWN'); assert.equal(report.authority, false); assert.equal(report.effect, false);
+    assert.equal(report.providerAttempts, 0); assert.equal(report.attemptedReferenceChecks, 0);
+    assert.throws(() => readFileSync(join(out, 'shadow.json')), /ENOENT/);
+    assert.throws(() => readFileSync(join(out, 'paired.json')), /ENOENT/);
+    if (mode === 'prepared') {
+      assert.equal(exitCode, 0, report.reason); assert.equal(report.observation, 'INPUT_PREPARED');
+      assert.equal(report.inputBytesSha256, expected); assert.equal(report.treeSha, i.treeSha);
+      assert.equal(report.providerOutput, null); assert.equal(report.wouldSelect, null); assert.equal(report.wouldOmit, null);
+      assert.equal(report.pairAdmissible, false);
+      const prepared = JSON.parse(readFileSync(join(out, 'prepared.json'), 'utf8'));
+      assert.deepEqual(prepared.input, i); assert.deepEqual(prepared.request.state.candidates, i.candidates);
+      assert.deepEqual(prepared.request.state.patches, i.patches);
+      // Successful preparation is not idempotent permission to overwrite prior evidence.
+      await assert.rejects(exec(process.execPath, args, { cwd: root }), /EEXIST/);
+    } else {
+      assert.equal(exitCode, 2, report.reason); assert.equal(report.observation, 'NOT_RUN');
+      assert.throws(() => readFileSync(join(out, 'prepared.json')), /ENOENT/);
+      if (mode === 'tampered') assert.equal(report.reason, 'INPUT_BYTES_MISMATCH');
+      if (mode === 'over-budget') assert.equal(report.reason, 'WINNOW_INPUT_BUDGET_EXCEEDED');
+    }
+    assert.deepEqual(readFileSync(inputPath), bytes);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
