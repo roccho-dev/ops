@@ -57,6 +57,9 @@ let
     assert provenance["artifact"]["bytes"] == len(zip_bytes), "zip size differs from provenance"
     assert provenance["source"]["commit"] == proof["merge_sha"] and provenance["source"]["tree"] == proof["merge_tree"], "provenance source differs from proof"
   '';
+  # The pinned cf CLI for the coming Workers adapter. Checkpoint only: the runtime below still deploys through the
+  # existing Pages adapter until the cf path is proven; cf is exercised offline by tests/workers.test.mjs.
+  cf = import ./cf.nix { inherit pkgs; };
   artifact = pkgs.runCommand "voice-ui-dist-release" ({
     nativeBuildInputs = [ pkgs.python3 pkgs.unzip ];
   } // release) ''
@@ -135,8 +138,15 @@ in runtime // {
     node ${./.}/tests/run.test.mjs
     node ${./.}/tests/pages.test.mjs
     node ${./tests/boundary.mjs} ${runtime} ${artifact} ${pkgs.wrangler}/bin/wrangler
+    # cf checkpoint: in this build sandbox only loopback exists, so any request cf makes can reach the recording
+    # fixture only. The receipt keeps the requests, the native deploy event and the uploaded byte digests.
+    ${cf}/bin/cf --version
+    node ${./tests/workers.test.mjs} ${cf}/bin/cf ${cf.nodeModules}/node_modules ${artifact} > cf-checkpoint.json
     mkdir -p "$out"
-    cp runtime.json "$out/"
-    printf 'CI_BOUNDARY_PASS\nLIVE_PROVIDER_NOT_RUN\n' > "$out/status"
+    cp runtime.json cf-checkpoint.json "$out/"
+    printf 'CI_BOUNDARY_PASS\nCF_CHECKPOINT_OFFLINE_PASS\nLIVE_PROVIDER_NOT_RUN\n' > "$out/status"
+    # Recorded, not asserted: a sandboxed build has no resolver, so no request could have left loopback. An
+    # unsandboxed build proves only what reached the fixture.
+    if [ -e /etc/resolv.conf ]; then echo CF_CHECKPOINT_EGRESS_UNISOLATED; else echo CF_CHECKPOINT_EGRESS_SANDBOXED; fi >> "$out/status"
   '';
 }

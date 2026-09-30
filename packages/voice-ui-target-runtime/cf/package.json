@@ -1,0 +1,8 @@
+{
+  "name": "voice-ui-target-runtime-cf",
+  "private": true,
+  "description": "Pins the Cloudflare cf CLI used only by the voice-ui target runtime; see ../cf.nix.",
+  "dependencies": {
+    "cf": "1.0.0-beta.6"
+  }
+}

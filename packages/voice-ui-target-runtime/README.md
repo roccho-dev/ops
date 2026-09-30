@@ -36,3 +36,16 @@ The single ordinary Nix check runs existing destructive/unit tests, real adapter
 Source readiness requires this exact-candidate check to pass and the source to be reviewed/merged. A mere version command, fixture-only unit PASS or pending CI is insufficient.
 
 After source/CI acceptance, the remaining inputs are physical: approved provider/effect credentials and Environment protection, actual target-native projection and its accepted handoff, then the existing command against live services. #436 needs its approved live-effect positive. Real application acceptance twice (apps#27) remains OPEN: it must obtain an apps acceptance-runtime artifact artifact-only, run in a separate credential-free process tree and correlate to this exact deploy/readback receipt. This runtime does not execute that join.
+
+## cf checkpoint (Workers path, not yet the deploy path)
+
+The deploy path above is still Pages through Wrangler. The coming path is Cloudflare Workers with static assets, deployed by the `cf` CLI with `cf deploy --prebuilt`. This checkpoint proves only what the pinned CLI does offline; the adapter, product metadata and delivery come later.
+
+- `cf.nix` pins `cf@1.0.0-beta.6` through `cf/package-lock.json`: every npm tarball is a fixed-output fetch keyed by its lock integrity. Nothing is resolved or installed at run time, and telemetry is off.
+- `tests/workers.test.mjs` builds a Build Output with the pinned `@cloudflare/build-output-utils` writers from the admitted artifact's unchanged `worker/worker.mjs` and `site/`. The Worker metadata (name, compatibility date `2026-09-01`, `ASSETS` and `JEV_API_KEY` bindings) is an explicit `NON_PRODUCT` fixture, not the product's declared requirements. A planted `.env` holds sentinel credentials that must never be used.
+  - C3: `cf deploy --prebuilt --dry-run` exits 0 and makes no request at all.
+  - C4a: a new Worker that declares the `JEV_API_KEY` secret is refused natively unless the secret value is supplied, and the `.env` is not a source of it; no script is uploaded.
+  - C4b: with `--secrets-file` holding a never-issued fixture value, `cf deploy --prebuilt` talks only to a recording loopback provider fixture (`CLOUDFLARE_API_BASE_URL`) with a never-issued account and token. It uploads the exact Worker bytes and all assets, and the native `deploy` event's `version_id` equals the one the fixture issued.
+- The check records whether the build was sandboxed (`CF_CHECKPOINT_EGRESS_SANDBOXED`, no request could leave loopback) or not (`CF_CHECKPOINT_EGRESS_UNISOLATED`, only requests that reached the fixture are proven).
+
+Not proven here: live Cloudflare, any real account or token, Workers authority for a real target (the existing Pages handoff is not Workers authority), product metadata, and a delivered runtime. C4a shows that deploying a new Worker needs the `JEV_API_KEY` value at deploy time or a Worker that already has it; how that value reaches a real deploy is an open credential boundary, not decided here.
