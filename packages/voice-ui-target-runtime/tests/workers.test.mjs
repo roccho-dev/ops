@@ -235,9 +235,14 @@ for (const [label, extra, secretPreset] of [["c4c", [], true], ["c4d_keep_vars",
   preset[label] = { exit: run.code, script_uploaded: versionId !== null,
     requests: requests.slice(from).map((r) => `${r.method} ${r.path}`),
     bindings: md && (md.bindings ?? []).map((b) => `${b.name}:${b.type}${b.text ? ":value" : ""}`),
-    keep_bindings: md ? (md.keep_bindings ?? null) : undefined, out_tail: run.out.split("\n").filter((l) => /rror|nknown|secret|keep/i.test(l)).slice(-4) };
+    keep_bindings: md ? (md.keep_bindings ?? null) : undefined, sentinel_in_output: run.out.includes(SENTINEL),
+    out_tail: run.out.split("\n").filter((l) => /rror|nknown|secret|keep/i.test(l)).slice(-4) };
 }
 receipt.preset_secret = preset;
+// Over every request of every run (C3 to C4e): only the never-issued fixture token, and the planted .env never used.
+receipt.all_requests = { count: requests.length, auth_only_fixture_token: authOk(requests),
+  sentinel_seen_by_provider: requests.some((r) => r.sentinel),
+  sentinel_in_any_output: [c3, c4a, c4b].some((r) => r.out.includes(SENTINEL)) || Object.values(preset).some((r) => r.sentinel_in_output) };
 server.close();
 console.log(JSON.stringify(receipt, null, 1));
 assert.notEqual(c4a.code, 0, "C4a deployed a Worker that declares a secret without its value");
@@ -266,4 +271,6 @@ assert.ok(pc.c4d_keep_vars.exit !== 0 && pc.c4d_keep_vars.requests.length === 0 
   pc.c4d_keep_vars.out_tail.some((l) => l.includes("Unknown arguments: keep-vars")), "C4d: --keep-vars is now accepted; re-evaluate");
 assert.deepEqual(pc.c4e_secret_missing.bindings, ["JEV_API_KEY:inherit", "ASSETS:assets"],
   "C4e: the CLI now treats a missing existing secret differently; re-evaluate");
+assert.deepEqual(receipt.all_requests, { count: requests.length, auth_only_fixture_token: true, sentinel_seen_by_provider: false,
+  sentinel_in_any_output: false }, "some request used a token other than the never-issued fixture token, or the planted .env was used");
 console.error(`PASS cf checkpoint (${isolation.grade}): C3 prebuilt dry run, 0 requests; C4a new Worker with a declared secret refused without its value, .env unused; C4b exact Worker module, bindings, date and asset paths and bytes, native version id equals the issued one; C4c existing Worker inherits the preset secret with no value; C4d no --keep-vars; C4e missing existing secret is not checked by the CLI`);
