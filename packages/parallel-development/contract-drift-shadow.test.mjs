@@ -158,5 +158,38 @@ await check('write-once report, missing auth, decrypt leak, CLI readback', async
     assert.ok(!cli.stdout.includes('ranked')); assert.ok(!cli.stdout.includes('answers'));
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+// Current I/O limitations from product-R review 5365254817. Development mocks only;
+// these checks characterize the gap, not a repaired adapter or v2 completion.
+await check('detached text is not admitted merely because its digest matches', async () => {
+  const bytes = `# Contract\n${input.contract.goal}\n# Change\n${input.change.implementation}\n`;
+  let calls = 0;
+  const result = await reviewContractDrift(bytes, driftDigest(bytes), async () => { calls++; });
+  assert.equal(result.status, 'BLOCK');
+  assert.equal(result.reason, 'INVALID_CONTRACT_DRIFT_INPUT');
+  assert.equal(result.inputDigest, driftDigest(bytes));
+  assert.equal(result.askInvocations, 0);
+  assert.equal(calls, 0);
+  assert.equal(result.exchange, null);
+});
+await check('category scores are not unique cross-artifact drift identities', async () => {
+  const changed = structuredClone(input);
+  changed.contract.acceptance = ['receipt includes the input identity'];
+  changed.change.implementation = 'emit receipt without the input identity';
+  const bytes = JSON.stringify(changed);
+  const first = await reviewContractDrift(inputText, digest, stub);
+  const second = await reviewContractDrift(bytes, driftDigest(bytes), stub);
+  assert.notEqual(first.inputDigest, second.inputDigest);
+  assert.notEqual(first.stateDigest, second.stateDigest);
+  assert.deepEqual(first.ranked, second.ranked);
+  for (const result of [first, second]) {
+    assert.equal(result.status, 'OBSERVED'); // injected response, not a provider result
+    for (const group of result.ranked) {
+      assert.deepEqual(group.findings, [{ subject: ['candidate', input.change.id], noul: 0.5 }]);
+    }
+    assert.equal(result.comparison, 'NOT_RUN');
+    assert.equal(result.downstreamEffect, 'UNMEASURED');
+    assert.equal(result.cost, 'UNMEASURED');
+  }
+});
 console.log(JSON.stringify({ suite: 'contract-drift-shadow', status: 'PASS', checks: passed.length,
   realJev: 'NOT_RUN', sourceReadback: 'NOT_RUN', independentComparison: 'NOT_RUN' }));

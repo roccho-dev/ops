@@ -3,6 +3,36 @@
 Refs: ops#449, ops#451; reuse the merged PR-phase evaluator and shared Jev boundary.
 This is a bounded proof adapter, not a CI selector, contract authority, or merge gate.
 
+## Current correction boundary
+
+Control `3ec15b2b473be9465fa32d94851c8ab09d1c62b9` permits offline corrections only,
+under [P's exact path set](https://github.com/roccho-dev/ops/pull/450#issuecomment-5910294374).
+[Product R's review](https://github.com/roccho-dev/ops/pull/451#pullrequestreview-5365254817)
+identifies two unresolved limits of the implementation described below:
+
+- Detached contract text plus a diff is not the structured input below. A matching
+  digest does not make it admissible, and missing meaning must not be invented.
+- `ranked[].findings` contains candidate-level theme scores, not source-position /
+  contract-condition / correction-effect identities. Distinct inputs can retain
+  different input/state digests while returning identical categories and scores.
+  Neither hashing a category nor counting all six themes creates a unique drift ID.
+  These scores alone cannot measure v2 recall, precision or accepted corrections.
+
+There is also an offline maintenance boundary: `natural-case/check.mjs` compares
+current evaluator module bytes against historical `question-contract.implementation`
+pins in `natural-case/raws.jsonl`. Even appending a newline to the adapter invalidates
+that check. Both historical files are outside the current mutable set. Do not update
+those pins, bypass their import, mask the failure, or put runtime correction code in
+tests to evade this boundary. Product R/P must resolve historical verification versus
+current implementation testing before a functional adapter successor can stay Green.
+The development checks added here expose these limits; they do not fix the adapter.
+
+Existing offline checks and historical evidence remain intact. ROOT_001/v3 remains
+consumed, BLOCK/UNKNOWN, NOT_COMPARABLE and RETIRED_FROM_CONFIRMATION. No command in
+this document authorizes provider/root execution, a new projection/case/oracle,
+credential changes, or retry. Executor authority and v2 completion evidence remain
+separate unmet conditions; missing measurements are not zero.
+
 ## Input and binding
 
 `reviewContractDrift(inputText, expectedDigest, ask)` consumes one UTF-8 JSON snapshot.
