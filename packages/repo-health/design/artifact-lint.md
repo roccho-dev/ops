@@ -63,8 +63,8 @@ an object without its own evidenceDigest; the result envelope also binds the man
 CLI readback must check these digests and that the terminal summary is present.
 A killed process may leave an incomplete append-only file: **never infer success**.
 
-`execution.status=OBSERVED` means six questions returned validated answers, not that
-any concern is true. An injected callback is always explicitly `mode=injected` with
+`execution.status=OBSERVED` means the call returned validated answers (six in
+category mode), not that any concern is true. An injected callback is always explicitly `mode=injected` with
 unobservable HTTP count (`null`), never live Jev proof. `calls` counts validated
 responses; `transportInvocations` counts callback invocations; live `httpRequests`
 counts attempted requests, including a failed request. A timeout after send does not
@@ -126,3 +126,75 @@ normal consumer path explicitly forbids source-secret and old-runner fallbacks.
 Those repository declarations do not authenticate any external target's current
 state. No permitted target credential/receipt was supplied to this execution. W did
 not configure authoring, perform projection, dispatch envs or change that authority.
+
+## Source-bound finding proposals: partial offline correction
+
+Control `3ec15b2b473be9465fa32d94851c8ab09d1c62b9`; product-R review
+`5365255667`; authority comment `5910294374`. This is a library-level binding and
+scoring correction, not automatic discovery or v2 completion. No evaluation data
+contract, root input, CLI option, candidate generator or provider response type is
+introduced. The existing CLI still uses category mode and is NOT defect-level
+completion evidence. ROOT_001/v3 remains consumed, NOT_COMPARABLE and retired; no
+command shown here authorizes its retry or replaces its historical evidence.
+
+`reviewSemanticArtifact(input, ask, proposals)` may receive explicit caller-produced
+semantic hypotheses as its third method argument. They are not reference answers.
+The original seven-field artifact input is unchanged; putting proposals/gold into
+it is still rejected. No file, root history, oracle or other artifact is fetched.
+The full artifact content remains the only state. The existing evaluator asks one
+Noul question per unique proposal; its model, budgets, timeout and no-retry behavior
+are unchanged. `ask` remains optional; offline tests supply it and never prove live
+provider ability. Authoring or wiring proposals into a real evaluation is not done
+by this correction and must respect the separately authorized input-only W boundary.
+
+The method argument contains exactly `contentSha256` and `candidates` (0–6 entries).
+Each candidate contains exactly `locations`, `defectKind`, `defect` and
+`correctionEffect`. The last three are explicit, nonempty, well-formed text: what
+kind of defect is proposed, the concrete concern, and the proposed corrective
+outcome. Merely supplying these fields does not prove their truth or usefulness.
+Locations contain 1–6 entries with `startByte`, `endByte`, `quote`: nonempty half-open
+UTF-8 byte spans in the ORIGINAL `input.content` string, not decoded JSON fields.
+For an omission, cite the existing supporting context rather than inventing missing
+source bytes. Each quote must match the exact byte slice on character boundaries.
+Stale content hashes, bad ranges/quotes, overlaps, extra fields, accessors, sparse
+arrays and excessive entries are rejected before evaluation/credential use.
+
+Locations are sorted and exact repeats removed. A proposal ID is SHA-256 over the
+canonical ordered object: sourceRef, revision, contentSha256, scope, numeric locations
+(startByte/endByte only), defectKind, correctionEffect. The plain sourceRef/revision
+are not copied into the question. ID does not depend on score, topK, candidate order
+or property order. Exact duplicate identities are evaluated once. Different concern
+text under the same identity is a conflict, not silently selected or counted twice.
+Different source identities or changed content have different IDs. Mechanical
+identity is not semantic equivalence: paraphrased effects/kinds still need independent
+reference matching/deduplication; the code does not pretend to solve that problem.
+
+`findingEvidence` distinguishes UNAVAILABLE/CATEGORY_ONLY_OUTPUT (no proposals),
+NOT_EVALUATED (explicit proposals without validated responses), and SCORED_PROPOSALS.
+It retains normalized candidates and their digest BEFORE scoring; successful scoring
+joins ranked answers back to those same candidates, with locations, kind, concern,
+correction effect and ID. Response extras cannot invent or override a finding.
+All candidates/raw scores are retained even when topK returns fewer; ties and zero
+scores are not dropped by a hidden threshold. `findings:null`, an empty candidate
+set, disabled execution, provider error or missing evidence never means no defects.
+An empty candidate set is UNKNOWN/NO_FINDING_PROPOSALS with zero calls.
+
+These are candidate findings, NOT verified defect/reference IDs or accepted
+corrections. R must retain the original proposal ID plus output seal when linking
+a later exact correction/check/readback; no correction is performed or certified
+here. Recall, precision, severity, missed defects, cost and acceptance remain outside
+this scorer. `comparison.status` stays UNKNOWN. No v2 metric or success is calculated
+from the number of candidates, questions or scores.
+
+LD01–LD09 retain the previous offline checks. LD10–LD16 add only development mocks
+inside the existing test source: category non-promotion; four input kinds; UTF-8 and
+tamper rejection; duplicate/conflicting identity; score/topK/order stability;
+inflight mutation; empty/disabled/budget/error handling; rejection of root-input
+extensions and provider-invented finding identities. These are not new prospective
+cases, an oracle or a semantic-quality experiment.
+
+Still unproved: source-only proposal discovery, proposal independence, live Jev
+quality, independent defect matching, accepted corrections, review/rework savings,
+full cost and 4/4 reproducibility. The current CLI cannot close that gap by receiving
+a key. If a generator, new evaluation input surface or shared provider-output change
+is needed, return that exact need to R/P; do not expand this bounded offline cut.

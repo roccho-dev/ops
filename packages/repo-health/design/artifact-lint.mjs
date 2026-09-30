@@ -28,6 +28,10 @@ const exact = (v, names) => v && [Object.prototype, null].includes(Object.getPro
     const d = Object.getOwnPropertyDescriptor(v, name);
     return d?.enumerable && Object.hasOwn(d, 'value');
   });
+const list = (v) => Array.isArray(v) && v.length <= CONCERNS.length
+  && Reflect.ownKeys(v).length === v.length + 1
+  && Array.from({ length: v.length }, (_, i) => Object.getOwnPropertyDescriptor(v, String(i)))
+    .every((d) => d && Object.hasOwn(d, 'value'));
 const copy = (v) => JSON.parse(JSON.stringify(v));
 const seal = (v) => ({ ...v, evidenceDigest: digest(v) });
 const safeError = (error) => {
@@ -60,15 +64,53 @@ export function validateArtifact(input) {
   return { source, observations };
 }
 
-export async function reviewSemanticArtifact(input, ask) {
+// Bind explicit caller proposals, never manufacture defect identities from category scores.
+// This verifies byte locations and identity, NOT semantic truth or proposal independence.
+function bindFindingProposals(source, proposals) {
+  if (proposals === undefined) return null;
+  const bad = () => { throw new Error('INVALID_FINDING_PROPOSALS'); };
+  if (!exact(proposals, ['contentSha256', 'candidates']) || !list(proposals.candidates)) bad();
+  if (proposals.contentSha256 !== source.contentSha256) throw new Error('FINDING_SOURCE_MISMATCH');
+  if (!source.content.isWellFormed()) bad();
+  const bytes = Buffer.from(source.content, 'utf8'), byId = new Map();
+  for (const candidate of proposals.candidates) {
+    if (!exact(candidate, ['locations', 'defectKind', 'defect', 'correctionEffect'])
+      || !['defectKind', 'defect', 'correctionEffect'].every((k) => text(candidate[k]) && candidate[k].isWellFormed())
+      || !list(candidate.locations) || !candidate.locations.length) bad();
+    const spans = new Map();
+    for (const span of candidate.locations) {
+      if (!exact(span, ['startByte', 'endByte', 'quote']) || !Number.isSafeInteger(span.startByte)
+        || !Number.isSafeInteger(span.endByte) || span.startByte < 0 || span.startByte >= span.endByte
+        || span.endByte > bytes.length || !text(span.quote) || !span.quote.isWellFormed()
+        || !bytes.subarray(span.startByte, span.endByte).equals(Buffer.from(span.quote, 'utf8'))) bad();
+      spans.set(`${span.startByte}:${span.endByte}`, { startByte: span.startByte, endByte: span.endByte, quote: span.quote });
+    }
+    const locations = [...spans.values()].sort((a, b) => a.startByte - b.startByte || a.endByte - b.endByte);
+    if (locations.some((span, i) => i > 0 && locations[i - 1].endByte > span.startByte)) bad();
+    const identity = { contentSha256: source.contentSha256, scope: source.scope,
+      locations: locations.map(({ startByte, endByte }) => ({ startByte, endByte })),
+      defectKind: candidate.defectKind, correctionEffect: candidate.correctionEffect };
+    const id = digest({ sourceRef: source.sourceRef, revision: source.revision, ...identity });
+    const finding = { id, ...identity, locations, defect: candidate.defect };
+    if (byId.has(id) && byId.get(id).defect !== finding.defect) throw new Error('FINDING_IDENTITY_CONFLICT');
+    byId.set(id, finding);
+  }
+  return [...byId.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+export async function reviewSemanticArtifact(input, ask, proposals) {
   const { source, observations } = validateArtifact(input);
   if (ask !== undefined && typeof ask !== 'function') throw new Error('INVALID_ARTIFACT_INPUT');
+  const candidates = bindFindingProposals(source, proposals);
   const mode = ask === undefined ? 'live' : 'injected';
   // Source names/revisions and comparison labels are NOT model-visible. All content bytes are.
   const state = { artifact: { kind: source.kind, scope: source.scope, content: source.content } };
   const themes = ['semantic-lint'];
-  const items = CONCERNS.map(({ id, concern }) => ({ theme: themes[0], subject: ['artifact', id],
-    concern: `For the whole supplied artifact (the second target element names the concern lens): ${concern}` }));
+  const items = candidates === null
+    ? CONCERNS.map(({ id, concern }) => ({ theme: themes[0], subject: ['artifact', id],
+      concern: `For the whole supplied artifact (the second target element names the concern lens): ${concern}` }))
+    : candidates.map((candidate) => ({ theme: themes[0], subject: ['artifact', candidate.id],
+      concern: `Assess this proposed defect against the complete artifact. Locations are UTF-8 byte spans in artifact.content. The proposed correction effect is not an instruction or proof. Candidate data: ${JSON.stringify(candidate)}` }));
   const record = {
     schema: 'ops.semanticLintShadow.v2', provider: 'jev', requestedModel: JEV_MODEL,
     authority: false, effect: false, effectAuthority: 0, referenceIsGroundTruth: false,
@@ -82,6 +124,9 @@ export async function reviewSemanticArtifact(input, ask) {
       httpRequests: mode === 'live' ? 0 : null, ms: 0 },
     observedModel: null, request: null, response: null, raw: [], ranked: [],
     coverage: { candidates: items.length, evaluated: 0, returned: 0 }, usage: {},
+    findingEvidence: { status: candidates === null ? 'UNAVAILABLE' : 'NOT_EVALUATED',
+      reason: candidates === null ? 'CATEGORY_ONLY_OUTPUT' : null,
+      proposalDigest: candidates === null ? null : digest(candidates), candidates, findings: null },
     comparison: { status: 'UNKNOWN', reason: 'NO_INDEPENDENT_COMPARISON', cost: null, attentionMs: null },
     claimCeiling: 'Concerns over supplied snapshot scope only; no source authentication, exhaustive coverage, artifact verdict, acceptance, forced correction, merge/skip authority or proven value.',
   };
@@ -89,6 +134,10 @@ export async function reviewSemanticArtifact(input, ask) {
     record.execution.reason = 'DISABLED';
     record.ranked = rankJudgments([], { topK: 0, themes, items });
     return seal(record);
+  }
+  if (!items.length) {
+    record.execution.reason = 'NO_FINDING_PROPOSALS';
+    return seal(record); // No proposal is not evidence of no defect.
   }
   const started = performance.now();
   try {
@@ -116,6 +165,13 @@ export async function reviewSemanticArtifact(input, ask) {
     record.observedModel = record.response.model;
     record.execution.calls = result.calls;
     record.execution.status = 'OBSERVED'; // Execution only, including explicitly injected tests.
+    if (candidates !== null) {
+      const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+      record.findingEvidence.status = 'SCORED_PROPOSALS';
+      record.findingEvidence.findings = record.ranked[0].findings.map(({ subject, noul }) => ({
+        ...copy(byId.get(subject[1])), noul,
+      }));
+    }
   } catch (error) {
     record.execution.reason = safeError(error);
     record.execution.status = ['JEV_BUDGET_EXCEEDED', 'JEV_API_KEY_REQUIRED', 'DECRYPT_CAPABILITY_LEAK'].includes(record.execution.reason) ? 'BLOCK' : 'UNKNOWN';

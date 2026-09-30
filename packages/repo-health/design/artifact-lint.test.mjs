@@ -162,4 +162,175 @@ await check('LD09-preregistered-pair-is-data-not-quality-proof', async () => {
   }
   assert.equal(scores[0], scores[1]);
 });
+// Development declarations only. No oracle/root, automatic diagnosis or real provider.
+const mockProposal = (input) => {
+  const bytes = Buffer.from(input.content, 'utf8');
+  const locations = ['承認はPのみ。', 'W automatically accepts.'].map((quote) => {
+    const startByte = bytes.indexOf(Buffer.from(quote, 'utf8'));
+    assert.ok(startByte >= 0);
+    return { startByte, endByte: startByte + Buffer.byteLength(quote, 'utf8'), quote };
+  });
+  return { contentSha256: input.contentSha256, candidates: [{ locations, defectKind: 'authority',
+    defect: 'W automatic acceptance conflicts with P-only acceptance.',
+    correctionEffect: 'Replace W automatic acceptance with a request for P approval.' }] };
+};
+const mockArtifact = (kind = 'contract') => inputFor(kind, '承認はPのみ。\nW automatically accepts.');
+
+await check('LD10-category-scores-never-become-defect-identities', async () => {
+  for (const value of [0, 1]) {
+    const r = await reviewSemanticArtifact(inputFor(), async (_, q) => reply(q, value));
+    assert.equal(r.execution.status, 'OBSERVED');
+    assert.deepEqual(r.findingEvidence, { status: 'UNAVAILABLE', reason: 'CATEGORY_ONLY_OUTPUT',
+      proposalDigest: null, candidates: null, findings: null });
+    assert.equal(r.comparison.status, 'UNKNOWN'); verifySeal(r);
+  }
+});
+await check('LD11-explicit-findings-bind-all-source-kinds', async () => {
+  for (const kind of Object.keys(SCOPES)) {
+    const input = mockArtifact(kind), proposals = mockProposal(input);
+    const r = await reviewSemanticArtifact(input, async (state, questions) => {
+      assert.equal(state.artifact.content, input.content);
+      assert.deepEqual(Object.keys(state), ['artifact']);
+      assert.equal(Object.keys(questions).length, 1);
+      assert.ok(questions.q0.instructions.includes(proposals.candidates[0].defect));
+      assert.ok(questions.q0.instructions.includes(proposals.candidates[0].correctionEffect));
+      assert.ok(!questions.q0.instructions.includes(input.sourceRef));
+      return reply(questions, 0); // Even zero is retained as a scored proposal, not a verdict.
+    }, proposals);
+    const evidence = r.findingEvidence, finding = evidence.findings[0];
+    assert.equal(evidence.status, 'SCORED_PROPOSALS');
+    assert.equal(evidence.proposalDigest, digest(evidence.candidates));
+    const identity = { contentSha256: input.contentSha256, scope: input.scope,
+      locations: finding.locations.map(({ startByte, endByte }) => ({ startByte, endByte })),
+      defectKind: finding.defectKind, correctionEffect: finding.correctionEffect };
+    assert.equal(finding.id, digest({ sourceRef: input.sourceRef, revision: input.revision, ...identity }));
+    assert.deepEqual(r.raw[0].subject, ['artifact', finding.id]);
+    assert.deepEqual(finding.locations, proposals.candidates[0].locations);
+    assert.equal(finding.noul, 0); assert.equal(finding.defect, proposals.candidates[0].defect);
+    assert.deepEqual(r.coverage, { candidates: 1, evaluated: 1, returned: 1 });
+    assert.equal(r.execution.mode, 'injected'); assert.equal(r.execution.calls, 1);
+    assert.equal(r.authority, false); assert.equal(r.effectAuthority, 0);
+    assert.equal(r.comparison.status, 'UNKNOWN'); assert.equal(r.comparison.cost, null);
+    assert.equal(r.requestDigest, digest(r.request)); assert.equal(r.responseDigest, digest(r.response)); verifySeal(r);
+    for (const key of ['accepted', 'referenceId', 'verdict', 'recall', 'precision']) assert.ok(!Object.hasOwn(finding, key));
+  }
+});
+await check('LD12-proposals-reject-tamper-before-evaluation', async () => {
+  const input = mockArtifact();
+  for (const edit of [
+    p => p.contentSha256 = 'sha256:stale', p => p.expected = true, p => p.candidates[0].id = 'invented',
+    p => p.candidates[0].accepted = true, p => p.candidates[0].defect = '',
+    p => p.candidates[0].defectKind = '', p => p.candidates[0].correctionEffect = '',
+    p => p.candidates[0].correctionEffect = '\ud800', p => p.candidates[0].locations = [],
+    p => p.candidates[0].locations[0].startByte = -1,
+    p => p.candidates[0].locations[0].startByte = 0.5,
+    p => p.candidates[0].locations[0].endByte = 99999,
+    p => p.candidates[0].locations[0].endByte = 0,
+    p => p.candidates[0].locations[0].quote = 'invented source',
+    p => p.candidates[0].locations[0].startByte = 1, // Splits a UTF-8 character.
+    p => p.candidates[0].locations[0].referenceId = 'hidden',
+    p => p.candidates = Array(1), p => p.candidates = Array(2 ** 32 - 1), p => p.candidates.push(...Array(6).fill(p.candidates[0])),
+    p => { Object.defineProperty(p.candidates[0], 'defect', { enumerable: true, get: never }); },
+    p => { Object.defineProperty(p.candidates, '0', { enumerable: true, get: never }); },
+    p => { p.candidates[0][Symbol('gold')] = true; },
+    p => { Object.defineProperty(p.candidates[0].locations[0], 'quote', { enumerable: true, get: never }); },
+    p => { p.candidates[0].locations.push({ startByte: 0, endByte: 3, quote: '承' }); },
+  ]) {
+    const proposals = mockProposal(input); edit(proposals);
+    await assert.rejects(() => reviewSemanticArtifact(input, never, proposals), /^(Error: )?(INVALID_FINDING_PROPOSALS|FINDING_SOURCE_MISMATCH)$/);
+  }
+  const changed = { ...input, content: input.content + ' changed' };
+  changed.contentSha256 = digest(changed.content);
+  await assert.rejects(() => reviewSemanticArtifact(changed, never, mockProposal(input)), /FINDING_SOURCE_MISMATCH/);
+  const invalidText = { ...input, content: input.content + '\ud800' };
+  invalidText.contentSha256 = digest(invalidText.content);
+  await assert.rejects(() => reviewSemanticArtifact(invalidText, never, mockProposal(invalidText)), /INVALID_FINDING_PROPOSALS/);
+});
+await check('LD13-dedup-and-stable-identity-without-semantic-invention', async () => {
+  const input = mockArtifact(), proposals = mockProposal(input);
+  const base = await reviewSemanticArtifact(input, ask, proposals);
+  const duplicate = structuredClone(proposals.candidates[0]);
+  duplicate.locations.reverse(); duplicate.locations.push({ ...duplicate.locations[0] });
+  proposals.candidates.push(duplicate);
+  const r = await reviewSemanticArtifact({ ...input, topK: 1 }, async (_, q) => reply(q, 1), proposals);
+  assert.equal(r.findingEvidence.candidates.length, 1); assert.equal(r.coverage.evaluated, 1);
+  assert.equal(r.findingEvidence.findings[0].id, base.findingEvidence.findings[0].id);
+  assert.equal(r.findingEvidence.proposalDigest, base.findingEvidence.proposalDigest);
+  proposals.candidates[1].defect = 'A different claim under the same identity';
+  await assert.rejects(() => reviewSemanticArtifact(input, never, proposals), /FINDING_IDENTITY_CONFLICT/);
+  for (const field of ['defectKind', 'correctionEffect']) {
+    const other = mockProposal(input); other.candidates[0][field] += ' different';
+    const result = await reviewSemanticArtifact(input, ask, other);
+    assert.notEqual(result.findingEvidence.findings[0].id, base.findingEvidence.findings[0].id);
+  }
+  for (const field of ['sourceRef', 'revision']) {
+    const result = await reviewSemanticArtifact({ ...input, [field]: 'another' }, ask, mockProposal(input));
+    assert.notEqual(result.findingEvidence.findings[0].id, base.findingEvidence.findings[0].id);
+  }
+});
+await check('LD14-request-ranking-and-inflight-proposals-remain-bound', async () => {
+  const input = mockArtifact(), proposals = mockProposal(input);
+  const other = structuredClone(proposals.candidates[0]);
+  other.defectKind = 'evidence'; other.defect = 'Completion lacks an acceptance receipt.';
+  other.correctionEffect = 'Require a P acceptance receipt before completion.';
+  proposals.candidates.push(other);
+  const before = structuredClone(proposals);
+  const r = await reviewSemanticArtifact({ ...input, topK: 1 }, async (state, q) => {
+    proposals.candidates[0].defect = 'mutated'; proposals.candidates[0].locations[0].quote = 'mutated';
+    state.artifact.content = 'mutated';
+    const response = reply(q, 0); response.answers.q1.noul = 1; delete q.q0; return response;
+  }, proposals);
+  assert.equal(r.coverage.evaluated, 2); assert.equal(r.coverage.returned, 1);
+  const finding = r.findingEvidence.findings[0];
+  assert.equal(finding.id, r.questionContract.items[1].subject[1]); assert.equal(finding.noul, 1);
+  assert.ok(!JSON.stringify(r).includes('mutated')); assert.equal(r.request.state.artifact.content, input.content);
+  const reverse = await reviewSemanticArtifact(input, ask, { ...before, candidates: [...before.candidates].reverse() });
+  assert.equal(reverse.questionContractDigest, r.questionContractDigest);
+  assert.equal(reverse.findingEvidence.proposalDigest, r.findingEvidence.proposalDigest); verifySeal(r);
+});
+await check('LD15-empty-disabled-budget-errors-are-not-defect-negatives', async () => {
+  const input = mockArtifact();
+  const empty = await reviewSemanticArtifact(input, never, { contentSha256: input.contentSha256, candidates: [] });
+  const disabled = await reviewSemanticArtifact({ ...input, topK: 0 }, never, mockProposal(input));
+  assert.equal(empty.execution.reason, 'NO_FINDING_PROPOSALS'); assert.equal(empty.execution.calls, 0);
+  assert.equal(disabled.execution.reason, 'DISABLED'); assert.equal(disabled.execution.calls, 0);
+  const oversized = mockProposal(input); oversized.candidates[0].defect = 'x'.repeat(60001);
+  const budget = await reviewSemanticArtifact(input, never, oversized);
+  assert.equal(budget.execution.reason, 'JEV_BUDGET_EXCEEDED'); assert.equal(budget.execution.transportInvocations, 0);
+  for (const result of [empty, disabled, budget]) {
+    assert.equal(result.findingEvidence.status, 'NOT_EVALUATED'); assert.equal(result.findingEvidence.findings, null);
+    assert.equal(result.comparison.status, 'UNKNOWN'); verifySeal(result);
+  }
+  for (const callback of [
+    () => { throw Error('JEV_API_KEY_REQUIRED'); },
+    () => { throw new DOMException('hidden', 'TimeoutError'); },
+    async (_, q) => { const r = reply(q); delete r.answers.q0; return r; },
+    async (_, q) => ({ ...reply(q), model: 'wrong' }),
+  ]) {
+    const r = await reviewSemanticArtifact(input, callback, mockProposal(input));
+    assert.notEqual(r.execution.status, 'OBSERVED'); assert.equal(r.coverage.evaluated, 0);
+    assert.equal(r.findingEvidence.findings, null); assert.equal(r.findingEvidence.status, 'NOT_EVALUATED');
+    assert.equal(r.comparison.status, 'UNKNOWN'); assert.equal(r.effectAuthority, 0); verifySeal(r);
+  }
+});
+
+await check('LD16-no-root-input-extension-or-provider-invented-finding', async () => {
+  const input = mockArtifact(), proposals = mockProposal(input);
+  await assert.rejects(() => reviewSemanticArtifact({ ...input, proposals }, never), /INVALID_ARTIFACT_INPUT/);
+  const r = await reviewSemanticArtifact(input, async (_, q) => {
+    const response = reply(q);
+    response.findings = [{ id: 'provider-invented', accepted: true }];
+    response.answers.q0.finding = { id: 'provider-invented', locations: [] };
+    return response;
+  }, proposals);
+  assert.notEqual(r.findingEvidence.findings[0].id, 'provider-invented');
+  assert.deepEqual(r.findingEvidence.findings[0].locations, proposals.candidates[0].locations);
+  assert.ok(!Object.hasOwn(r.findingEvidence.findings[0], 'accepted'));
+  const reordered = mockProposal(input);
+  reordered.candidates[0].locations = reordered.candidates[0].locations.map(({ quote, endByte, startByte }) => ({ quote, endByte, startByte }));
+  const other = await reviewSemanticArtifact(input, ask, reordered);
+  assert.equal(other.findingEvidence.proposalDigest, r.findingEvidence.proposalDigest);
+  assert.equal(other.questionContractDigest, r.questionContractDigest);
+  assert.equal(r.comparison.status, 'UNKNOWN'); verifySeal(r);
+});
 console.log(JSON.stringify({ semanticLintShadowContract: 'PASS', tests: done, concernCandidates: CONCERNS.length, liveProviderExecuted: false }));
