@@ -6,7 +6,9 @@ import { join } from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
-import { PLAN, MEMBERS, assertAdmission, jobName, commandFor, timeoutFor, begin, execute, terminal, loadTerminal, joinTerminals } from './parallel.mjs';
+import { PLAN, MEMBERS, PROSPECTIVE_JOB, assertAdmission, assertProspectiveAdmission, jobName, commandFor, timeoutFor,
+  begin, execute, terminal, loadTerminal, joinTerminals, prospectiveBegin, prospectiveRun,
+  prospectiveTerminal, loadProspectiveTerminal } from './parallel.mjs';
 import { digest, REFERENCE_UNIVERSE, runWinnowRelevance } from './winnow.mjs';
 const exec = promisify(execFile);
 const clone = structuredClone;
@@ -185,4 +187,85 @@ esac
     assert.equal(t.execution.timeoutSeconds,1200);assert.equal(t.start.runner.id,201);assert.equal(t.start.source.treeSha,T);
     assert.equal(t.result,'UNKNOWN');assert.throws(()=>execute('cdp-tty-proof',out),/EEXIST/); // no second command
   }finally{process.chdir(cwd);process.env.PATH=path;globalThis.fetch=fetch;rmSync(root,{recursive:true,force:true});}
+});
+
+test('prospective admission is manual, exact, packet-bound and attempt-one only', () => {
+  const admitted = { repository: 'roccho-dev/ops', eventName: 'workflow_dispatch',
+    refName: 'proof/449-winnow-ci-relevance', attempt: 1, evaluatorSha: H, actualHead: H,
+    packetSha256: 'a'.repeat(64), expectedPacketSha256: 'a'.repeat(64), packetId: 'case-1', goRef: 'p-go' };
+  assert.doesNotThrow(() => assertProspectiveAdmission(admitted));
+  for (const change of [
+    { eventName: 'pull_request' }, { refName: 'proposals' }, { attempt: 2 }, { actualHead: T },
+    { expectedPacketSha256: 'b'.repeat(64) }, { packetId: '' }, { goRef: '' }, { repository: 'other/repo' },
+  ]) assert.throws(() => assertProspectiveAdmission({ ...admitted, ...change }), /PROSPECTIVE_/);
+});
+
+test('prospective provider evidence binds evaluator and detached case, seals once and never runs a reference', async () => {
+  const { createHash } = await import('node:crypto');
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-prospective-')), out = join(root, 'out');
+  const packet = join(root, 'packet.json');
+  const input = { baseSha: '4'.repeat(40), headSha: '5'.repeat(40), treeSha: '6'.repeat(40),
+    changedPaths: ['formal.txt'], patches: [{ filename: 'formal.txt', patch: '@@ -1 +1 @@\n-before\n+after\n' }],
+    beforeFacts: null, candidates: [
+      { id: 'workflow-a/job-a', name: 'job-a' }, { id: 'workflow-b/job-b', name: 'job-b' }], topK: 1 };
+  const bytes = Buffer.from(JSON.stringify(input)), packetSha = createHash('sha256').update(bytes).digest('hex');
+  writeFileSync(packet, bytes); mkdirSync(out);
+  mkdirSync(join(root, 'packages/ci-relevance-shadow'), { recursive: true });
+  for (const name of ['proof.mjs', 'winnow.mjs'])
+    cpSync(new URL('./' + name, import.meta.url), join(root, 'packages/ci-relevance-shadow', name));
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  git('init', '-q'); git('config', 'user.name', 'fixture'); git('config', 'user.email', 'fixture@example.invalid');
+  git('add', '.'); git('commit', '-qm', 'evaluator'); const evaluatorSha = git('rev-parse', 'HEAD');
+  const event = join(root, 'event.json');
+  writeFileSync(event, JSON.stringify({ inputs: { a_packet_id: 'formal-pilot-1', a_packet_sha256: packetSha,
+    a_evaluator_sha: evaluatorSha, a_go_ref: 'https://example.invalid/go' } }));
+  const env = { ...process.env, GITHUB_EVENT_PATH: event, GITHUB_REPOSITORY: 'roccho-dev/ops',
+    GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'proof/449-winnow-ci-relevance',
+    GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: '1', RUNNER_NAME: 'fixture-runner',
+    RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', GH_TOKEN: 'offline-fixture' };
+  const oldFetch = globalThis.fetch, cwd = process.cwd();
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/api/version') return res.end(JSON.stringify({ version: PLAN.version }));
+    if (req.url === '/api/tags' || req.url === '/api/ps')
+      return res.end(JSON.stringify({ models: [{ name: PLAN.model, digest: PLAN.manifestSha256, device: 'cpu', size_vram: 0 }] }));
+    let body = ''; for await (const chunk of req) body += chunk; requests++;
+    assert.ok(!body.includes('script')); assert.ok(!body.includes('conclusion'));
+    res.end(JSON.stringify({ model: PLAN.model,
+      answers: { q0: { type: 'noul', noul: 0.3 }, q1: { type: 'noul', noul: 0.7 } } }));
+  });
+  try {
+    process.chdir(root);
+    globalThis.fetch = async url => {
+      assert.ok(String(url).endsWith('/actions/runs/77/attempts/1/jobs?per_page=100'));
+      return { ok: true, text: async () => JSON.stringify({ total_count: 1, jobs: [{
+        name: PROSPECTIVE_JOB, id: 901, run_id: 77, run_attempt: 1, head_sha: evaluatorSha,
+        runner_id: 902, runner_name: 'fixture-runner', labels: ['ubuntu-24.04'] }] }) };
+    };
+    await prospectiveBegin(out, packet, env);
+    const start = JSON.parse(readFileSync(join(out, 'start.json'), 'utf8'));
+    assert.equal(start.evaluator.headSha, evaluatorSha); assert.equal(start.case.headSha, input.headSha);
+    assert.equal(start.packetSha256, packetSha); assert.notEqual(start.evaluator.headSha, start.case.headSha);
+    globalThis.fetch = oldFetch;
+    mkdirSync(join(out, 'provider'));
+    writeFileSync(join(out, 'provider/runtime-files.json'),
+      JSON.stringify({ archiveSha256: PLAN.archiveSha256, binarySha256: PLAN.binarySha256 }));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    process.env.WINNOW_PORT = String(server.address().port);
+    assert.equal(prospectiveRun(out, packet), 0);
+    prospectiveTerminal(out, { LANE_JOB_STATUS: 'success' });
+    const terminal = loadProspectiveTerminal(out);
+    assert.equal(requests, 1); assert.equal(terminal.sealed, true);
+    assert.equal(terminal.observation, 'PROVIDER_OUTPUT_SEALED'); assert.equal(terminal.result, 'UNKNOWN');
+    assert.equal(terminal.comparisonOwner, 'product-r'); assert.equal(terminal.authority, false);
+    assert.deepEqual(terminal.execution.shadow.input, input);
+    assert.throws(() => readFileSync(join(out, 'provider/reference.json')), /ENOENT/);
+    assert.throws(() => readFileSync(join(out, 'provider/paired.json')), /ENOENT/);
+    assert.throws(() => prospectiveRun(out, packet), /EEXIST/);
+    assert.equal(requests, 1);
+  } finally {
+    delete process.env.WINNOW_PORT; globalThis.fetch = oldFetch; process.chdir(cwd);
+    await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true });
+  }
 });

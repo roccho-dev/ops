@@ -9,8 +9,9 @@ import { digest, REFERENCE_KIND, REFERENCE_UNIVERSE, prepareWinnowRelevance, run
 const out = process.argv[2];
 const providerOnly = process.argv[3] === 'provider-only';
 const prepareOnly = process.argv[3] === 'prepare-input';
-if (!out || process.argv.length !== (prepareOnly ? 6 : providerOnly ? 4 : 3))
-  throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY [provider-only | prepare-input INPUT_JSON SHA256]');
+const detachedProvider = process.argv[3] === 'provider-detached';
+if (!out || process.argv.length !== (prepareOnly || detachedProvider ? 6 : providerOnly ? 4 : 3))
+  throw new Error('usage: node proof.mjs OUTPUT_DIRECTORY [provider-only | prepare-input INPUT_JSON SHA256 | provider-detached INPUT_JSON SHA256]');
 mkdirSync(out, { recursive: true });
 const write = (name, data) => writeFileSync(join(out, name), JSON.stringify(data, null, 2) + '\n', { flag: 'wx' });
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
@@ -34,20 +35,55 @@ const modelFrom = (tags) => {
   requireThat(models?.length === 1 && /^[0-9a-f]{64}$/u.test(models[0].digest), 'MODEL_DIGEST_UNAVAILABLE');
   return models[0];
 };
+const detachedInput = () => {
+  const bytes = readFileSync(process.argv[4]);
+  requireThat(/^[0-9a-f]{64}$/u.test(process.argv[5]) && sha256(bytes) === process.argv[5], 'INPUT_BYTES_MISMATCH');
+  const prepared = prepareWinnowRelevance(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+  requireThat(prepared.input.treeSha !== undefined, 'DETACHED_INPUT_REQUIRED');
+  return { bytes, prepared };
+};
 
 try {
   if (prepareOnly) {
     // No checkout, provider or command execution. This does not activate a case.
-    const bytes = readFileSync(process.argv[4]);
-    requireThat(/^[0-9a-f]{64}$/u.test(process.argv[5]) && sha256(bytes) === process.argv[5], 'INPUT_BYTES_MISMATCH');
-    const prepared = prepareWinnowRelevance(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
-    requireThat(prepared.input.treeSha !== undefined, 'DETACHED_INPUT_REQUIRED');
+    const { bytes, prepared } = detachedInput();
     write('prepared.json', prepared);
     Object.assign(report, { observation: 'INPUT_PREPARED', reason: 'Offline I/O validation only; no case or execution admission.',
       headSha: prepared.input.headSha, treeSha: prepared.input.treeSha, baseSha: prepared.input.baseSha,
       inputBytesSha256: sha256(bytes), inputSha256: prepared.inputSha256, requestSha256: prepared.requestSha256,
       referenceUniverse: prepared.input.candidates, providerOutput: null, wouldSelect: null, wouldOmit: null,
       pairAdmissible: false });
+  } else if (detachedProvider) {
+    const { bytes, prepared } = detachedInput();
+    requireThat(prepared.input.candidates.every(row => !Object.hasOwn(row, 'script')), 'FORMAL_INPUT_COMMAND_FORBIDDEN');
+    writeFileSync(join(out, 'input.json'), bytes, { flag: 'wx' });
+    write('prepared.json', prepared);
+    const runtimeVersion = await json('/api/version', 'runtime-version.json');
+    requireThat(runtimeVersion.version === '0.7.5', 'RUNTIME_VERSION_MISMATCH');
+    const model = modelFrom(await json('/api/tags', 'model-before.json'));
+    const runtimeFiles = JSON.parse(readFileSync(join(out, 'runtime-files.json'), 'utf8'));
+    requireThat(/^[0-9a-f]{64}$/u.test(runtimeFiles.archiveSha256) && /^[0-9a-f]{64}$/u.test(runtimeFiles.binarySha256), 'RUNTIME_FILE_IDENTITY_MISSING');
+    report.providerAttempts = 1;
+    const shadow = await runWinnowRelevance(prepared.input, { endpoint: origin + '/v1/systemone', timeoutMs: 300000 });
+    write('shadow.json', shadow);
+    const modelAfter = modelFrom(await json('/api/tags', 'model-after.json'));
+    const loaded = await json('/api/ps', 'loaded-models.json');
+    requireThat(model.digest === modelAfter.digest, 'MODEL_CHANGED_DURING_REQUEST');
+    report.provider = { requestedModel: shadow.requestedModel, observedModel: shadow.observedModel,
+      manifestSha256: model.digest, version: runtimeVersion.version, runtimeFiles, loaded };
+    Object.assign(report, {
+      referenceKind: null, observation: 'PROVIDER_EXECUTED',
+      reason: 'Prospective detached provider output sealed; hidden reference comparison belongs to product R.',
+      headSha: prepared.input.headSha, treeSha: prepared.input.treeSha, baseSha: prepared.input.baseSha,
+      inputBytesSha256: sha256(bytes), inputSha256: shadow.inputSha256, requestSha256: shadow.requestSha256,
+      responseSha256: shadow.responseSha256, sealedShadowSha256: digest(shadow),
+      referenceUniverse: prepared.input.candidates, providerOutput: shadow.response,
+      wouldSelect: shadow.wouldSelect, wouldOmit: shadow.wouldOmit, pairAdmissible: false,
+      comparisonOwner: 'product-r', referenceChecks: 0,
+      coverage: { naturalChanges: 1, independentCauseGroups: 1, provider: shadow.coverage, referenceChecks: 0 },
+      cost: { requestMs: shadow.elapsedMs, inputUsage: shadow.usage, billedMoney: null,
+        humanAttentionMs: null, actualSavedExecutionMs: null },
+    });
   } else {
   const headSha = gitLine('rev-parse', 'HEAD');
   requireThat(/^[0-9a-f]{40}$/u.test(process.env.PROOF_BASE ?? ''), 'EXACT_BASE_REQUIRED');

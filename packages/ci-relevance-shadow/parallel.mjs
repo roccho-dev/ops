@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, openSy
 import { cpus, totalmem, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { digest, REFERENCE_KIND, REFERENCE_UNIVERSE, joinBoundedCiReference } from './winnow.mjs';
+import { digest, REFERENCE_KIND, REFERENCE_UNIVERSE, prepareWinnowRelevance, joinBoundedCiReference } from './winnow.mjs';
 
 export const PLAN = Object.freeze({
   id: 'lane-a-separate-runners-5898026275',
@@ -37,6 +37,9 @@ const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer
 const line = (...args) => git(...args).trim();
 const stamp = s => typeof s === 'string' && Number.isFinite(Date.parse(s));
 const hex40 = s => typeof s === 'string' && /^[a-f0-9]{40}$/u.test(s);
+const hex64 = s => typeof s === 'string' && /^[a-f0-9]{64}$/u.test(s);
+const text = s => typeof s === 'string' && s.trim().length > 0;
+export const PROSPECTIVE_JOB = 'lane-a-prospective-provider';
 const providerIdentity = p => p?.version === PLAN.version && p.manifestSha256 === PLAN.manifestSha256
   && p.runtimeFiles?.archiveSha256 === PLAN.archiveSha256 && p.runtimeFiles.binarySha256 === PLAN.binarySha256
   && p.loaded?.models?.filter(x => x.name === PLAN.model && x.digest === PLAN.manifestSha256
@@ -231,14 +234,139 @@ export function joinTerminals(terminals, jobs, expected, joinedAt = now()) {
   return report;
 }
 
+function prospectiveEvaluatorIdentity() {
+  const headSha = line('rev-parse', 'HEAD'), treeSha = line('rev-parse', 'HEAD^{tree}');
+  requireThat(!git('status', '--porcelain', '--untracked-files=no'), 'DIRTY_SOURCE');
+  return { headSha, treeSha };
+}
+
+function readProspectivePacket(path, expectedSha256) {
+  const bytes = readFileSync(path);
+  requireThat(hex64(expectedSha256) && hash(bytes) === expectedSha256, 'PACKET_BYTES_MISMATCH');
+  const input = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  const prepared = prepareWinnowRelevance(input);
+  requireThat(prepared.input.treeSha !== undefined, 'DETACHED_INPUT_REQUIRED');
+  requireThat(prepared.input.candidates.every(row => !Object.hasOwn(row, 'script')), 'FORMAL_INPUT_COMMAND_FORBIDDEN');
+  return { bytes, prepared };
+}
+
+export function assertProspectiveAdmission({ repository, eventName, refName, attempt, evaluatorSha, actualHead,
+  packetSha256, expectedPacketSha256, packetId, goRef }) {
+  requireThat(repository === 'roccho-dev/ops' && eventName === 'workflow_dispatch'
+    && refName === 'proof/449-winnow-ci-relevance' && attempt === 1, 'PROSPECTIVE_EVENT_NOT_ADMITTED');
+  requireThat(hex40(evaluatorSha) && evaluatorSha === actualHead, 'PROSPECTIVE_EVALUATOR_MISMATCH');
+  requireThat(hex64(packetSha256) && packetSha256 === expectedPacketSha256 && text(packetId) && text(goRef),
+    'PROSPECTIVE_PACKET_NOT_ADMITTED');
+}
+
+export async function prospectiveBegin(out, packetPath, env = process.env) {
+  requireThat(env.GITHUB_REPOSITORY === 'roccho-dev/ops' && text(packetPath), 'PROSPECTIVE_EVENT_NOT_ADMITTED');
+  const event = read(env.GITHUB_EVENT_PATH), evaluator = prospectiveEvaluatorIdentity();
+  const packetSha256 = event.inputs?.a_packet_sha256, packetId = event.inputs?.a_packet_id, goRef = event.inputs?.a_go_ref;
+  const evaluatorSha = event.inputs?.a_evaluator_sha;
+  const { bytes, prepared } = readProspectivePacket(packetPath, packetSha256);
+  assertProspectiveAdmission({ repository: env.GITHUB_REPOSITORY, eventName: env.GITHUB_EVENT_NAME,
+    refName: env.GITHUB_REF_NAME, attempt: Number(env.GITHUB_RUN_ATTEMPT), evaluatorSha, actualHead: evaluator.headSha,
+    packetSha256: hash(bytes), expectedPacketSha256: packetSha256, packetId, goRef });
+  const jobs = await jobsReadback(env, out);
+  const matches = jobs.jobs.filter(x => x.name === PROSPECTIVE_JOB && x.run_attempt === 1
+    && String(x.run_id) === env.GITHUB_RUN_ID);
+  requireThat(matches.length === 1, 'RUNNER_JOB_UNRESOLVED');
+  const job = matches[0];
+  requireThat(job.head_sha === evaluator.headSha && job.runner_name === env.RUNNER_NAME
+    && job.runner_id > 0 && same(job.labels, ['ubuntu-24.04']), 'RUNNER_IDENTITY_MISMATCH');
+  writeFileSync(join(out, 'packet.json'), bytes, { flag: 'wx' });
+  put(join(out, 'prepared.json'), prepared);
+  put(join(out, 'start.json'), {
+    schema: 'ops.winnowProspectiveStart.v1', packetId, packetSha256, goRef,
+    inputSha256: prepared.inputSha256, requestSha256: prepared.requestSha256,
+    evaluator, case: { baseSha: prepared.input.baseSha, headSha: prepared.input.headSha, treeSha: prepared.input.treeSha },
+    candidateIds: prepared.input.candidates.map(row => row.id), jobName: PROSPECTIVE_JOB, jobId: job.id,
+    runId: job.run_id, attempt: 1, providerTimeoutMs: PLAN.providerTimeoutMs, timeoutSeconds: 360,
+    start: now(), runner: { id: job.runner_id, name: job.runner_name, labels: job.labels,
+      hostname: hostname(), os: env.RUNNER_OS, arch: env.RUNNER_ARCH,
+      logicalCpus: cpus().length, cpuModel: cpus()[0]?.model ?? null, memoryBytes: totalmem() },
+    authority: false, effect: false, skipAuthority: false,
+  });
+}
+
+export function prospectiveRun(out, packetPath) {
+  const start = read(join(out, 'start.json')), evaluatorBefore = prospectiveEvaluatorIdentity();
+  const { prepared } = readProspectivePacket(packetPath, start.packetSha256);
+  requireThat(same(evaluatorBefore, start.evaluator) && prepared.inputSha256 === start.inputSha256
+    && prepared.requestSha256 === start.requestSha256
+    && same({ baseSha: prepared.input.baseSha, headSha: prepared.input.headSha, treeSha: prepared.input.treeSha }, start.case)
+    && same(prepared.input.candidates.map(row => row.id), start.candidateIds), 'PROSPECTIVE_BINDING_MISMATCH');
+  const commandStart = now(), t = performance.now();
+  const args = [process.execPath, 'packages/ci-relevance-shadow/proof.mjs', join(out, 'provider'),
+    'provider-detached', packetPath, start.packetSha256];
+  const fd = openSync(join(out, 'command.log'), 'wx');
+  let result;
+  try { result = spawnSync('timeout', ['--kill-after=10', String(start.timeoutSeconds), ...args],
+    { stdio: ['ignore', fd, fd], env: process.env }); } finally { closeSync(fd); }
+  const end = now();
+  const execution = { start: commandStart, end, durationMs: performance.now() - t,
+    command: 'proof.mjs provider-detached <verified-packet> <sha256>', timeoutSeconds: start.timeoutSeconds,
+    exitCode: result.status, signal: result.signal, error: result.error?.message ?? null,
+    conclusion: result.error || result.signal ? 'cancelled' : [124, 137].includes(result.status) ? 'timed_out'
+      : [126, 127].includes(result.status) || result.status === null ? 'not_executed' : result.status === 0 ? 'success' : 'failure',
+    logSha256: hash(readFileSync(join(out, 'command.log'))) };
+  try {
+    requireThat(same(prospectiveEvaluatorIdentity(), start.evaluator), 'PROSPECTIVE_EVALUATOR_CHANGED');
+    execution.evaluatorAfter = start.evaluator;
+    execution.report = read(join(out, 'provider/report.json'));
+    if (existsSync(join(out, 'provider/shadow.json'))) execution.shadow = read(join(out, 'provider/shadow.json'));
+    const report = execution.report, shadow = execution.shadow;
+    requireThat(providerIdentity(report.provider), 'PROVIDER_IDENTITY_MISMATCH');
+    requireThat(report.providerAttempts === 1 && report.attemptedReferenceChecks === 0
+      && report.completedReferenceChecks === 0 && report.observation === 'PROVIDER_EXECUTED'
+      && report.authority === false && report.effect === false && report.referenceKind === null
+      && report.pairAdmissible === false && report.comparisonOwner === 'product-r'
+      && report.inputBytesSha256 === start.packetSha256 && report.inputSha256 === start.inputSha256
+      && shadow?.executionKind === 'live-http' && same(shadow.input, prepared.input)
+      && !existsSync(join(out, 'provider/reference.json')) && !existsSync(join(out, 'provider/paired.json')),
+      'PROSPECTIVE_PROVIDER_EVIDENCE_INCOMPLETE');
+  } catch (e) { execution.reason = e.message; }
+  put(join(out, 'execution.json'), execution);
+  return execution.conclusion === 'success' && !execution.reason ? 0 : 2;
+}
+
+export function prospectiveTerminal(out, env = process.env) {
+  if (existsSync(join(out, 'terminal.json'))) return;
+  const start = existsSync(join(out, 'start.json')) ? read(join(out, 'start.json')) : null;
+  const execution = existsSync(join(out, 'execution.json')) ? read(join(out, 'execution.json')) : null;
+  const sealed = execution?.conclusion === 'success' && !execution.reason && execution.shadow;
+  put(join(out, 'terminal.json'), {
+    schema: 'ops.winnowProspectiveTerminal.v1', start, execution, terminalAt: now(),
+    jobStatusAtFinalizer: env.LANE_JOB_STATUS ?? null, result: 'UNKNOWN',
+    observation: sealed ? 'PROVIDER_OUTPUT_SEALED' : 'INCOMPLETE', sealed: Boolean(sealed),
+    reason: execution?.reason ?? (execution ? execution.conclusion : 'SETUP_OR_EXECUTION_INCOMPLETE'),
+    authority: false, effect: false, skipAuthority: false, comparisonOwner: 'product-r',
+    memberSha256: fileHashes(out),
+  });
+}
+
+export function loadProspectiveTerminal(out) {
+  const terminal = read(join(out, 'terminal.json'));
+  requireThat(same(terminal.memberSha256, fileHashes(out)), 'EVIDENCE_BYTES_MISMATCH');
+  if (terminal.start) requireThat(same(terminal.start, read(join(out, 'start.json'))), 'START_EVIDENCE_MISMATCH');
+  if (terminal.execution) requireThat(same(terminal.execution, read(join(out, 'execution.json'))), 'EXECUTION_EVIDENCE_MISMATCH');
+  return terminal;
+}
+
 async function main() {
   const [mode, outArg, member] = process.argv.slice(2);
-  requireThat(outArg && ['begin', 'run', 'terminal', 'join'].includes(mode), 'usage: parallel.mjs begin|run|terminal|join OUTPUT [MEMBER]');
+  const modes = ['begin', 'run', 'terminal', 'join', 'prospective-begin', 'prospective-run', 'prospective-terminal'];
+  requireThat(outArg && modes.includes(mode),
+    'usage: parallel.mjs begin|run|terminal|join|prospective-begin|prospective-run|prospective-terminal OUTPUT [MEMBER|PACKET]');
   const out = resolve(outArg); mkdirSync(out, { recursive: true });
   try {
     if (mode === 'begin') await begin(member, out);
     if (mode === 'run') process.exitCode = execute(member, out);
     if (mode === 'terminal') terminal(member, out);
+    if (mode === 'prospective-begin') await prospectiveBegin(out, member);
+    if (mode === 'prospective-run') process.exitCode = prospectiveRun(out, member);
+    if (mode === 'prospective-terminal') prospectiveTerminal(out);
     if (mode === 'join') {
       const expected = { headSha: line('rev-parse', 'HEAD'), treeSha: line('rev-parse', 'HEAD^{tree}'),
         runId: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT) };
