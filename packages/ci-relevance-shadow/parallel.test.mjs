@@ -202,14 +202,14 @@ test('prospective admission is manual, exact, packet-bound and attempt-one only'
 
 test('prospective provider evidence binds evaluator and detached case, seals once and never runs a reference', async () => {
   const { createHash } = await import('node:crypto');
-  const root = mkdtempSync(join(tmpdir(), 'lane-a-prospective-')), out = join(root, 'out');
-  const packet = join(root, 'packet.json');
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-prospective-')), out = join(root, 'out'), bin = join(root, 'bin');
+  const packet = join(root, 'packet.json'), calls = join(root, 'timeout-calls');
   const input = { baseSha: '4'.repeat(40), headSha: '5'.repeat(40), treeSha: '6'.repeat(40),
     changedPaths: ['formal.txt'], patches: [{ filename: 'formal.txt', patch: '@@ -1 +1 @@\n-before\n+after\n' }],
     beforeFacts: null, candidates: [
       { id: 'workflow-a/job-a', name: 'job-a' }, { id: 'workflow-b/job-b', name: 'job-b' }], topK: 1 };
   const bytes = Buffer.from(JSON.stringify(input)), packetSha = createHash('sha256').update(bytes).digest('hex');
-  writeFileSync(packet, bytes); mkdirSync(out);
+  writeFileSync(packet, bytes); mkdirSync(out); mkdirSync(bin);
   mkdirSync(join(root, 'packages/ci-relevance-shadow'), { recursive: true });
   for (const name of ['proof.mjs', 'winnow.mjs'])
     cpSync(new URL('./' + name, import.meta.url), join(root, 'packages/ci-relevance-shadow', name));
@@ -223,18 +223,21 @@ test('prospective provider evidence binds evaluator and detached case, seals onc
     GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_NAME: 'proof/449-winnow-ci-relevance',
     GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: '1', RUNNER_NAME: 'fixture-runner',
     RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', GH_TOKEN: 'offline-fixture' };
-  const oldFetch = globalThis.fetch, cwd = process.cwd();
-  let requests = 0;
-  const server = createServer(async (req, res) => {
-    res.setHeader('content-type', 'application/json');
-    if (req.url === '/api/version') return res.end(JSON.stringify({ version: PLAN.version }));
-    if (req.url === '/api/tags' || req.url === '/api/ps')
-      return res.end(JSON.stringify({ models: [{ name: PLAN.model, digest: PLAN.manifestSha256, device: 'cpu', size_vram: 0 }] }));
-    let body = ''; for await (const chunk of req) body += chunk; requests++;
-    assert.ok(!body.includes('script')); assert.ok(!body.includes('conclusion'));
-    res.end(JSON.stringify({ model: PLAN.model,
-      answers: { q0: { type: 'noul', noul: 0.3 }, q1: { type: 'noul', noul: 0.7 } } }));
-  });
+  const fakeTimeout = `#!/usr/bin/env node
+const fs=require('fs'),crypto=require('crypto');
+const a=process.argv.slice(2),out=a[4],packet=a[6],sha=a[7];
+fs.mkdirSync(out,{recursive:true});
+const input=JSON.parse(fs.readFileSync(packet,'utf8'));
+const inputSha=crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
+const manifest=${JSON.stringify(PLAN.manifestSha256)},archive=${JSON.stringify(PLAN.archiveSha256)},binary=${JSON.stringify(PLAN.binarySha256)},model=${JSON.stringify(PLAN.model)},version=${JSON.stringify(PLAN.version)};
+const shadow={executionKind:'live-http',input};
+const report={providerAttempts:1,attemptedReferenceChecks:0,completedReferenceChecks:0,observation:'PROVIDER_EXECUTED',authority:false,effect:false,referenceKind:null,pairAdmissible:false,comparisonOwner:'product-r',inputBytesSha256:sha,inputSha256:inputSha,provider:{version,manifestSha256:manifest,runtimeFiles:{archiveSha256:archive,binarySha256:binary},loaded:{models:[{name:model,digest:manifest,device:'cpu',size_vram:0}]}}};
+fs.writeFileSync(out+'/shadow.json',JSON.stringify(shadow)+'\\n',{flag:'wx'});
+fs.writeFileSync(out+'/report.json',JSON.stringify(report)+'\\n',{flag:'wx'});
+fs.appendFileSync(${JSON.stringify(calls)},'one\\n');
+`;
+  writeFileSync(join(bin, 'timeout'), fakeTimeout, { mode: 0o755 });
+  const oldFetch = globalThis.fetch, cwd = process.cwd(), oldPath = process.env.PATH;
   try {
     process.chdir(root);
     globalThis.fetch = async url => {
@@ -247,25 +250,20 @@ test('prospective provider evidence binds evaluator and detached case, seals onc
     const start = JSON.parse(readFileSync(join(out, 'start.json'), 'utf8'));
     assert.equal(start.evaluator.headSha, evaluatorSha); assert.equal(start.case.headSha, input.headSha);
     assert.equal(start.packetSha256, packetSha); assert.notEqual(start.evaluator.headSha, start.case.headSha);
-    globalThis.fetch = oldFetch;
-    mkdirSync(join(out, 'provider'));
-    writeFileSync(join(out, 'provider/runtime-files.json'),
-      JSON.stringify({ archiveSha256: PLAN.archiveSha256, binarySha256: PLAN.binarySha256 }));
-    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    process.env.WINNOW_PORT = String(server.address().port);
+    globalThis.fetch = oldFetch; process.env.PATH = `${bin}:${oldPath}`;
     assert.equal(prospectiveRun(out, packet), 0);
     prospectiveTerminal(out, { LANE_JOB_STATUS: 'success' });
     const terminal = loadProspectiveTerminal(out);
-    assert.equal(requests, 1); assert.equal(terminal.sealed, true);
+    assert.equal(readFileSync(calls, 'utf8'), 'one\n'); assert.equal(terminal.sealed, true);
     assert.equal(terminal.observation, 'PROVIDER_OUTPUT_SEALED'); assert.equal(terminal.result, 'UNKNOWN');
     assert.equal(terminal.comparisonOwner, 'product-r'); assert.equal(terminal.authority, false);
     assert.deepEqual(terminal.execution.shadow.input, input);
     assert.throws(() => readFileSync(join(out, 'provider/reference.json')), /ENOENT/);
     assert.throws(() => readFileSync(join(out, 'provider/paired.json')), /ENOENT/);
     assert.throws(() => prospectiveRun(out, packet), /EEXIST/);
-    assert.equal(requests, 1);
+    assert.equal(readFileSync(calls, 'utf8'), 'one\n');
   } finally {
-    delete process.env.WINNOW_PORT; globalThis.fetch = oldFetch; process.chdir(cwd);
-    await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true });
+    process.env.PATH = oldPath; globalThis.fetch = oldFetch; process.chdir(cwd);
+    rmSync(root, { recursive: true, force: true });
   }
 });
