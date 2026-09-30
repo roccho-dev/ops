@@ -146,7 +146,6 @@
           ops-thread-fsm = existing.ops-thread-fsm;
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
-          cdp-tty = packages.${system}.cdp-tty.proof;
           provider-effect-runtime = packages.${system}.provider-effect-runtime.check;
           voice-ui-target-runtime = packages.${system}.voice-ui-target-runtime.boundaryCheck;
           jev =

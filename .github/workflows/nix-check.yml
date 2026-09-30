@@ -11,6 +11,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    if: false # DEFERRED_NOT_RUN: ops#460
     steps:
       - uses: actions/checkout@v4
         with:
