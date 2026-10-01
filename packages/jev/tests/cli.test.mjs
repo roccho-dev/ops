@@ -28,7 +28,14 @@ async function runCli(input, env = {}, scenario = null) {
   }
 
   const setupUrl = pathToFileURL(setupPath).href;
-  const args = ["--import", setupUrl, cliPath];
+  const args = ["--import", setupUrl];
+  if (scenario === "key_error_canary" || scenario === "key_json_canary") {
+    const code = scenario === "key_error_canary"
+      ? "globalThis.fetch=async()=>{throw Error(process.env.JEV_API_KEY)}"
+      : "globalThis.fetch=async()=>({ok:true,json:async()=>{throw Error(process.env.JEV_API_KEY)}})";
+    args.push("--import", "data:text/javascript," + encodeURIComponent(code));
+  }
+  args.push(cliPath);
 
   const child = spawn("node", args, {
     stdio: ["pipe", "pipe", "pipe"],
@@ -255,4 +262,14 @@ test("score type missing instructions returns exit 1", async () => {
   const env = { JEV_API_KEY: TEST_API_KEY };
   const { code, stdout, stderr } = await runCli(input, env);
   assert.equal(code, EXIT_INPUT_ERROR);
+});
+
+test("bound CLI transport never reflects key-bearing network or JSON exceptions", async () => {
+  for (const scenario of ["key_error_canary", "key_json_canary"]) {
+    const { code, stdout, stderr } = await runCli(JSON.stringify({ type:"noul", text:"fixture", question:"Question?" }), { JEV_API_KEY:TEST_API_KEY }, scenario);
+    assert.equal(code, EXIT_PROVIDER_ERROR);
+    assert.equal(stdout.trim().split("\n").length, 1);
+    assert.ok(!stdout.includes(TEST_API_KEY));assert.ok(!stderr.includes(TEST_API_KEY));
+    assert.equal(JSON.parse(stdout).error, scenario === "key_error_canary" ? "provider_unreachable" : "provider_invalid_response");
+  }
 });

@@ -1,5 +1,6 @@
 // Worker-compatible named-choice transport. Application meaning stays with callers.
-const ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+import { bindJev, JevTransportError } from "./core.mjs";
+export { bindJev } from "./core.mjs";
 const MODEL = "jev-latest";
 const DEADLINE_MS = 10_000;
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -50,31 +51,15 @@ function normalize(data, questions) {
     return {answers};
   } catch { fail("provider_contract_error"); }
 }
-export async function judgeNamedChoices({request, apiKey, fetch:fetchFn = globalThis.fetch, signal} = {}) {
-  if (typeof apiKey !== "string" || !apiKey) fail("auth_missing");
+export async function judgeNamedChoices({request, provider, signal} = {}) {
+  if (!provider?.available) fail("auth_missing");
   const body = requestBody(request);
   const questions = JSON.parse(body).questions;
-  if (typeof fetchFn !== "function") fail("provider_unavailable");
-  if (signal?.aborted) fail("cancelled");
-  const controller = new AbortController();
-  let timer, abort;
-  const stopped = new Promise((_,reject) => {
-    timer = setTimeout(() => { controller.abort(); reject(new JudgeProviderError("provider_timeout")); }, DEADLINE_MS);
-    abort = () => { controller.abort(); reject(new JudgeProviderError("cancelled")); };
-    if (signal?.aborted) abort();
-    else signal?.addEventListener("abort",abort,{once:true});
-  });
-  const call = (async () => {
-    let response;
-    try {
-      response = await fetchFn(ENDPOINT,{method:"POST",headers:{authorization:`Bearer ${apiKey}`,"content-type":"application/json"},body,signal:controller.signal});
-    } catch { fail("provider_unavailable"); }
-    if (!response?.ok) fail("provider_http_error");
-    let data;
-    try { data = await response.json(); } catch { fail("provider_invalid_response"); }
-    return normalize(data,questions);
-  })();
-  try { return await Promise.race([stopped,call]); }
-  catch (error) { if (error instanceof JudgeProviderError) throw error; fail("provider_contract_error"); }
-  finally { clearTimeout(timer); signal?.removeEventListener("abort",abort); }
+  try {
+    return normalize(await provider.post(JSON.parse(body), { signal, deadlineMs: DEADLINE_MS }), questions);
+  } catch (error) {
+    if (error instanceof JudgeProviderError) throw error;
+    if (error instanceof JevTransportError) fail(error.code);
+    fail("provider_contract_error");
+  }
 }

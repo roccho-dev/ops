@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {test} from "node:test";
 const entry = process.env.JEV_PROVIDER_ENTRY ?? new URL("../src/batch.mjs",import.meta.url);
-const {judgeNamedChoices,JudgeProviderError} = await import(entry);
+const {judgeNamedChoices: boundJudge,JudgeProviderError,bindJev} = await import(entry);
+// Reuse the literal matrix through the actual bound API, never a second transport.
+const judgeNamedChoices = ({apiKey,fetch,...input}) => boundJudge({...input,provider:bindJev({apiKey,fetch})});
 
 const request = {state:{text:"fixture"},questions:{first:{instruction:"Choose",options:{NONE:"none",A:"option"}},second:{instruction:"Choose",options:{NONE:"none",B:"option"}}}};
 const data = () => ({model:"synthetic-model-canary",extra:"allowed",answers:{first:{type:"choice",choice:"A",confidence:0.2},second:{type:"choice",choice:"NONE",confidence:1,probabilities:{NONE:2}}}});
@@ -80,5 +82,53 @@ test("caller cancellation has closed cause",async()=>{
 });
 test("entry is self-contained and portable, not a CLI import",()=>{
   const source=fs.readFileSync(entry,"utf8");
-  assert.ok(!/\bimport\s|\bprocess\b|\brequire\s*\(|node:|\bfs\b/.test(source));
+  assert.ok(!/\bprocess\b|\brequire\s*\(|node:|\bfs\b/.test(source));
+  if (process.env.JEV_PROVIDER_ENTRY) assert.ok(!/\bimport\s/.test(source));
+});
+
+test("one binding reuses private credential without per-operation key and isolates calls",async()=>{
+  const signals=[],headers=[];
+  const provider=bindJev({apiKey:key,fetch:async(_,init)=>{
+    signals.push(init.signal);headers.push(init.headers.authorization);
+    return {ok:true,json:async()=>data()};
+  }});
+  assert.equal(Object.isFrozen(provider),true);
+  assert.deepEqual(Object.keys(provider),["available","post"]);
+  await Promise.all([boundJudge({request,provider}),boundJudge({request,provider})]);
+  assert.deepEqual(headers,["Bearer "+key,"Bearer "+key]);
+  assert.notEqual(signals[0],signals[1]);
+  let otherCalls=0;
+  const other=bindJev({apiKey:"other-synthetic-key",fetch:async(_,init)=>{
+    otherCalls++;assert.equal(init.headers.authorization,"Bearer other-synthetic-key");
+    return {ok:true,json:async()=>data()};
+  }});
+  await boundJudge({request,provider:other});assert.equal(otherCalls,1);
+});
+test("cancelling one bound call leaves its concurrent sibling and another binding alive",async()=>{
+  const controller=new AbortController();let release;
+  const provider=bindJev({apiKey:key,fetch:async(_,init)=>{
+    if(init.signal.aborted) throw Error("synthetic-abort-detail");
+    return new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>data()});});
+  }});
+  const first=boundJudge({request,provider,signal:controller.signal});
+  const sibling=boundJudge({request,provider});
+  const check=refuse(()=>first,"cancelled");controller.abort();await check;
+  release();await sibling;
+  await boundJudge({request,provider:bindJev({apiKey:key,fetch:async()=>({ok:true,json:async()=>data()})})});
+});
+test("native-style abort rejection cannot replace the caller cancellation cause",async()=>{
+  for(const body of [false,true]){
+    const controller=new AbortController();let calls=0;
+    const provider=bindJev({apiKey:key,fetch:async(_,init)=>{
+      calls++;
+      const pending=()=>new Promise((_,reject)=>{
+        init.signal.addEventListener("abort",()=>reject(Error("synthetic-abort-canary")),{once:true});
+      });
+      return body?{ok:true,json:pending}:pending();
+    }});
+    const result=boundJudge({request,provider,signal:controller.signal});
+    const check=refuse(()=>result,"cancelled");
+    await Promise.resolve();await Promise.resolve();controller.abort();await check;
+    assert.equal(calls,1);
+  }
 });

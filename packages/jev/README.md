@@ -8,7 +8,11 @@ Intentionally narrow subset: string `text` and `question` fields; choice questio
 nix build .#jev
 ```
 
-## Usage
+## Legacy compatibility usage
+
+The envctl examples below document the older auxiliary interface, not current
+normal application acceptance. The target owner supplies an opaque credential
+through its approved one-child entry; this package does not acquire or decrypt it.
 
 Set `ENVS_BUNDLE`, `SOPS` and `AGE_KEY_FILE` to absolute paths for the envs auth bundle, sops executable and age identity:
 
@@ -56,16 +60,24 @@ The installed artifact requires `jev-api`; the selected envs environment must su
 
 ## Worker-compatible named-choice provider
 
-The separate `jev-worker-esm` output is a self-contained ES module, not the CLI.
+CLI and Worker adapters share one credential-bound auth/HTTP core. The
+`jev-worker-esm` output is a self-contained completed ES module, not the CLI.
+`bindJev({apiKey, fetch?})` is the only binder: a frozen capability with
+non-secret `available` and `post`. Each target composition binds once; normal
+operations carry no key. Availability is not real authentication success.
+The old exported client per-call key interface remains a compatibility bridge;
+the CLI normal path does not use it. Legacy calls retain their absence of a
+new deadline; the batch adapter selects its existing ten-second deadline.
+Known raw transport exception details are not reflected by either adapter.
 The old CLI request/response shape and its strict probability validation remain
 unchanged. It has no application slot/action constants and no apps source input.
 
-`judgeNamedChoices({request, apiKey, fetch?, signal?})` receives:
+`judgeNamedChoices({request, provider, signal?})` receives:
 
 - `request.state`: an object supplied by the caller.
 - `request.questions`: a nonempty map of neutral names to
   `{instruction: string, options: {key: string}}` descriptors (2–255 choices).
-- An opaque credential and optional concrete fetch/cancellation binding.
+- The pre-bound capability and optional cancellation signal; no per-call key.
 
 It performs one POST for the whole named batch, with one ten-second deadline
 covering headers and body. The normalized result is
@@ -85,11 +97,15 @@ No retry occurs. Fixture tests are mechanical evidence, not live Jev success.
 ### Exact artifact handoff
 
 `nix build .#jev-worker-esm` produces one deterministic ZIP containing only
-`batch.mjs` and a manifest (`jev-provider/1`, `named-choices/1`, entry,
+`batch.mjs` (producer-bundled core and adapter) and a manifest
+(`jev-provider/1`, `named-choices/2`, entry,
 exports, empty import closure and the entry's byte length/SHA256).
 Consumers verify locator/digest/contract/merged proof before import; refusal
 must not fall back to source checkout, ambient resolution or a credential read.
-The entry input digest and a later bundled Worker digest are distinct.
+Source input digests, the completed ESM digest, and a later app Worker digest
+are distinct. Provenance records the core, batch adapter and assembly definition
+as source inputs, never claims that bundled bytes equal source bytes. Old
+`named-choices/1` assets are retained and are not silently accepted as /2.
 
 The narrow `jev-provider-release.yml` verifies the actual ZIP entry, preserves
 old CLI tests, and reuses unchanged reviewed-merge proof/selftest/workflow lint.

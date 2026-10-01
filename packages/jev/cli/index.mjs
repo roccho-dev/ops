@@ -1,4 +1,4 @@
-import { askJevNoul, askJevChoice, askJevScore, JevError, JevContractError } from "../src/client.mjs";
+import { askJevNoul, askJevChoice, askJevScore, bindJev, JevError, JevContractError } from "../src/client.mjs";
 
 // Exit codes: 0=success, 1=input/json error, 2=auth error, 3=provider error, 4=contract error, 5=internal/fatal
 const EXIT_SUCCESS = 0;
@@ -8,7 +8,7 @@ const EXIT_PROVIDER_ERROR = 3;
 const EXIT_CONTRACT_ERROR = 4;
 const EXIT_FATAL = 5;
 
-const apiKey = process.env.JEV_API_KEY;
+const provider = bindJev({ apiKey: process.env.JEV_API_KEY });
 
 async function main() {
   let input = "";
@@ -48,7 +48,7 @@ async function main() {
       throw new JevError("input_invalid", `Unknown request type: ${type}`);
     }
 
-    if (!apiKey) {
+    if (!provider.available) {
       throw new JevError("auth_missing", "JEV_API_KEY environment variable not set");
     }
 
@@ -57,8 +57,7 @@ async function main() {
       const { model, noul } = await askJevNoul({
         text,
         question,
-        apiKey,
-        fetch: globalThis.fetch,
+        provider,
       });
       result = { model, noul };
     } else if (type === "choice") {
@@ -66,8 +65,7 @@ async function main() {
         text,
         criteria,
         instructions: question,
-        apiKey,
-        fetch: globalThis.fetch,
+        provider,
       });
       result = { model, choice };
     } else if (type === "score") {
@@ -75,8 +73,7 @@ async function main() {
         text,
         criteria,
         instructions: question,
-        apiKey,
-        fetch: globalThis.fetch,
+        provider,
       });
       result = { model, score };
     }
