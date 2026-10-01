@@ -23,10 +23,10 @@ stdenvNoCC.mkDerivation {
     nativeBuildInputs = [ python3 ];
     dontBuild = true;
     installPhase = ''
-      python3 build/provider-artifact.py selftest --source src/batch.mjs
-      python3 build/provider-artifact.py assemble --source src/batch.mjs --out "$out"
+      python3 ${../../tools/jev-provider-artifact.py} selftest --source src/batch.mjs
+      python3 ${../../tools/jev-provider-artifact.py} assemble --source src/batch.mjs --out "$out"
       digest=$(cut -d' ' -f1 "$out/jev-provider.zip.sha256")
-      python3 build/provider-artifact.py verify --archive "$out/jev-provider.zip" --sha256 "$digest"
+      python3 ${../../tools/jev-provider-artifact.py} verify --archive "$out/jev-provider.zip" --sha256 "$digest"
     '';
   };
 

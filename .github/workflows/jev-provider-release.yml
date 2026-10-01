@@ -55,7 +55,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/jev-provider"
           cp "$out/jev-provider.zip" "$out/jev-provider.zip.sha256" "$RUNNER_TEMP/jev-provider/"
           digest="$(cut -d' ' -f1 "$out/jev-provider.zip.sha256")"
-          python3 packages/jev/build/provider-artifact.py verify --archive "$out/jev-provider.zip" --sha256 "$digest" --extract "$RUNNER_TEMP/jev-entry"
+          python3 tools/jev-provider-artifact.py verify --archive "$out/jev-provider.zip" --sha256 "$digest" --extract "$RUNNER_TEMP/jev-entry"
           nix shell --inputs-from . nixpkgs#nodejs -c env JEV_PROVIDER_ENTRY="$RUNNER_TEMP/jev-entry/batch.mjs" node --test packages/jev/tests/batch.test.mjs
       - name: Bind current canonical check and merged review proof
         if: env.PUBLISH == 'true'
@@ -90,8 +90,8 @@ jobs:
           merge_tree="$(git rev-parse HEAD^{tree})"
           dir="$RUNNER_TEMP/jev-provider"
           python3 packages/hayamimi-web/build/release-provenance.py proof --pr "$RUNNER_TEMP/pr.json" --reviews "$RUNNER_TEMP/reviews.json" --head-tree "$head_tree" --merge-sha "$EXACT_SHA" --merge-tree "$merge_tree" --out "$dir/merged-pr-proof.json"
-          python3 packages/jev/build/provider-artifact.py provenance --archive "$dir/jev-provider.zip" --proof "$dir/merged-pr-proof.json" --out "$dir/provenance.json" --sha "$EXACT_SHA" --tree "$merge_tree" --workflow-ref "$GITHUB_WORKFLOW_REF" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --root "$GITHUB_WORKSPACE"
-          python3 packages/jev/build/provider-artifact.py verify-release --dir "$dir" --sha "$EXACT_SHA"
+          python3 tools/jev-provider-artifact.py provenance --archive "$dir/jev-provider.zip" --proof "$dir/merged-pr-proof.json" --out "$dir/provenance.json" --sha "$EXACT_SHA" --tree "$merge_tree" --workflow-ref "$GITHUB_WORKFLOW_REF" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --root "$GITHUB_WORKSPACE"
+          python3 tools/jev-provider-artifact.py verify-release --dir "$dir" --sha "$EXACT_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: jev-provider-${{ github.event.pull_request.head.sha || github.sha }}
@@ -122,7 +122,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXACT_SHA"
           test "$(gh api "repos/$GITHUB_REPOSITORY/branches/proposals" --jq .commit.sha)" = "$EXACT_SHA"
           dir="$RUNNER_TEMP/jev-provider"
-          python3 packages/jev/build/provider-artifact.py verify-release --dir "$dir" --sha "$EXACT_SHA"
+          python3 tools/jev-provider-artifact.py verify-release --dir "$dir" --sha "$EXACT_SHA"
           pr="$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/jev-provider/merged-pr-proof.json"))["pr_number"])')"
           gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" > "$RUNNER_TEMP/current-pr.json"
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$pr/reviews?per_page=100" > "$RUNNER_TEMP/current-review-pages.json"
@@ -139,7 +139,7 @@ jobs:
             gh release create "$tag" "$dir/jev-provider.zip" "$dir/jev-provider.zip.sha256" "$dir/merged-pr-proof.json" "$dir/provenance.json" --repo "$GITHUB_REPOSITORY" --target "$EXACT_SHA" --latest=false --title "$tag" --notes 'Worker-compatible named-choice provider; reviewed source, not live-provider evidence.'
           fi
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/jev-readback"
-          python3 packages/jev/build/provider-artifact.py verify-release --dir "$RUNNER_TEMP/jev-readback" --sha "$EXACT_SHA"
+          python3 tools/jev-provider-artifact.py verify-release --dir "$RUNNER_TEMP/jev-readback" --sha "$EXACT_SHA"
           for name in jev-provider.zip jev-provider.zip.sha256 merged-pr-proof.json provenance.json; do
             cmp "$dir/$name" "$RUNNER_TEMP/jev-readback/$name"
           done

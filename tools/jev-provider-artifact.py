@@ -110,7 +110,7 @@ def provenance(archive, proof_path, out, sha, tree, workflow_ref, run_id, run_at
               "producer": {"workflow_ref": workflow_ref, "run_id": run_id, "run_attempt": run_attempt},
               "locator": f"https://github.com/roccho-dev/ops/releases/download/jev-provider-{sha}/jev-provider.zip",
               "inputDigests": {name: digest((root / name).read_bytes()) for name in
-                               ("flake.lock", "packages/jev/src/batch.mjs", "packages/jev/build/provider-artifact.py")},
+                               ("flake.lock", "packages/jev/src/batch.mjs", "tools/jev-provider-artifact.py")},
               "cross_host_bytes_reproducible": False,
               "contract": CONTRACT, "artifact": {"name": "jev-provider.zip", "bytes": len(payload), "sha256": digest(payload)},
               "manifestSha256": digest((json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()),
@@ -137,7 +137,7 @@ def verify_release(directory, sha):
     require(record.get("manifestSha256") == digest((json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()), "manifest_mismatch")
     require(record.get("locator") == f"https://github.com/roccho-dev/ops/releases/download/jev-provider-{sha}/jev-provider.zip"
             and record.get("cross_host_bytes_reproducible") is False, "provenance_invalid")
-    require(set(record.get("inputDigests", {})) == {"flake.lock", "packages/jev/src/batch.mjs", "packages/jev/build/provider-artifact.py"}
+    require(set(record.get("inputDigests", {})) == {"flake.lock", "packages/jev/src/batch.mjs", "tools/jev-provider-artifact.py"}
             and all(re.fullmatch(r"[0-9a-f]{64}", v) for v in record["inputDigests"].values()), "provenance_invalid")
     require(manifest["files"][0]["sha256"] == record["inputDigests"]["packages/jev/src/batch.mjs"], "source_identity_mismatch")
 
@@ -167,7 +167,7 @@ def selftest(source):
             else:
                 raise Refusal("selftest_failure")
         fixture = out / "source-fixture"
-        for name, value in {"flake.lock": b"{}", "packages/jev/src/batch.mjs": data, "packages/jev/build/provider-artifact.py": pathlib.Path(__file__).read_bytes()}.items():
+        for name, value in {"flake.lock": b"{}", "packages/jev/src/batch.mjs": data, "tools/jev-provider-artifact.py": pathlib.Path(__file__).read_bytes()}.items():
             path = fixture / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(value)
