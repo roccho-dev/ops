@@ -27,6 +27,7 @@ export function assertIsolatedPublisherPaths(workflow, filename) {
   if (!products) return;
   const events = workflow.on;
   need(events && typeof events === "object" && !Array.isArray(events), `${filename}: explicit events required`);
+  need(same(Object.keys(events), ["pull_request", "push", "workflow_dispatch"]), `${filename}: event set differs`);
   need(Object.hasOwn(events, "workflow_dispatch"), `${filename}: manual entry missing`);
   for (const [event, expected] of [["pull_request", [...products, filename]], ["push", products]]) {
     const filter = events[event];
@@ -34,6 +35,7 @@ export function assertIsolatedPublisherPaths(workflow, filename) {
     need(filter.paths.length === expected.length && same(filter.paths, expected), `${filename}: ${event} product paths differ`);
   }
   need(same(events.push.branches ?? [], ["proposals"]), `${filename}: product push branch differs`);
+  need(!Object.hasOwn(events.push,"branches-ignore"), `${filename}: push branch exclusion forbidden`);
 }
 
 // Deliberately bounded admission, not a general GitHub expression interpreter.
@@ -133,6 +135,8 @@ export function selftest() {
       w=>{w.on.push["paths-ignore"]=["unrelated/**"];},
       w=>{w.on.push.paths.pop();},
       w=>{delete w.on.workflow_dispatch;},
+      w=>{w.on.pull_request_target={};},
+      w=>{w.on.push["branches-ignore"]=["proposals"];},
     ];
     for (const mutate of mutations) {const w=structuredClone(isolated);mutate(w);assert.throws(()=>assertIsolatedPublisherPaths(w,filename));}
     // Bounded literal/prefix representatives, not a general GitHub glob engine.
@@ -173,7 +177,7 @@ export function selftest() {
   assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
   parity.jobs.materialize.steps.at(-1).env={TOKEN:"${{ secrets.TOKEN }}"};
   assert.ok(analyzeEffectWorkflow(parity,policy).issues.length);
-  return {positive:2,negative:cases.length+2,publisherIsolation:{positive:2,negative:16}};
+  return {positive:2,negative:cases.length+2,publisherIsolation:{positive:2,negative:20}};
 }
 
 export function check(root) {

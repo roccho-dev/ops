@@ -70,6 +70,7 @@
           cdp-tty = nixpkgs.legacyPackages.${system}.callPackage ./packages/cdp-tty { };
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
+          jev-worker-esm = packages.${system}.jev.workerESM;
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
             version = "0.1.0";
@@ -154,12 +155,23 @@
             in
             pkgs.runCommand "jev-test"
               {
-                nativeBuildInputs = [ pkgs.nodejs ];
+                nativeBuildInputs = [
+                  pkgs.nodejs
+                  pkgs.python3
+                  pkgs.yq-go
+                ];
               }
               ''
                 ${pkgs.nodejs}/bin/node --test ${self}/packages/jev-dispatcher/test.mjs
                 cd ${self}/packages/jev
                 ${pkgs.nodejs}/bin/node --test tests/*.test.mjs
+                JEV_PROVIDER_ENTRY=${
+                  packages.${system}.jev-worker-esm
+                }/batch.mjs ${pkgs.nodejs}/bin/node --test tests/batch.test.mjs
+                python3 build/provider-artifact.py selftest --source ${packages.${system}.jev-worker-esm}/batch.mjs
+                yq -o=json . ${self}/.github/workflows/jev-provider-release.yml | python3 ${self}/packages/hayamimi-web/build/check-release-workflow.py
+                python3 ${self}/packages/hayamimi-web/build/check-release-workflow.py --selftest
+                python3 ${self}/packages/hayamimi-web/build/release-provenance.py selftest
                 cd "$TMPDIR"
                 unset JEV_API_KEY
                 BIN=${packages.${system}.jev}/bin/jev

@@ -43,14 +43,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
           fetch-depth: 0
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
       - name: Verify portable complete lock
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          printf 'expected_commit=%s\nactual_commit=%s\n' "$EXPECTED_SHA" "$actual" > nix-flake-check.log
+          test "$actual" = "$EXPECTED_SHA"
           ! grep -Eq 'file:///home/|ssh://100\.' flake.lock
           before="$(sha256sum flake.lock | cut -d' ' -f1)"
           nix flake metadata --json >/dev/null
@@ -63,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           log="nix-flake-check.log"
-          if ! nix flake check --show-trace >"$log" 2>&1; then
+          if ! nix flake check --show-trace >>"$log" 2>&1; then
             tail -n 220 "$log" >&2
             exit 1
           fi

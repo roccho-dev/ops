@@ -1,0 +1,145 @@
+name: jev provider release
+on:
+  pull_request:
+    paths:
+      - 'packages/jev/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'ci.intent.v1.jsonl'
+      - '.github/workflows/jev-provider-release.yml'
+      - '.github/workflows/nix-check.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Verify exact source and existing release admission
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          printf 'expected_commit=%s\nactual_commit=%s\n' "$EXACT_SHA" "$actual"
+          test "$actual" = "$EXACT_SHA"
+          nix shell --inputs-from . nixpkgs#yq-go nixpkgs#python3 -c bash -c '
+            yq -o=json . .github/workflows/jev-provider-release.yml | python3 packages/hayamimi-web/build/check-release-workflow.py
+            python3 packages/hayamimi-web/build/check-release-workflow.py --selftest
+            python3 packages/hayamimi-web/build/release-provenance.py selftest'
+      - name: Build and execute the completed ESM, with old CLI regression
+        run: |
+          set -euo pipefail
+          before="$(sha256sum flake.lock | cut -d' ' -f1)"
+          out="$(nix build --no-link --print-out-paths -L .#jev-worker-esm)"
+          nix build --no-link -L .#checks.x86_64-linux.jev
+          test "$before" = "$(sha256sum flake.lock | cut -d' ' -f1)"
+          git diff --exit-code -- flake.lock
+          mkdir -p "$RUNNER_TEMP/jev-provider"
+          cp "$out/jev-provider.zip" "$out/jev-provider.zip.sha256" "$RUNNER_TEMP/jev-provider/"
+          digest="$(cut -d' ' -f1 "$out/jev-provider.zip.sha256")"
+          python3 packages/jev/build/provider-artifact.py verify --archive "$out/jev-provider.zip" --sha256 "$digest" --extract "$RUNNER_TEMP/jev-entry"
+          nix shell --inputs-from . nixpkgs#nodejs -c env JEV_PROVIDER_ENTRY="$RUNNER_TEMP/jev-entry/batch.mjs" node --test packages/jev/tests/batch.test.mjs
+      - name: Bind current canonical check and merged review proof
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/proposals" --jq .commit.sha)" = "$EXACT_SHA"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$EXACT_SHA&event=push&branch=proposals&per_page=100" > "$RUNNER_TEMP/canonical-runs.json"
+          python3 - "$RUNNER_TEMP/canonical-runs.json" "$EXACT_SHA" <<'PY'
+          import json,sys
+          rows=[r for r in json.load(open(sys.argv[1]))['workflow_runs'] if r['path']=='.github/workflows/nix-check.yml' and r['head_sha']==sys.argv[2] and r['event']=='push' and r['head_branch']=='proposals']
+          assert rows and rows[0]['status']=='completed' and rows[0]['conclusion']=='success'
+          print('canonical_nix_run='+str(rows[0]['id']))
+          PY
+          gh api "repos/$GITHUB_REPOSITORY/commits/$EXACT_SHA/pulls" > "$RUNNER_TEMP/associated.json"
+          pr="$(python3 - "$RUNNER_TEMP/associated.json" "$EXACT_SHA" <<'PY'
+          import json,sys
+          rows=[p for p in json.load(open(sys.argv[1])) if p.get('merged_at') and p['base']['ref']=='proposals' and p.get('merge_commit_sha')==sys.argv[2]]
+          assert len(rows)==1
+          print(rows[0]['number'])
+          PY
+          )"
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" > "$RUNNER_TEMP/pr.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$pr/reviews?per_page=100" > "$RUNNER_TEMP/review-pages.json"
+          python3 - "$RUNNER_TEMP/review-pages.json" "$RUNNER_TEMP/reviews.json" <<'PY'
+          import json,sys
+          json.dump([r for page in json.load(open(sys.argv[1])) for r in page],open(sys.argv[2],'w'))
+          PY
+          head="$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/pr.json"))["head"]["sha"])')"
+          head_tree="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head" --jq .commit.tree.sha)"
+          merge_tree="$(git rev-parse HEAD^{tree})"
+          dir="$RUNNER_TEMP/jev-provider"
+          python3 packages/hayamimi-web/build/release-provenance.py proof --pr "$RUNNER_TEMP/pr.json" --reviews "$RUNNER_TEMP/reviews.json" --head-tree "$head_tree" --merge-sha "$EXACT_SHA" --merge-tree "$merge_tree" --out "$dir/merged-pr-proof.json"
+          python3 packages/jev/build/provider-artifact.py provenance --archive "$dir/jev-provider.zip" --proof "$dir/merged-pr-proof.json" --out "$dir/provenance.json" --sha "$EXACT_SHA" --tree "$merge_tree" --workflow-ref "$GITHUB_WORKFLOW_REF" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --root "$GITHUB_WORKSPACE"
+          python3 packages/jev/build/provider-artifact.py verify-release --dir "$dir" --sha "$EXACT_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: jev-provider-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/jev-provider/
+          if-no-files-found: error
+  publish:
+    needs: build-test
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: jev-provider-${{ github.sha }}
+          path: ${{ runner.temp }}/jev-provider
+      - name: Revalidate current review, publish fixed set, and byte-compare readback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXACT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/proposals" --jq .commit.sha)" = "$EXACT_SHA"
+          dir="$RUNNER_TEMP/jev-provider"
+          python3 packages/jev/build/provider-artifact.py verify-release --dir "$dir" --sha "$EXACT_SHA"
+          pr="$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/jev-provider/merged-pr-proof.json"))["pr_number"])')"
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" > "$RUNNER_TEMP/current-pr.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls/$pr/reviews?per_page=100" > "$RUNNER_TEMP/current-review-pages.json"
+          python3 - "$RUNNER_TEMP/current-review-pages.json" "$RUNNER_TEMP/current-reviews.json" <<'PY'
+          import json,sys
+          json.dump([r for page in json.load(open(sys.argv[1])) for r in page],open(sys.argv[2],'w'))
+          PY
+          head="$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/current-pr.json"))["head"]["sha"])')"
+          head_tree="$(gh api "repos/$GITHUB_REPOSITORY/commits/$head" --jq .commit.tree.sha)"
+          python3 packages/hayamimi-web/build/release-provenance.py proof --pr "$RUNNER_TEMP/current-pr.json" --reviews "$RUNNER_TEMP/current-reviews.json" --head-tree "$head_tree" --merge-sha "$EXACT_SHA" --merge-tree "$(git rev-parse HEAD^{tree})" --out "$RUNNER_TEMP/current-proof.json"
+          cmp "$RUNNER_TEMP/current-proof.json" "$dir/merged-pr-proof.json"
+          tag="jev-provider-$EXACT_SHA"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" "$dir/jev-provider.zip" "$dir/jev-provider.zip.sha256" "$dir/merged-pr-proof.json" "$dir/provenance.json" --repo "$GITHUB_REPOSITORY" --target "$EXACT_SHA" --latest=false --title "$tag" --notes 'Worker-compatible named-choice provider; reviewed source, not live-provider evidence.'
+          fi
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/jev-readback"
+          python3 packages/jev/build/provider-artifact.py verify-release --dir "$RUNNER_TEMP/jev-readback" --sha "$EXACT_SHA"
+          for name in jev-provider.zip jev-provider.zip.sha256 merged-pr-proof.json provenance.json; do
+            cmp "$dir/$name" "$RUNNER_TEMP/jev-readback/$name"
+          done
