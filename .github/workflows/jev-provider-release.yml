@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'packages/jev/**'
+      - 'tools/jev-provider-artifact.py'
       - 'flake.nix'
       - 'flake.lock'
       - 'ci.intent.v1.jsonl'

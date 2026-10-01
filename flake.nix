@@ -168,7 +168,9 @@
                 JEV_PROVIDER_ENTRY=${
                   packages.${system}.jev-worker-esm
                 }/batch.mjs ${pkgs.nodejs}/bin/node --test tests/batch.test.mjs
-                python3 ${self}/tools/jev-provider-artifact.py selftest --source ${packages.${system}.jev-worker-esm}/batch.mjs
+                python3 ${self}/tools/jev-provider-artifact.py selftest --source ${
+                  packages.${system}.jev-worker-esm
+                }/batch.mjs
                 yq -o=json . ${self}/.github/workflows/jev-provider-release.yml | python3 ${self}/packages/hayamimi-web/build/check-release-workflow.py
                 python3 ${self}/packages/hayamimi-web/build/check-release-workflow.py --selftest
                 python3 ${self}/packages/hayamimi-web/build/release-provenance.py selftest
