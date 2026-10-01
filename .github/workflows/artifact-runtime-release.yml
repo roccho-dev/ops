@@ -6,14 +6,11 @@ on:
       - '.github/workflows/artifact-runtime-release.yml'
       - 'verification/artifact-runtime-publication/**'
       - 'verification/artifact-runtime-app/**'
-      - 'ci.intent.v1.jsonl'
   push:
     branches: [proposals]
     paths:
-      - '.github/workflows/artifact-runtime-release.yml'
       - 'verification/artifact-runtime-publication/**'
       - 'verification/artifact-runtime-app/**'
-      - 'ci.intent.v1.jsonl'
   workflow_dispatch:
 
 permissions:

@@ -53,3 +53,57 @@ Response: `{"model":"...","score":{"type":"score","score":1.05,"legend":{"0":"lo
 ## Credentials
 
 The installed artifact requires `jev-api`; the selected envs environment must supply its binding. `envctl` injects `JEV_API_KEY` into the CLI child process. Installing or merging this package does not provision a credential. Pass no key in arguments or stdin.
+
+## Worker-compatible named-choice provider
+
+The separate `jev-worker-esm` output is a self-contained ES module, not the CLI.
+The old CLI request/response shape and its strict probability validation remain
+unchanged. It has no application slot/action constants and no apps source input.
+
+`judgeNamedChoices({request, apiKey, fetch?, signal?})` receives:
+
+- `request.state`: an object supplied by the caller.
+- `request.questions`: a nonempty map of neutral names to
+  `{instruction: string, options: {key: string}}` descriptors (2–255 choices).
+- An opaque credential and optional concrete fetch/cancellation binding.
+
+It performs one POST for the whole named batch, with one ten-second deadline
+covering headers and body. The normalized result is
+`{answers: {name: {choice, confidence, probabilities?}}}`: no wire `type`,
+raw model, endpoint, header or credential is returned. Apps must independently
+check its own exact slot/choice meaning and retain its existing low-confidence
+no-change threshold; a confidence below 0.5 is not a provider contract error.
+Top-level provider extras and any model string remain accepted; unknown answer
+fields are refused. Probabilities remain optional/subset finite values,
+including finite values outside [0,1], independently of the unchanged CLI.
+
+Errors contain only a closed code: `auth_missing`, `input_invalid`,
+`provider_unavailable`, `provider_http_error`, `provider_invalid_response`,
+`provider_contract_error`, `provider_timeout`, or `cancelled`.
+No retry occurs. Fixture tests are mechanical evidence, not live Jev success.
+
+### Exact artifact handoff
+
+`nix build .#jev-worker-esm` produces one deterministic ZIP containing only
+`batch.mjs` and a manifest (`jev-provider/1`, `named-choices/1`, entry,
+exports, empty import closure and the entry's byte length/SHA256).
+Consumers verify locator/digest/contract/merged proof before import; refusal
+must not fall back to source checkout, ambient resolution or a credential read.
+The entry input digest and a later bundled Worker digest are distinct.
+
+The narrow `jev-provider-release.yml` verifies the actual ZIP entry, preserves
+old CLI tests, and reuses unchanged reviewed-merge proof/selftest/workflow lint.
+Only an explicit proposals publish dispatch can create
+`jev-provider-<exact-merge-SHA>` with exactly four assets:
+
+- `jev-provider.zip`
+- `jev-provider.zip.sha256`
+- `merged-pr-proof.json`
+- `provenance.json`
+
+Publication requires the current canonical push nix-check, latest nondismissed
+exact-head Green review and equal reviewed/merged trees. Its write job performs
+no Nix build and compares a re-download byte-for-byte; existing assets are never
+overwritten. This is unsigned, shared-principal review/provenance evidence,
+not a provider signature or host immutability guarantee. A PR build is not
+formal supply. Old artifacts/real receipts do not transfer to a new identity.

@@ -1,4 +1,9 @@
-{ stdenvNoCC, nodejs, makeWrapper }:
+{
+  stdenvNoCC,
+  nodejs,
+  makeWrapper,
+  python3,
+}:
 
 stdenvNoCC.mkDerivation {
   pname = "jev";
@@ -6,7 +11,24 @@ stdenvNoCC.mkDerivation {
 
   src = ./.;
 
-  nativeBuildInputs = [ nodejs makeWrapper ];
+  nativeBuildInputs = [
+    nodejs
+    makeWrapper
+  ];
+
+  passthru.workerESM = stdenvNoCC.mkDerivation {
+    pname = "jev-worker-esm";
+    version = "1.0.0";
+    src = ./.;
+    nativeBuildInputs = [ python3 ];
+    dontBuild = true;
+    installPhase = ''
+      python3 ${../../tools/jev-provider-artifact.py} selftest --source src/batch.mjs
+      python3 ${../../tools/jev-provider-artifact.py} assemble --source src/batch.mjs --out "$out"
+      digest=$(cut -d' ' -f1 "$out/jev-provider.zip.sha256")
+      python3 ${../../tools/jev-provider-artifact.py} verify --archive "$out/jev-provider.zip" --sha256 "$digest"
+    '';
+  };
 
   installPhase = ''
     mkdir -p $out/lib
