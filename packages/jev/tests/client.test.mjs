@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { JevError, JevContractError, askJevNoul, askJevChoice, askJevScore } from "../src/client.mjs";
+import { JevError, JevContractError, askJevNoul, askJevChoice, askJevScore, bindJev } from "../src/client.mjs";
+
+test("ordinary legacy calls reuse one binding without per-call key or a new deadline", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let release, calls=0;
+  const provider=bindJev({apiKey:"bound-synthetic-key",fetch:async(_,init)=>{
+    calls++;assert.equal(init.headers.authorization,"Bearer bound-synthetic-key");
+    return new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>({
+      model:"legacy-model",answers:{live:{type:"noul",noul:.75}},
+    })});});
+  }});
+  const pending=askJevNoul({text:"fixture",question:"Question?",provider});
+  let settled=false;pending.then(()=>{settled=true;},()=>{settled=true;});
+  t.mock.timers.tick(20_000);await Promise.resolve();assert.equal(settled,false);
+  release();assert.deepEqual(await pending,{model:"legacy-model",noul:.75});
+  assert.equal(calls,1);
+});
+test("legacy transport errors do not reflect raw key-bearing exception messages", async () => {
+  const provider=bindJev({apiKey:"synthetic-key-canary",fetch:async()=>{throw Error("synthetic-key-canary");}});
+  await assert.rejects(()=>askJevNoul({text:"fixture",question:"Question?",provider}),
+    e=>e instanceof JevError&&e.code==="provider_unreachable"&&!e.message.includes("canary"));
+});
 
 test("missing api key throws auth_missing", async () => {
   try {

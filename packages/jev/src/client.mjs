@@ -1,7 +1,8 @@
 // Generic Jev client: caller supplies text and question, we return typed result.
 // Injected fetch allows testing without network.
 
-const JEV_PROVIDER_URL = "https://api.typesafe.ai/v1/systemone";
+import { bindJev, JevTransportError } from "./core.mjs";
+export { bindJev } from "./core.mjs";
 const JEV_MODEL = "jev-latest";
 
 export class JevError extends Error {
@@ -24,36 +25,18 @@ function validateModel(value) {
   return value;
 }
 
-async function fetchAndParseResponse(body, apiKey, fetchFn) {
-  let response;
-  try {
-    response = await fetchFn(JEV_PROVIDER_URL, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    throw new JevError("provider_unreachable", `Failed to reach provider: ${e.message}`);
-  }
-
-  if (!response.ok) {
-    throw new JevError("provider_error", `Provider returned ${response.status}`);
-  }
-
+async function fetchAndParseResponse(body, provider) {
   let data;
-  try {
-    data = await response.json();
-  } catch (e) {
-    throw new JevError("provider_invalid_response", `Failed to parse provider response: ${e.message}`);
+  try { data = await provider.post(body); }
+  catch (error) {
+    if (error instanceof JevTransportError) {
+      if (error.code === "provider_http_error") throw new JevError("provider_error", `Provider returned ${error.status}`);
+      if (error.code === "provider_invalid_response") throw new JevError("provider_invalid_response", "Failed to parse provider response");
+      throw new JevError("provider_unreachable", "Failed to reach provider");
+    }
+    throw error;
   }
-
-  if (!data || typeof data !== "object") {
-    throw new JevContractError("provider response must be object");
-  }
-
+  if (!data || typeof data !== "object") throw new JevContractError("provider response must be object");
   return data;
 }
 
@@ -132,18 +115,19 @@ function validateScoreAnswer(answer, numLevels, criteria) {
   return answer;
 }
 
-export async function askJevNoul({ text, question, apiKey, fetch: injectedFetch }) {
+export async function askJevNoul({ text, question, apiKey, fetch: injectedFetch, provider }) {
   if (typeof text !== "string" || text.trim().length === 0) {
     throw new JevError("input_invalid", "text must be non-empty string");
   }
   if (typeof question !== "string" || question.trim().length === 0) {
     throw new JevError("input_invalid", "question must be non-empty string");
   }
-  if (typeof apiKey !== "string" || apiKey.length === 0) {
+  // Per-call key input is a compatibility bridge; normal wrappers pass a bound provider.
+  provider ??= bindJev({ apiKey, fetch: injectedFetch || globalThis.fetch });
+  if (!provider.available) {
     throw new JevError("auth_missing", "JEV_API_KEY not provided or empty");
   }
 
-  const fetchFn = injectedFetch || globalThis.fetch;
   const body = {
     model: JEV_MODEL,
     state: text,
@@ -155,14 +139,14 @@ export async function askJevNoul({ text, question, apiKey, fetch: injectedFetch 
     },
   };
 
-  const data = await fetchAndParseResponse(body, apiKey, fetchFn);
+  const data = await fetchAndParseResponse(body, provider);
   const model = validateModel(data.model);
   const noul = validateNoulAnswer(data.answers?.live);
 
   return { model, noul };
 }
 
-export async function askJevChoice({ text, criteria, instructions, apiKey, fetch: injectedFetch }) {
+export async function askJevChoice({ text, criteria, instructions, apiKey, fetch: injectedFetch, provider }) {
   if (typeof text !== "string" || text.trim().length === 0) {
     throw new JevError("input_invalid", "text must be non-empty string");
   }
@@ -181,11 +165,12 @@ export async function askJevChoice({ text, criteria, instructions, apiKey, fetch
   if (typeof instructions !== "string" || instructions.trim().length === 0) {
     throw new JevError("input_invalid", "instructions must be non-empty string");
   }
-  if (typeof apiKey !== "string" || apiKey.length === 0) {
+  // Per-call key input is a compatibility bridge; normal wrappers pass a bound provider.
+  provider ??= bindJev({ apiKey, fetch: injectedFetch || globalThis.fetch });
+  if (!provider.available) {
     throw new JevError("auth_missing", "JEV_API_KEY not provided or empty");
   }
 
-  const fetchFn = injectedFetch || globalThis.fetch;
   const body = {
     model: JEV_MODEL,
     state: text,
@@ -198,14 +183,14 @@ export async function askJevChoice({ text, criteria, instructions, apiKey, fetch
     },
   };
 
-  const data = await fetchAndParseResponse(body, apiKey, fetchFn);
+  const data = await fetchAndParseResponse(body, provider);
   const model = validateModel(data.model);
   const choice = validateChoiceAnswer(data.answers?.live, optionKeys);
 
   return { model, choice };
 }
 
-export async function askJevScore({ text, criteria, instructions, apiKey, fetch: injectedFetch }) {
+export async function askJevScore({ text, criteria, instructions, apiKey, fetch: injectedFetch, provider }) {
   if (typeof text !== "string" || text.trim().length === 0) {
     throw new JevError("input_invalid", "text must be non-empty string");
   }
@@ -220,11 +205,12 @@ export async function askJevScore({ text, criteria, instructions, apiKey, fetch:
   if (typeof instructions !== "string" || instructions.trim().length === 0) {
     throw new JevError("input_invalid", "instructions must be non-empty string");
   }
-  if (typeof apiKey !== "string" || apiKey.length === 0) {
+  // Per-call key input is a compatibility bridge; normal wrappers pass a bound provider.
+  provider ??= bindJev({ apiKey, fetch: injectedFetch || globalThis.fetch });
+  if (!provider.available) {
     throw new JevError("auth_missing", "JEV_API_KEY not provided or empty");
   }
 
-  const fetchFn = injectedFetch || globalThis.fetch;
   const body = {
     model: JEV_MODEL,
     state: text,
@@ -237,7 +223,7 @@ export async function askJevScore({ text, criteria, instructions, apiKey, fetch:
     },
   };
 
-  const data = await fetchAndParseResponse(body, apiKey, fetchFn);
+  const data = await fetchAndParseResponse(body, provider);
   const model = validateModel(data.model);
   const score = validateScoreAnswer(data.answers?.live, criteria.length, criteria);
 
