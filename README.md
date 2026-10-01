@@ -56,9 +56,11 @@ Structural validation preserves blocked packets; strict validation fails when an
 package is blocked.
 
 `ops-gov-package-output` projects those exact receipts without claiming final
-admission. `.github/workflows/gov-package-validation.yml` runs contract selftests on
-ordinary changes and executes a real exact release only through an explicit
-content-addressed `workflow_dispatch` input.
+admission. The workflow that ran its contract selftests on ordinary changes and an
+exact release through an explicit content-addressed `workflow_dispatch` input is
+paused, unchanged, at `.github/workflows-paused/gov-package-validation.yml`
+(`DEFERRED_NOT_RUN`, governance#150): it does not run, so those selftests are not
+currently executed in CI.
 
 GitHub workflows are replaceable compute/effect adapters, not authority.
 

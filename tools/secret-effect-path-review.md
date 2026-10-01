@@ -7,8 +7,8 @@ One CI intent inventory and one parsed-YAML checker remain. All retained effect 
 | Entry | Disposition | Evidence / retained responsibility |
 |---|---|---|
 | artifact-runtime-static-host | Keep and fix | ops#230 owns a distinct content-addressed Artifact Runtime endpoint. Its secret-free PR source parity remains, explicitly separated from owner-command effect. |
-| mobile-agent-preset-static-host | Keep and fix | ops#242 owns the exact immutable existing-preset App publication. Remove its unreachable mutable bootstrap alternative; no replacement App is invented. |
-| mobile-agent-url-only-runtime | Keep and fix | Current deploy-once hosted compiler; builds the business-model presentation, tests 2/3/4 actors and publishes the compiler as well. |
+| mobile-agent-preset-static-host | Retire active workflow | Its bootstrap exception (ops#233) expired on 2026-09-30 and was not renewed. The owner-commanded exact-Release Pages deploy entry is removed and not replaced. The existing Releases, site and `verification/mobile-agent-preset-app` sources are kept. |
+| mobile-agent-url-only-runtime | Retire active workflow | Its bootstrap exception (ops#293) expired on 2026-09-30 and was not renewed. The deploy-once hosted compiler entry is removed, so nothing produces a new `accepted/mobile-agent-public-url` receipt; `mobile-agent-public-url-required` is kept and cannot pass for a new head until a producer exists. `verification/mobile-agent-url-only-runtime` sources and existing Releases are kept. |
 | mobile-agent-business-model-public | Retire active workflow | Older one-file publisher overlaps the presentation/test responsibility already executed by URL-only build.py and cannot coexist with its hosted compiler without overwrite. Keep source tests and immutable Release evidence. |
 | mobile-agent-seq-comment-ingress | Retire active workflow | One-shot historical comment-chunk transport, not a permanent consumer runtime. Keep Carrier/browser evidence and current preset/runtime paths; do not resurrect it for a safety checkbox. |
 
