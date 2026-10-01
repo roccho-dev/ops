@@ -43,7 +43,7 @@ export const PROSPECTIVE_JOB = 'lane-a-prospective-provider';
 export const PROSPECTIVE_CONTROL = '3ec15b2b473be9465fa32d94851c8ab09d1c62b9';
 export const GO_MARKER = 'LANE-A-P-GO-v1';
 export const RELEASE_MARKER = 'LANE-A-VERIFIED-RELEASE-v1';
-export const formalRunTitle = label => `lane-a-formal-${label}`;
+export const formalRunTitle = label => label;
 const providerIdentity = p => p?.version === PLAN.version && p.manifestSha256 === PLAN.manifestSha256
   && p.runtimeFiles?.archiveSha256 === PLAN.archiveSha256 && p.runtimeFiles.binarySha256 === PLAN.binarySha256
   && p.loaded?.models?.filter(x => x.name === PLAN.model && x.digest === PLAN.manifestSha256

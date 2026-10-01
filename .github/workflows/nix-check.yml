@@ -1,5 +1,5 @@
 name: nix-check
-run-name: ${{ github.event.action == 'labeled' && startsWith(github.event.label.name, 'lane-a-go-') && format('lane-a-formal-{0}', github.event.label.name) || github.event.pull_request.title || github.event.head_commit.message }}
+run-name: ${{ github.event.label.name || github.event.pull_request.title || github.event.head_commit.message }}
 
 on:
   pull_request:
