@@ -40,6 +40,10 @@ const hex40 = s => typeof s === 'string' && /^[a-f0-9]{40}$/u.test(s);
 const hex64 = s => typeof s === 'string' && /^[a-f0-9]{64}$/u.test(s);
 const text = s => typeof s === 'string' && s.trim().length > 0;
 export const PROSPECTIVE_JOB = 'lane-a-prospective-provider';
+export const PROSPECTIVE_CONTROL = '3ec15b2b473be9465fa32d94851c8ab09d1c62b9';
+export const GO_MARKER = 'LANE-A-P-GO-v1';
+export const RELEASE_MARKER = 'LANE-A-VERIFIED-RELEASE-v1';
+export const formalRunTitle = label => `lane-a-formal-${label}`;
 const providerIdentity = p => p?.version === PLAN.version && p.manifestSha256 === PLAN.manifestSha256
   && p.runtimeFiles?.archiveSha256 === PLAN.archiveSha256 && p.runtimeFiles.binarySha256 === PLAN.binarySha256
   && p.loaded?.models?.filter(x => x.name === PLAN.model && x.digest === PLAN.manifestSha256
@@ -250,24 +254,108 @@ function readProspectivePacket(path, expectedSha256) {
   return { bytes, prepared };
 }
 
-export function assertProspectiveAdmission({ repository, eventName, refName, attempt, evaluatorSha, actualHead,
-  packetSha256, expectedPacketSha256, packetId, goRef }) {
-  requireThat(repository === 'roccho-dev/ops' && eventName === 'workflow_dispatch'
-    && refName === 'proof/449-winnow-ci-relevance' && attempt === 1, 'PROSPECTIVE_EVENT_NOT_ADMITTED');
-  requireThat(hex40(evaluatorSha) && evaluatorSha === actualHead, 'PROSPECTIVE_EVALUATOR_MISMATCH');
-  requireThat(hex64(packetSha256) && packetSha256 === expectedPacketSha256 && text(packetId) && text(goRef),
-    'PROSPECTIVE_PACKET_NOT_ADMITTED');
+const commentHtml = id => `https://github.com/roccho-dev/ops/pull/450#issuecomment-${id}`;
+const exactIssueApi = 'https://api.github.com/repos/roccho-dev/ops/issues/450';
+const exactKeys = (value, keys) => same(Object.keys(value).sort(), [...keys].sort());
+
+function parseEnvelope(body, marker, keys) {
+  requireThat(text(body), 'FORMAL_RECORD_BODY_MISSING');
+  const prefix = `<!-- ${marker}\n`, suffix = '\n-->';
+  requireThat(body.startsWith(prefix) && body.endsWith(suffix), 'FORMAL_RECORD_MARKER_MISMATCH');
+  let value;
+  try { value = JSON.parse(body.slice(prefix.length, -suffix.length)); }
+  catch { throw new Error('FORMAL_RECORD_JSON_INVALID'); }
+  requireThat(value && typeof value === 'object' && !Array.isArray(value) && exactKeys(value, keys), 'FORMAL_RECORD_SCHEMA_MISMATCH');
+  return value;
 }
 
-export async function prospectiveBegin(out, packetPath, env = process.env) {
-  requireThat(env.GITHUB_REPOSITORY === 'roccho-dev/ops' && text(packetPath), 'PROSPECTIVE_EVENT_NOT_ADMITTED');
+async function publicComment(id, out, name) {
+  requireThat(Number.isSafeInteger(id) && id > 0, 'FORMAL_COMMENT_ID_INVALID');
+  const url = `https://api.github.com/repos/roccho-dev/ops/issues/comments/${id}`;
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30000),
+    headers: { accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' } });
+  const raw = await response.text();
+  writeFileSync(join(out, `${name}-comment-api.json`), raw, { flag: 'wx' });
+  requireThat(response.ok, `${name.toUpperCase()}_COMMENT_HTTP_${response.status}`);
+  const record = JSON.parse(raw);
+  requireThat(record.id === id && record.issue_url === exactIssueApi && record.html_url === commentHtml(id), 'FORMAL_COMMENT_SCOPE_MISMATCH');
+  requireThat(stamp(record.created_at) && record.created_at === record.updated_at, 'FORMAL_COMMENT_EDITED');
+  requireThat(text(record.body), 'FORMAL_RECORD_BODY_MISSING');
+  return record;
+}
+
+function strictBase64(value) {
+  requireThat(typeof value === 'string' && value.length > 0 && /^[A-Za-z0-9+/]+={0,2}$/u.test(value)
+    && value.length % 4 === 0, 'PACKET_BASE64_INVALID');
+  const bytes = Buffer.from(value, 'base64');
+  requireThat(bytes.toString('base64') === value, 'PACKET_BASE64_INVALID');
+  return bytes;
+}
+
+function activationCommentId(label) {
+  const match = /^lane-a-go-([1-9][0-9]*)$/u.exec(label ?? '');
+  requireThat(match && Number.isSafeInteger(Number(match[1])), 'PROSPECTIVE_LABEL_NOT_ADMITTED');
+  return Number(match[1]);
+}
+
+async function formalRunsReadback(env, out, headRef) {
+  requireThat(text(env.GH_TOKEN) && /^\d+$/u.test(env.GITHUB_RUN_ID ?? ''), 'RUN_HISTORY_UNAVAILABLE');
+  const url = `https://api.github.com/repos/roccho-dev/ops/actions/workflows/nix-check.yml/runs?event=pull_request&branch=${encodeURIComponent(headRef)}&per_page=100`;
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30000),
+    headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${env.GH_TOKEN}`, 'X-GitHub-Api-Version': '2022-11-28' } });
+  const raw = await response.text();
+  writeFileSync(join(out, 'formal-runs-api.json'), raw, { flag: 'wx' });
+  requireThat(response.ok, `RUN_HISTORY_HTTP_${response.status}`);
+  const data = JSON.parse(raw);
+  requireThat(Array.isArray(data.workflow_runs) && data.workflow_runs.length === data.total_count, 'RUN_HISTORY_INCOMPLETE');
+  return data;
+}
+
+export function assertProspectiveAdmission({ repository, eventName, action, pr, headRef, label, attempt,
+  evaluatorSha, eventHead, actualHead, baseSha, eventBase, workflowSha, actualWorkflowSha, goCommentId }) {
+  requireThat(repository === 'roccho-dev/ops' && eventName === 'pull_request' && action === 'labeled'
+    && pr === 450 && headRef === 'proof/449-winnow-ci-relevance' && attempt === 1, 'PROSPECTIVE_EVENT_NOT_ADMITTED');
+  requireThat(activationCommentId(label) === goCommentId, 'PROSPECTIVE_LABEL_NOT_ADMITTED');
+  requireThat(hex40(evaluatorSha) && evaluatorSha === eventHead && evaluatorSha === actualHead, 'PROSPECTIVE_EVALUATOR_MISMATCH');
+  requireThat(hex40(baseSha) && baseSha === eventBase && hex40(workflowSha) && workflowSha === actualWorkflowSha,
+    'PROSPECTIVE_HARNESS_MISMATCH');
+}
+
+export async function prospectiveBegin(out, env = process.env) {
+  requireThat(env.GITHUB_REPOSITORY === 'roccho-dev/ops', 'PROSPECTIVE_EVENT_NOT_ADMITTED');
   const event = read(env.GITHUB_EVENT_PATH), evaluator = prospectiveEvaluatorIdentity();
-  const packetSha256 = event.inputs?.a_packet_sha256, packetId = event.inputs?.a_packet_id, goRef = event.inputs?.a_go_ref;
-  const evaluatorSha = event.inputs?.a_evaluator_sha;
-  const { bytes, prepared } = readProspectivePacket(packetPath, packetSha256);
-  assertProspectiveAdmission({ repository: env.GITHUB_REPOSITORY, eventName: env.GITHUB_EVENT_NAME,
-    refName: env.GITHUB_REF_NAME, attempt: Number(env.GITHUB_RUN_ATTEMPT), evaluatorSha, actualHead: evaluator.headSha,
-    packetSha256: hash(bytes), expectedPacketSha256: packetSha256, packetId, goRef });
+  const label = event.label?.name, goCommentId = activationCommentId(label);
+  const goRecord = await publicComment(goCommentId, out, 'go');
+  const go = parseEnvelope(goRecord.body, GO_MARKER, [
+    'control', 'releaseCommentId', 'releaseCommentUrl', 'packetSha256', 'evaluatorSha', 'baseSha', 'workflowSha',
+    'attempt', 'effectAuthority', 'skipAuthority'
+  ]);
+  requireThat(go.control === PROSPECTIVE_CONTROL && go.attempt === 1 && go.effectAuthority === false && go.skipAuthority === false,
+    'GO_AUTHORITY_MISMATCH');
+  requireThat(Number.isSafeInteger(go.releaseCommentId) && go.releaseCommentId > 0
+    && go.releaseCommentUrl === commentHtml(go.releaseCommentId) && hex64(go.packetSha256), 'GO_RELEASE_REFERENCE_INVALID');
+  const releaseRecord = await publicComment(go.releaseCommentId, out, 'release');
+  const release = parseEnvelope(releaseRecord.body, RELEASE_MARKER, ['control', 'packetId', 'packetSha256', 'packetBase64']);
+  requireThat(release.control === PROSPECTIVE_CONTROL && text(release.packetId) && hex64(release.packetSha256)
+    && release.packetSha256 === go.packetSha256, 'RELEASE_PACKET_MISMATCH');
+  requireThat(Date.parse(releaseRecord.created_at) <= Date.parse(goRecord.created_at), 'RELEASE_AFTER_GO');
+  const bytes = strictBase64(release.packetBase64);
+  requireThat(hash(bytes) === release.packetSha256, 'PACKET_BYTES_MISMATCH');
+  const packetPath = join(out, 'packet.json');
+  writeFileSync(packetPath, bytes, { flag: 'wx' });
+  const { prepared } = readProspectivePacket(packetPath, release.packetSha256);
+  assertProspectiveAdmission({ repository: env.GITHUB_REPOSITORY, eventName: env.GITHUB_EVENT_NAME, action: event.action,
+    pr: event.number, headRef: event.pull_request?.head?.ref, label, attempt: Number(env.GITHUB_RUN_ATTEMPT),
+    evaluatorSha: go.evaluatorSha, eventHead: event.pull_request?.head?.sha, actualHead: evaluator.headSha,
+    baseSha: go.baseSha, eventBase: event.pull_request?.base?.sha, workflowSha: go.workflowSha,
+    actualWorkflowSha: env.GITHUB_WORKFLOW_SHA, goCommentId });
+  const runHistory = await formalRunsReadback(env, out, event.pull_request.head.ref);
+  const title = formalRunTitle(label);
+  const formalRuns = runHistory.workflow_runs.filter(run => run.display_title === title);
+  const currentRuns = formalRuns.filter(run => String(run.id) === env.GITHUB_RUN_ID);
+  const priorRuns = formalRuns.filter(run => String(run.id) !== env.GITHUB_RUN_ID);
+  requireThat(priorRuns.length === 0 && currentRuns.length <= 1
+    && currentRuns.every(run => run.run_attempt === 1 && run.head_sha === evaluator.headSha), 'FORMAL_ACTIVATION_REUSED');
   const jobs = await jobsReadback(env, out);
   const matches = jobs.jobs.filter(x => x.name === PROSPECTIVE_JOB && x.run_attempt === 1
     && String(x.run_id) === env.GITHUB_RUN_ID);
@@ -275,18 +363,23 @@ export async function prospectiveBegin(out, packetPath, env = process.env) {
   const job = matches[0];
   requireThat(job.head_sha === evaluator.headSha && job.runner_name === env.RUNNER_NAME
     && job.runner_id > 0 && same(job.labels, ['ubuntu-24.04']), 'RUNNER_IDENTITY_MISMATCH');
-  writeFileSync(join(out, 'packet.json'), bytes, { flag: 'wx' });
   put(join(out, 'prepared.json'), prepared);
   put(join(out, 'start.json'), {
-    schema: 'ops.winnowProspectiveStart.v1', packetId, packetSha256, goRef,
+    schema: 'ops.winnowProspectiveStart.v2', packetId: release.packetId, packetSha256: release.packetSha256,
     inputSha256: prepared.inputSha256, requestSha256: prepared.requestSha256,
     evaluator, case: { baseSha: prepared.input.baseSha, headSha: prepared.input.headSha, treeSha: prepared.input.treeSha },
+    harness: { baseSha: go.baseSha, workflowSha: go.workflowSha },
+    activation: { label, formalRunTitle: title, goCommentId, goCommentUrl: commentHtml(goCommentId),
+      releaseCommentId: go.releaseCommentId, releaseCommentUrl: go.releaseCommentUrl,
+      goCreatedAt: goRecord.created_at, releaseCreatedAt: releaseRecord.created_at,
+      goBody: goRecord.body, goBodySha256: hash(goRecord.body),
+      releaseBody: releaseRecord.body, releaseBodySha256: hash(releaseRecord.body) },
     candidateIds: prepared.input.candidates.map(row => row.id), jobName: PROSPECTIVE_JOB, jobId: job.id,
     runId: job.run_id, attempt: 1, providerTimeoutMs: PLAN.providerTimeoutMs, timeoutSeconds: 360,
     start: now(), runner: { id: job.runner_id, name: job.runner_name, labels: job.labels,
       hostname: hostname(), os: env.RUNNER_OS, arch: env.RUNNER_ARCH,
       logicalCpus: cpus().length, cpuModel: cpus()[0]?.model ?? null, memoryBytes: totalmem() },
-    authority: false, effect: false, skipAuthority: false,
+    authority: false, effect: false, skipAuthority: false, comparisonOwner: 'product-r',
   });
 }
 
@@ -364,7 +457,7 @@ async function main() {
     if (mode === 'begin') await begin(member, out);
     if (mode === 'run') process.exitCode = execute(member, out);
     if (mode === 'terminal') terminal(member, out);
-    if (mode === 'prospective-begin') await prospectiveBegin(out, member);
+    if (mode === 'prospective-begin') await prospectiveBegin(out);
     if (mode === 'prospective-run') process.exitCode = prospectiveRun(out, member);
     if (mode === 'prospective-terminal') prospectiveTerminal(out);
     if (mode === 'join') {
