@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { captureIsolation } from "../capture-isolation.mjs";
+import { main } from "../entry.mjs";
 import { runTargetRuntime } from "../lib.mjs";
 import { sanitizedEnv, sha256File } from "../modules/core.mjs";
 import { admitProduct, validateArtifact, validateIsolationVerdict, validateProjectionReceipt, validateWorkersTarget } from "../modules/input-contracts.mjs";
@@ -164,6 +165,15 @@ for (const [name, mutate, message] of [
   assert.equal(validateArtifact(root, APPS_SHA, PIN.manifestSha256).manifest.runtime.main_module, "worker/worker.mjs");
   const manifestSha256 = mutate(root);
   assert.throws(() => validateArtifact(root, APPS_SHA, manifestSha256), message);
+});
+test("an unversioned or near-miss installed revision refuses a request before the request file is read", () => {
+  const missing = path.join(tmpdir(), "voice-ui-no-such-request.json");
+  assert.equal(existsSync(missing), false);
+  for (const opsSha of ["working-tree", OPS_SHA.toUpperCase().replace(/1/g, "A"), "1".repeat(39), `${OPS_SHA}-dirty`, undefined])
+    assert.throws(() => main({ ...INSTALLED, opsSha }, "/nonexistent", ["--request", missing]),
+      /^Error: installed ops revision must be an exact 40-character lowercase SHA$/);
+  // With an exact revision the same call gets as far as the file, so the order above is the revision guard's.
+  assert.throws(() => main({ ...INSTALLED, opsSha: OPS_SHA }, "/nonexistent", ["--request", missing]), /is unreadable/);
 });
 test("the Workers target is a bare approved https origin", () => {
   assert.equal(validateWorkersTarget({ ...TARGET }).url, TARGET.url);

@@ -30,6 +30,17 @@ assert.ok(runtimeRoot && product && path.isAbsolute(runtimeRoot) && path.isAbsol
   "usage: workers.test.mjs --runtime <root> --product <dir> [--acceptance-node <bin>] [--require-isolation]");
 const share = path.join(runtimeRoot, "share/voice-ui-target-runtime");
 const installed = JSON.parse(fs.readFileSync(path.join(share, "configuration.json"), "utf8"));
+// The installed revision is either an exact commit, or the honest sentinel of an evaluation that has no self.rev
+// (for example an input-overridden flake check). Decided here, before isolation, product or any fixture request:
+// nothing else is accepted, and the acceptance gate needs the exact one. Without an exact revision the private
+// harness uses a never-authority context SHA, which is test data and never the installed or source identity.
+const NEVER_AUTHORITY_OPS_SHA = "0".repeat(40);
+const exactRevision = typeof installed.opsSha === "string" && /^[0-9a-f]{40}$/.test(installed.opsSha);
+assert.ok(exactRevision || installed.opsSha === "working-tree", `unsupported installed ops revision: ${JSON.stringify(installed.opsSha)}`);
+assert.ok(exactRevision || acceptanceNode === undefined, "the acceptance gate needs an exact installed ops revision");
+const revision = exactRevision
+  ? { grade: "EXACT_INSTALLED_REVISION", installed: installed.opsSha, harness_context: installed.opsSha, harness_context_is_installed_identity: true }
+  : { grade: "UNBOUND_SOURCE_NONAUTHORITY_FIXTURE", installed: installed.opsSha, harness_context: NEVER_AUTHORITY_OPS_SHA, harness_context_is_installed_identity: false };
 const cfBin = installed.cf, nodeModules = installed.buildOutputUtils;
 
 // Kernel evidence of isolation: the only interface is lo, and a connect to a TEST-NET-1 literal (RFC 5737, never
@@ -392,7 +403,7 @@ const writeJson = (name, value) => { const p = path.join(work, name); fs.writeFi
 // Never-issued, Workers-shaped EXTERNAL EXPECTATION of the envs handoff (see fixtures/envs-projection.json).
 const projectionPath = writeJson("projection.json", JSON.parse(fs.readFileSync(path.join(HERE, "fixtures/envs-projection.json"), "utf8")));
 const projection = JSON.parse(fs.readFileSync(projectionPath, "utf8"));
-const isolationPath = writeJson("isolation.json", { kind: "ops.secretEffectBoundary.check.v1", status: "PASS", opsSha: installed.opsSha,
+const isolationPath = writeJson("isolation.json", { kind: "ops.secretEffectBoundary.check.v1", status: "PASS", opsSha: revision.harness_context,
   active: 1, secretBearingEffects: 0, obsolete: 0, unclassified: 0,
   workflows: [{ path: ".github/workflows/fixture.yml", classification: "secret_free_verify" }],
   inputs: { checkerSha256: `sha256:${"5".repeat(64)}`, intentSha256: `sha256:${"6".repeat(64)}`,
@@ -406,7 +417,7 @@ const SETTINGS = { workersDev: true, previewUrls: false, observability: { enable
 const target = { provider: "cloudflare-workers", accountId: ACCOUNT, workerName: "voice-ui-nonproduct-fixture",
   url: `${ORIGIN}/`, nativeDeploySettings: SETTINGS };
 const approved = (output, approvedTarget = target) => ({ kind: "ops.voiceUiTargetRuntimeRequest.v2",
-  expected: { opsSha: installed.opsSha, envsSha: projection.envs_sha, appsSha: installed.product.proof.merge_sha,
+  expected: { opsSha: revision.harness_context, envsSha: projection.envs_sha, appsSha: installed.product.proof.merge_sha,
     artifactManifestSha256: installed.product.manifestSha256, projectionReceiptSha256: sha256(fs.readFileSync(projectionPath)),
     isolationVerdictSha256: sha256(fs.readFileSync(isolationPath)), target: approvedTarget },
   inputs: { product, projectionReceipt: projectionPath, isolationVerdict: isolationPath }, output });
@@ -422,10 +433,48 @@ assert.equal(described.code, 0, described.stderr);
 const describedConfig = JSON.parse(described.stdout);
 assert.equal(describedConfig.product.tag, installed.product.tag);
 assert.equal(describedConfig.gate.programSha256, sha256(fs.readFileSync(installed.gate.program)));
-const refused = await execute(entry, ["--request", writeJson("approved.json", approved(path.join(work, "refused")))], { PATH: "" });
-assert.ok(refused.code !== 0 && /effect capability is missing/.test(refused.stderr), `no-credential request: ${refused.stderr}`);
+assert.equal(describedConfig.opsSha, installed.opsSha, "--describe must report the installed revision unchanged");
+// The ordinary entry, by revision. Exact: it reaches the credential guard. Unversioned: it refuses for the revision
+// itself, before it reads the request, and neither the harness context SHA nor a credential can rescue it.
+const REVISION_REFUSAL = /installed ops revision must be an exact 40-character lowercase SHA/;
+const fixtureCredential = { PATH: "", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN };
+const ordinary = async (label, requestPath, env, pattern) => {
+  const r = await execute(entry, ["--request", requestPath], env);
+  assert.ok(r.code !== 0 && r.stdout === "" && pattern.test(r.stderr), `${label}: ${r.stderr}`);
+  return "REFUSED_BEFORE_PROVIDER";
+};
+const refusedOutput = path.join(work, "refused");
+const normal_entries = { describe: "PASS", describe_ops_sha_unchanged: true,
+  no_credential_request: await ordinary("no-credential request", writeJson("approved.json", approved(refusedOutput)), { PATH: "" },
+    exactRevision ? /effect capability is missing/ : REVISION_REFUSAL),
+  never_authority_context_with_credential: await ordinary("never-authority context", writeJson("never-authority.json",
+    { ...approved(refusedOutput), expected: { ...approved(refusedOutput).expected, opsSha: NEVER_AUTHORITY_OPS_SHA } }), fixtureCredential,
+    exactRevision ? /approved opsSha differs from installed runtime/ : REVISION_REFUSAL),
+  missing_request_file: await ordinary("missing request file", path.join(work, "no-such-request.json"), fixtureCredential,
+    exactRevision ? /is unreadable/ : REVISION_REFUSAL) };
+assert.equal(fs.existsSync(refusedOutput), false, "an ordinary entry wrote an output directory");
 assert.equal(providerCount(), entryFrom, "an ordinary entry reached the provider");
-installedReceipt.normal_entries = { describe: "PASS", no_credential_request: "REFUSED_BEFORE_PROVIDER", provider_requests: 0 };
+installedReceipt.normal_entries = { ...normal_entries, refusal: exactRevision ? "BY_REQUEST_GUARDS" : "BY_INSTALLED_REVISION", provider_requests: 0 };
+
+// Any other installed revision, or an unversioned one with the acceptance gate, makes this program refuse before
+// isolation, product admission or any fixture request. Each child sees only a temporary configuration.
+const revisionChild = async (label, opsSha, extra, pattern) => {
+  const root = fs.mkdtempSync(path.join(work, "revision-")), dir = path.join(root, "share/voice-ui-target-runtime");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "configuration.json"), JSON.stringify({ ...installed, opsSha }));
+  const from = [providerCount(), siteRequests.length];
+  const r = await execute(process.execPath, [SELF, "--runtime", root, "--product", product, ...extra], { PATH: "" });
+  assert.ok(r.code !== 0 && r.stdout === "" && pattern.test(r.stderr), `${label} was not refused as expected:\n${r.stderr}`);
+  assert.deepEqual([providerCount(), siteRequests.length], from, `${label}: a fixture request happened`);
+  return label;
+};
+const nearMisses = { uppercase: installed.product.proof.merge_sha.toUpperCase(), short: "1".repeat(39), long: "1".repeat(41),
+  sentinel_case: "Working-Tree", sentinel_space: "working-tree ", dirty_suffix: `${"1".repeat(40)}-dirty`, empty: "", null: null };
+installedReceipt.revision_refusals = [];
+for (const [label, value] of Object.entries(nearMisses))
+  installedReceipt.revision_refusals.push(await revisionChild(`UNSUPPORTED_${label}`, value, [], /unsupported installed ops revision/));
+installedReceipt.revision_refusals.push(await revisionChild("UNVERSIONED_WITH_ACCEPTANCE", "working-tree",
+  ["--acceptance-node", process.execPath], /the acceptance gate needs an exact installed ops revision/));
 
 // The installed lib and adapters, through the private spawn seam only.
 const adapters = Object.fromEntries(["deploy", "readback"].map((name) => {
@@ -435,14 +484,14 @@ const adapters = Object.fromEntries(["deploy", "readback"].map((name) => {
 let providerFetches = 0;
 globalThis.fetch = () => { providerFetches++; throw new Error("fixture: provider fetch refused"); };
 const short = (p) => p.replace(`/client/v4/accounts/${ACCOUNT}/workers`, "").replace("/scripts/voice-ui-nonproduct-fixture", "<script>");
-async function installedRun(label, { setup = () => {}, approvedTarget = target } = {}) {
+async function installedRun(label, { setup = () => {}, approvedTarget = target, token = TOKEN } = {}) {
   resetCaptures();
   resetWorkerMeta();
   setup();
   const from = providerCount(), output = path.join(work, label);
   const request = { ...approved(output, approvedTarget), installed: { product: installed.product, unzip: installed.unzip }, adapters };
   const run = await execute(process.execPath, [SELF, "--run", runtimeRoot, writeJson(`${label}.json`, request), base],
-    { PATH: process.env.PATH ?? "", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN });
+    { PATH: process.env.PATH ?? "", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, ...(token === null ? {} : { CLOUDFLARE_API_TOKEN: token }) });
   const rs = requests.slice(from);
   return { run, output, requests: rs.map((r) => `${r.method} ${short(r.path)}`),
     // Every mutating call in order, with its whole JSON body where it has one.
@@ -509,6 +558,8 @@ const refusedRun = async (label, options, pattern, expectedRequests) => {
   assert.deepEqual(r.mutations, [], `${label}: a mutating provider call happened`);
   installedReceipt[label] = { refused: true, requests: r.requests, mutations: 0 };
 };
+// The private seam without a token: the installed lib's own credential guard, in either revision mode, no request.
+await refusedRun("SEAM_NO_CREDENTIAL", { token: null }, /effect capability is missing/, []);
 // Target data refused before any provider call: no acknowledgement, a different one, a custom domain.
 const { nativeDeploySettings: _omitted, ...unacknowledged } = target;
 await refusedRun("TARGET_SETTINGS_MISSING", { approvedTarget: unacknowledged }, /expected target fields differ/, []);
@@ -580,10 +631,12 @@ if (acceptanceNode) {
 }
 installedReceipt.provider_fetches_from_worker = providerFetches;
 installedReceipt.violations = violations;
+// The installed source revision and the harness's context SHA are separate facts; only an exact one is an identity.
+installedReceipt.revision = revision;
 assert.equal(providerFetches, 0, "the executed Worker tried to call a provider");
 assert.deepEqual(violations, [], "fixture violations");
 receipt.installed = installedReceipt;
-receipt.grades = { isolation: isolation.grade, harness: "INSTALLED_ADAPTER_LOOPBACK_HARNESS", module_and_assets: "CLI_SENT_EXACT",
+receipt.grades = { isolation: isolation.grade, ops_revision: revision.grade, harness: "INSTALLED_ADAPTER_LOOPBACK_HARNESS", module_and_assets: "CLI_SENT_EXACT",
   site: "FIXTURE_SERVED", stored_module_bytes: "NO_CAPABILITY_NOT_RUN", acceptance: acceptanceNode ? "RED_EXPECTED" : "NOT_RUN_HERE",
   live_provider: "NOT_RUN" };
 server.close();

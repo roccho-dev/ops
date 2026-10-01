@@ -255,7 +255,14 @@ jobs:
           gate="$(jq -r .deploy.gate.entry deploy/provenance.json)"
           # shellcheck disable=SC2024 # the receipt belongs to the runner; the gate drops to it before any test code
           sudo "$gate" --product "$PWD/product" --acceptance-node "$(jq -r .acceptance.entry product/provenance.json)" > gate-receipt.json
-          jq -e '.isolation.grade == "ISOLATED" and .grades.harness == "INSTALLED_ADAPTER_LOOPBACK_HARNESS"
+          # The gate ran the exact revision this run is about: the DEPLOY provenance, the installed runtime and the
+          # harness context all name it. An unversioned or other revision is never accepted here.
+          jq -e --arg sha "$EXACT_SHA" '.source.commit == $sha' deploy/provenance.json >/dev/null
+          jq -e --arg sha "$EXACT_SHA" '.isolation.grade == "ISOLATED" and .grades.harness == "INSTALLED_ADAPTER_LOOPBACK_HARNESS"
+            and .grades.ops_revision == "EXACT_INSTALLED_REVISION"
+            and .installed.revision == { grade: "EXACT_INSTALLED_REVISION", installed: $sha, harness_context: $sha, harness_context_is_installed_identity: true }
+            and .installed.normal_entries.refusal == "BY_REQUEST_GUARDS" and (.installed.revision_refusals | length) == 9
+            and .installed.SEAM_NO_CREDENTIAL == { refused: true, requests: [], mutations: 0 }
             and .grades.acceptance == "RED_EXPECTED" and .grades.stored_module_bytes == "NO_CAPABILITY_NOT_RUN"
             and .grades.live_provider == "NOT_RUN" and .installed.provider_fetches_from_worker == 0
             and .installed.preset.settings.grade == "CLI_READBACK" and (.installed.preset.mutations | length) == 6
