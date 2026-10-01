@@ -1,0 +1,345 @@
+name: voice-ui target runtime
+
+# DEPLOY as a provided object: build-test builds the runtime once and exports its full native closure; the
+# voice-ui-cf-consumer-cleanstart job is a fresh consumer that only downloads and imports the three objects (the
+# canonical apps PRODUCT and ACCEPTANCE by anonymous download, DEPLOY from this run) and runs the installed gate;
+# publish is the guarded, Nix-free release of DEPLOY. Publication is never readiness: the same gate must pass again on
+# the published canonical tuple. check-release-workflow.py requires publish to need only build-test.
+# That later run is the `canonical` dispatch: on the formal tag ref voice-ui-target-runtime-<commit> only, it skips the
+# producer (so publish is skipped too) and the same consumer job fetches the four formal DEPLOY assets anonymously
+# instead of this run's artifact. It takes no URL or SHA input.
+on:
+  pull_request:
+    paths:
+      - "packages/voice-ui-target-runtime/**"
+      - "flake.nix"
+      - "flake.lock"
+      - "ci.intent.v1.jsonl"
+      - ".github/workflows/voice-ui-target-runtime.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
+      canonical:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.canonical) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Lint release workflow
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          nix shell --inputs-from . nixpkgs#yq-go nixpkgs#python3 -c sh -c '
+            yq -o=json . .github/workflows/voice-ui-target-runtime.yml | python3 packages/hayamimi-web/build/check-release-workflow.py
+            python3 packages/hayamimi-web/build/release-provenance.py selftest'
+      - name: Build DEPLOY and export its closure
+        run: |
+          set -euo pipefail
+          root="$(nix build --no-link --print-out-paths .#voice-ui-target-runtime)"
+          "$root/bin/voice-ui-target-runtime" --describe > "$RUNNER_TEMP/describe.json"
+          jq -e --arg sha "$EXACT_SHA" '.opsSha == $sha' "$RUNNER_TEMP/describe.json" >/dev/null
+          test "$(jq -r .gate.programSha256 "$RUNNER_TEMP/describe.json")" = "$(sha256sum "$(jq -r .gate.program "$RUNNER_TEMP/describe.json")" | cut -d' ' -f1)"
+          mapfile -t closure < <(nix-store --query --requisites "$root")
+          if printf '%s\n' "${closure[@]}" | grep -E -- '-(voice-ui-dist|voice-ui-acceptance|wrangler|python3|sops|age|envs)[-.]'; then
+            echo "forbidden path in the DEPLOY closure" >&2; exit 1
+          fi
+          mkdir -p dist/release
+          nix-store --export "${closure[@]}" > dist/release/voice-ui-target-runtime.nix-export
+          (cd dist/release && sha256sum voice-ui-target-runtime.nix-export > voice-ui-target-runtime.nix-export.sha256)
+          nix path-info --json --recursive "$root" > "$RUNNER_TEMP/path-info.json"
+          # The recorded closure is exactly the exported one.
+          diff <(printf '%s\n' "${closure[@]}" | sort) \
+            <(jq -r 'if type == "array" then .[].path else keys[] end' "$RUNNER_TEMP/path-info.json" | sort)
+          test "$(stat -c %s dist/release/voice-ui-target-runtime.nix-export)" -lt 2147483648
+          printf '%s' "$root" > "$RUNNER_TEMP/root"
+      - name: Flake check at the exact publish SHA
+        if: env.PUBLISH == 'true'
+        run: |
+          set -euo pipefail
+          nix flake check -L --no-write-lock-file
+      - name: Record provenance
+        run: |
+          set -euo pipefail
+          export_file=dist/release/voice-ui-target-runtime.nix-export
+          jq -n --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg tree "$(git rev-parse 'HEAD^{tree}')" \
+            --arg ref "$GITHUB_WORKFLOW_REF" --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg root "$(cat "$RUNNER_TEMP/root")" --argjson bytes "$(stat -c %s "$export_file")" \
+            --arg digest "$(sha256sum "$export_file" | cut -d' ' -f1)" \
+            --slurpfile describe "$RUNNER_TEMP/describe.json" --slurpfile info "$RUNNER_TEMP/path-info.json" '{
+              schema: "roccho.voice-ui-target-runtime.release-provenance/1",
+              producer: { repository: $repo, workflow_ref: $ref, run_id: $run, run_attempt: $attempt },
+              source: { repository: $repo, commit: $sha, tree: $tree },
+              deploy: { name: "voice-ui-target-runtime.nix-export", format: "nix-store --export", bytes: $bytes, sha256: $digest,
+                locator: "https://github.com/\($repo)/releases/download/voice-ui-target-runtime-\($sha)/voice-ui-target-runtime.nix-export",
+                root: $root, entry: "\($root)/bin/voice-ui-target-runtime", gate: $describe[0].gate,
+                closure: ($info[0] | (if type == "array" then map({ path, narHash, narSize }) else to_entries | map({ path: .key, narHash: .value.narHash, narSize: .value.narSize }) end) | sort_by(.path)) },
+              apps_pin: $describe[0].product,
+              cross_host_bytes_reproducible: false }' > dist/release/provenance.json
+      - name: Record merged-PR proof
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="repos/$GITHUB_REPOSITORY"
+          # shellcheck disable=SC2016 # $ENV is read by the jq filter, not the shell
+          pr="$(gh api "$api/commits/$EXACT_SHA/pulls" --jq '[.[] | select(.merged_at != null and .base.ref == "proposals" and .merge_commit_sha == $ENV.EXACT_SHA)] | if length == 1 then .[0].number else error("need exactly one merged proposals PR") end')"
+          gh api "$api/pulls/$pr" > "$RUNNER_TEMP/pr.json"
+          gh api "$api/pulls/$pr/reviews?per_page=100" > "$RUNNER_TEMP/reviews.json"
+          head="$(jq -r .head.sha "$RUNNER_TEMP/pr.json")"
+          python3 packages/hayamimi-web/build/release-provenance.py proof \
+            --pr "$RUNNER_TEMP/pr.json" --reviews "$RUNNER_TEMP/reviews.json" \
+            --head-tree "$(gh api "$api/git/commits/$head" --jq .tree.sha)" \
+            --merge-sha "$EXACT_SHA" --merge-tree "$(git rev-parse 'HEAD^{tree}')" \
+            --out dist/release/merged-pr-proof.json
+      - name: Verify the release set
+        run: |
+          set -euo pipefail
+          d=dist/release p=dist/release/provenance.json f=voice-ui-target-runtime.nix-export
+          want=("$f" "$f.sha256" provenance.json)
+          if [ "$PUBLISH" = true ]; then want+=(merged-pr-proof.json); fi
+          test "$(cd "$d" && find . -type f -printf '%f\n' | sort | paste -sd ' ')" = "$(printf '%s\n' "${want[@]}" | sort | paste -sd ' ')"
+          test "$(cat "$d/$f.sha256")" = "$(cd "$d" && sha256sum "$f")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --argjson bytes "$(stat -c %s "$d/$f")" \
+            --arg digest "$(sha256sum "$d/$f" | cut -d' ' -f1)" '
+            .schema == "roccho.voice-ui-target-runtime.release-provenance/1" and .source.repository == $repo and .source.commit == $sha
+            and .deploy.bytes == $bytes and .deploy.sha256 == $digest and .deploy.bytes < 2147483648
+            and .deploy.locator == "https://github.com/\($repo)/releases/download/voice-ui-target-runtime-\($sha)/voice-ui-target-runtime.nix-export"
+            and (.deploy.root as $r | any(.deploy.closure[]; .path == $r))
+            and .cross_host_bytes_reproducible == false' "$p" >/dev/null
+          for value in "$(jq -r .apps_pin.tag "$p")" "$(jq -r .apps_pin.zip.sha256 "$p")" "$(jq -r .apps_pin.proofSha256 "$p")" "$(jq -r .apps_pin.provenanceSha256 "$p")"; do
+            grep -qF -- "\"$value\"" packages/voice-ui-target-runtime/default.nix
+          done
+          if [ "$PUBLISH" = true ]; then
+            jq -e --arg sha "$EXACT_SHA" --slurpfile q "$d/merged-pr-proof.json" '
+              $q[0].merge_sha == $sha and $q[0].base == "proposals" and $q[0].reviewed_tree == $q[0].merge_tree
+              and .source.tree == $q[0].merge_tree
+              and ([$q[0].pr_number, $q[0].r_exact_head_verdict_ref, $q[0].merged_at, $q[0].reviewed_head] | all)' "$p" >/dev/null
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: voice-ui-target-runtime-release
+          path: dist/release/
+          if-no-files-found: error
+
+  # A fresh consumer: no checkout, no build. It downloads the three objects, imports the two native closures, compares
+  # them with their provenance, then runs the installed gate entry in a loopback-only network namespace.
+  voice-ui-cf-consumer-cleanstart:
+    needs: build-test
+    # One job for both modes: after this run's producer (CI_ONLY), or with the producer skipped for `canonical`.
+    if: ${{ always() && (needs.build-test.result == 'success' || (needs.build-test.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.canonical)) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: ${{ !inputs.canonical }}
+        with:
+          name: voice-ui-target-runtime-release
+          path: deploy
+      - name: Fetch and validate the formal DEPLOY release anonymously
+        if: ${{ inputs.canonical }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          # The formal release of exactly this dispatch commit, on its own tag ref; never together with publish.
+          tag="voice-ui-target-runtime-$EXACT_SHA" f=voice-ui-target-runtime.nix-export api="repos/$GITHUB_REPOSITORY"
+          test "$PUBLISH_INPUT" != true
+          test "$GITHUB_REF" = "refs/tags/$tag"
+          test "$(gh api "$api/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha')" = "commit $EXACT_SHA"
+          tree="$(gh api "$api/git/commits/$EXACT_SHA" --jq .tree.sha)"
+          test "$(gh api "$api/releases/tags/$tag" --jq '[.assets[].name] | sort | join(" ")')" = "merged-pr-proof.json provenance.json $f $f.sha256"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          # No token, netrc or git credentials for the bytes: these are the public locators.
+          fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
+          mkdir deploy
+          for name in "$f" "$f.sha256" provenance.json merged-pr-proof.json; do fetch "$base/$name" "deploy/$name"; done
+          test "$(cat "deploy/$f.sha256")" = "$(cd deploy && sha256sum "$f")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg tree "$tree" --arg locator "$base/$f" \
+            --argjson bytes "$(stat -c %s "deploy/$f")" --arg digest "$(sha256sum "deploy/$f" | cut -d' ' -f1)" \
+            --slurpfile q deploy/merged-pr-proof.json '
+            .schema == "roccho.voice-ui-target-runtime.release-provenance/1" and .source == { repository: $repo, commit: $sha, tree: $tree }
+            and .producer.repository == $repo and .producer.workflow_ref == "\($repo)/.github/workflows/voice-ui-target-runtime.yml@refs/heads/proposals"
+            and .deploy.name == "voice-ui-target-runtime.nix-export" and .deploy.format == "nix-store --export"
+            and .deploy.bytes == $bytes and .deploy.sha256 == $digest and .deploy.locator == $locator and .cross_host_bytes_reproducible == false
+            and $q[0].merge_sha == $sha and $q[0].base == "proposals" and $q[0].reviewed_tree == $tree and $q[0].merge_tree == $tree
+            and ($q[0].pr_number | type == "number") and ([$q[0].merged_at, $q[0].reviewed_head] | all)
+            and ($q[0].r_exact_head_verdict_ref | startswith("https://github.com/\($repo)/pull/\($q[0].pr_number)#pullrequestreview-"))' deploy/provenance.json >/dev/null
+      - name: Fetch the canonical PRODUCT and ACCEPTANCE anonymously
+        run: |
+          set -euo pipefail
+          p=deploy/provenance.json
+          (cd deploy && sha256sum -c voice-ui-target-runtime.nix-export.sha256)
+          jq -e --arg sha "$EXACT_SHA" --arg digest "$(sha256sum deploy/voice-ui-target-runtime.nix-export | cut -d' ' -f1)" \
+            '.source.commit == $sha and .deploy.sha256 == $digest' "$p" >/dev/null
+          # Before any import: the root is one store path, and the entry, gate entry and gate program are exactly its own
+          # fixed files and are in the recorded closure's root. No other path can be named.
+          jq -e '.deploy.root as $r | ($r | test("^/nix/store/[0-9a-z]{32}-voice-ui-target-runtime$"))
+            and .deploy.entry == "\($r)/bin/voice-ui-target-runtime" and .deploy.gate.entry == "\($r)/bin/voice-ui-target-runtime-gate"
+            and .deploy.gate.program == "\($r)/share/voice-ui-target-runtime/tests/workers.test.mjs"
+            and (.deploy.gate.programSha256 | test("^[0-9a-f]{64}$")) and any(.deploy.closure[]; .path == $r)' "$p" >/dev/null
+          fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
+          check() { test "$(sha256sum "$1" | cut -d' ' -f1)" = "$2"; }
+          base="$(jq -r .apps_pin.base "$p")"
+          mkdir product
+          fetch "$base/voice-ui-dist.zip" product/voice-ui-dist.zip
+          fetch "$base/merged-pr-proof.json" product/merged-pr-proof.json
+          fetch "$base/provenance.json" product/provenance.json
+          check product/voice-ui-dist.zip "$(jq -r .apps_pin.zip.sha256 "$p")"
+          check product/merged-pr-proof.json "$(jq -r .apps_pin.proofSha256 "$p")"
+          check product/provenance.json "$(jq -r .apps_pin.provenanceSha256 "$p")"
+          a=product/provenance.json
+          test "$(jq -r .acceptance.sha256 "$a")" = "$(jq -r .apps_pin.acceptance.sha256 "$p")"
+          fetch "$(jq -r .acceptance.locator "$a")" acceptance.nix-export
+          check acceptance.nix-export "$(jq -r .acceptance.sha256 "$a")"
+          test "$(stat -c %s acceptance.nix-export)" = "$(jq -r .acceptance.bytes "$a")"
+      - name: Import the native closures and compare them with their provenance
+        run: |
+          set -euo pipefail
+          # Unsigned exports: the import runs as root, whom the Nix daemon trusts. No build or substitution happens.
+          # shellcheck disable=SC2024 # the runner reads the downloaded export; only nix-store runs as root
+          sudo "$(command -v nix-store)" --import < deploy/voice-ui-target-runtime.nix-export > /dev/null
+          # shellcheck disable=SC2024
+          sudo "$(command -v nix-store)" --import < acceptance.nix-export > /dev/null
+          # Both sides become the same canonical form: exactly path, narHash and narSize per member, sorted by path,
+          # with sorted keys (jq -S), so only a real difference in the set, a hash or a size can differ.
+          canon='map({ path, narHash, narSize }) | sort_by(.path)'
+          native='(if type == "array" then . else to_entries | map(.value + { path: .key }) end)'
+          same() { diff <(jq -cS "$canon" <<<"$1") <(jq -cS "$canon" <<<"$2") > /dev/null; }
+          same '[{"path":"/a","narHash":"h","narSize":1},{"path":"/b","narHash":"i","narSize":2}]' '[{"narSize":2,"path":"/b","narHash":"i"},{"narHash":"h","narSize":1,"path":"/a"}]'
+          for wrong in '[{"path":"/a","narHash":"x","narSize":1}]' '[{"path":"/a","narHash":"h","narSize":2}]' \
+            '[{"path":"/a","narHash":"h","narSize":1},{"path":"/b","narHash":"i","narSize":2}]'; do
+            if same '[{"path":"/a","narHash":"h","narSize":1}]' "$wrong"; then echo "closure comparison accepted $wrong" >&2; exit 1; fi
+          done
+          compare() { diff <(nix path-info --json --recursive "$1" | jq -cS "$native | $canon") <(jq -cS "$2 | $canon" "$3"); }
+          compare "$(jq -r .deploy.root deploy/provenance.json)" .deploy.closure deploy/provenance.json
+          compare "$(jq -r .acceptance.root product/provenance.json)" .acceptance.closure product/provenance.json
+          test -x "$(jq -r .deploy.gate.entry deploy/provenance.json)"
+          test "$(sha256sum "$(jq -r .deploy.gate.program deploy/provenance.json)" | cut -d' ' -f1)" = "$(jq -r .deploy.gate.programSha256 deploy/provenance.json)"
+          test -x "$(jq -r .acceptance.entry product/provenance.json)"
+      - name: Run the installed gate in a loopback-only network namespace
+        run: |
+          set -euo pipefail
+          gate="$(jq -r .deploy.gate.entry deploy/provenance.json)"
+          # shellcheck disable=SC2024 # the receipt belongs to the runner; the gate drops to it before any test code
+          sudo "$gate" --product "$PWD/product" --acceptance-node "$(jq -r .acceptance.entry product/provenance.json)" > gate-receipt.json
+          # The gate ran the exact revision this run is about: the DEPLOY provenance, the installed runtime and the
+          # harness context all name it. An unversioned or other revision is never accepted here.
+          jq -e --arg sha "$EXACT_SHA" '.source.commit == $sha' deploy/provenance.json >/dev/null
+          jq -e --arg sha "$EXACT_SHA" '.isolation.grade == "ISOLATED" and .grades.harness == "INSTALLED_ADAPTER_LOOPBACK_HARNESS"
+            and .grades.ops_revision == "EXACT_INSTALLED_REVISION"
+            and .installed.revision == { grade: "EXACT_INSTALLED_REVISION", installed: $sha, harness_context: $sha, harness_context_is_installed_identity: true }
+            and .installed.normal_entries.refusal == "BY_REQUEST_GUARDS" and (.installed.revision_refusals | length) == 9
+            and .installed.SEAM_NO_CREDENTIAL == { refused: true, requests: [], mutations: 0 }
+            and .grades.acceptance == "RED_EXPECTED" and .grades.stored_module_bytes == "NO_CAPABILITY_NOT_RUN"
+            and .grades.live_provider == "NOT_RUN" and .installed.provider_fetches_from_worker == 0
+            and .installed.preset.settings.grade == "CLI_READBACK" and (.installed.preset.mutations | length) == 6
+            and .installed.installed_wrappers.requests == 0' gate-receipt.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: voice-ui-cf-consumer-cleanstart-${{ github.event.pull_request.head.sha || github.sha }}
+          path: gate-receipt.json
+          if-no-files-found: ignore
+
+  # Publishes only the bytes built and checked by build-test in this run. Runs no Nix (check-release-workflow.py
+  # enforces that and the guard). A rerun after a partial publish fails closed: the tag or release already exists.
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/proposals' && github.event.repository.default_branch == 'proposals'
+    needs: build-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      EXACT_SHA: ${{ github.sha }}
+      TAG: voice-ui-target-runtime-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: voice-ui-target-runtime-release
+          path: release
+      - name: Verify release set
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_SHA"
+          p=release/provenance.json f=voice-ui-target-runtime.nix-export
+          test "$(cd release && find . -type f -printf '%f\n' | sort | paste -sd ' ')" = "merged-pr-proof.json provenance.json $f $f.sha256"
+          test "$(cat "release/$f.sha256")" = "$(cd release && sha256sum "$f")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg tree "$(git rev-parse 'HEAD^{tree}')" \
+            --argjson bytes "$(stat -c %s "release/$f")" --arg digest "$(sha256sum "release/$f" | cut -d' ' -f1)" \
+            --slurpfile q release/merged-pr-proof.json '
+            .schema == "roccho.voice-ui-target-runtime.release-provenance/1" and .source == { repository: $repo, commit: $sha, tree: $tree }
+            and .deploy.bytes == $bytes and .deploy.sha256 == $digest and .cross_host_bytes_reproducible == false
+            and $q[0].merge_sha == $sha and $q[0].base == "proposals" and $q[0].reviewed_tree == $q[0].merge_tree
+            and .source.tree == $q[0].merge_tree' "$p" >/dev/null
+          for value in "$(jq -r .apps_pin.tag "$p")" "$(jq -r .apps_pin.zip.sha256 "$p")" "$(jq -r .apps_pin.proofSha256 "$p")" "$(jq -r .apps_pin.provenanceSha256 "$p")"; do
+            grep -qF -- "\"$value\"" packages/voice-ui-target-runtime/default.nix
+          done
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          status() { curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" "$1"; }
+          # gh release create reuses an existing tag and ignores --target, so both must be absent.
+          test "$(status "$api/git/ref/tags/$TAG")" = 404
+          test "$(status "$api/releases/tags/$TAG")" = 404
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/proposals" --jq .commit.sha)" = "$EXACT_SHA"
+          gh release create "$TAG" release/voice-ui-target-runtime.nix-export release/voice-ui-target-runtime.nix-export.sha256 \
+            release/provenance.json release/merged-pr-proof.json \
+            --title "$TAG" --notes "voice-ui target runtime DEPLOY closure built from $EXACT_SHA" \
+            --target "$EXACT_SHA" --repo "$GITHUB_REPOSITORY"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')" = "commit $EXACT_SHA"
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name] | sort | join(" ")')" \
+            = "$(cd release && find . -type f -printf '%f\n' | sort | paste -sd ' ')"
+      - name: Anonymously fetch the public locators and compare bytes
+        run: |
+          set -euo pipefail
+          readback="$(mktemp -d)"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
+          # No token, netrc or git credentials: this is the URL downstream pins.
+          fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
+          for f in release/*; do
+            name="$(basename "$f")"
+            fetch "$base/$name" "$readback/$name"
+            cmp "$f" "$readback/$name"
+          done
+          test "$(jq -r .deploy.locator release/provenance.json)" = "$base/voice-ui-target-runtime.nix-export"
