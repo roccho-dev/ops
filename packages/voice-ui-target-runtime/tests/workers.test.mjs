@@ -102,6 +102,13 @@ const resetCaptures = () => { versionId = null; uploadedModules = {}; assetManif
 // Installed stage: the deployment the fixture reports as active, the fixture phase, and what reached the site.
 let activeDeployment = null;
 let phase = null;
+// What the fixture's `GET worker` reports. It starts unlike the acknowledged settings, so the post-deploy readback
+// passes only when the CLI's own settings writes arrived. `metaFault` and `secretType` drive the negatives.
+const ORIGIN = "https://voice-ui-nonproduct-fixture.never-issued-fixture.workers.dev";
+let workerMeta = null, metaFault = null, secretType = "secret_text", subdomainWritten = false;
+const resetWorkerMeta = () => { metaFault = null; secretType = "secret_text"; subdomainWritten = false;
+  workerMeta = { id: "fixture-worker-id", name: "voice-ui-nonproduct-fixture", tags: ["fixture-preexisting"], observability: { enabled: true },
+    subdomain: { enabled: false, previews_enabled: true, url: ORIGIN } }; };
 const siteRequests = [];
 const violations = [];
 // Never-issued fixture value, only ever the Worker's JEV_API_KEY in PRESET_SECRET_FIXTURE; valid JSON is refused there.
@@ -162,6 +169,7 @@ const server = http.createServer((req, res) => {
       return serveSite(req, res, body).catch((error) => { violations.push(`site: ${error.message}`); res.writeHead(500); res.end(); });
     }
     requests.push({ method: req.method, path: url.pathname, auth: req.headers.authorization ?? null, bytes: body.length,
+      json: req.method !== "GET" && String(req.headers["content-type"] ?? "").includes("application/json") ? JSON.parse(body.toString()) : undefined,
       sentinel: body.includes(SENTINEL) || String(req.headers.authorization ?? "").includes(SENTINEL),
       fixture_secret: body.includes(fixtureSecret) || req.url.includes(fixtureSecret) });
     const reply = (status, result, code = 10000 + status) => {
@@ -195,7 +203,23 @@ const server = http.createServer((req, res) => {
     }
     // Secret names only, never values: the preflight the installed adapter runs before any mutating call.
     if (existing && req.method === "GET" && p === `${script}/secrets`)
-      return reply(200, presetSecret ? [{ name: "JEV_API_KEY", type: "secret_text" }] : []);
+      return reply(200, presetSecret ? [{ name: "JEV_API_KEY", type: secretType }] : []);
+    // Installed stage: the Worker's provider-reported metadata, changed only by the settings writes the CLI makes.
+    if (phase && req.method === "GET" && p === `/accounts/${ACCOUNT}/workers/workers/voice-ui-nonproduct-fixture`)
+      return reply(200, metaFault === "missing-after-deploy" && subdomainWritten ? { id: workerMeta.id, name: workerMeta.name } : workerMeta);
+    if (phase && req.method === "PATCH" && p === `${script}/script-settings`) {
+      if (metaFault === "settings-write-fails") return reply(403, null);
+      const sent = JSON.parse(body.toString());
+      workerMeta.observability = sent.observability;
+      workerMeta.tags = sent.tags;
+      return reply(200, {});
+    }
+    if (phase && req.method === "POST" && p === `${script}/subdomain`) {
+      const sent = JSON.parse(body.toString());
+      Object.assign(workerMeta.subdomain, { enabled: sent.enabled, previews_enabled: sent.previews_enabled });
+      subdomainWritten = true;
+      return reply(200, { enabled: sent.enabled, previews_enabled: sent.previews_enabled });
+    }
     if (req.method === "PUT" && (p === script || p === `${script}/versions`)) {
       uploadedModules = multipart(req, body);
       versionId = crypto.randomUUID();
@@ -373,12 +397,18 @@ const isolationPath = writeJson("isolation.json", { kind: "ops.secretEffectBound
   workflows: [{ path: ".github/workflows/fixture.yml", classification: "secret_free_verify" }],
   inputs: { checkerSha256: `sha256:${"5".repeat(64)}`, intentSha256: `sha256:${"6".repeat(64)}`,
     boundarySha256: `sha256:${"7".repeat(64)}`, workflowTreeSha: "8".repeat(40) } });
+// The gate runs only as the installed program; a source copy is not honoured.
+assert.equal(SELF, installed.gate.program, "this is not the installed gate program");
+assert.equal(installed.gate.program, path.join(share, "tests/workers.test.mjs"));
+assert.equal(installed.gate.entry, path.join(runtimeRoot, "bin/voice-ui-target-runtime-gate"));
+// A never-issued fixture target. The acknowledged settings are written out here, not imported from the adapter.
+const SETTINGS = { workersDev: true, previewUrls: false, observability: { enabled: false }, tags: [] };
 const target = { provider: "cloudflare-workers", accountId: ACCOUNT, workerName: "voice-ui-nonproduct-fixture",
-  url: "https://voice-ui-nonproduct-fixture.invalid/" };
-const approved = (output) => ({ kind: "ops.voiceUiTargetRuntimeRequest.v2",
+  url: `${ORIGIN}/`, nativeDeploySettings: SETTINGS };
+const approved = (output, approvedTarget = target) => ({ kind: "ops.voiceUiTargetRuntimeRequest.v2",
   expected: { opsSha: installed.opsSha, envsSha: projection.envs_sha, appsSha: installed.product.proof.merge_sha,
     artifactManifestSha256: installed.product.manifestSha256, projectionReceiptSha256: sha256(fs.readFileSync(projectionPath)),
-    isolationVerdictSha256: sha256(fs.readFileSync(isolationPath)), target },
+    isolationVerdictSha256: sha256(fs.readFileSync(isolationPath)), target: approvedTarget },
   inputs: { product, projectionReceipt: projectionPath, isolationVerdict: isolationPath }, output });
 const entry = path.join(runtimeRoot, "bin/voice-ui-target-runtime");
 const providerCount = () => requests.length;
@@ -404,19 +434,25 @@ const adapters = Object.fromEntries(["deploy", "readback"].map((name) => {
 }));
 let providerFetches = 0;
 globalThis.fetch = () => { providerFetches++; throw new Error("fixture: provider fetch refused"); };
-async function installedRun(label) {
+const short = (p) => p.replace(`/client/v4/accounts/${ACCOUNT}/workers`, "").replace("/scripts/voice-ui-nonproduct-fixture", "<script>");
+async function installedRun(label, { setup = () => {}, approvedTarget = target } = {}) {
   resetCaptures();
+  resetWorkerMeta();
+  setup();
   const from = providerCount(), output = path.join(work, label);
-  const request = { ...approved(output), installed: { product: installed.product, unzip: installed.unzip }, adapters };
+  const request = { ...approved(output, approvedTarget), installed: { product: installed.product, unzip: installed.unzip }, adapters };
   const run = await execute(process.execPath, [SELF, "--run", runtimeRoot, writeJson(`${label}.json`, request), base],
     { PATH: process.env.PATH ?? "", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, CLOUDFLARE_API_TOKEN: TOKEN });
   const rs = requests.slice(from);
-  const firstMutation = rs.findIndex((r) => r.method !== "GET");
-  return { run, output, requests: rs.map((r) => `${r.method} ${r.path}`), mutations: rs.filter((r) => r.method !== "GET").length,
-    preflight_before_mutation: rs.findIndex((r) => r.method === "GET" && r.path.endsWith("/secrets")) >= 0
-      && (firstMutation < 0 || rs.findIndex((r) => r.path.endsWith("/secrets")) < firstMutation),
+  return { run, output, requests: rs.map((r) => `${r.method} ${short(r.path)}`),
+    // Every mutating call in order, with its whole JSON body where it has one.
+    mutations: rs.filter((r) => r.method !== "GET").map((r) => [`${r.method} ${short(r.path)}`, r.json]),
     auth_only_fixture_token: authOk(rs), sentinel: rs.some((r) => r.sentinel) };
 }
+const READS_BEFORE_MUTATION = ["GET <script>/secrets", "GET /workers/voice-ui-nonproduct-fixture"];
+// The six writes of one pinned `cf deploy`, in order. Anything else is a failure, never tolerated.
+const SIX = ["POST <script>/assets-upload-session", "POST /assets/upload", "POST <script>/versions", "POST <script>/deployments",
+  "PATCH <script>/script-settings", "POST <script>/subdomain"];
 
 // PRESET_SECRET_FIXTURE: the secret name is listed, and the executed Worker holds the never-issued fixture value. The
 // production readback's invalid-JSON probe gets the Worker's own 400 before any provider call; valid JSON is refused.
@@ -438,12 +474,24 @@ const sent = {
 };
 installedReceipt.preset = { result: { status: result.status, claim: result.claim, limits: result.limits },
   version_id: deployed.deployment.versionId, issued_version_id: versionId, requests: positive.requests,
-  preflight_before_mutation: positive.preflight_before_mutation, cli_sent: sent,
+  mutations: positive.mutations.map(([call, json]) => [call, call.endsWith("assets-upload-session") ? "(asset manifest)" : json]),
+  settings: deployed.settings, cli_sent: sent,
   readback: { files: readBack.publicBytes.fileCount, function: readBack.function, stored_module_bytes: readBack.storedModuleBytes },
   api: siteRequests.slice(apiFrom) };
 assert.deepEqual(installedReceipt.preset.result, { status: "PASS", claim: "DEPLOY_READBACK_PASS",
-  limits: { secretPresence: "NAME_PRESENT_NOT_AUTHORITY", inheritPreservation: "NOT_PROVEN", storedModuleBytes: "NO_CAPABILITY_NOT_RUN" } });
-assert.ok(positive.preflight_before_mutation && positive.auth_only_fixture_token && !positive.sentinel, "preflight order or authentication differs");
+  limits: { targetSettings: "ACKNOWLEDGED_DATA_NOT_AUTHORITY", workerSettings: "CLI_READBACK_PROVIDER_REPORTED",
+    secretPresence: "NAME_PRESENT_NOT_AUTHORITY", inheritPreservation: "NOT_PROVEN", storedModuleBytes: "NO_CAPABILITY_NOT_RUN" } });
+assert.ok(positive.auth_only_fixture_token && !positive.sentinel, "authentication differs");
+// The two native reads come first, then exactly the six writes, with exactly these JSON bodies.
+assert.deepEqual(positive.requests.slice(0, 2), READS_BEFORE_MUTATION, "the preflight reads are not first");
+assert.deepEqual(positive.mutations.map(([call]) => call), SIX, "the deploy made other writes than the six known ones");
+assert.deepEqual(positive.mutations[0][1].manifest, assetManifest, "asset manifest body differs");
+assert.deepEqual(positive.mutations.slice(3).map(([, json]) => json), [
+  { strategy: "percentage", versions: [{ version_id: versionId, percentage: 100 }], annotations: {} },
+  { observability: { enabled: false }, tags: [] },
+  { enabled: true, previews_enabled: false }], "deployment, settings or subdomain body differs");
+// CLI_READBACK: the provider-reported settings changed from the fixture's initial ones to exactly the acknowledged ones.
+assert.deepEqual(deployed.settings, { grade: "CLI_READBACK", reported: SETTINGS });
 assert.equal(deployed.deployment.versionId, versionId, "deploy receipt version differs from the one the fixture issued");
 // CLI_SENT_EXACT: the one module is the admitted Worker; the bindings and date are the product's declared runtime.
 assert.deepEqual(sent, { modules: { "worker.mjs": installed.product.workerSha256 }, main_module: "worker.mjs",
@@ -452,12 +500,55 @@ assert.deepEqual(sent, { modules: { "worker.mjs": installed.product.workerSha256
 assert.equal(readBack.publicBytes.fileCount, sitePathsNow.length);
 assert.deepEqual(siteRequests.slice(apiFrom).map((r) => [r.method, r.status]), [["POST", 400]], "readback probe differs");
 
-// Preflight negative: the Worker lists no JEV_API_KEY, so the adapter fails before any mutating call.
-phase = "PREFLIGHT_SECRET_ABSENT"; presetSecret = false;
-const absent = await installedRun("preflight-absent");
-assert.ok(absent.run.code !== 0 && /deploy adapter failed/.test(absent.run.stderr), `preflight did not refuse:\n${absent.run.stderr}`);
-assert.equal(absent.mutations, 0, "a mutating provider call happened without the required secret name");
-installedReceipt.preflight_absent = { refused: true, requests: absent.requests, mutations: 0 };
+// Refusals. Each asserts its exact provider requests, so "the adapter failed" alone can never satisfy it.
+const refusedRun = async (label, options, pattern, expectedRequests) => {
+  phase = label;
+  const r = await installedRun(label, options);
+  assert.ok(r.run.code !== 0 && pattern.test(r.run.stderr), `${label} was not refused as expected:\n${r.run.stderr}`);
+  assert.deepEqual(r.requests, expectedRequests, `${label}: provider requests differ`);
+  assert.deepEqual(r.mutations, [], `${label}: a mutating provider call happened`);
+  installedReceipt[label] = { refused: true, requests: r.requests, mutations: 0 };
+};
+// Target data refused before any provider call: no acknowledgement, a different one, a custom domain.
+const { nativeDeploySettings: _omitted, ...unacknowledged } = target;
+await refusedRun("TARGET_SETTINGS_MISSING", { approvedTarget: unacknowledged }, /expected target fields differ/, []);
+await refusedRun("TARGET_SETTINGS_DIFFERENT", { approvedTarget: { ...target, nativeDeploySettings: { ...SETTINGS, previewUrls: true } } },
+  /acknowledge exactly the native deploy settings/, []);
+await refusedRun("TARGET_CUSTOM_DOMAIN", { approvedTarget: { ...target, url: "https://voice-ui.example.invalid/" } }, /exactly https:\/\/<workerName>/, []);
+// The secret name absent, or present with another type: exactly the one secrets read, nothing else.
+await refusedRun("PREFLIGHT_SECRET_ABSENT", { setup: () => { presetSecret = false; } }, /deploy adapter failed/, READS_BEFORE_MUTATION.slice(0, 1));
+presetSecret = true;
+await refusedRun("PREFLIGHT_SECRET_WRONG_TYPE", { setup: () => { secretType = "plain_text"; } }, /deploy adapter failed/, READS_BEFORE_MUTATION.slice(0, 1));
+// The provider reports another URL for this Worker: refused after the two reads, before any write.
+await refusedRun("PREFLIGHT_WORKER_URL_DIFFERS", { setup: () => { workerMeta.subdomain.url = "https://voice-ui-nonproduct-fixture.other-fixture.workers.dev"; } },
+  /deploy adapter failed/, READS_BEFORE_MUTATION);
+
+// After a deploy the provider must report the acknowledged settings. The CLI ignores a failed settings write and
+// still exits 0, so only this readback can make the run RED; missing metadata does the same.
+for (const fault of ["settings-write-fails", "missing-after-deploy"]) {
+  phase = `SETTINGS_READBACK_${fault}`;
+  const faulty = await installedRun(`settings-${fault}`, { setup: () => { metaFault = fault; } });
+  assert.ok(faulty.run.code !== 0 && /deploy adapter failed/.test(faulty.run.stderr), `${fault} did not make the run RED:\n${faulty.run.stderr}`);
+  assert.deepEqual(faulty.mutations.map(([call]) => call), SIX, `${fault}: the deploy did not run its six writes`);
+  assert.equal(fs.existsSync(path.join(faulty.output, "receipt.json")), false, `${fault}: a receipt was written`);
+  installedReceipt[phase] = { run: "RED", writes: faulty.mutations.length, receipt: false };
+}
+
+// The installed wrappers themselves, each refused deterministically before any provider or network call.
+phase = "INSTALLED_WRAPPERS";
+const wrapperFrom = providerCount(), siteFrom = siteRequests.length;
+const effect = { kind: "ops.voiceUiEffectRequest.v2", expected: approved(path.join(work, "wrapper")).expected, artifactRoot: artifact,
+  projection: { receiptSha256: sha256(fs.readFileSync(projectionPath)), ciphertextSha256: projection.source.sha256 } };
+const wrapper = (name, request) => execute(process.execPath, [path.join(share, `${name}.mjs`), "--request", writeJson(`wrapper-${name}.json`, request),
+  "--receipt", path.join(work, `wrapper-${name}-receipt.json`)], { PATH: "" });
+const noAuthority = await wrapper("deploy", effect);
+assert.deepEqual([noAuthority.code, noAuthority.stderr], [1, "effect authority/target mismatch\n"], "installed deploy.mjs without a credential");
+const otherTarget = await wrapper("readback", { ...effect, deployment: { versionId: "fixture", deploymentId: "fixture",
+  workerName: target.workerName, url: "https://voice-ui-nonproduct-fixture.other-fixture.workers.dev/" } });
+assert.deepEqual([otherTarget.code, otherTarget.stderr], [1, "readback target differs\n"], "installed readback.mjs with another deployment URL");
+assert.deepEqual([providerCount() - wrapperFrom, siteRequests.length - siteFrom, fs.readdirSync(work).filter((f) => f.endsWith("-receipt.json"))],
+  [0, 0, []], "an installed wrapper reached the provider, the site or wrote a receipt");
+installedReceipt.installed_wrappers = { deploy_without_credential: "REFUSED_AUTHORITY", readback_other_url: "REFUSED_TARGET", requests: 0 };
 
 // SECRET_ABSENT_FIXTURE: the name is listed but the executed Worker has no value (e.g. `inherit` did not keep it). The
 // same uploaded bytes answer the probe 503, so the production readback is RED.
@@ -497,7 +588,7 @@ receipt.grades = { isolation: isolation.grade, harness: "INSTALLED_ADAPTER_LOOPB
   live_provider: "NOT_RUN" };
 server.close();
 console.log(JSON.stringify(receipt, null, 1));
-console.error(`PASS installed runtime (${isolation.grade}): ordinary entries make no provider call; secret-name preflight before any mutation; exact admitted module/assets/bindings sent; fixture 400 readback; absent name refused before mutation; absent value makes readback RED; acceptance ${receipt.grades.acceptance}; Worker provider calls 0`);
+console.error(`PASS installed runtime (${isolation.grade}): ordinary entries and both installed wrappers make no provider call; unacknowledged settings or a custom domain refused with no request; secret name and type, then provider-reported name and URL, before any write; exactly six writes with exact bodies; exact admitted module/assets/bindings sent; provider-reported settings read back (CLI_READBACK), RED when the write fails or metadata is missing; fixture 400 readback; absent value makes readback RED; acceptance ${receipt.grades.acceptance}; Worker provider calls 0`);
 
 // Harness children. `--run <runtime> <request> <base>`: the installed lib, with the private spawn seam pointing each
 // adapter start at `--adapter`. `--adapter <runtime> <base> <adapter> --request r --receipt p`: the installed

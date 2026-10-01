@@ -165,8 +165,10 @@ function runAdmitted(request, expected, artifact, projection, isolation, options
       deploy: deployReceipt.status,
       readback: readbackReceipt.status,
     },
-    // What this receipt cannot prove with the native CLI.
+    // What this receipt does and does not prove with the native CLI.
     limits: {
+      targetSettings: "ACKNOWLEDGED_DATA_NOT_AUTHORITY",
+      workerSettings: "CLI_READBACK_PROVIDER_REPORTED",
       secretPresence: "NAME_PRESENT_NOT_AUTHORITY",
       inheritPreservation: "NOT_PROVEN",
       storedModuleBytes: "NO_CAPABILITY_NOT_RUN",

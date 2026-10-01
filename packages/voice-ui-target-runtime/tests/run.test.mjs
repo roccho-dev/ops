@@ -9,6 +9,7 @@ import { captureIsolation } from "../capture-isolation.mjs";
 import { runTargetRuntime } from "../lib.mjs";
 import { sanitizedEnv, sha256File } from "../modules/core.mjs";
 import { admitProduct, validateArtifact, validateIsolationVerdict, validateProjectionReceipt, validateWorkersTarget } from "../modules/input-contracts.mjs";
+import { deploy, readback } from "../workers.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(HERE, "../run.mjs");
@@ -21,8 +22,10 @@ const PIN = INSTALLED.product, OPS_SHA = "1".repeat(40), APPS_SHA = PIN.proof.me
 const projection = () => JSON.parse(readFileSync(path.join(HERE, "fixtures/envs-projection.json"), "utf8"));
 const ENVS_SHA = projection().envs_sha;
 const ACCOUNT_ID = projection().target.account_id;
+const URL_OK = "https://voice-ui-nonproduct-fixture.never-issued-fixture.workers.dev/";
+const SETTINGS = { workersDev: true, previewUrls: false, observability: { enabled: false }, tags: [] };
 const TARGET = { provider: "cloudflare-workers", accountId: ACCOUNT_ID, workerName: projection().target.worker_name,
-  url: "https://voice-ui-nonproduct-fixture.invalid/" };
+  url: URL_OK, nativeDeploySettings: SETTINGS };
 const read = file => JSON.parse(readFileSync(file, "utf8"));
 function write(file, value) { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`); }
 const effectEnv = () => ({ PATH: process.env.PATH, CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID, CLOUDFLARE_API_TOKEN: "offline-effect-fixture" });
@@ -43,7 +46,7 @@ const save=value=>fs.writeFileSync(args["--receipt"],JSON.stringify(value));\n`;
 const deployCode = preamble + `
 const r=JSON.parse(fs.readFileSync(args["--request"])),e=r.expected,t=e.target;
 save({kind:"ops.voiceUiDeployReceipt.v2",status:"PASS",opsSha:e.opsSha,appsSha:e.appsSha,artifactManifestSha256:e.artifactManifestSha256,target:t,
- preflight:{secrets:["JEV_API_KEY"],presence:"NAME_PRESENT"},deployment:{versionId:"version-1",deploymentId:"deployment-1",workerName:t.workerName,url:t.url},effect:{status:"PASS"}});
+ preflight:{secrets:["JEV_API_KEY"],presence:"NAME_PRESENT"},settings:{grade:"CLI_READBACK",reported:t.nativeDeploySettings},deployment:{versionId:"version-1",deploymentId:"deployment-1",workerName:t.workerName,url:t.url},effect:{status:"PASS"}});
 console.log("do-not-forward-effect-output");
 `;
 const readbackCode = preamble + `
@@ -66,7 +69,7 @@ function fixture(t) {
   writeFileSync(deploy, deployCode); writeFileSync(readback, readbackCode);
   const request = { kind: "ops.voiceUiTargetRuntimeRequest.v2",
     expected: { opsSha: OPS_SHA, envsSha: ENVS_SHA, appsSha: APPS_SHA, artifactManifestSha256: PIN.manifestSha256,
-      projectionReceiptSha256: sha256File(projectionPath), isolationVerdictSha256: sha256File(isolationPath), target: { ...TARGET } },
+      projectionReceiptSha256: sha256File(projectionPath), isolationVerdictSha256: sha256File(isolationPath), target: structuredClone(TARGET) },
     inputs: { product, projectionReceipt: projectionPath, isolationVerdict: isolationPath },
     installed: { product: structuredClone(PIN), unzip: INSTALLED.unzip },
     adapters: {
@@ -119,9 +122,16 @@ for (const [name, mutate, message] of [
   ["isolation changed after approval", f=>{write(f.isolationPath,{...read(f.isolationPath),status:"RED"});}, /isolation verdict digest/],
   ["receipt for another Worker", f=>{const r=read(f.projectionPath);r.target.worker_name="other";write(f.projectionPath,r);f.request.expected.projectionReceiptSha256=sha256File(f.projectionPath);}, /Worker mismatch/],
   ["Pages target", f=>{f.request.expected.target={provider:"cloudflare-pages",accountId:ACCOUNT_ID,project:"voice-ui",branch:"proposals"};}, /expected target fields/],
-  ["target URL with a query", f=>{f.request.expected.target.url="https://voice-ui-nonproduct-fixture.invalid/?x=1";}, /bare https origin/],
-  ["target URL with userinfo", f=>{f.request.expected.target.url="https://user@voice-ui-nonproduct-fixture.invalid/";}, /bare https origin/],
-  ["plain http target URL", f=>{f.request.expected.target.url="http://voice-ui-nonproduct-fixture.invalid/";}, /bare https origin/],
+  ["target URL with a query", f=>{f.request.expected.target.url=`${URL_OK}?x=1`;}, /exactly https:\/\/<workerName>/],
+  ["target URL with userinfo", f=>{f.request.expected.target.url=URL_OK.replace("https://","https://user@");}, /exactly https:\/\/<workerName>/],
+  ["plain http target URL", f=>{f.request.expected.target.url=URL_OK.replace("https:","http:");}, /exactly https:\/\/<workerName>/],
+  ["custom domain target URL", f=>{f.request.expected.target.url="https://voice-ui.example.invalid/";}, /exactly https:\/\/<workerName>/],
+  ["another Worker's workers.dev URL", f=>{f.request.expected.target.url="https://other.never-issued-fixture.workers.dev/";}, /exactly https:\/\/<workerName>/],
+  ["no settings acknowledgement", f=>{delete f.request.expected.target.nativeDeploySettings;}, /expected target fields differ/],
+  ["acknowledgement set to true", f=>{f.request.expected.target.nativeDeploySettings=true;}, /acknowledge exactly/],
+  ["acknowledgement with previews on", f=>{f.request.expected.target.nativeDeploySettings.previewUrls=true;}, /acknowledge exactly/],
+  ["acknowledgement with an extra key", f=>{f.request.expected.target.nativeDeploySettings.logpush=false;}, /acknowledge exactly/],
+  ["acknowledgement missing tags", f=>{delete f.request.expected.target.nativeDeploySettings.tags;}, /acknowledge exactly/],
   ["zip byte changed", f=>{const z=path.join(f.product,"voice-ui-dist.zip"),b=readFileSync(z);b[b.length-1]^=1;writeFileSync(z,b);}, /zip differs from the pinned release/],
   ["proof changed", f=>{const p=path.join(f.product,"merged-pr-proof.json");const q=read(p);q.reviewed_head="0".repeat(40);write(p,q);}, /proof differs from the pinned release/],
   ["provenance changed", f=>{const p=path.join(f.product,"provenance.json");const q=read(p);q.source.tree="0".repeat(40);write(p,q);}, /provenance differs from the pinned release/],
@@ -157,8 +167,10 @@ for (const [name, mutate, message] of [
 });
 test("the Workers target is a bare approved https origin", () => {
   assert.equal(validateWorkersTarget({ ...TARGET }).url, TARGET.url);
-  assert.throws(() => validateWorkersTarget({ ...TARGET, url: "https://voice-ui-nonproduct-fixture.invalid/#x" }), /bare https origin/);
-  assert.throws(() => validateWorkersTarget({ ...TARGET, url: "https://voice-ui-nonproduct-fixture.invalid/app" }), /bare https origin/);
+  for (const url of [`${URL_OK}#x`, `${URL_OK}app`, URL_OK.slice(0, -1), "https://voice-ui-nonproduct-fixture.a.b.workers.dev/",
+    "https://voice-ui-nonproduct-fixture.workers.dev/", "https://voice-ui-nonproduct-fixture.never-issued-fixture.workers.dev.example.invalid/"]) {
+    assert.throws(() => validateWorkersTarget({ ...TARGET, url }), /exactly https:\/\/<workerName>/, url);
+  }
   assert.throws(() => validateWorkersTarget({ ...TARGET, workerName: "Voice UI" }), /Worker name/);
 });
 
@@ -180,7 +192,8 @@ test("real offline processes exercise CLI, deploy and readback without claiming 
   assert.equal(r.status,0,r.stderr);assert.doesNotMatch(r.stdout,/do-not-forward-effect-output/);
   const result=read(path.join(f.request.output,"receipt.json"));
   assert.equal(result.claim,"DEPLOY_READBACK_PASS");
-  assert.deepEqual(result.limits,{secretPresence:"NAME_PRESENT_NOT_AUTHORITY",inheritPreservation:"NOT_PROVEN",storedModuleBytes:"NO_CAPABILITY_NOT_RUN"});
+  assert.deepEqual(result.limits,{targetSettings:"ACKNOWLEDGED_DATA_NOT_AUTHORITY",workerSettings:"CLI_READBACK_PROVIDER_REPORTED",
+    secretPresence:"NAME_PRESENT_NOT_AUTHORITY",inheritPreservation:"NOT_PROVEN",storedModuleBytes:"NO_CAPABILITY_NOT_RUN"});
   assert.equal(result.sources.productZipSha256,`sha256:${PIN.zip.sha256}`);
   assert.deepEqual(Object.keys(result.stages).sort(),["deploy","isolation","projection","readback"]);
   assert.equal(result.sources.acceptanceRuntimeSha256,undefined);
@@ -194,6 +207,33 @@ test("only the package's deploy and readback adapters are started; product bytes
   }});
   assert.equal(result.status,"PASS");
   assert.deepEqual(commands,[[process.execPath,f.deploy],[process.execPath,f.readback]]);
+});
+for (const [name, from, to] of [
+  ["without provider-reported settings", 'settings:{grade:"CLI_READBACK",reported:t.nativeDeploySettings},', ''],
+  ["with other provider-reported settings", 'reported:t.nativeDeploySettings', 'reported:{...t.nativeDeploySettings,tags:["kept"]}'],
+]) test(`a deploy receipt ${name} cannot become PASS`, t=>{
+  const f=fixture(t);writeFileSync(f.deploy,deployCode.replace(from,to));
+  f.request.adapters.deploy.sha256=sha256File(f.deploy);
+  assert.throws(()=>runTargetRuntime(f.request,{env:effectEnv()}),/settings are missing or differ/);
+  assert.equal(existsSync(path.join(f.request.output,"receipt.json")),false);
+});
+// The adapter's fixed tooling is checked before the authority guard, so a wrong tool is never reported as authority.
+test("tooling is refused for its own reason before authority; valid tooling then reaches the authority guard", async t=>{
+  const request={kind:"ops.voiceUiEffectRequest.v2",expected:fixture(t).request.expected,artifactRoot:"/nonexistent"};
+  const good={cf:INSTALLED.cf,buildOutputUtils:INSTALLED.buildOutputUtils}, noAuthority={PATH:""};
+  for (const tooling of [{}, {...good,cf:undefined}, {...good,cf:"cf"}, {...good,cf:`${INSTALLED.cf}-absent`}, {...good,cf:INSTALLED.buildOutputUtils},
+    {...good,buildOutputUtils:undefined}, {...good,buildOutputUtils:path.dirname(INSTALLED.cf)}]) {
+    await assert.rejects(deploy(request,{...tooling,env:noAuthority}),/fixed cf executable and build-output library required/);
+  }
+  await assert.rejects(deploy(request,{...good,env:noAuthority}),/effect authority\/target mismatch/);
+  await assert.rejects(deploy(request,{...good,env:{...effectEnv(),CLOUDFLARE_ACCOUNT_ID:"f".repeat(32)}}),/effect authority\/target mismatch/);
+});
+test("a readback is refused before any fetch when the deployment is not the approved target", async t=>{
+  const expected=fixture(t).request.expected; let fetches=0;
+  await assert.rejects(readback({kind:"ops.voiceUiEffectRequest.v2",expected,artifactRoot:"/nonexistent",
+    deployment:{versionId:"v",deploymentId:"d",workerName:TARGET.workerName,url:"https://voice-ui-nonproduct-fixture.other-fixture.workers.dev/"}},
+    {fetcher:()=>{fetches++;throw new Error("no fetch");}}),/readback target differs/);
+  assert.equal(fetches,0);
 });
 test("a readback that claims stored module bytes is refused", t=>{
   const f=fixture(t);writeFileSync(f.readback,readbackCode.replace('"NO_CAPABILITY_NOT_RUN"','"PASS"'));

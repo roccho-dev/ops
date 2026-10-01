@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
 import {
   assertNoPrivateMaterial,
@@ -18,17 +19,23 @@ function providerPath(value, label) {
   // Evidence only. The approved receipt digest binds it; consumers never open it.
 }
 
-// The approved Workers target. The URL is owner-approved data bound by the approved request's digests, not a
-// provider-verified route.
+// The non-versioned settings the pinned `cf deploy` writes on the existing Worker with this adapter's Build Output:
+// workers.dev on, preview URLs off, observability off, tags emptied. A target must acknowledge exactly these.
+export const NATIVE_DEPLOY_SETTINGS = Object.freeze({ workersDev: true, previewUrls: false, observability: { enabled: false }, tags: [] });
+const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+
+// The approved Workers target: owner-approved data bound by the approved request's digests. It is not authority, not
+// a provider-verified route and not an approval of any real Worker. This adapter serves only the Worker's own
+// workers.dev origin; a custom domain or any path is refused here, before any provider call.
 export function validateWorkersTarget(target) {
-  exactObjectKeys(target, ["provider", "accountId", "workerName", "url"], "expected target");
+  exactObjectKeys(target, ["provider", "accountId", "workerName", "url", "nativeDeploySettings"], "expected target");
   requireCondition(target.provider === "cloudflare-workers", "expected target provider differs");
   requireCondition(/^[0-9a-f]{32}$/.test(target.accountId ?? ""), "expected target account id invalid");
-  requireCondition(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(target.workerName ?? ""), "expected target Worker name invalid");
-  let url;
-  try { url = new URL(target.url); } catch { throw new Error("expected target URL invalid"); }
-  requireCondition(url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash
-    && url.pathname === "/" && url.href === target.url, "expected target URL must be a bare https origin with no userinfo, query or fragment");
+  requireCondition(new RegExp(`^${DNS_LABEL}$`).test(target.workerName ?? ""), "expected target Worker name invalid");
+  requireCondition(typeof target.url === "string" && new RegExp(`^https://${target.workerName}\\.${DNS_LABEL}\\.workers\\.dev/$`).test(target.url)
+    && new URL(target.url).href === target.url, "expected target URL must be exactly https://<workerName>.<label>.workers.dev/");
+  requireCondition(isDeepStrictEqual(target.nativeDeploySettings, NATIVE_DEPLOY_SETTINGS),
+    "expected target must acknowledge exactly the native deploy settings");
   return target;
 }
 

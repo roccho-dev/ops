@@ -5,6 +5,7 @@ import {
   normalizedHttps,
   requireCondition,
 } from "./core.mjs";
+import { isDeepStrictEqual } from "node:util";
 
 // A deploy receipt names the operation (native deploy event version, active deployment at 100%) and the secret-name
 // preflight. It never claims provider-stored module bytes or that `inherit` kept a secret value.
@@ -14,11 +15,11 @@ export function validateDeployReceipt(receipt, expected) {
   requireCondition(receipt.opsSha === expected.opsSha, "deploy ops SHA mismatch");
   requireCondition(receipt.appsSha === expected.appsSha, "deploy apps SHA mismatch");
   requireCondition(normalizeSha256(receipt.artifactManifestSha256) === expected.artifactManifestSha256, "deploy artifact digest mismatch");
-  exactObjectKeys(receipt.target, ["provider", "accountId", "workerName", "url"], "deploy target");
-  for (const field of ["provider", "accountId", "workerName", "url"]) {
-    requireCondition(receipt.target[field] === expected.target[field], `deploy target ${field} differs`);
-  }
+  requireCondition(isDeepStrictEqual(receipt.target, expected.target), "deploy target differs");
   requireCondition(JSON.stringify(receipt.preflight) === JSON.stringify({ secrets: ["JEV_API_KEY"], presence: "NAME_PRESENT" }), "secret presence preflight differs");
+  // The provider must have reported exactly the acknowledged settings after the deploy; the CLI's exit code cannot.
+  requireCondition(isDeepStrictEqual(receipt.settings, { grade: "CLI_READBACK", reported: expected.target.nativeDeploySettings }),
+    "provider-reported Worker settings are missing or differ");
   exactObjectKeys(receipt.deployment, ["versionId", "deploymentId", "workerName", "url"], "deployment");
   for (const field of ["versionId", "deploymentId"]) {
     requireCondition(typeof receipt.deployment[field] === "string" && receipt.deployment[field].length > 0, `deployment ${field} missing`);

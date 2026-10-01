@@ -5,6 +5,9 @@ name: voice-ui target runtime
 # canonical apps PRODUCT and ACCEPTANCE by anonymous download, DEPLOY from this run) and runs the installed gate;
 # publish is the guarded, Nix-free release of DEPLOY. Publication is never readiness: the same gate must pass again on
 # the published canonical tuple. check-release-workflow.py requires publish to need only build-test.
+# That later run is the `canonical` dispatch: on the formal tag ref voice-ui-target-runtime-<commit> only, it skips the
+# producer (so publish is skipped too) and the same consumer job fetches the four formal DEPLOY assets anonymously
+# instead of this run's artifact. It takes no URL or SHA input.
 on:
   pull_request:
     paths:
@@ -18,12 +21,16 @@ on:
       publish:
         type: boolean
         default: false
+      canonical:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   build-test:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.canonical) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -142,6 +149,8 @@ jobs:
   # them with their provenance, then runs the installed gate entry in a loopback-only network namespace.
   voice-ui-cf-consumer-cleanstart:
     needs: build-test
+    # One job for both modes: after this run's producer (CI_ONLY), or with the producer skipped for `canonical`.
+    if: ${{ always() && (needs.build-test.result == 'success' || (needs.build-test.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.canonical)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -154,9 +163,40 @@ jobs:
           extra_nix_config: |
             extra-experimental-features = nix-command flakes
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: ${{ !inputs.canonical }}
         with:
           name: voice-ui-target-runtime-release
           path: deploy
+      - name: Fetch and validate the formal DEPLOY release anonymously
+        if: ${{ inputs.canonical }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          # The formal release of exactly this dispatch commit, on its own tag ref; never together with publish.
+          tag="voice-ui-target-runtime-$EXACT_SHA" f=voice-ui-target-runtime.nix-export api="repos/$GITHUB_REPOSITORY"
+          test "$PUBLISH_INPUT" != true
+          test "$GITHUB_REF" = "refs/tags/$tag"
+          test "$(gh api "$api/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha')" = "commit $EXACT_SHA"
+          tree="$(gh api "$api/git/commits/$EXACT_SHA" --jq .tree.sha)"
+          test "$(gh api "$api/releases/tags/$tag" --jq '[.assets[].name] | sort | join(" ")')" = "merged-pr-proof.json provenance.json $f $f.sha256"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          # No token, netrc or git credentials for the bytes: these are the public locators.
+          fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
+          mkdir deploy
+          for name in "$f" "$f.sha256" provenance.json merged-pr-proof.json; do fetch "$base/$name" "deploy/$name"; done
+          test "$(cat "deploy/$f.sha256")" = "$(cd deploy && sha256sum "$f")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg tree "$tree" --arg locator "$base/$f" \
+            --argjson bytes "$(stat -c %s "deploy/$f")" --arg digest "$(sha256sum "deploy/$f" | cut -d' ' -f1)" \
+            --slurpfile q deploy/merged-pr-proof.json '
+            .schema == "roccho.voice-ui-target-runtime.release-provenance/1" and .source == { repository: $repo, commit: $sha, tree: $tree }
+            and .producer.repository == $repo and .producer.workflow_ref == "\($repo)/.github/workflows/voice-ui-target-runtime.yml@refs/heads/proposals"
+            and .deploy.name == "voice-ui-target-runtime.nix-export" and .deploy.format == "nix-store --export"
+            and .deploy.bytes == $bytes and .deploy.sha256 == $digest and .deploy.locator == $locator and .cross_host_bytes_reproducible == false
+            and $q[0].merge_sha == $sha and $q[0].base == "proposals" and $q[0].reviewed_tree == $tree and $q[0].merge_tree == $tree
+            and ($q[0].pr_number | type == "number") and ([$q[0].merged_at, $q[0].reviewed_head] | all)
+            and ($q[0].r_exact_head_verdict_ref | startswith("https://github.com/\($repo)/pull/\($q[0].pr_number)#pullrequestreview-"))' deploy/provenance.json >/dev/null
       - name: Fetch the canonical PRODUCT and ACCEPTANCE anonymously
         run: |
           set -euo pipefail
@@ -164,6 +204,12 @@ jobs:
           (cd deploy && sha256sum -c voice-ui-target-runtime.nix-export.sha256)
           jq -e --arg sha "$EXACT_SHA" --arg digest "$(sha256sum deploy/voice-ui-target-runtime.nix-export | cut -d' ' -f1)" \
             '.source.commit == $sha and .deploy.sha256 == $digest' "$p" >/dev/null
+          # Before any import: the root is one store path, and the entry, gate entry and gate program are exactly its own
+          # fixed files and are in the recorded closure's root. No other path can be named.
+          jq -e '.deploy.root as $r | ($r | test("^/nix/store/[0-9a-z]{32}-voice-ui-target-runtime$"))
+            and .deploy.entry == "\($r)/bin/voice-ui-target-runtime" and .deploy.gate.entry == "\($r)/bin/voice-ui-target-runtime-gate"
+            and .deploy.gate.program == "\($r)/share/voice-ui-target-runtime/tests/workers.test.mjs"
+            and (.deploy.gate.programSha256 | test("^[0-9a-f]{64}$")) and any(.deploy.closure[]; .path == $r)' "$p" >/dev/null
           fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
           check() { test "$(sha256sum "$1" | cut -d' ' -f1)" = "$2"; }
           base="$(jq -r .apps_pin.base "$p")"
@@ -211,7 +257,9 @@ jobs:
           sudo "$gate" --product "$PWD/product" --acceptance-node "$(jq -r .acceptance.entry product/provenance.json)" > gate-receipt.json
           jq -e '.isolation.grade == "ISOLATED" and .grades.harness == "INSTALLED_ADAPTER_LOOPBACK_HARNESS"
             and .grades.acceptance == "RED_EXPECTED" and .grades.stored_module_bytes == "NO_CAPABILITY_NOT_RUN"
-            and .grades.live_provider == "NOT_RUN" and .installed.provider_fetches_from_worker == 0' gate-receipt.json
+            and .grades.live_provider == "NOT_RUN" and .installed.provider_fetches_from_worker == 0
+            and .installed.preset.settings.grade == "CLI_READBACK" and (.installed.preset.mutations | length) == 6
+            and .installed.installed_wrappers.requests == 0' gate-receipt.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
