@@ -11,6 +11,31 @@ const list = value => value === undefined ? [] : Array.isArray(value) ? value : 
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 const need = (ok, message) => { if (!ok) throw new Error(message); };
 
+// These two existing products do not consume the shared CI registry. Keep
+// workflow-edit verification on PRs, but publish only for product-input pushes.
+const isolatedProducts = {
+  ".github/workflows/artifact-runtime-release.yml": [
+    "verification/artifact-runtime-publication/**", "verification/artifact-runtime-app/**",
+  ],
+  ".github/workflows/ops-task-runtime-release.yml": [
+    "packages/ops-task-runtime/**", "packages/gosh/**", "packages/ops-portable-runtime-pack/**",
+    "packages/chatgpt-capability/ingress/carrier-job.mjs", "verification/raw-artifact-carry/**",
+  ],
+};
+export function assertIsolatedPublisherPaths(workflow, filename) {
+  const products = isolatedProducts[filename];
+  if (!products) return;
+  const events = workflow.on;
+  need(events && typeof events === "object" && !Array.isArray(events), `${filename}: explicit events required`);
+  need(Object.hasOwn(events, "workflow_dispatch"), `${filename}: manual entry missing`);
+  for (const [event, expected] of [["pull_request", [...products, filename]], ["push", products]]) {
+    const filter = events[event];
+    need(filter && Array.isArray(filter.paths) && !Object.hasOwn(filter, "paths-ignore"), `${filename}: ${event} explicit paths required`);
+    need(filter.paths.length === expected.length && same(filter.paths, expected), `${filename}: ${event} product paths differ`);
+  }
+  need(same(events.push.branches ?? [], ["proposals"]), `${filename}: product push branch differs`);
+}
+
 // Deliberately bounded admission, not a general GitHub expression interpreter.
 // Unknown expression forms fail closed instead of being guessed safe.
 function guarded(job, events, allowed) {
@@ -96,6 +121,25 @@ export function analyzeEffectWorkflow(workflow, boundary) {
 }
 
 export function selftest() {
+  for (const [filename, products] of Object.entries(isolatedProducts)) {
+    const isolated = {on:{pull_request:{paths:[...products, filename]},push:{branches:["proposals"],paths:[...products]},workflow_dispatch:null}};
+    assertIsolatedPublisherPaths(isolated, filename);
+    const mutations = [
+      w=>{w.on.push.paths.push("ci.intent.v1.jsonl");},
+      w=>{w.on.pull_request.paths.push("ci.intent.v1.jsonl");},
+      w=>{w.on.push.paths.push(filename);},
+      w=>{w.on.push.paths=["**"];},
+      w=>{delete w.on.push.paths;},
+      w=>{w.on.push["paths-ignore"]=["unrelated/**"];},
+      w=>{w.on.push.paths.pop();},
+      w=>{delete w.on.workflow_dispatch;},
+    ];
+    for (const mutate of mutations) {const w=structuredClone(isolated);mutate(w);assert.throws(()=>assertIsolatedPublisherPaths(w,filename));}
+    // Bounded literal/prefix representatives, not a general GitHub glob engine.
+    const matches = file => products.some(pattern => pattern.endsWith("/**") ? file.startsWith(pattern.slice(0,-2)) : file === pattern);
+    for (const pattern of products) assert.ok(matches(pattern.endsWith("/**") ? pattern.slice(0,-2)+"fixture.mjs" : pattern));
+    for (const file of ["ci.intent.v1.jsonl",filename,"build/packages.jsonl","build/checks.jsonl","flake.nix","packages/jev/src/batch.mjs"]) assert.equal(matches(file),false);
+  }
   const action = "actions/checkout@" + "1".repeat(40);
   const policy = {allowedEvents:["workflow_dispatch"],environment:"cloudflare-production"};
   const safe = {on:{pull_request:{},workflow_dispatch:{}},jobs:{
@@ -129,7 +173,7 @@ export function selftest() {
   assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
   parity.jobs.materialize.steps.at(-1).env={TOKEN:"${{ secrets.TOKEN }}"};
   assert.ok(analyzeEffectWorkflow(parity,policy).issues.length);
-  return {positive:2,negative:cases.length+2};
+  return {positive:2,negative:cases.length+2,publisherIsolation:{positive:2,negative:16}};
 }
 
 export function check(root) {
@@ -146,6 +190,7 @@ export function check(root) {
     const parsed=spawnSync("yq",["-o=json",".",path.join(root,p)],{encoding:"utf8"});
     need(parsed.status===0,`${p}: YAML parser failed; yq-go must be provided by the pinned check closure`);
     const w=JSON.parse(parsed.stdout),intent=intents.find(x=>x.path===p),boundary=byPath.get(p);
+    assertIsolatedPublisherPaths(w,p);
     need(intent,`${p}: no CI intent`);
     const events=typeof w.on==="string"?[w.on]:Array.isArray(w.on)?w.on:Object.keys(w.on??{});
     for(const event of intent.dispatch??[]) need(events.includes(event),`${p}: intent trigger ${event} absent`);

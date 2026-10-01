@@ -8,9 +8,6 @@ on:
       - "packages/ops-portable-runtime-pack/**"
       - "packages/chatgpt-capability/ingress/carrier-job.mjs"
       - "verification/raw-artifact-carry/**"
-      - "build/packages.jsonl"
-      - "build/checks.jsonl"
-      - "ci.intent.v1.jsonl"
       - ".github/workflows/ops-task-runtime-release.yml"
   push:
     branches: [proposals]
@@ -20,10 +17,6 @@ on:
       - "packages/ops-portable-runtime-pack/**"
       - "packages/chatgpt-capability/ingress/carrier-job.mjs"
       - "verification/raw-artifact-carry/**"
-      - "build/packages.jsonl"
-      - "build/checks.jsonl"
-      - "ci.intent.v1.jsonl"
-      - ".github/workflows/ops-task-runtime-release.yml"
   workflow_dispatch:
 
 permissions:
