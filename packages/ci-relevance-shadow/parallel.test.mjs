@@ -193,18 +193,25 @@ const formalEnvelope = (marker, value) => `<!-- ${marker}\n${JSON.stringify(valu
 const formalCommentUrl = id => `https://github.com/roccho-dev/ops/pull/450#issuecomment-${id}`;
 
 function prospectiveRecords({ evaluatorSha, packetSha, packetBase64, baseSha, workflowSha,
-  goId = 123, releaseId = 456, goMutate = x => x, releaseMutate = x => x, edited = null }) {
+  goId = 123, releaseId = 456, goMutate = x => x, releaseMutate = x => x, edited = null,
+  releaseAfterGo = false, goMarker = GO_MARKER, releaseMarker = RELEASE_MARKER, wrongScope = null }) {
   const release = releaseMutate({ control: PROSPECTIVE_CONTROL, packetId: 'formal-pilot-1', packetSha256: packetSha, packetBase64 });
   const go = goMutate({ control: PROSPECTIVE_CONTROL, releaseCommentId: releaseId, releaseCommentUrl: formalCommentUrl(releaseId),
     packetSha256: packetSha, evaluatorSha, baseSha, workflowSha, attempt: 1, effectAuthority: false, skipAuthority: false });
-  const stamp = '2026-10-01T00:00:00Z';
-  const record = (id, body, which) => ({ id, issue_url: 'https://api.github.com/repos/roccho-dev/ops/issues/450',
-    html_url: formalCommentUrl(id), created_at: stamp, updated_at: edited === which ? '2026-10-01T00:00:01Z' : stamp, body });
-  return { goId, releaseId, go: record(goId, formalEnvelope(GO_MARKER, go), 'go'),
-    release: record(releaseId, formalEnvelope(RELEASE_MARKER, release), 'release') };
+  const goStamp = '2026-10-01T00:00:00Z', releaseStamp = releaseAfterGo ? '2026-10-01T00:00:01Z' : goStamp;
+  const record = (id, body, which) => {
+    const created_at = which === 'release' ? releaseStamp : goStamp;
+    return { id,
+      issue_url: wrongScope === which ? 'https://api.github.com/repos/roccho-dev/ops/issues/451' : 'https://api.github.com/repos/roccho-dev/ops/issues/450',
+      html_url: formalCommentUrl(id), created_at,
+      updated_at: edited === which ? '2026-10-01T00:00:02Z' : created_at, body };
+  };
+  return { goId, releaseId, go: record(goId, formalEnvelope(goMarker, go), 'go'),
+    release: record(releaseId, formalEnvelope(releaseMarker, release), 'release') };
 }
 
-async function prospectiveFixture({ goMutate, releaseMutate, edited, priorRun = false, brokenRuns = false } = {}) {
+async function prospectiveFixture({ goMutate, releaseMutate, edited, priorRun = false, brokenRuns = false,
+  releaseAfterGo = false, goMarker, releaseMarker, wrongScope = null, brokenComment = null } = {}) {
   const { createHash } = await import('node:crypto');
   const root = mkdtempSync(join(tmpdir(), 'lane-a-prospective-')), out = join(root, 'out'), bin = join(root, 'bin');
   const input = { baseSha: '4'.repeat(40), headSha: '5'.repeat(40), treeSha: '6'.repeat(40),
@@ -220,7 +227,7 @@ async function prospectiveFixture({ goMutate, releaseMutate, edited, priorRun = 
   git('add', '.'); git('commit', '-qm', 'evaluator'); const evaluatorSha = git('rev-parse', 'HEAD');
   const baseSha = '7'.repeat(40), workflowSha = '8'.repeat(40), label = 'lane-a-go-123';
   const records = prospectiveRecords({ evaluatorSha, packetSha, packetBase64: bytes.toString('base64'), baseSha, workflowSha,
-    goMutate, releaseMutate, edited });
+    goMutate, releaseMutate, edited, releaseAfterGo, goMarker, releaseMarker, wrongScope });
   const event = join(root, 'event.json');
   writeFileSync(event, JSON.stringify({ action: 'labeled', number: 450, label: { name: label },
     pull_request: { head: { sha: evaluatorSha, ref: 'proof/449-winnow-ci-relevance' }, base: { sha: baseSha } } }));
@@ -231,8 +238,10 @@ async function prospectiveFixture({ goMutate, releaseMutate, edited, priorRun = 
   const jsonResponse = value => ({ ok: true, status: 200, text: async () => JSON.stringify(value) });
   globalThis.fetch = async url => {
     url = String(url);
-    if (url.endsWith('/issues/comments/123')) return jsonResponse(records.go);
-    if (url.endsWith('/issues/comments/456')) return jsonResponse(records.release);
+    if (url.endsWith('/issues/comments/123')) return brokenComment === 'go'
+      ? { ok: false, status: 503, text: async () => 'unavailable' } : jsonResponse(records.go);
+    if (url.endsWith('/issues/comments/456')) return brokenComment === 'release'
+      ? { ok: false, status: 503, text: async () => 'unavailable' } : jsonResponse(records.release);
     if (url.includes('/actions/workflows/nix-check.yml/runs?')) {
       if (brokenRuns) return { ok: false, status: 503, text: async () => 'unavailable' };
       const current = { id: 77, run_attempt: 1, head_sha: evaluatorSha, display_title: 'ordinary-pr-title', conclusion: null };
@@ -264,7 +273,8 @@ test('prospective admission is labeled, exact, harness-bound and attempt-one onl
   assert.doesNotThrow(() => assertProspectiveAdmission(admitted));
   for (const change of [
     { eventName: 'workflow_dispatch' }, { action: 'synchronize' }, { pr: 451 }, { headRef: 'proposals' },
-    { label: 'lane-a-go-x' }, { attempt: 2 }, { eventHead: T }, { eventBase: H }, { actualWorkflowSha: H },
+    { label: 'lane-a-go-x' }, { label: 'lane-a-go-124' }, { attempt: 2 }, { eventHead: T },
+    { eventBase: H }, { actualWorkflowSha: H },
   ]) assert.throws(() => assertProspectiveAdmission({ ...admitted, ...change }), /PROSPECTIVE_/);
   assert.throws(() => assertAdmission({ head: H, parent: PLAN.parent, eventHead: H, eventName: 'pull_request',
     action: 'labeled', pr: 450, headRef: 'proof/449-winnow-ci-relevance', attempt: 1 }), /UNREGISTERED/);
@@ -291,7 +301,16 @@ test('prospective begin seals exact immutable GO/release records before provider
 for (const [name, options, expected] of [
   ['edited GO', { edited: 'go' }, /FORMAL_COMMENT_EDITED/],
   ['edited release', { edited: 'release' }, /FORMAL_COMMENT_EDITED/],
+  ['wrong GO control', { goMutate: x => ({ ...x, control: 'wrong-control' }) }, /GO_AUTHORITY_MISMATCH/],
+  ['wrong release control', { releaseMutate: x => ({ ...x, control: 'wrong-control' }) }, /RELEASE_PACKET_MISMATCH/],
   ['GO release digest mismatch', { releaseMutate: x => ({ ...x, packetSha256: 'a'.repeat(64) }) }, /RELEASE_PACKET_MISMATCH/],
+  ['release created after GO', { releaseAfterGo: true }, /RELEASE_AFTER_GO/],
+  ['malformed GO marker', { goMarker: 'WRONG-GO-MARKER' }, /FORMAL_RECORD_MARKER_MISMATCH/],
+  ['malformed release schema', { releaseMutate: x => ({ ...x, unexpected: true }) }, /FORMAL_RECORD_SCHEMA_MISMATCH/],
+  ['wrong GO comment scope', { wrongScope: 'go' }, /FORMAL_COMMENT_SCOPE_MISMATCH/],
+  ['wrong release comment scope', { wrongScope: 'release' }, /FORMAL_COMMENT_SCOPE_MISMATCH/],
+  ['GO comment GET failure', { brokenComment: 'go' }, /GO_COMMENT_HTTP_503/],
+  ['release comment GET failure', { brokenComment: 'release' }, /RELEASE_COMMENT_HTTP_503/],
   ['reused activation after failed prior run', { priorRun: true }, /FORMAL_ACTIVATION_REUSED/],
   ['missing run-history readback', { brokenRuns: true }, /RUN_HISTORY_HTTP_503/],
 ]) test(`prospective begin rejects ${name} before provider`, async () => {
