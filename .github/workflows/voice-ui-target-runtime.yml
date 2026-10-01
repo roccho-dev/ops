@@ -187,8 +187,17 @@ jobs:
           sudo "$(command -v nix-store)" --import < deploy/voice-ui-target-runtime.nix-export > /dev/null
           # shellcheck disable=SC2024
           sudo "$(command -v nix-store)" --import < acceptance.nix-export > /dev/null
-          normal='if type == "array" then map({ path, narHash, narSize }) else to_entries | map({ path: .key, narHash: .value.narHash, narSize: .value.narSize }) end | sort_by(.path)'
-          compare() { diff <(nix path-info --json --recursive "$1" | jq -c "$normal") <(jq -c "$2 | sort_by(.path)" "$3"); }
+          # Both sides become the same canonical form: exactly path, narHash and narSize per member, sorted by path,
+          # with sorted keys (jq -S), so only a real difference in the set, a hash or a size can differ.
+          canon='map({ path, narHash, narSize }) | sort_by(.path)'
+          native='(if type == "array" then . else to_entries | map(.value + { path: .key }) end)'
+          same() { diff <(jq -cS "$canon" <<<"$1") <(jq -cS "$canon" <<<"$2") > /dev/null; }
+          same '[{"path":"/a","narHash":"h","narSize":1},{"path":"/b","narHash":"i","narSize":2}]' '[{"narSize":2,"path":"/b","narHash":"i"},{"narHash":"h","narSize":1,"path":"/a"}]'
+          for wrong in '[{"path":"/a","narHash":"x","narSize":1}]' '[{"path":"/a","narHash":"h","narSize":2}]' \
+            '[{"path":"/a","narHash":"h","narSize":1},{"path":"/b","narHash":"i","narSize":2}]'; do
+            if same '[{"path":"/a","narHash":"h","narSize":1}]' "$wrong"; then echo "closure comparison accepted $wrong" >&2; exit 1; fi
+          done
+          compare() { diff <(nix path-info --json --recursive "$1" | jq -cS "$native | $canon") <(jq -cS "$2 | $canon" "$3"); }
           compare "$(jq -r .deploy.root deploy/provenance.json)" .deploy.closure deploy/provenance.json
           compare "$(jq -r .acceptance.root product/provenance.json)" .acceptance.closure product/provenance.json
           test -x "$(jq -r .deploy.gate.entry deploy/provenance.json)"
