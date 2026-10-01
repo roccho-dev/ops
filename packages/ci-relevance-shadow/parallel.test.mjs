@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
-import { PLAN, MEMBERS, PROSPECTIVE_JOB, PROSPECTIVE_CONTROL, GO_MARKER, RELEASE_MARKER, formalRunTitle,
+import { PLAN, MEMBERS, PROSPECTIVE_JOB, prospectiveJobName, PROSPECTIVE_CONTROL, GO_MARKER, RELEASE_MARKER,
   assertAdmission, assertProspectiveAdmission, jobName, commandFor, timeoutFor, begin, execute, terminal,
   loadTerminal, joinTerminals, prospectiveBegin, prospectiveRun, prospectiveTerminal, loadProspectiveTerminal } from './parallel.mjs';
 import { digest, REFERENCE_UNIVERSE, runWinnowRelevance } from './winnow.mjs';
@@ -235,12 +235,15 @@ async function prospectiveFixture({ goMutate, releaseMutate, edited, priorRun = 
     if (url.endsWith('/issues/comments/456')) return jsonResponse(records.release);
     if (url.includes('/actions/workflows/nix-check.yml/runs?')) {
       if (brokenRuns) return { ok: false, status: 503, text: async () => 'unavailable' };
-      const current = { id: 77, run_attempt: 1, head_sha: evaluatorSha, display_title: formalRunTitle(label), conclusion: null };
+      const current = { id: 77, run_attempt: 1, head_sha: evaluatorSha, display_title: 'ordinary-pr-title', conclusion: null };
       const workflow_runs = priorRun ? [{ ...current, id: 66, conclusion: 'failure' }, current] : [current];
       return jsonResponse({ total_count: workflow_runs.length, workflow_runs });
     }
+    if (url.endsWith('/actions/runs/66/attempts/1/jobs?per_page=100'))
+      return jsonResponse({ total_count: 1, jobs: [{ name: prospectiveJobName(label), id: 801, run_id: 66, run_attempt: 1,
+        head_sha: evaluatorSha, runner_id: 802, runner_name: 'prior-runner', labels: ['ubuntu-24.04'] }] });
     if (url.endsWith('/actions/runs/77/attempts/1/jobs?per_page=100'))
-      return jsonResponse({ total_count: 1, jobs: [{ name: PROSPECTIVE_JOB, id: 901, run_id: 77, run_attempt: 1,
+      return jsonResponse({ total_count: 1, jobs: [{ name: prospectiveJobName(label), id: 901, run_id: 77, run_attempt: 1,
         head_sha: evaluatorSha, runner_id: 902, runner_name: 'fixture-runner', labels: ['ubuntu-24.04'] }] });
     throw new Error('unexpected fetch ' + url);
   };
@@ -276,7 +279,7 @@ test('prospective begin seals exact immutable GO/release records before provider
     assert.equal(start.evaluator.headSha, f.evaluatorSha); assert.equal(start.case.headSha, f.input.headSha);
     assert.equal(start.harness.baseSha, f.baseSha); assert.equal(start.harness.workflowSha, f.workflowSha);
     assert.equal(start.activation.goCommentId, 123); assert.equal(start.activation.releaseCommentId, 456);
-    assert.equal(start.activation.label, f.label); assert.equal(start.activation.formalRunTitle, formalRunTitle(f.label));
+    assert.equal(start.activation.label, f.label); assert.equal(start.jobName, prospectiveJobName(f.label));
     assert.match(start.activation.goBody, new RegExp(GO_MARKER)); assert.match(start.activation.releaseBody, new RegExp(RELEASE_MARKER));
     assert.deepEqual(JSON.parse(readFileSync(join(f.out, 'packet.json'), 'utf8')), f.input);
     const modelVisible = JSON.stringify(prepared.request);

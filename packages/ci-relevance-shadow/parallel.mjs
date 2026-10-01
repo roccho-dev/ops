@@ -40,10 +40,10 @@ const hex40 = s => typeof s === 'string' && /^[a-f0-9]{40}$/u.test(s);
 const hex64 = s => typeof s === 'string' && /^[a-f0-9]{64}$/u.test(s);
 const text = s => typeof s === 'string' && s.trim().length > 0;
 export const PROSPECTIVE_JOB = 'lane-a-prospective-provider';
+export const prospectiveJobName = label => `${PROSPECTIVE_JOB}-${label}`;
 export const PROSPECTIVE_CONTROL = '3ec15b2b473be9465fa32d94851c8ab09d1c62b9';
 export const GO_MARKER = 'LANE-A-P-GO-v1';
 export const RELEASE_MARKER = 'LANE-A-VERIFIED-RELEASE-v1';
-export const formalRunTitle = label => label;
 const providerIdentity = p => p?.version === PLAN.version && p.manifestSha256 === PLAN.manifestSha256
   && p.runtimeFiles?.archiveSha256 === PLAN.archiveSha256 && p.runtimeFiles.binarySha256 === PLAN.binarySha256
   && p.loaded?.models?.filter(x => x.name === PLAN.model && x.digest === PLAN.manifestSha256
@@ -311,6 +311,18 @@ async function formalRunsReadback(env, out, headRef) {
   return data;
 }
 
+async function priorRunJobsReadback(env, out, runId) {
+  const url = `https://api.github.com/repos/roccho-dev/ops/actions/runs/${runId}/attempts/1/jobs?per_page=100`;
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30000),
+    headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${env.GH_TOKEN}`, 'X-GitHub-Api-Version': '2022-11-28' } });
+  const raw = await response.text();
+  writeFileSync(join(out, `prior-run-${runId}-jobs-api.json`), raw, { flag: 'wx' });
+  requireThat(response.ok, `PRIOR_RUN_JOBS_HTTP_${response.status}`);
+  const data = JSON.parse(raw);
+  requireThat(Array.isArray(data.jobs) && data.jobs.length === data.total_count, 'PRIOR_RUN_JOBS_INCOMPLETE');
+  return data;
+}
+
 export function assertProspectiveAdmission({ repository, eventName, action, pr, headRef, label, attempt,
   evaluatorSha, eventHead, actualHead, baseSha, eventBase, workflowSha, actualWorkflowSha, goCommentId }) {
   requireThat(repository === 'roccho-dev/ops' && eventName === 'pull_request' && action === 'labeled'
@@ -350,14 +362,14 @@ export async function prospectiveBegin(out, env = process.env) {
     baseSha: go.baseSha, eventBase: event.pull_request?.base?.sha, workflowSha: go.workflowSha,
     actualWorkflowSha: env.GITHUB_WORKFLOW_SHA, goCommentId });
   const runHistory = await formalRunsReadback(env, out, event.pull_request.head.ref);
-  const title = formalRunTitle(label);
-  const formalRuns = runHistory.workflow_runs.filter(run => run.display_title === title);
-  const currentRuns = formalRuns.filter(run => String(run.id) === env.GITHUB_RUN_ID);
-  const priorRuns = formalRuns.filter(run => String(run.id) !== env.GITHUB_RUN_ID);
-  requireThat(priorRuns.length === 0 && currentRuns.length <= 1
-    && currentRuns.every(run => run.run_attempt === 1 && run.head_sha === evaluator.headSha), 'FORMAL_ACTIVATION_REUSED');
+  const priorRuns = runHistory.workflow_runs.filter(run => run.head_sha === evaluator.headSha
+    && String(run.id) !== env.GITHUB_RUN_ID);
+  for (const run of priorRuns) {
+    const priorJobs = await priorRunJobsReadback(env, out, run.id);
+    requireThat(!priorJobs.jobs.some(job => job.name === prospectiveJobName(label)), 'FORMAL_ACTIVATION_REUSED');
+  }
   const jobs = await jobsReadback(env, out);
-  const matches = jobs.jobs.filter(x => x.name === PROSPECTIVE_JOB && x.run_attempt === 1
+  const matches = jobs.jobs.filter(x => x.name === prospectiveJobName(label) && x.run_attempt === 1
     && String(x.run_id) === env.GITHUB_RUN_ID);
   requireThat(matches.length === 1, 'RUNNER_JOB_UNRESOLVED');
   const job = matches[0];
@@ -369,12 +381,12 @@ export async function prospectiveBegin(out, env = process.env) {
     inputSha256: prepared.inputSha256, requestSha256: prepared.requestSha256,
     evaluator, case: { baseSha: prepared.input.baseSha, headSha: prepared.input.headSha, treeSha: prepared.input.treeSha },
     harness: { baseSha: go.baseSha, workflowSha: go.workflowSha },
-    activation: { label, formalRunTitle: title, goCommentId, goCommentUrl: commentHtml(goCommentId),
+    activation: { label, goCommentId, goCommentUrl: commentHtml(goCommentId),
       releaseCommentId: go.releaseCommentId, releaseCommentUrl: go.releaseCommentUrl,
       goCreatedAt: goRecord.created_at, releaseCreatedAt: releaseRecord.created_at,
       goBody: goRecord.body, goBodySha256: hash(goRecord.body),
       releaseBody: releaseRecord.body, releaseBodySha256: hash(releaseRecord.body) },
-    candidateIds: prepared.input.candidates.map(row => row.id), jobName: PROSPECTIVE_JOB, jobId: job.id,
+    candidateIds: prepared.input.candidates.map(row => row.id), jobName: prospectiveJobName(label), jobId: job.id,
     runId: job.run_id, attempt: 1, providerTimeoutMs: PLAN.providerTimeoutMs, timeoutSeconds: 360,
     start: now(), runner: { id: job.runner_id, name: job.runner_name, labels: job.labels,
       hostname: hostname(), os: env.RUNNER_OS, arch: env.RUNNER_ARCH,
