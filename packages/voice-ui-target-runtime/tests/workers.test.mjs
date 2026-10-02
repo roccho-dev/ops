@@ -622,12 +622,12 @@ if (acceptanceNode) {
     { PATH: process.env.PATH ?? "", HOME: home, TMPDIR: home, LANG: "C.UTF-8" }, { cwd: home, detached: true });
   const r = fs.existsSync(path.join(home, "receipt.json")) ? JSON.parse(fs.readFileSync(path.join(home, "receipt.json"), "utf8")) : null;
   installedReceipt.acceptance = { exit: accepted.code, status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs, limits: r?.limits,
-    reason: /NOT_RUN: jev_unavailable/.test(accepted.stderr) ? "NOT_RUN: jev_unavailable" : null, api: siteRequests.slice(apiFrom) };
+    reason: /NOT_RUN: judge_unavailable/.test(accepted.stderr) ? "NOT_RUN: judge_unavailable" : null, api: siteRequests.slice(apiFrom) };
   assert.equal(accepted.code, 1, accepted.stderr);
   assert.deepEqual(installedReceipt.acceptance.limits, { scope: "application-e2e", providerIdentity: "NOT_PROVEN",
     providerAuthentication: "NOT_PROVEN", liveMicrophone: "NOT_RUN" });
   assert.deepEqual({ status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs, reason: installedReceipt.acceptance.reason },
-    { status: "RED", stage: "application-e2e", secret_inputs: [], reason: "NOT_RUN: jev_unavailable" }, accepted.stderr);
+    { status: "RED", stage: "application-e2e", secret_inputs: [], reason: "NOT_RUN: judge_unavailable" }, accepted.stderr);
   assert.deepEqual(siteRequests.slice(apiFrom).map((a) => [a.method, a.origin, a.fetchSite, a.status]),
     [["POST", origin, "same-origin", 503]], "acceptance must make exactly one same-origin page request to /api/judge");
 }
