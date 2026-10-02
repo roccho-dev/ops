@@ -57,6 +57,16 @@ stdenv.mkDerivation {
         if any(key in row["test"] for key in ("block", "rejected", "only", "generation", "wire-", "no-retry", "isolation")):
             print(json.dumps(row))
     PYTHON
+    python3 <<'PYTHON' > "$proof/ux.jsonl"
+    import json
+    with open("proof.jsonl") as source:
+        rows = [json.loads(line) for line in source]
+    selected = [row for row in rows if row["test"].startswith("ux-") or row["test"] == "residuals"]
+    assert any(row["test"] == "ux-browser-equivalence-summary" for row in selected)
+    assert any(row["test"] == "residuals" for row in selected)
+    for row in selected:
+        print(json.dumps(row, ensure_ascii=False))
+    PYTHON
     sha256sum cdp.c cdp.h tty.c tty.h main.c Makefile tests/probe.c tests/proof.py default.nix proof.nix > "$proof/source.sha256"
     ${chromium}/bin/chromium --version > "$proof/versions.txt"
     pkg-config --modversion libcurl json-c >> "$proof/versions.txt"
