@@ -81,6 +81,98 @@ test("only typed HTTP failures retain a bounded upstream status without reading 
   }
   assert.deepEqual(await invoke(data()),{answers:{first:{choice:"A",confidence:0.2},second:{choice:"NONE",confidence:1,probabilities:{NONE:2}}}});
 });
+test("HTTP400 diagnostic is one fixed same-field vocabulary observation, never raw detail",async()=>{
+  const flag="context-limit-vocabulary-observed";
+  const cases=[
+    [{detail:"private-canary CONTEXT length"},true],
+    [{message:"not a context limit: private-canary"},true],
+    [{error:{message:"reflected input context limit private-canary"}},true],
+    [{detail:"context",message:"length"},false],
+    [{detail:"contextual length"},false],
+    [{detail:"context_length"},false],
+    [{detail:["context length"]},false],
+    [{input:{message:"context limit"}},false],
+    [{error:{detail:"context length"}},false],
+    [{detail:"private-canary unknown"},false],
+    [null,false],
+  ];
+  for(const [value,expected]of cases){
+    let calls=0,rawReads=0;
+    const bytes=new TextEncoder().encode(JSON.stringify(value));
+    await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>{
+      calls++;return {ok:false,status:400,body:new ReadableStream({start(c){c.enqueue(bytes);c.close();}}),json(){rawReads++;throw Error("private-canary");},text(){rawReads++;throw Error("private-canary");}};
+    }}),error=>{
+      assert.equal(error.code,"provider_http_error");assert.equal(error.upstreamStatus,400);
+      assert.equal(Object.hasOwn(error,"diagnostic"),expected);
+      if(expected)assert.equal(error.diagnostic,flag);
+      assert.ok(!JSON.stringify(error).includes("private-canary"));
+      assert.deepEqual(Object.keys(error).sort(),expected?["code","diagnostic","name","upstreamStatus"]:["code","name","upstreamStatus"]);
+      return true;
+    });
+    assert.equal(calls,1);assert.equal(rawReads,0);
+  }
+  for(const [code,status,diagnostic]of [["provider_timeout",400,flag],["provider_http_error",401,flag],["provider_http_error",400,"private-canary"]]){
+    assert.equal(Object.hasOwn(new JudgeProviderError(code,status,diagnostic),"diagnostic"),false);
+  }
+});
+test("diagnostic cap is4096 bytes with strict UTF8/JSON and no fallback read",async()=>{
+  const text=JSON.stringify({message:"context limit private-canary"});
+  for(const [bytes,expected]of [
+    [new TextEncoder().encode(text.padEnd(4096," ")),true],
+    [new TextEncoder().encode(text.padEnd(4097," ")),false],
+    [new Uint8Array([255]),false],
+    [new TextEncoder().encode("context limit private-canary"),false],
+  ]){
+    let cancels=0;
+    const body=new ReadableStream({start(c){c.enqueue(bytes);},cancel(){cancels++;}});
+    // Close valid-size streams; the oversize case must cancel before another read.
+    const stream=bytes.length<=4096?new ReadableStream({start(c){c.enqueue(bytes);c.close();}}):body;
+    await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:false,status:400,body:stream,text(){throw Error("must not fallback");},json(){throw Error("must not fallback");}})}),error=>{
+      assert.equal(error.upstreamStatus,400);assert.equal(Object.hasOwn(error,"diagnostic"),expected);assert.ok(!JSON.stringify(error).includes("private-canary"));return true;
+    });
+    assert.equal(stream.locked,false);if(bytes.length>4096)assert.equal(cancels,1);
+  }
+  const exact=new TextEncoder().encode(text.padEnd(4096," "));
+  for(const [chunks,expected]of [[ [exact.slice(0,2000),exact.slice(2000)],true ],[ [exact,new Uint8Array([32]),new TextEncoder().encode("private-unread-canary")],false ]]){
+    let reads=0,cancels=0,releases=0;
+    const reader={read:async()=>{const value=chunks[reads++];return value?{done:false,value}:{done:true};},cancel(){cancels++;},releaseLock(){releases++;}};
+    await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:false,status:400,body:{getReader:()=>reader}})}),error=>{
+      assert.equal(Object.hasOwn(error,"diagnostic"),expected);assert.ok(!JSON.stringify(error).includes("canary"));return true;
+    });
+    assert.equal(reads,expected?3:2);assert.equal(cancels,expected?0:1);assert.equal(releases,1);
+  }
+  for(const body of [undefined,{}, {getReader(){throw Error("private-canary");}}]){
+    await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:false,status:400,body})}),error=>error.code==="provider_http_error"&&!Object.hasOwn(error,"diagnostic")&&!JSON.stringify(error).includes("canary"));
+  }
+  let cancels=0,releases=0;
+  const reader={read:async()=>{throw Error("private-read-canary");},cancel(){cancels++;},releaseLock(){releases++;}};
+  await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:false,status:400,body:{getReader:()=>reader}})}),error=>error.code==="provider_http_error"&&!Object.hasOwn(error,"diagnostic")&&!JSON.stringify(error).includes("canary"));
+  assert.equal(cancels,1);assert.equal(releases,1);
+});
+test("legacy, other statuses and success never inspect rejection bodies",async()=>{
+  for(const status of [400,401,429,503]){
+    let reads=0;const fetch=async()=>({ok:false,status,get body(){reads++;throw Error("private-canary");}});
+    const provider=bindJev({apiKey:key,fetch});
+    await assert.rejects(()=>provider.post({legacy:true}),error=>error.code==="provider_http_error");assert.equal(reads,0);
+    if(status!==400){await refuse(()=>boundJudge({request,provider}),"provider_http_error");assert.equal(reads,0);}
+  }
+  let reads=0;await judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:true,json:async()=>data(),get body(){reads++;throw Error("private-canary");}})});assert.equal(reads,0);
+});
+test("diagnostic stalled reader is cancelled and released at original deadline or caller abort",async t=>{
+  t.mock.timers.enable({apis:["setTimeout"]});
+  for(const timeout of [true,false]){
+    const controller=new AbortController();let reads=0,cancels=0,releases=0,late;
+    const reader={read(){reads++;return new Promise(resolve=>{late=resolve;});},cancel(){cancels++;return Promise.reject(Error("private-cancel-canary"));},releaseLock(){releases++;}};
+    const pending=judgeNamedChoices({request,apiKey:key,signal:controller.signal,fetch:async()=>({ok:false,status:400,body:{getReader:()=>reader}})});
+    const check=refuse(()=>pending,timeout?"provider_timeout":"cancelled");
+    for(let i=0;i<6;i++)await Promise.resolve();assert.equal(reads,1);
+    if(timeout)t.mock.timers.tick(10000);else controller.abort();
+    await check;for(let i=0;i<6;i++)await Promise.resolve();
+    assert.equal(cancels,1);assert.equal(releases,1);
+    late({done:false,value:new TextEncoder().encode("private-late-canary context limit")});
+    for(let i=0;i<6;i++)await Promise.resolve();assert.equal(reads,1);
+  }
+});
 test("single ten-second deadline covers hung headers and body",async t=>{
   t.mock.timers.enable({apis:["setTimeout"]});
   for(const body of [false,true]){

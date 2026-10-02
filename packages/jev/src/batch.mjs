@@ -8,14 +8,15 @@ const own = (value, key) => Object.hasOwn(value, key);
 const finite = value => typeof value === "number" && Number.isFinite(value);
 
 export class JudgeProviderError extends Error {
-  constructor(code, upstreamStatus) {
+  constructor(code, upstreamStatus, diagnostic) {
     super(code); this.name = "JudgeProviderError"; this.code = code;
     if (code === "provider_http_error" && Number.isInteger(upstreamStatus) && upstreamStatus >= 300 && upstreamStatus <= 599) {
       this.upstreamStatus = upstreamStatus;
+      if (upstreamStatus === 400 && diagnostic === "context-limit-vocabulary-observed") this.diagnostic = diagnostic;
     }
   }
 }
-const fail = (code, upstreamStatus) => { throw new JudgeProviderError(code, upstreamStatus); };
+const fail = (code, upstreamStatus, diagnostic) => { throw new JudgeProviderError(code, upstreamStatus, diagnostic); };
 function requestBody(request) {
   try {
     if (!object(request) || Object.keys(request).some(k => !["state", "questions"].includes(k))
@@ -61,10 +62,10 @@ export async function judgeNamedChoices({request, provider, signal} = {}) {
   const body = requestBody(request);
   const questions = JSON.parse(body).questions;
   try {
-    return normalize(await provider.post(JSON.parse(body), { signal, deadlineMs: DEADLINE_MS }), questions);
+    return normalize(await provider.post(JSON.parse(body), { signal, deadlineMs: DEADLINE_MS, diagnoseRejection: true }), questions);
   } catch (error) {
     if (error instanceof JudgeProviderError) throw error;
-    if (error instanceof JevTransportError) fail(error.code, error.status);
+    if (error instanceof JevTransportError) fail(error.code, error.status, error.diagnostic);
     fail("provider_contract_error");
   }
 }
