@@ -20,6 +20,6 @@ Required missing route:
 
 - capability: `find-packages`
 - owning repo: not discoverable from the current single policy entry
-- compliant next step after route exists: `git ls-remote ssh://100.124.250.91/home/nixos/repos/<repo>.git`, then `nix run git+ssh://100.124.250.91/home/nixos/repos/<repo>.git?ref=<ref>#find-packages`
+- compliant next step after route exists: `git ls-remote ssh://100.124.250.91/home/nixos/repos/.bare/<repo>.git`, then `nix run git+ssh://100.124.250.91/home/nixos/repos/.bare/<repo>.git?ref=<ref>#find-packages`
 
 This evidence proves the package surface builds and exists in this proposal, but current single policy-entry routing is not sufficient for cold discovery.
