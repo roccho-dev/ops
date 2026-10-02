@@ -265,6 +265,7 @@ jobs:
             and .installed.SEAM_NO_CREDENTIAL == { refused: true, requests: [], mutations: 0 }
             and .grades.acceptance == "RED_EXPECTED" and .grades.stored_module_bytes == "NO_CAPABILITY_NOT_RUN"
             and .grades.live_provider == "NOT_RUN" and .installed.provider_fetches_from_worker == 0
+            and .installed.acceptance.limits == {scope: "application-e2e", providerIdentity: "NOT_PROVEN", providerAuthentication: "NOT_PROVEN", liveMicrophone: "NOT_RUN"}
             and .installed.preset.settings.grade == "CLI_READBACK" and (.installed.preset.mutations | length) == 6
             and .installed.installed_wrappers.requests == 0' gate-receipt.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

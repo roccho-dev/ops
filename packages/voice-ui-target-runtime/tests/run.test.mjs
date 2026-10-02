@@ -55,7 +55,7 @@ const r=JSON.parse(fs.readFileSync(args["--request"])),e=r.expected;
 const files=JSON.parse(fs.readFileSync(path.join(r.artifactRoot,"manifest.json"))).files.filter(row=>row.path.startsWith("site/"));
 save({kind:"ops.voiceUiReadbackReceipt.v2",status:"PASS",opsSha:e.opsSha,appsSha:e.appsSha,artifactManifestSha256:e.artifactManifestSha256,
  versionId:r.deployment.versionId,storedModuleBytes:"NO_CAPABILITY_NOT_RUN",publicBytes:{status:"PASS",fileCount:files.length,files},
- function:{status:"PASS",path:"/api/jev",response:400,error:"invalid_json"}});
+ function:{status:"PASS",path:"/api/judge",response:400,error:"invalid_json"}});
 `;
 
 function fixture(t) {

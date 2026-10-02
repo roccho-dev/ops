@@ -146,13 +146,13 @@ export async function readback(request, { fetcher = fetch, wait = delay } = {}) 
       return { path: row.path, bytes: bytes.length, sha256 };
     })));
   }
-  const response = await checked(new URL("/api/jev", t.url), { method: "POST", headers: { "content-type": "application/json" }, body: "not json" });
+  const response = await checked(new URL("/api/judge", t.url), { method: "POST", headers: { "content-type": "application/json" }, body: "not json" });
   const body = await response.json().catch(() => null);
   need(response.status === 400 && body?.error === "invalid_json", `deployed Worker rejection contract differs (HTTP ${response.status})`);
   return { kind: "ops.voiceUiReadbackReceipt.v2", status: "PASS", opsSha: e.opsSha, appsSha: e.appsSha,
     artifactManifestSha256: e.artifactManifestSha256, versionId: deployment.versionId,
     publicBytes: { status: "PASS", fileCount: required.length, files: observed },
-    function: { status: "PASS", path: "/api/jev", response: 400, error: "invalid_json" },
+    function: { status: "PASS", path: "/api/judge", response: 400, error: "invalid_json" },
     storedModuleBytes: "NO_CAPABILITY_NOT_RUN" };
 }
 

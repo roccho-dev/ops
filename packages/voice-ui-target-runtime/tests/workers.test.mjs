@@ -140,10 +140,10 @@ async function serveSite(req, res, body) {
     worker = { digest, module: (await import(pathToFileURL(file))).default };
   }
   const row = { phase, method: req.method, path: url.pathname, origin: req.headers.origin ?? null, fetchSite: req.headers["sec-fetch-site"] ?? null };
-  if (url.pathname === "/api/jev" && phase === "PRESET_SECRET_FIXTURE") {
+  if (url.pathname === "/api/judge" && phase === "PRESET_SECRET_FIXTURE") {
     let json = true;
     try { JSON.parse(body.toString()); } catch { json = false; }
-    if (json) { violations.push("valid JSON reached /api/jev while the fixture secret was set"); res.writeHead(409); return res.end(); }
+    if (json) { violations.push("valid JSON reached /api/judge while the fixture secret was set"); res.writeHead(409); return res.end(); }
   }
   const headers = new Headers();
   for (const name of ["content-type", "origin", "sec-fetch-site", "accept"]) if (typeof req.headers[name] === "string") headers.set(name, req.headers[name]);
@@ -156,7 +156,7 @@ async function serveSite(req, res, body) {
   const env = { ASSETS: assets, ...(phase === "PRESET_SECRET_FIXTURE" ? { JEV_API_KEY: fixtureJevValue } : {}) };
   const response = await worker.module.fetch(new Request(url, { method: req.method, headers,
     body: ["GET", "HEAD"].includes(req.method) ? undefined : body }), env);
-  if (url.pathname === "/api/jev") siteRequests.push({ ...row, status: response.status });
+  if (url.pathname === "/api/judge") siteRequests.push({ ...row, status: response.status });
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
 }
@@ -611,7 +611,7 @@ assert.deepEqual(siteRequests.slice(apiFrom).map((r) => [r.method, r.status]), A
 installedReceipt.secret_absent = { readback: "RED", api: siteRequests.slice(apiFrom) };
 
 // NO_SECRET_ACCEPTANCE: the imported ACCEPTANCE runtime, in its own credential-free process tree, runs the product's
-// acceptance entry against the same uploaded bytes; the page's own /api/jev call gets 503 and ends RED_EXPECTED.
+// acceptance entry against the same uploaded bytes; the page's own /api/judge call gets 503 and ends RED_EXPECTED.
 if (acceptanceNode) {
   phase = "NO_SECRET_ACCEPTANCE"; apiFrom = siteRequests.length;
   const origin = `http://127.0.0.1:${server.address().port}`, home = path.join(work, "acceptance");
@@ -621,13 +621,15 @@ if (acceptanceNode) {
     "--expected-manifest-sha256", installed.product.manifestSha256, "--handoff-id", "gate/1", "--receipt", path.join(home, "receipt.json")],
     { PATH: process.env.PATH ?? "", HOME: home, TMPDIR: home, LANG: "C.UTF-8" }, { cwd: home, detached: true });
   const r = fs.existsSync(path.join(home, "receipt.json")) ? JSON.parse(fs.readFileSync(path.join(home, "receipt.json"), "utf8")) : null;
-  installedReceipt.acceptance = { exit: accepted.code, status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs,
-    reason: /NOT_RUN: jev_unavailable/.test(accepted.stderr) ? "NOT_RUN: jev_unavailable" : null, api: siteRequests.slice(apiFrom) };
+  installedReceipt.acceptance = { exit: accepted.code, status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs, limits: r?.limits,
+    reason: /NOT_RUN: judge_unavailable/.test(accepted.stderr) ? "NOT_RUN: judge_unavailable" : null, api: siteRequests.slice(apiFrom) };
   assert.equal(accepted.code, 1, accepted.stderr);
+  assert.deepEqual(installedReceipt.acceptance.limits, { scope: "application-e2e", providerIdentity: "NOT_PROVEN",
+    providerAuthentication: "NOT_PROVEN", liveMicrophone: "NOT_RUN" });
   assert.deepEqual({ status: r?.status, stage: r?.stage, secret_inputs: r?.dependencies?.secretInputs, reason: installedReceipt.acceptance.reason },
-    { status: "RED", stage: "application-e2e", secret_inputs: [], reason: "NOT_RUN: jev_unavailable" }, accepted.stderr);
+    { status: "RED", stage: "application-e2e", secret_inputs: [], reason: "NOT_RUN: judge_unavailable" }, accepted.stderr);
   assert.deepEqual(siteRequests.slice(apiFrom).map((a) => [a.method, a.origin, a.fetchSite, a.status]),
-    [["POST", origin, "same-origin", 503]], "acceptance must make exactly one same-origin page request to /api/jev");
+    [["POST", origin, "same-origin", 503]], "acceptance must make exactly one same-origin page request to /api/judge");
 }
 installedReceipt.provider_fetches_from_worker = providerFetches;
 installedReceipt.violations = violations;
