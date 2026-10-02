@@ -1,0 +1,33 @@
+name: Package Decision Atlas candidate
+
+on:
+  pull_request:
+    branches: [proposals]
+    paths:
+      - 'verification/package-decision-atlas/**'
+      - '.github/workflows/package-decision-atlas.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test deterministic projection and composite
+        run: python3 -m unittest discover -s verification/package-decision-atlas/tests -v
+      - name: Materialize sample semantic views
+        run: |
+          python3 verification/package-decision-atlas/project_package_decisions.py \
+            --input verification/package-decision-atlas/fixtures/package-decisions.sample.jsonl \
+            --out-dir "$RUNNER_TEMP/package-decision-atlas"
+          test -s "$RUNNER_TEMP/package-decision-atlas/map.semantic.jsonl"
+          test -s "$RUNNER_TEMP/package-decision-atlas/relations.semantic.jsonl"
+          test -s "$RUNNER_TEMP/package-decision-atlas/history.semantic.jsonl"
+          test -s "$RUNNER_TEMP/package-decision-atlas/projection-receipt.json"

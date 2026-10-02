@@ -1,0 +1,38 @@
+{
+  "schema": "ops.packageDecisionAtlasCandidate/1",
+  "status": "draft",
+  "authority": false,
+  "parent": "roccho-dev/adrs#318",
+  "dependsOn": [
+    "roccho-dev/governance#204",
+    "roccho-dev/governance#205",
+    "roccho-dev/ui#168",
+    "roccho-dev/ui#169",
+    "roccho-dev/ops#327"
+  ],
+  "input": {
+    "currentDraftSchema": "package-decision-event.sample/1",
+    "productionPackageDecisionSchema": "OPEN",
+    "singleSource": true
+  },
+  "projection": {
+    "map": "map/1",
+    "relations": "graph/1",
+    "history": "seq/1"
+  },
+  "composite": {
+    "oneHtml": true,
+    "layout": "vertical",
+    "existingMobileAgentCanvases": 3,
+    "newRenderer": false,
+    "newPreset": false,
+    "newCodec": false
+  },
+  "open": [
+    "governance output must carry stable package responsibility/publication fields",
+    "exact Mobile Agent source carrier must be bound in ordinary PR CI",
+    "authenticated protected JSONL route must be connected",
+    "gosh publication and remote readback must be implemented"
+  ],
+  "cutover": false
+}
