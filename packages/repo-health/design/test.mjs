@@ -148,3 +148,5 @@ await assert.rejects(() => askJev(base, questions, { ...options, fetchImpl: asyn
 await assert.rejects(() => askJev(base, questions, { ...options, fetchImpl: async () => ({ ok: true, json: async () => { throw Error('bad'); } }) }), /INVALID_JEV_JSON/);
 console.log(JSON.stringify({ designContract: 'PASS', regressionIds: done, hardCounterexamples: hardCases.length, cases: rows.length,
   semanticThresholds: 0, live: false, readme: 'executed with mock HTTP from a fresh directory' }));
+
+await import('./artifact-lint.test.mjs');

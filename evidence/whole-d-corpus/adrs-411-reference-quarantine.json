@@ -1,0 +1,31 @@
+{
+  "scope": "Lane C / ops#449 / PR#452 / finite preparation only",
+  "episode": "adrs#411 / one-launch and subsequent check",
+  "use": "comparison-only quarantine; not model input or candidate-construction input",
+  "source": {
+    "repository": "roccho-dev/adrs",
+    "commentId": 5829480900,
+    "url": "https://github.com/roccho-dev/adrs/pull/411#issuecomment-5829480900",
+    "createdAt": "2026-09-25T08:38:46Z",
+    "updatedAt": "2026-09-25T08:38:46Z",
+    "bodySha256": "5f63278f118c32bcf6e56b86b5e1ecf3fc003dc526140b58e11788f20b10117b",
+    "bodyBytes": 1485,
+    "digestEncoding": "UTF-8 decoded comment body; final CRLF retained"
+  },
+  "evidenceClass": "post-execution report, not raw provider transcript or contemporaneous dispatcher input",
+  "sourceBodyRetention": "Body remains at the source; only its locator, timestamps and digest are retained here. No source policy or transcript body is republished.",
+  "reportedOnly": {
+    "firstLaunch": "COMPLETED / fired=true",
+    "check": "DUPLICATE / fired=false",
+    "policyDefectAlsoReported": true,
+    "priorLaunchConsumed": true
+  },
+  "independentlyReplayed": false,
+  "referenceIsGroundTruth": false,
+  "exactReferenceDecision": null,
+  "rawEffect": null,
+  "rawReadback": null,
+  "status": "BLOCK",
+  "reason": "RAW_REFERENCE_EFFECT_READBACK_UNAVAILABLE",
+  "claimCeiling": "A timestamped report can locate an episode. It cannot reconstruct its pre-decision state, prove policy correctness, or supply a comparable exact whole-D decision."
+}
