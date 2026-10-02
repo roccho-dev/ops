@@ -1,0 +1,42 @@
+result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.agent.inspect","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"agent.inspect","aliases":[],"keywords":["agent","inspect"],"description":"Human can ask an agent to inspect a target before model commit."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":false,"kinds":["projectionNode","relation","contract"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.agent.proposeModel","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"agent.proposeModel","aliases":[],"keywords":["agent","proposeModel"],"description":"Agent may produce modelingProposal.v1, never accepted ledger changes."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":false,"kinds":["projectionNode","relation","contract"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.agent.fixProjection","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"agent.fixProjection","aliases":[],"keywords":["agent","fixProjection"],"description":"Agent may propose projection fixes with evidence and tests."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":false,"kinds":["projection","projectionNode"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.agent.addTest","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"agent.addTest","aliases":[],"keywords":["agent","addTest"],"description":"Agent may add tests to protect a modeling or projection boundary."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":false,"kinds":["package","projection","contract"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.agent.explainEdge","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"agent.explainEdge","aliases":[],"keywords":["agent","explainEdge"],"description":"Agent may explain edge evidence without committing the model."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":true,"kinds":["relation"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.agent.findEvidence","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"agent.findEvidence","aliases":[],"keywords":["agent","findEvidence"],"description":"Agent may find evidence before a human confirms model commit."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":false,"kinds":["projectionNode","relation","source.archive"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
++{"kind":"ops.operation.v1","operationId":"ops.synthetic.future","operationVersion":"1","packageId":"hq-modeling-runtime","obligationId":"edits.agent-intent-surface.v1","command":{"name":"synthetic.future","aliases":[],"keywords":["synthetic","future"],"description":"Unselected fixture for deterministic release isolation."},"intent":{"queueKind":"hq.agentTaskQueued.v1","effectClass":"agent_task","op":null},"target":{"required":false,"kinds":["package"]},"contracts":{"input":"edits.commandRequest.v1","result":"hq.receipt.v1"},"risk":{"class":"proposal-only","approval":"explicit-submit"},"viewPolicy":"optional","authority":false}
+diff --git a/packages/ops-operation-catalog/source/release.json b/packages/ops-operation-catalog/source/release.json
+new file mode 100644
+index 0000000..cd90cd7
+--- /dev/null
++++ b/packages/ops-operation-catalog/source/release.json
+@@ -0,0 +1,67 @@
++{
++  "authority": false,
++  "kind": "ops.operationRelease.v1",
++  "releaseId": "ops-operator-console-v1",
++  "selected": [
++    {
++      "contentDigest": "fa3da33f720ed241c01c637672ec2e090bbfd85d6658be00de65961da006d200",
++      "operationId": "ops.model.addSchema",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "6fc1fd5cf5b93ef7e453eff0982e6a07bd80dc2a90dc8ac8a48e5c766916c3ec",
++      "operationId": "ops.model.addField",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "5dbde7b23b48aacdb9b7c2cc9c1212dd38d8ec6f55ef72a691028cc85aed7ece",
++      "operationId": "ops.model.addEdge",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "54ef8fd20f84672a11d75c37eb02ea4a6040da7f7cde5dbf9e9aef2315ed81fb",
++      "operationId": "ops.model.deprecateField",
++      "operationVersion": "1"
++    },
++    {
++      "contentDigest": "e75ed86f47e249435c4213df2ac1c465bd741d73765d4e8627004cd511a8aaee",
++      "operationId": "

@@ -1,0 +1,69 @@
+name: materialize issue 355 operation catalog source
+
+on:
+  push:
+    branches:
+      - proposal/issue-355-operation-catalog
+    paths:
+      - .github/carry/issue355/**
+      - .github/workflows/materialize-issue-355-source.yml
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: issue-355-source-materialization
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Decode bounded source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/carry/issue355/chunk-*.b64 | tr -d '\r\n' | base64 --decode > "$RUNNER_TEMP/issue355.payload.gz"
+          gzip -t "$RUNNER_TEMP/issue355.payload.gz"
+          gzip -dc "$RUNNER_TEMP/issue355.payload.gz" > "$RUNNER_TEMP/issue355.payload"
+          file "$RUNNER_TEMP/issue355.payload"
+
+          if head -c 32 "$RUNNER_TEMP/issue355.payload" | grep -q '^diff --git '; then
+            git apply --index "$RUNNER_TEMP/issue355.payload"
+          elif tar -tf "$RUNNER_TEMP/issue355.payload" >/dev/null 2>&1; then
+            tar -xf "$RUNNER_TEMP/issue355.payload" -C .
+            git add -A
+          else
+            echo 'unsupported bounded payload format' >&2
+            exit 1
+          fi
+
+          test -d packages/ops-operation-catalog
+          test -f packages/ops-operation-catalog/flake.nix
+          test -f packages/ops-operation-catalog/tests/test-operation-catalog.mjs
+
+      - name: Run focused and existing package checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/ops-operation-catalog/tests/test-operation-catalog.mjs
+          node packages/ops-package-responses/lib/selftest.mjs
+          nix-instantiate --parse packages/ops-operation-catalog/flake.nix >/dev/null
+
+      - name: Replace carrier commit with source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/carry/issue355 .github/workflows/materialize-issue-355-source.yml
+          git add -A
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m 'feat(ops): produce exact immutable operation catalog for edits'
+          git push origin HEAD:proposal/issue-355-operation-catalog

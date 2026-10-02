@@ -1,0 +1,114 @@
+anifest_binds_all_exact_input_and_output_digests",
++    "TestOperationCatalogProducer.test_unselected_declaration_changes_no_output",
++    "TestOperationCatalogProducer.test_selected_data_only_extension_needs_no_edits_change",
++    "TestOperationCatalogProducer.test_compile_validate_and_read_effect_counts_are_zero",
++    "TestOperationCatalogProducer.test_mutable_head_and_implicit_latest_reads_are_zero",
++    "TestOperationCatalogProducer.test_edits_consumer_compatibility_is_exact",
++    "TestOperationCatalogProducer.test_clean_clone_nix_build_and_check_are_green",
++    "TestOperationCatalogProducer.test_preexisting_ops_regressions_skips_and_waivers_are_zero"
++  ],
++  "forbiddenGreenMechanisms": ["skip", "xfail", "waiver", "delete-test", "weaken-assertion", "change-expected-output"]
++}
+diff --git a/proofs/issue-355/operation-catalog/tests/__init__.py b/proofs/issue-355/operation-catalog/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/proofs/issue-355/operation-catalog/tests/test_operation_catalog_producer.py b/proofs/issue-355/operation-catalog/tests/test_operation_catalog_producer.py
+new file mode 100644
+index 0000000..1530415
+--- /dev/null
++++ b/proofs/issue-355/operation-catalog/tests/test_operation_catalog_producer.py
+@@ -0,0 +1,107 @@
++from __future__ import annotations
++
++import json
++from pathlib import Path
++import unittest
++
++REPO = Path(__file__).resolve().parents[4]
++EVIDENCE = REPO / "proofs" / "issue-355" / "operation-catalog" / "evidence"
++
++
++def load(name: str):
++    path = EVIDENCE / name
++    if not path.is_file():
++        raise AssertionError(f"missing operation-catalog evidence: {path.relative_to(REPO)}")
++    return json.loads(path.read_text(encoding="utf-8"))
++
++
++class TestOperationCatalogProducer(unittest.TestCase):
++    def test_package_source_compiler_and_nix_contract_exist(self) -> None:
++        package = REPO / "packages" / "ops-operation-catalog"
++        for rel in ("source/operations.jsonl", "source/release.json", "bin/ops-operation-catalog.mjs", "lib/core.mjs", "default.nix"):
++            self.assertTrue((package / rel).is_file(), rel)
++
++    def test_all_selected_operations_bind_existing_package_and_obligation(self) -> None:
++        data = load("reference-closure.json")
++        self.assertGreater(data.get("selectedOperations", 0), 0)
++        self.assertEqual(data.get("missingPackages"), 0)
++        self.assertEqual(data.get("missingObligations"), 0)
++        self.assertEqual(data.get("duplicateBindings"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_all_negative_cases_are_rejected(self) -> None:
++        data = load("negative-cases.json")
++        for case in ("malformed", "duplicate", "orphan", "unknown-kind", "missing-package", "missing-obligation", "digest-drift"):
++            self.assertEqual(data.get("cases", {}).get(case), "REJECTED", case)
++        self.assertEqual(data.get("acceptedInvalidRows"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_two_exact_compiles_are_byte_identical(self) -> None:
++        data = load("determinism.json")
++        self.assertEqual(data.get("compileRuns"), 2)
++        self.assertEqual(data.get("catalogDigestMismatches"), 0)
++        self.assertEqual(data.get("manifestDigestMismatches"), 0)
++        self.assertEqual(data.get("byteMismatches"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_manifest_binds_all_exact_input_and_output_digests(self) -> None:
++        data = load("manifest-binding.json")
++        self.assertEqual(len(data.get("sourceCommit", "")), 40)
++        self.assertEqual(len(data.get("sourceTree", "")), 40)
++        for key in ("declarationsDigest", "releaseDigest", "catalogDigest", "manifestDigest"):
++            self.assertEqual(len(data.get(key, "")), 64, key)
++        self.assertEqual(data.get("mutableRefCount"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_unselected_declaration_changes_no_output(self) -> None:
++        data = load("selection-isolation.json")
++        self.assertGreater(data.get("unselectedFixtures", 0), 0)
++        self.assertEqual(data.get("catalogChanges"), 0)
++        self.assertEqual(data.get("manifestSemanticChanges"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_selected_data_only_extension_needs_no_edits_change(self) -> None:
++        data = load("data-only-extension.json")
++        self.assertGreater(data.get("selectedNewOperations", 0), 0)
++        self.assertEqual(data.get("editsSourceChanges"), 0)
++        self.assertEqual(data.get("projectedNewOperations"), data.get("selectedNewOperations"))
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_compile_validate_and_read_effect_counts_are_zero(self) -> None:
++        data = load("effect-boundary.json")
++        for key in ("packageEffects", "workerEffects", "shellEffects", "retryDecisions", "cancelDecisions", "canonicalResultWrites"):
++            self.assertEqual(data.get(key), 0, key)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_mutable_head_and_implicit_latest_reads_are_zero(self) -> None:
++        data = load("manifest-binding.json")
++        self.assertEqual(data.get("runtimeRepositoryHeadReads"), 0)
++        self.assertEqual(data.get("implicitLatestReads"), 0)
++        self.assertEqual(data.get("mutableRefCount"), 0)
++
++    def test_edits_consumer_compatibility_is_exact(self) -> None:
++        data = load("edits-consumer.json")
++        self.assertGreater(data.get("catalogRows", 0), 0)
++        self.assertEqual(data.get("rejectedRows"), 0)
++        self.assertEqual(data.get("candidateMismatches"), 0)
++        self.assertEqual(data.get("status"), "PASS")
++
++    def test_clean_clone_nix_build_and_check_are_green(self) -> None:
++        data = load("nix-clean-clone.json")
++        self.assertEqual(data.get("cleanClone"), True)
++        self.assertEqual(data.get("nixBuild"), "PASS")
++        self.assertEqual(data.get("nixCheck"), "PASS")
++        self.assertEqual(da
