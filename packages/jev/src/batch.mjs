@@ -8,9 +8,14 @@ const own = (value, key) => Object.hasOwn(value, key);
 const finite = value => typeof value === "number" && Number.isFinite(value);
 
 export class JudgeProviderError extends Error {
-  constructor(code) { super(code); this.name = "JudgeProviderError"; this.code = code; }
+  constructor(code, upstreamStatus) {
+    super(code); this.name = "JudgeProviderError"; this.code = code;
+    if (code === "provider_http_error" && Number.isInteger(upstreamStatus) && upstreamStatus >= 300 && upstreamStatus <= 599) {
+      this.upstreamStatus = upstreamStatus;
+    }
+  }
 }
-const fail = code => { throw new JudgeProviderError(code); };
+const fail = (code, upstreamStatus) => { throw new JudgeProviderError(code, upstreamStatus); };
 function requestBody(request) {
   try {
     if (!object(request) || Object.keys(request).some(k => !["state", "questions"].includes(k))
@@ -59,7 +64,7 @@ export async function judgeNamedChoices({request, provider, signal} = {}) {
     return normalize(await provider.post(JSON.parse(body), { signal, deadlineMs: DEADLINE_MS }), questions);
   } catch (error) {
     if (error instanceof JudgeProviderError) throw error;
-    if (error instanceof JevTransportError) fail(error.code);
+    if (error instanceof JevTransportError) fail(error.code, error.status);
     fail("provider_contract_error");
   }
 }
