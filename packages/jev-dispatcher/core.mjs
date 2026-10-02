@@ -4,6 +4,17 @@ import { judgeNamedChoices, JudgeProviderError } from '../jev/src/batch.mjs';
 
 export const CORE_PLAN = 'd-core-s1/1';
 const version = /^jev-\d+\.\d+\.\d+$/;
+const errorCodes = new Set(['auth_missing', 'input_invalid', 'provider_unavailable', 'provider_http_error',
+  'provider_invalid_response', 'provider_contract_error', 'provider_timeout', 'cancelled']);
+function failureCode(error) {
+  try {
+    if (error instanceof JudgeProviderError) {
+      const code = Object.getOwnPropertyDescriptor(error, 'code')?.value;
+      if (errorCodes.has(code)) return code;
+    }
+  } catch { /* Unsupported error metadata is never reflected. */ }
+  return 'provider_contract_error';
+}
 const text = value => typeof value === 'string';
 const nonempty = value => text(value) && value.trim().length > 0;
 export class CoreInputError extends Error {
@@ -129,7 +140,7 @@ export async function decideCore(input, config = {}) {
       evidence: {
         status: 'EXECUTION_ERROR', plan: CORE_PLAN, inputDigest,
         modelRequested: model, modelObserved: null,
-        code: error instanceof JudgeProviderError ? error.code : 'provider_contract_error', answers: null,
+        code: failureCode(error), answers: null,
       },
     });
   }

@@ -110,7 +110,12 @@ Valid typed answers with matching observed version give VALID. Missing, unbound
 or mismatched model evidence gives EVIDENCE_INVALID **with the same decision
 and normalized answers retained**. A known forbidden FIRE does not disappear
 because metadata is missing. Shared provider/answer failures give decision=null,
-answers=null, modelObserved=null and a closed EXECUTION_ERROR code. Malformed
+answers=null, modelObserved=null and a closed EXECUTION_ERROR code. Core retains
+only an own data-property code from the existing eight-code provider vocabulary
+(`auth_missing`, `input_invalid`, `provider_unavailable`, `provider_http_error`,
+`provider_invalid_response`, `provider_contract_error`, `provider_timeout`,
+`cancelled`); unsupported typed-error metadata becomes `provider_contract_error`
+without reading accessors or reflecting raw values. Malformed
 input/configuration throws closed `CoreInputError("input_invalid")` before
 transport. NOT_RUN belongs to external accounting, not a fake returned action.
 
