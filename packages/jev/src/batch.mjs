@@ -2,6 +2,7 @@
 import { bindJev, JevTransportError } from "./core.mjs";
 export { bindJev } from "./core.mjs";
 const MODEL = "jev-latest";
+const VERSION = /^jev-\d+\.\d+\.\d+$/;
 const DEADLINE_MS = 10_000;
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const own = (value, key) => Object.hasOwn(value, key);
@@ -17,8 +18,10 @@ export class JudgeProviderError extends Error {
   }
 }
 const fail = (code, upstreamStatus, diagnostic) => { throw new JudgeProviderError(code, upstreamStatus, diagnostic); };
-function requestBody(request) {
+function requestBody(request, model, includeEvidence) {
   try {
+    if (typeof model !== "string" || !model.trim() || typeof includeEvidence !== "boolean"
+        || (includeEvidence && !VERSION.test(model))) fail("input_invalid");
     if (!object(request) || Object.keys(request).some(k => !["state", "questions"].includes(k))
         || !object(request.state) || !object(request.questions)) fail("input_invalid");
     const names = Object.keys(request.questions);
@@ -31,14 +34,14 @@ function requestBody(request) {
       if (keys.length < 2 || keys.length > 255 || keys.some(k => !k || typeof q.options[k] !== "string")) fail("input_invalid");
       return [name, {type:"choice", criteria:{...q.options}, instructions:q.instruction}];
     }));
-    const body = JSON.stringify({model:MODEL, state:request.state, questions});
+    const body = JSON.stringify({model, state:request.state, questions});
     if (!object(JSON.parse(body).state)) fail("input_invalid");
     return body;
   } catch { fail("input_invalid"); }
 }
-function normalize(data, questions) {
+function normalize(data, questions, requestedModel, includeEvidence) {
   try {
-    if (!object(data) || typeof data.model !== "string" || !object(data.answers)) fail("provider_contract_error");
+    if (!object(data) || (!includeEvidence && typeof data.model !== "string") || !object(data.answers)) fail("provider_contract_error");
     const names = Object.keys(questions);
     if (Object.keys(data.answers).length !== names.length || names.some(k => !own(data.answers,k))) fail("provider_contract_error");
     const answers = Object.fromEntries(names.map(name => {
@@ -53,16 +56,26 @@ function normalize(data, questions) {
       }
       return [name,normalized];
     }));
-    // A valid arbitrary provider model string is type-checked, then discarded.
-    return {answers};
+    // Default compatibility: type-check and discard the arbitrary model string.
+    if (!includeEvidence) return {answers};
+    // A typed answer is not erased merely because model evidence is unusable.
+    // Version syntax/binding is not proof that a real model was executed.
+    const present = own(data, "model");
+    const usable = present && typeof data.model === "string" && VERSION.test(data.model);
+    return {answers, evidence: {
+      modelRequested: requestedModel,
+      modelObserved: usable ? data.model : null,
+      code: !present ? "model_missing" : !usable ? "model_unbound"
+        : data.model !== requestedModel ? "model_mismatch" : null,
+    }};
   } catch { fail("provider_contract_error"); }
 }
-export async function judgeNamedChoices({request, provider, signal} = {}) {
+export async function judgeNamedChoices({request, provider, signal, model = MODEL, includeEvidence = false} = {}) {
   if (!provider?.available) fail("auth_missing");
-  const body = requestBody(request);
+  const body = requestBody(request, model, includeEvidence);
   const questions = JSON.parse(body).questions;
   try {
-    return normalize(await provider.post(JSON.parse(body), { signal, deadlineMs: DEADLINE_MS, diagnoseRejection: true }), questions);
+    return normalize(await provider.post(JSON.parse(body), { signal, deadlineMs: DEADLINE_MS, diagnoseRejection: true }), questions, model, includeEvidence);
   } catch (error) {
     if (error instanceof JudgeProviderError) throw error;
     if (error instanceof JevTransportError) fail(error.code, error.status, error.diagnostic);

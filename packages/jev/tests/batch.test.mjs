@@ -30,6 +30,87 @@ test("compatibility: optional/subset finite probabilities and endpoint confidenc
   for(const probabilities of [{},{A:-2},{NONE:2,A:0}]){const x=data();x.answers.first.probabilities=probabilities;await invoke(x);}
   const x=data();x.model="";await invoke(x);
 });
+test("opt-in model evidence binds requested and observed versions without equating them",async()=>{
+  const model="jev-0.0.1";let calls=0;
+  const result=await judgeNamedChoices({request,apiKey:key,model,includeEvidence:true,fetch:async(_url,init)=>{
+    calls++;assert.equal(JSON.parse(init.body).model,model);
+    return {ok:true,json:async()=>({...data(),model:"jev-0.0.2"})};
+  }});
+  assert.equal(calls,1);
+  assert.deepEqual(result.evidence,{modelRequested:model,modelObserved:"jev-0.0.2",code:"model_mismatch"});
+  assert.deepEqual(result.answers,(await invoke(data())).answers);
+  assert.deepEqual((await invoke({...data(),model},{model,includeEvidence:true})).evidence,
+    {modelRequested:model,modelObserved:model,code:null});
+});
+test("opt-in missing or unbound model evidence retains typed decisions, never arbitrary metadata",async()=>{
+  for(const [mutate,code] of [
+    [x=>{delete x.model;},"model_missing"],
+    [x=>{x.model=null;},"model_unbound"],
+    [x=>{x.model={private:"synthetic-private-canary"};},"model_unbound"],
+    [x=>{x.model="";},"model_unbound"],[x=>{x.model="   ";},"model_unbound"],
+    [x=>{x.model="jev-latest";},"model_unbound"],[x=>{x.model="arbitrary-private-canary";},"model_unbound"],
+  ]){
+    const x=data();mutate(x);
+    const result=await invoke(x,{model:"jev-0.0.1",includeEvidence:true});
+    assert.equal(result.answers.first.choice,"A");
+    assert.deepEqual(result.evidence,{modelRequested:"jev-0.0.1",modelObserved:null,code});
+    assert.ok(!JSON.stringify(result).includes("private-canary"));
+  }
+});
+test("opt-in evidence does not weaken shared typed answer validation",async()=>{
+  for(const mutate of [
+    x=>{delete x.answers.first;},x=>{x.answers.extra=x.answers.first;},
+    x=>{x.answers.first.type="other";},x=>{x.answers.first.choice="unoffered";},
+    x=>{x.answers.first.confidence=Infinity;},x=>{x.answers.first.probabilities={unoffered:1};},
+  ]){
+    const x=data();delete x.model;mutate(x);
+    await refuse(()=>invoke(x,{model:"jev-0.0.1",includeEvidence:true}),"provider_contract_error");
+  }
+});
+test("explicit model preserves default shape; invalid execution options call no provider",async()=>{
+  const result=await invoke(data(),{model:"jev-0.0.1"});
+  assert.deepEqual(Object.keys(result),["answers"]);
+  let calls=0;const fetch=async()=>{calls++;throw Error("must not call");};
+  for(const options of [{model:null},{model:""},{model:" "},{model:12},
+    {includeEvidence:null},{includeEvidence:1},{includeEvidence:"true"},
+    {includeEvidence:true},{includeEvidence:true,model:"jev-latest"},
+    {includeEvidence:true,model:"jev-0.0.1-private"}]){
+    await refuse(()=>judgeNamedChoices({request,apiKey:key,fetch,...options}),"input_invalid");
+  }
+  assert.equal(calls,0);
+});
+test("opt-in snapshot and closed provider failure preserve existing boundaries",async()=>{
+  const local=structuredClone(request);let wire,release;
+  const pending=judgeNamedChoices({request:local,apiKey:key,model:"jev-0.0.1",includeEvidence:true,fetch:async(_url,init)=>{
+    wire=JSON.parse(init.body);
+    return await new Promise(resolve=>{release=()=>resolve({ok:true,json:async()=>({...data(),model:"jev-0.0.1"})});});
+  }});
+  local.state.text="changed";local.questions.first.options.A="changed";
+  release();const result=await pending;
+  assert.equal(wire.state.text,"fixture");assert.equal(wire.questions.first.criteria.A,"option");
+  assert.equal(result.answers.first.choice,"A");
+  await refuse(()=>judgeNamedChoices({request,apiKey:key,model:"jev-0.0.1",includeEvidence:true,
+    fetch:async()=>({ok:false,status:503})}),"provider_http_error");
+});
+test("one binding isolates concurrent default and explicit models including one cancellation",async()=>{
+  const pending=new Map(),wires=[];
+  const provider=bindJev({apiKey:key,fetch:async(_url,init)=>{
+    const wire=JSON.parse(init.body);wires.push(wire.model);
+    return await new Promise((resolve,reject)=>{
+      pending.set(wire.model,()=>resolve({ok:true,json:async()=>({...data(),model:wire.model})}));
+      init.signal.addEventListener("abort",()=>reject(Error("synthetic-abort-canary")),{once:true});
+    });
+  }});
+  const controller=new AbortController();
+  const ordinary=boundJudge({request,provider});
+  const a=boundJudge({request,provider,model:"jev-0.0.1",includeEvidence:true,signal:controller.signal});
+  const b=boundJudge({request,provider,model:"jev-0.0.2",includeEvidence:true});
+  controller.abort();await refuse(()=>a,"cancelled");
+  pending.get("jev-0.0.2")();pending.get("jev-latest")(); // reverse response order
+  assert.deepEqual(Object.keys(await ordinary),["answers"]);
+  assert.deepEqual((await b).evidence,{modelRequested:"jev-0.0.2",modelObserved:"jev-0.0.2",code:null});
+  assert.deepEqual(wires,["jev-latest","jev-0.0.1","jev-0.0.2"]);
+});
 test("generic envelope/answer/choice contract refuses without raw detail",async()=>{
   const mutations=[
     x=>{delete x.model;},x=>{x.model={};},x=>{x.answers=null;},

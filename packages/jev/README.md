@@ -1,5 +1,40 @@
 # Jev CLI
 
+## S1 source-only named Choice model evidence
+
+The existing `src/batch.mjs` owner accepts optional execution settings `model`
+(default `jev-latest`) and `includeEvidence` (default `false`). Omitted settings
+preserve the existing request, result `{answers}`, closed errors, and
+optional/subset finite-probability contract.
+
+The opt-in requires an explicit `jev-<digits>.<digits>.<digits>` model and returns:
+
+```js
+{
+  answers,
+  evidence: {
+    modelRequested,  // sent version, never substituted for observation
+    modelObserved,   // returned version-shaped string, or null
+    code             // null | model_missing | model_unbound | model_mismatch
+  }
+}
+```
+
+Missing model property gives `model_missing`. Blank, wrong-type, alias or
+unsupported model metadata gives `model_unbound` with observed=null. A supported
+but different version is retained with `model_mismatch`; an exact match gives
+code=null. This proves syntax/binding only, not that the real model exists or
+executed. Typed answers remain available despite model evidence defects, but
+invalid answers still fail through the same shared validator. No raw model-field
+object/text, confidence threshold, retry, second transport, or credential
+acquisition is added.
+
+This opt-in source contract has offline tests only. Past Releases and
+`named-choices/2` consumer evidence do not prove this new path; no new Release,
+real-provider identity, D acceptance, or quality improvement is claimed.
+
+## CLI usage
+
 Ask Jev a question about text. The CLI reads one JSON request on stdin and writes one JSON line.
 
 Intentionally narrow subset: string `text` and `question` fields; choice questions support 2-255 string-valued options; score questions support 2-10 string-valued levels. The underlying API may support richer data types; CLI constrains input to string values only.
