@@ -1,0 +1,55 @@
+{
+  "base": {
+    "commit": "3b501296b5e81d85ab44a88099783c3af05a6f2a",
+    "ref": "proposals"
+  },
+  "ingress": {
+    "branch": "ingress/sandbox-large-source-pr-2608280625",
+    "commit": "83054f730de66c57589561241aab969b116c0895"
+  },
+  "materialization": {
+    "remoteBlobSamples": 3,
+    "remoteReadback": "PASS",
+    "sourceCommit": "5b7767bb4e2f0eb98c027529ecfe8ebac7cdc261",
+    "sourceCommitTree": "0c25951be95e6034c077ca261424fc078a6e925a",
+    "targetBranch": "proof/sandbox-large-source-pr-2608280625"
+  },
+  "requestId": "sandbox-large-source-pr-2608280625",
+  "run": {
+    "attempt": 1,
+    "id": 33116955237
+  },
+  "schema": "ops.sandboxLargeSourceMaterializationReceipt/1",
+  "source": {
+    "expectedTree": "8cebc3bebf19e70dd1663f857458eaee4b7b0c29",
+    "observedTree": "8cebc3bebf19e70dd1663f857458eaee4b7b0c29",
+    "records": 32,
+    "root": "verification/sandbox-large-source-pr/src",
+    "semanticSha256": "2d54cdff831dcd8833f64b00ff4f4d796c94519c85290b51b312015132ec3f14",
+    "shardBytes": 2097152,
+    "shardFiles": 32
+  },
+  "status": "PASS",
+  "tests": {
+    "package": {
+      "results": 32,
+      "schema": "ops.sandboxLargeSourceTest/1",
+      "shardBytes": 2097152,
+      "shards": 32,
+      "status": "PASS"
+    },
+    "queryCount": 32,
+    "status": "PASS"
+  },
+  "transport": {
+    "archiveBytes": 2256,
+    "archiveSha256": "95a5ce9c7343ea4787adfdcd03e32736289514df1039f550664cd0a8a029e4a5",
+    "carrierBytes": 3008,
+    "carrierSha256": "9ca9c2ffd39a8d28d51d1024bfeb62c051228b533f8a4963baae0a4eb20a42e7",
+    "codec": "tar+xz+standard-base64",
+    "fullSourceWrittenThroughConnector": false,
+    "modelRepairAllowed": false,
+    "parts": 4,
+    "sourceRegenerationFromSeedAllowed": false
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schema": "ops.sandboxLargeSourcePackage/1",
+  "source": {
+    "semanticSha256": "2d54cdff831dcd8833f64b00ff4f4d796c94519c85290b51b312015132ec3f14",
+    "shardBytes": 2097152,
+    "shardFiles": 32
+  },
+  "status": "candidate"
+}
