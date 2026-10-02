@@ -51,7 +51,7 @@ export function validateReadbackReceipt(receipt, expected, deployment, artifact)
     requireCondition(actual && actual.bytes === row.bytes
       && normalizeSha256(actual.sha256) === normalizeSha256(row.sha256), `public readback differs: ${row.path}`);
   }
-  requireCondition(JSON.stringify(receipt.function) === JSON.stringify({ status: "PASS", path: "/api/jev", response: 400, error: "invalid_json" }),
+  requireCondition(JSON.stringify(receipt.function) === JSON.stringify({ status: "PASS", path: "/api/judge", response: 400, error: "invalid_json" }),
     "Worker rejection readback is not PASS");
   assertNoPrivateMaterial(receipt);
   return receipt;
