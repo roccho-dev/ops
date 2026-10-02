@@ -4,6 +4,8 @@
 
 `gosh` is a bin-first, shell-never local operation runtime. It reads append-only JSONL intent, reduces it deterministically in physical line order, builds an in-memory plan, resolves tools to validated absolute executables, runs them directly with `argv[]`, and appends bounded execution evidence.
 
+Local script capability placement is staged under [`../../capabilities/README.md`](../../capabilities/README.md). That convention does not change the current v0 event contract.
+
 This package implements the v0 scope owned by `roccho-dev/ops#82`. It is not a shell, workflow daemon, HQ endpoint, queue, admission gate, accepted ledger, or decision authority.
 
 ## Boundary
