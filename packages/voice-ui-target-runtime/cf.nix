@@ -3,19 +3,30 @@
 # integrity hash, so the closure is built once from reviewed bytes and never resolves or installs anything at run time.
 # Only the voice-ui target runtime uses it, and only for `cf deploy --prebuilt` of an already built Worker.
 let
-  nodeModules = pkgs.importNpmLock.buildNodeModules {
-    npmRoot = ./cf;
-    inherit (pkgs) nodejs;
-  };
+  nodeModules =
+    (pkgs.importNpmLock.buildNodeModules {
+      npmRoot = ./cf;
+      inherit (pkgs) nodejs;
+    }).overrideAttrs
+      (old: {
+        # npm records build-directory-relative tarball paths here; this generated cache is not a runtime input.
+        # Keep both reviewed package locks and every installed module byte, but omit the host-dependent hidden lock.
+        postInstall = (old.postInstall or "") + ''
+          test -f "$out/node_modules/.package-lock.json"
+          rm -- "$out/node_modules/.package-lock.json"
+        '';
+      });
 in
-pkgs.runCommand "cf-1.0.0-beta.6" {
-  nativeBuildInputs = [ pkgs.makeWrapper ];
-  passthru = { inherit nodeModules; };
-} ''
-  test -f ${nodeModules}/node_modules/cf/bin/cf
-  # Telemetry off by the documented switches; nothing else about cf's behaviour is changed.
-  makeWrapper ${pkgs.nodejs}/bin/node "$out/bin/cf" \
-    --add-flags ${nodeModules}/node_modules/cf/bin/cf \
-    --set DO_NOT_TRACK 1 \
-    --set WRANGLER_SEND_METRICS false
-''
+pkgs.runCommand "cf-1.0.0-beta.6"
+  {
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    passthru = { inherit nodeModules; };
+  }
+  ''
+    test -f ${nodeModules}/node_modules/cf/bin/cf
+    # Telemetry off by the documented switches; nothing else about cf's behaviour is changed.
+    makeWrapper ${pkgs.nodejs}/bin/node "$out/bin/cf" \
+      --add-flags ${nodeModules}/node_modules/cf/bin/cf \
+      --set DO_NOT_TRACK 1 \
+      --set WRANGLER_SEND_METRICS false
+  ''
