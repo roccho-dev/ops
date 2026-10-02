@@ -59,6 +59,28 @@ test("network/http/json failures are closed and never retried",async()=>{
     [async()=>({ok:true,json:async()=>{throw Error("synthetic-json-canary");}}),"provider_invalid_response"],
   ]){let calls=0;await refuse(()=>judgeNamedChoices({request,apiKey:key,fetch:(...args)=>{calls++;return fetch(...args);}}),code);assert.equal(calls,1);}
 });
+test("only typed HTTP failures retain a bounded upstream status without reading a body",async()=>{
+  for(const status of [300,401,429,500,599,undefined,null,"401",200,299,600,-1,NaN,Infinity,401.5,true,{}]){
+    let calls=0,reads=0;
+    await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>{
+      calls++;return {ok:false,status,json:async()=>{reads++;throw Error("private-body-canary");}};
+    }}),error=>{
+      assert.ok(error instanceof JudgeProviderError);
+      assert.equal(error.code,"provider_http_error");
+      assert.equal(error.message,"provider_http_error");
+      const allowed=Number.isInteger(status)&&status>=300&&status<=599;
+      assert.equal(Object.hasOwn(error,"upstreamStatus"),allowed);
+      if(allowed)assert.equal(error.upstreamStatus,status);
+      assert.ok(!JSON.stringify(error).includes("canary"));
+      return true;
+    });
+    assert.equal(calls,1);assert.equal(reads,0);
+  }
+  for(const code of ["provider_timeout","provider_unavailable","provider_invalid_response","provider_contract_error","auth_missing"]){
+    assert.equal(Object.hasOwn(new JudgeProviderError(code,503),"upstreamStatus"),false);
+  }
+  assert.deepEqual(await invoke(data()),{answers:{first:{choice:"A",confidence:0.2},second:{choice:"NONE",confidence:1,probabilities:{NONE:2}}}});
+});
 test("single ten-second deadline covers hung headers and body",async t=>{
   t.mock.timers.enable({apis:["setTimeout"]});
   for(const body of [false,true]){
