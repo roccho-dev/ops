@@ -141,6 +141,17 @@ test("diagnostic cap is4096 bytes with strict UTF8/JSON and no fallback read",as
     });
     assert.equal(reads,expected?3:2);assert.equal(cancels,expected?0:1);assert.equal(releases,1);
   }
+  // Empty non-done chunks are unsupported: stop before repeated empties or
+  // subsequent matching bytes can starve the deadline or create a diagnostic.
+  for(const next of [new Uint8Array(),new TextEncoder().encode(text)]){
+    let reads=0,cancels=0,releases=0;
+    const reader={read:async()=>({done:false,value:reads++===0?new Uint8Array():next}),cancel(){cancels++;},releaseLock(){releases++;}};
+    await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:false,status:400,body:{getReader:()=>reader}})}),error=>{
+      assert.equal(error.code,"provider_http_error");assert.equal(error.upstreamStatus,400);
+      assert.equal(Object.hasOwn(error,"diagnostic"),false);assert.ok(!JSON.stringify(error).includes("canary"));return true;
+    });
+    assert.equal(reads,1);assert.equal(cancels,1);assert.equal(releases,1);
+  }
   for(const body of [undefined,{}, {getReader(){throw Error("private-canary");}}]){
     await assert.rejects(()=>judgeNamedChoices({request,apiKey:key,fetch:async()=>({ok:false,status:400,body})}),error=>error.code==="provider_http_error"&&!Object.hasOwn(error,"diagnostic")&&!JSON.stringify(error).includes("canary"));
   }

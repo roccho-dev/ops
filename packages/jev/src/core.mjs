@@ -67,7 +67,7 @@ export function bindJev({ apiKey, fetch: fetchFn = globalThis.fetch } = {}) {
                   const { done, value, interrupted: stopped } = await Promise.race([reader.read(), interrupted]);
                   if (stopped) break;
                   if (done) { complete = true; break; }
-                  if (!(value instanceof Uint8Array) || size + value.byteLength > 4096) { cancel(); break; }
+                  if (!(value instanceof Uint8Array) || value.byteLength === 0 || size + value.byteLength > 4096) { cancel(); break; }
                   size += value.byteLength; chunks.push(value);
                 }
                 if (complete && !controller.signal.aborted) {
