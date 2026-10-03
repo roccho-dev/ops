@@ -384,6 +384,81 @@ const initialBudgetInput=structuredClone(finalBudgetInput); initialBudgetInput.c
 const initialRefused=await semlint(initialBudgetInput,noCalls); assert.equal(initialRefused.records[0].status,'EXECUTION_ERROR');
 assert.equal(initialRefused.accounting.callbackAttempts,0); assert.equal(initialRefused.questionDigest,expectedV2(initialBudgetInput).digest); bridgeControls++;
 
+// V3 exact-byte projection controls are mechanical, not scope-adequacy proof.
+let projectedControls = 0;
+const fullSpan = (text) => ({startByte: 0, endByte: Buffer.byteLength(text, 'utf8')});
+const asV3 = (input) => ({...structuredClone(input), schema: 'ops.semlint.input.v3',
+  subject: {...structuredClone(input.subject), evaluationSpan: fullSpan(input.subject.content)},
+  context: input.context.map((row) => ({...structuredClone(row), evaluationSpan: fullSpan(row.content)}))});
+function expectedProjection(raw) {
+  const cut = (row) => Buffer.from(row.content).subarray(row.evaluationSpan.startByte, row.evaluationSpan.endByte).toString('utf8');
+  const content = cut(raw.subject);
+  return {schema:'ops.semlint.evaluation-state.v1',subject:{kind:raw.subject.kind,ref:raw.subject.ref,revision:raw.subject.revision,scope:raw.subject.scope,
+    content,sha256:digest(content),rawSha256:raw.subject.sha256,evaluationSpan:{...raw.subject.evaluationSpan}},
+    context:raw.context.map(row=>{const content=cut(row);return {role:row.role,ref:row.ref,revision:row.revision,content,sha256:digest(content),rawSha256:row.sha256,evaluationSpan:{...row.evaluationSpan}};})};
+}
+const scopedInput = asV3(provided); scopedInput.checks=[scopedInput.checks[0]];
+scopedInput.subject.content='prefix αtarget🙂 suffix';scopedInput.subject.sha256=digest(scopedInput.subject.content);
+scopedInput.subject.evaluationSpan={startByte:Buffer.byteLength('prefix '),endByte:Buffer.byteLength('prefix αtarget🙂')};
+const scopedBefore=JSON.stringify(scopedInput);
+const scopedResult=await semlint(scopedInput,async(s,q)=>{
+  assert.deepEqual(s,expectedProjection(scopedInput));assert.equal(s.subject.content,'αtarget🙂');
+  assert.equal(Object.hasOwn(s,'checks'),false);assert.equal(q.q0.instructions.question,scopedInput.checks[0].concern);
+  assert.equal(s.subject.rawSha256,scopedInput.subject.sha256);assert.notEqual(s.subject.sha256,s.subject.rawSha256);
+  assert.ok(Object.isFrozen(s.subject.evaluationSpan));
+  return {model:JEV_MODEL,answers:{q0:{type:'noul',noul:.5}}};
+});
+assert.equal(JSON.stringify(scopedInput),scopedBefore);assert.equal(scopedResult.schema,'ops.semlint.result.v3');
+assert.equal(scopedResult.inputDigest,digest(scopedBefore));assert.equal(scopedResult.projection.stateDigest,digest(JSON.stringify(expectedProjection(scopedInput))));
+assert.equal(scopedResult.projection.spanDigest,digest(JSON.stringify({subject:scopedInput.subject.evaluationSpan,context:scopedInput.context.map(row=>row.evaluationSpan)})));
+assert.equal(scopedResult.records[0].contextRefs[0].sha256,scopedInput.context[0].sha256);projectedControls++;
+for(const mutate of [x=>x.subject.evaluationSpan.startByte=-1,x=>x.subject.evaluationSpan.endByte=99999,
+  x=>x.subject.evaluationSpan.startByte=8,x=>x.subject.evaluationSpan.endByte=17,
+  x=>x.subject.evaluationSpan.extra=1,x=>x.subject.evaluationSpan.startByte=.5,
+  x=>x.subject.evaluationSpan={startByte:4,endByte:2},x=>x.subject.sha256='0'.repeat(64),
+  x=>x.subject.evaluationSpan={startByte:0,endByte:0},x=>x.subject.evaluationSpan={startByte:6,endByte:7},
+  x=>Object.defineProperty(x.subject.evaluationSpan,'startByte',{get(){throw Error('SPAN_CANARY');}})]){
+  const input=structuredClone(scopedInput);mutate(input);await assert.rejects(()=>semlint(input,noCalls),/INVALID_SEMLINT_INPUT/);projectedControls++;
+}
+for(const mode of ['missing','empty','blank']){
+  const input=asV3(provided);input.checks=[input.checks[0]];
+  if(mode==='empty')input.checks=[];
+  else if(mode==='missing') input.context.forEach(row=>row.evaluationSpan={startByte:0,endByte:0});
+  else input.context.forEach(row=>{row.content=' ';row.sha256=digest(' ');row.evaluationSpan=fullSpan(' ');});
+  const out=await semlint(input,noCalls);assert.equal(out.accounting.callbackAttempts,0);
+  assert.ok(out.projection.stateDigest);assert.ok(out.questionDigest);
+  if(mode!=='empty')assert.equal(out.records[0].status,'INCOMPLETE');projectedControls++;
+}
+const rawLarge=asV3(provided);rawLarge.subject.content='x'.repeat(29000);rawLarge.subject.sha256=digest(rawLarge.subject.content);rawLarge.subject.evaluationSpan={startByte:0,endByte:1};
+const rawRefused=await semlint(rawLarge,noCalls);assert.equal(rawRefused.accounting.callbackAttempts,0);assert.equal(rawRefused.records[0].status,'EXECUTION_ERROR');assert.ok(rawRefused.questionDigest);projectedControls++;
+const fullRange=asV3(grant);fullRange.checks=[{...provided.checks[0],requiredRoles:['authorityContract']}];
+await semlint(fullRange,async(s,q)=>{assert.deepEqual(s,expectedProjection(fullRange));assert.equal(s.context.length,2);assert.equal(q.q0.instructions.question,fullRange.checks[0].concern);return {model:JEV_MODEL,answers:{q0:{type:'noul',noul:.5}}};});projectedControls++;
+for(const mode of ['zero','missing','subjectblank']){
+  const late=structuredClone(rawLarge);
+  if(mode==='zero')late.checks=[];
+  if(mode==='missing'){late.context.forEach(row=>row.evaluationSpan={startByte:0,endByte:0});late.checks=late.checks.filter(row=>row.requiredRoles.length);}
+  if(mode==='subjectblank')late.subject.evaluationSpan={startByte:0,endByte:0};
+  await assert.rejects(()=>semlint(late,noCalls),/INVALID_SEMLINT_INPUT/);
+  let http=0;const plan=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'first',input:scopedInput},{id:'late',input:late}]},
+    {key:'FIXTURE_CANARY',fetchImpl:async()=>{http++;throw Error('MUST_NOT_FETCH');}});
+  assert.equal(http,0);assert.equal(plan.attemptedHttpCalls,0);assert.equal(plan.cases[0].status,'NOT_RUN');assert.equal(plan.cases[1].status,'INVALID_INPUT');projectedControls++;
+}
+const inflated=asV3(provided);inflated.checks=[inflated.checks[0]];
+inflated.context=Array.from({length:100},(_,i)=>({...inflated.context[0],ref:'fixture:context'+i,content:'a',sha256:digest('a'),evaluationSpan:fullSpan('a')}));
+validateJevBudget(inflated,{});assert.throws(()=>validateJevBudget(expectedProjection(inflated),expectedV2(provided).questions));
+const projectedRefused=await semlint(inflated,noCalls);assert.equal(projectedRefused.accounting.callbackAttempts,0);assert.equal(projectedRefused.records[0].status,'EXECUTION_ERROR');assert.ok(projectedRefused.projection.stateDigest);projectedControls++;
+
+const finalOnly=asV3(provided);finalOnly.checks=[finalOnly.checks[0]];finalOnly.checks[0].concern='x'.repeat(3000);
+finalOnly.context=Array.from({length:60},(_,i)=>({...finalOnly.context[0],ref:'fixture:final'+i,content:'a',sha256:digest('a'),evaluationSpan:fullSpan('a')}));
+finalOnly.subject.content='';finalOnly.subject.sha256=digest('');finalOnly.subject.evaluationSpan=fullSpan('');
+finalOnly.subject.content='x'.repeat(27500-Buffer.byteLength(JSON.stringify(expectedProjection(finalOnly))));
+finalOnly.subject.sha256=digest(finalOnly.subject.content);finalOnly.subject.evaluationSpan=fullSpan(finalOnly.subject.content);
+validateJevBudget(finalOnly,{});
+const finalItems=[{theme:finalOnly.checks[0].axis,subject:[finalOnly.subject.kind,finalOnly.subject.ref,finalOnly.subject.revision,finalOnly.checks[0].id],concern:finalOnly.checks[0].concern}];
+await evaluate(expectedProjection(finalOnly),{themes:semlintThemes,items:finalItems},async()=>({model:JEV_MODEL,answers:{q0:{type:'noul',noul:.5}}}));
+assert.throws(()=>validateJevBudget(expectedProjection(finalOnly),{q0:expectedProvidedQuestion(expectedProjection(finalOnly),finalOnly.checks[0])}));
+const finalOnlyRefused=await semlint(finalOnly,noCalls);assert.equal(finalOnlyRefused.accounting.callbackAttempts,0);assert.equal(finalOnlyRefused.records[0].status,'EXECUTION_ERROR');assert.ok(finalOnlyRefused.questionDigest);projectedControls++;
+
 let realEntryControls = 0, fixtureHttpCalls = 0;
 const realPlan = {schema: 'ops.semlint.real-input.v1', cases: [{id: 'case-1', input: sample},
   {id: 'case-missing', input: {...sample, context: []}}]};
@@ -441,7 +516,7 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks, bridgeControls, realEntryControls, fixtureHttpCalls,
+  providedCases, providedCallbacks, bridgeControls, projectedControls, realEntryControls, fixtureHttpCalls,
 }));
 }
 
