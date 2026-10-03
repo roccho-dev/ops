@@ -6,9 +6,12 @@ import { JEV_MODEL } from '../core.mjs';
 import { evaluate } from '../review.mjs';
 import { createHash } from 'node:crypto';
 import { semlint } from '../semlint.mjs';
+import { askJev } from '../jev.mjs';
+import { pathToFileURL } from 'node:url';
 import { rankJudgments } from '../rank.mjs';
 import { evaluateInput, parseJsonl, rowsForEvaluation, serializeJsonl, validateCliInput, writeAndReadback } from '../bin/jev-review.mjs';
 
+async function runMachineTests() {
 const state = { purpose: 'fixture' };
 const themes = ['purpose', 'scope'];
 const items = [
@@ -305,6 +308,56 @@ assert.equal(largeResult.records[0].status,'EXECUTION_ERROR');assert.equal(large
 assert.equal(largeResult.records[2].status,'INCOMPLETE'); providedCases++;
 assert.equal((await semlint(sample,mock)).schema,'ops.semlint.result.v1');
 
+let realEntryControls = 0, fixtureHttpCalls = 0;
+const realPlan = {schema: 'ops.semlint.real-input.v1', cases: [{id: 'case-1', input: sample},
+  {id: 'case-missing', input: {...sample, context: []}}]};
+const fixtureFetch = async (url, init) => {
+  fixtureHttpCalls++;
+  assert.equal(url, 'https://api.typesafe.ai/v1/systemone');
+  assert.equal(init.redirect, 'error'); assert.equal(init.method, 'POST');
+  assert.ok(init.signal instanceof AbortSignal);
+  const questions = JSON.parse(init.body).questions;
+  return new Response(JSON.stringify({model: JEV_MODEL,
+    answers: Object.fromEntries(Object.keys(questions).map((id) => [id, {type: 'noul', noul: .7, extra: canary}])),
+    usage: {input_tokens: 15, output_tokens: 3, secret: canary}}), {status: 200});
+};
+const realObserved = await runRealPlan(realPlan, {key: canary, fetchImpl: fixtureFetch});
+assert.equal(realObserved.attemptedHttpCalls, 1); assert.equal(fixtureHttpCalls, 1);
+assert.equal(realObserved.cases[0].provider.completedHttpCalls, 1);
+assert.equal(realObserved.cases[0].provider.validatedModel, JEV_MODEL);
+assert.deepEqual(realObserved.cases[0].provider.usage, {input_tokens: 15, output_tokens: 3});
+assert.equal(realObserved.cases[1].provider.attemptedHttpCalls, 0);
+assert.equal(realObserved.cases[1].result.records[0].status, 'INCOMPLETE');
+assert.equal(JSON.stringify(realObserved).includes(canary), false); realEntryControls++;
+for (const bad of [{...realPlan, extra: true}, {...realPlan, cases: []},
+  {...realPlan, cases: [realPlan.cases[0], realPlan.cases[0]]},
+  {...realPlan, cases: Array.from({length: 25}, (_, i) => ({id: 'c' + i, input: sample}))}]) {
+  await assert.rejects(() => runRealPlan(bad, {key: canary, fetchImpl: fixtureFetch}), /INVALID_SEMLINT_REAL_PLAN/u);
+  assert.equal(fixtureHttpCalls, 1); realEntryControls++;
+}
+const badLater = {...realPlan, cases: [realPlan.cases[0], {id: 'bad', input: {...sample, schema: 'bad'}}]};
+const refused = await runRealPlan(badLater, {key: canary, fetchImpl: fixtureFetch});
+assert.equal(refused.attemptedHttpCalls, 0); assert.equal(fixtureHttpCalls, 1);
+assert.deepEqual(refused.cases.map((row) => row.status), ['NOT_RUN', 'INVALID_INPUT']); realEntryControls++;
+const modelBad = await runRealPlan({schema: realPlan.schema, cases: [realPlan.cases[0]]},
+  {key: canary, fetchImpl: async () => new Response(JSON.stringify({model: canary, answers: {}}), {status: 200})});
+assert.equal(modelBad.cases[0].provider.completedHttpCalls, 1);
+assert.equal(modelBad.cases[0].provider.validatedModel, null);
+assert.equal(modelBad.cases[0].result.records[0].status, 'EVIDENCE_INVALID');
+assert.equal(JSON.stringify(modelBad).includes(canary), false); realEntryControls++;
+let capCalls = 0;
+const atCap = await runRealPlan({schema: realPlan.schema,
+  cases: Array.from({length: 24}, (_, i) => ({id: 'cap-' + i, input: sample}))},
+  {key: canary, fetchImpl: async (url, init) => {
+    capCalls++; return fixtureFetch(url, init);
+  }});
+assert.equal(capCalls, 24); assert.equal(atCap.attemptedHttpCalls, 24); realEntryControls++;
+const requestError = await runRealPlan({schema: realPlan.schema, cases: [realPlan.cases[0]]},
+  {key: canary, fetchImpl: async () => { throw new Error(canary); }});
+assert.equal(requestError.attemptedHttpCalls, 1);
+assert.equal(requestError.cases[0].provider.completedHttpCalls, 0);
+assert.equal(JSON.stringify(requestError).includes(canary), false); realEntryControls++;
+
 console.log(JSON.stringify({
   status: 'PASS',
   core: 'semantic-evaluate',
@@ -312,5 +365,104 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks,
+  providedCases, providedCallbacks, realEntryControls, fixtureHttpCalls,
 }));
+}
+
+const realDigest = (value) => createHash('sha256').update(value).digest('hex');
+const usageView = (value) => Object.fromEntries(['input_tokens', 'output_tokens'].map((name) =>
+  [name, Number.isSafeInteger(value?.[name]) && value[name] >= 0 ? value[name] : null]));
+const exactReal = (value, keys) => value && Object.getPrototypeOf(value) === Object.prototype
+  && Reflect.ownKeys(value).length === keys.length
+  && keys.every((key) => Object.getOwnPropertyDescriptor(value, key)?.enumerable
+    && Object.hasOwn(Object.getOwnPropertyDescriptor(value, key), 'value'));
+
+// Public JSON data only. Gold, thresholds and arbitrary executable selectors are not inputs.
+export async function runRealPlan(plan, {key, fetchImpl = fetch} = {}) {
+  if (!exactReal(plan, ['schema', 'cases']) || plan.schema !== 'ops.semlint.real-input.v1'
+    || !Array.isArray(plan.cases) || plan.cases.length < 1 || plan.cases.length > 24
+    || Reflect.ownKeys(plan.cases).length !== plan.cases.length + 1
+    || plan.cases.some((row) => !exactReal(row, ['id', 'input'])
+      || typeof row.id !== 'string' || !/^[A-Za-z0-9_.-]{1,80}$/u.test(row.id))
+    || new Set(plan.cases.map((row) => row.id)).size !== plan.cases.length) {
+    throw new Error('INVALID_SEMLINT_REAL_PLAN');
+  }
+  const fixed = JSON.parse(JSON.stringify(plan));
+  if (Buffer.byteLength(JSON.stringify(fixed)) > 1048576) throw new Error('INVALID_SEMLINT_REAL_PLAN');
+  const prepared = []; let failedIndex = -1;
+  // Complete admission for the whole plan before sending its first provider request.
+  for (const [index, row] of fixed.cases.entries()) {
+    try {
+      const result = await semlint(row.input, async (_, questions) => ({model: JEV_MODEL,
+        answers: Object.fromEntries(Object.keys(questions).map((id) => [id, {type: 'noul', noul: 0.5}]))}));
+      if (result.records.some((record) => record.status === 'EXECUTION_ERROR'
+        || record.status === 'EVIDENCE_INVALID')) throw new Error('INVALID_SEMLINT_REAL_PLAN');
+      prepared.push(row);
+    } catch { failedIndex = index; break; }
+  }
+  if (failedIndex >= 0) return {schema: 'ops.semlint.real-output.v1', attemptedHttpCalls: 0,
+    cases: fixed.cases.map((row, index) => ({id: row.id, status: index === failedIndex ? 'INVALID_INPUT' : 'NOT_RUN',
+      cause: 'PLAN_PREFLIGHT_REFUSED', provider: {attemptedHttpCalls: 0, completedHttpCalls: 0}})),
+    claimCeiling: 'PLAN_REFUSAL_NOT_SEMANTIC_QUALITY'};
+  let totalAttempted = 0;
+  const results = [];
+  for (const row of prepared) {
+    const provider = {attemptedHttpCalls: 0, completedHttpCalls: 0, statusClass: 'NOT_RUN',
+      validatedModel: null, usage: usageView(null), elapsedMs: 0, responseDigest: null, sanitizedAnswers: null};
+    const start = performance.now();
+    const result = await semlint(row.input, async (state, questions) => {
+      const observedFetch = async (url, init) => {
+        if (url !== 'https://api.typesafe.ai/v1/systemone' || init.method !== 'POST'
+          || init.redirect !== 'error' || totalAttempted >= 24) throw new Error('REAL_REQUEST_REFUSED');
+        totalAttempted++; provider.attemptedHttpCalls++; provider.statusClass = 'REQUEST_ERROR';
+        const response = await fetchImpl(url, init);
+        provider.completedHttpCalls++; provider.statusClass = 'HTTP_' + Math.floor(response.status / 100) + 'XX';
+        if (!response.ok) return response;
+        // Consume once under the original fetch signal; no clone, independent timeout or retry.
+        const bytes = Buffer.from(await response.arrayBuffer());
+        provider.responseDigest = realDigest(bytes);
+        return {ok: response.ok, status: response.status, json: async () => JSON.parse(bytes.toString('utf8'))};
+      };
+      const answer = await askJev(state, questions, {key,
+        endpoint: 'https://api.typesafe.ai/v1/systemone', timeoutMs: 15000, fetchImpl: observedFetch});
+      provider.validatedModel = JEV_MODEL; provider.statusClass = 'VALIDATED_RESPONSE';
+      provider.usage = usageView(answer.usage);
+      provider.sanitizedAnswers = Object.fromEntries(Object.keys(questions).map((id) =>
+        [id, {type: 'noul', noul: answer.answers[id].noul}]));
+      return answer;
+    });
+    provider.elapsedMs = performance.now() - start;
+    const projected = {...result, accounting: {...result.accounting, usage: usageView(result.accounting.usage)}};
+    results.push({id: row.id, inputDigest: result.inputDigest, questionDigest: result.questionDigest,
+      result: projected, provider});
+  }
+  return {schema: 'ops.semlint.real-output.v1', cases: results, attemptedHttpCalls: totalAttempted,
+    claimCeiling: 'REAL_OBSERVATION_NOT_INDEPENDENT_QUALITY_OR_AUTHORITY'};
+}
+
+async function main() {
+  if (process.argv.length === 2) return runMachineTests();
+  if (process.argv.length !== 3 || process.argv[2] !== '--semlint-real') throw new Error('INVALID_SEMLINT_TEST_MODE');
+  const chunks = []; let length = 0;
+  const requestHash = createHash('sha256');
+  for await (const chunk of process.stdin) {
+    length += chunk.length;
+    requestHash.update(chunk);
+    if (length <= 1048576) chunks.push(chunk);
+  }
+  const requestDigest = requestHash.digest('hex');
+  const bytes = Buffer.concat(chunks);
+  try {
+    if (length > 1048576) throw new Error('INVALID_SEMLINT_REAL_PLAN');
+    const text = new TextDecoder('utf-8', {fatal: true}).decode(bytes);
+    const output = await runRealPlan(JSON.parse(text), {key: process.env.JEV_API_KEY});
+    console.log(JSON.stringify(output));
+  } catch {
+    console.log(JSON.stringify({schema: 'ops.semlint.real-refusal.v1', cause: 'INVALID_SEMLINT_REAL_PLAN',
+      requestDigest}));
+    process.exitCode = 1;
+  }
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch(() => { console.error('SEMLINT_TEST_REQUEST_REFUSED'); process.exitCode = 1; });
+}
