@@ -11,6 +11,7 @@ const catalog = [
   ['Improving', 'improving.comparable-evidence', ['qualityContract', 'baselineEvidence'], 'Improvement lacks a comparable failure/cause/metric/regression/evidence chain. Explicit justified tradeoffs and identified multiple causes are legitimate.', []],
 ];
 const axes = catalog.map((row) => row[0]);
+const comparisonBridge = "Evaluate the caller's concern against the meaning selected by state.subject.scope within state.subject.content, not the headline or majority of other statements. Use supplied context relevant to this check's declared roles and concern as contracts, evidence or grants according to their declared meaning; role presence alone establishes no authority. Assess proposed declarations for consistency with supplied requirements without demanding execution evidence unless the concern requires it. Preserve stated exceptions, legitimate grants and authorized updates. Do not infer a violation from the concern's wording or its copy in state.checks. Other honest or compliant statements do not cancel a conflicting scoped claim. Caller concern (verbatim): ";
 const hash = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const fail = () => { throw new Error('INVALID_SEMLINT_INPUT'); };
 const string = (x, nonempty = true) => typeof x === 'string' && x.isWellFormed() && (!nonempty || x.trim().length > 0);
@@ -105,7 +106,7 @@ export async function semlint(input, ask) {
   });
   const items = records.filter((x) => x.status === 'OBSERVED').map((x) => ({
     theme: x.question, subject: [state.subject.kind, state.subject.ref, state.subject.revision, x.rule],
-    concern: rules.find((row) => row[1] === x.rule)[3] }));
+    concern: (version2 ? comparisonBridge : '') + rules.find((row) => row[1] === x.rule)[3] }));
   const themes = axes;
   const questionDigest = hash(JSON.stringify({themes, items}));
   let callbackAttempts = 0, validatedCalls = 0, usage = null;
