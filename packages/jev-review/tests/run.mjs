@@ -553,6 +553,108 @@ assert.throws(()=>validateJevBudget(expectedProjection(atomicFinal),expectedAtom
 const atomicFinalRefused=await semlint(atomicFinal,noCalls);assert.equal(atomicFinalRefused.accounting.callbackAttempts,0);
 assert.equal(atomicFinalRefused.records[0].status,'EXECUTION_ERROR');assert.equal(atomicFinalRefused.questionDigest,expectedAtomic(atomicFinal).digest);atomicControls++;
 
+// V5 named descriptions: natural-language criteria, not facts or an AND fold.
+let structuredControls = 0;
+const rubricKeys=['targetAssertion','applicableRequirement','outcomeCondition','legitimateExceptions'];
+const rubric={targetAssertion:'The scoped authority declaration.',applicableRequirement:'The applicable supplied grant for that same declaration.',
+  outcomeCondition:'The declaration exceeds that grant.',legitimateExceptions:'Legitimate separate grants and authorized updates remain legitimate.'};
+const asV5=input=>({...structuredClone(input),schema:'ops.semlint.input.v5'});
+const structuredInput=asV5(atomicInput);
+structuredInput.checks[0].predicate.true=structuredClone(rubric);
+structuredInput.checks[1].predicate.false={...rubric,outcomeCondition:'The declaration stays within that grant.'};
+const structuredExpected=expectedAtomic(structuredInput);
+const structuredAsk=async(s,q)=>({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(id=>[id,{type:'noul',noul:.5}])),usage:{input_tokens:4,output_tokens:1}});
+const structuredResult=await semlint(structuredInput,async(s,q)=>{
+  assert.deepEqual(s,structuredExpected.state);assert.deepEqual(q,structuredExpected.questions);
+  assert.deepEqual(Object.keys(q.q0.criteria.true),rubricKeys);assert.ok(Object.isFrozen(q.q0.criteria.true));
+  assert.equal(typeof q.q0.criteria.false,'string');assert.equal(typeof q.q1.criteria.true,'string');
+  assert.equal(Object.hasOwn(s,'checks'),false);return structuredAsk(s,q);
+});
+assert.equal(structuredResult.schema,'ops.semlint.result.v5');
+assert.equal(structuredResult.inputDigest,digest(JSON.stringify(structuredInput)));
+assert.equal(structuredResult.questionDigest,structuredExpected.digest);
+assert.deepEqual(structuredResult.counts,atomicResult.counts);assert.deepEqual(structuredResult.records,atomicResult.records);
+assert.deepEqual(structuredResult.projection,atomicResult.projection);structuredControls++;
+const stringV5=await semlint(asV5(atomicInput),async(s,q)=>{
+  assert.deepEqual(s,atomicExpected.state);assert.deepEqual(q,atomicExpected.questions);return structuredAsk(s,q);
+});
+assert.deepEqual(noElapsed({...stringV5,schema:atomicResult.schema,inputDigest:atomicResult.inputDigest}),noElapsed(atomicResult));structuredControls++;
+for(const mode of ['both','true','false']){
+  const input=asV5(atomicInput);for(const key of ['true','false'])if(mode==='both'||mode===key)input.checks[0].predicate[key]=structuredClone(rubric);
+  await semlint(input,async(s,q)=>{assert.deepEqual(q,expectedAtomic(input).questions);return structuredAsk(s,q);});structuredControls++;
+}
+const reorderedV5=structuredClone(structuredInput);
+for(const check of reorderedV5.checks)for(const key of ['true','false'])if(typeof check.predicate[key]==='object')
+  check.predicate[key]=Object.fromEntries(Object.entries(check.predicate[key]).reverse());
+assert.deepEqual(noElapsed(await semlint(reorderedV5,structuredAsk)),noElapsed(structuredResult));structuredControls++;
+for(const key of rubricKeys){
+  const input=structuredClone(structuredInput);input.checks[0].predicate.true[key]+=' Another declared criterion phrase.';
+  const out=await semlint(input,structuredAsk);assert.notEqual(out.inputDigest,structuredResult.inputDigest);
+  assert.notEqual(out.questionDigest,structuredResult.questionDigest);structuredControls++;
+}
+for(const mutate of [
+ r=>delete r.targetAssertion,r=>r.extra='extra',r=>r.targetAssertion='',r=>r.targetAssertion=' ',
+ r=>r.targetAssertion='\ud800',r=>r.targetAssertion={},r=>r.targetAssertion=[],r=>r.targetAssertion=false,
+ r=>r[Symbol('extra')]='extra',r=>Object.defineProperty(r,'targetAssertion',{get(){throw Error(canary);}}),
+ r=>Object.defineProperty(r,'targetAssertion',{enumerable:false}),r=>Object.setPrototypeOf(r,{hidden:'value'}),
+ r=>r.targetAssertion=r,
+]){
+  const input=structuredClone(structuredInput);mutate(input.checks[0].predicate.true);
+  await assert.rejects(()=>semlint(input,noCalls),/INVALID_SEMLINT_INPUT/);structuredControls++;
+}
+for(const bad of [null,[],42,()=>{},new String('text')]){
+  const input=structuredClone(structuredInput);input.checks[0].predicate.true=bad;
+  await assert.rejects(()=>semlint(input,noCalls),/INVALID_SEMLINT_INPUT/);structuredControls++;
+}
+const descriptorCounts=Object.fromEntries(rubricKeys.map(key=>[key,0]));let descriptionReads=0;
+const capturedV5=structuredClone(structuredInput);
+capturedV5.checks[0].predicate.true=new Proxy(capturedV5.checks[0].predicate.true,{
+  get(){descriptionReads++;return canary;},
+  getOwnPropertyDescriptor(target,key){const d=Reflect.getOwnPropertyDescriptor(target,key);if(Object.hasOwn(descriptorCounts,key)){
+    descriptorCounts[key]++;return {...d,value:descriptorCounts[key]===1?d.value:canary};}return d;},
+});
+const capturedResult=await semlint(capturedV5,async(s,q)=>{assert.deepEqual(q,structuredExpected.questions);return structuredAsk(s,q);});
+assert.deepEqual(descriptorCounts,Object.fromEntries(rubricKeys.map(key=>[key,1])));assert.equal(descriptionReads,0);
+assert.deepEqual(noElapsed(capturedResult),noElapsed(structuredResult));structuredControls++;
+const movingV5=structuredClone(structuredInput);let releaseV5;
+const pendingV5=semlint(movingV5,async(s,q)=>{await new Promise(resolve=>releaseV5=resolve);
+  assert.deepEqual(q,structuredExpected.questions);return structuredAsk(s,q);});
+movingV5.checks[0].predicate.true.outcomeCondition=canary;releaseV5();
+assert.deepEqual(noElapsed(await pendingV5),noElapsed(structuredResult));structuredControls++;
+for(const mode of ['empty','missing']){
+  const input=structuredClone(structuredInput);if(mode==='empty')input.checks=[];else{input.checks=input.checks.filter(x=>x.requiredRoles.length);input.context=[];}
+  const out=await semlint(input,noCalls);assert.equal(out.accounting.callbackAttempts,0);
+  assert.equal(out.questionDigest,expectedAtomic(input).digest);assert.ok(out.projection.stateDigest);
+  assert.equal(out.records.every(row=>row.status==='INCOMPLETE'),true);structuredControls++;
+}
+for(const mode of ['badDescription','raw','zero','missing','blankSubject']){
+  const input=mode==='badDescription'?structuredClone(structuredInput):asV5(atomicLarge);
+  if(mode==='badDescription')input.checks[0].predicate.true={...rubric,extra:'bad'};
+  if(mode==='zero')input.checks=[];
+  if(mode==='missing'){input.checks=input.checks.filter(x=>x.requiredRoles.length);input.context.forEach(x=>x.evaluationSpan={startByte:0,endByte:0});}
+  if(mode==='blankSubject')input.subject.evaluationSpan={startByte:0,endByte:0};
+  let http=0;const out=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'first',input:structuredInput},{id:'late',input}]},
+    {key:canary,fetchImpl:async()=>{http++;throw Error(canary);}});
+  assert.equal(http,0);assert.equal(out.attemptedHttpCalls,0);assert.deepEqual(out.cases.map(x=>x.status),['NOT_RUN','INVALID_INPUT']);structuredControls++;
+}
+const structuredFinal=asV5(atomicFinal);
+structuredFinal.checks[0].predicate.question='Does the declared claim exceed the applicable grant?';
+structuredFinal.checks[0].predicate.true={...rubric,outcomeCondition:'x'.repeat(3500)};
+validateJevBudget(structuredFinal,{});
+await evaluate(expectedProjection(structuredFinal),{themes:semlintThemes,items:atomicFinalItems},async()=>({model:JEV_MODEL,answers:{q0:{type:'noul',noul:.5}}}));
+assert.throws(()=>validateJevBudget(expectedProjection(structuredFinal),expectedAtomic(structuredFinal).questions));
+const structuredFinalRefused=await semlint(structuredFinal,noCalls);
+assert.equal(structuredFinalRefused.accounting.callbackAttempts,0);assert.equal(structuredFinalRefused.records[0].status,'EXECUTION_ERROR');
+assert.equal(structuredFinalRefused.questionDigest,expectedAtomic(structuredFinal).digest);structuredControls++;
+let structuredFinalHttp=0;
+const structuredFinalPlan=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'first',input:structuredInput},{id:'late',input:structuredFinal}]},
+ {key:canary,fetchImpl:async()=>{structuredFinalHttp++;throw Error(canary);}});
+assert.equal(structuredFinalHttp,0);assert.equal(structuredFinalPlan.attemptedHttpCalls,0);structuredControls++;
+for(const kind of ['model','answer','throw']){
+  const out=await semlint(structuredInput,async()=>{if(kind==='throw')throw Error(canary);return kind==='model'?{model:canary,answers:{}}:{model:JEV_MODEL,answers:{}};});
+  assert.equal(out.accounting.callbackAttempts,1);assert.equal(out.accounting.validatedCalls,0);assert.equal(JSON.stringify(out).includes(canary),false);structuredControls++;
+}
+
 let realEntryControls = 0, fixtureHttpCalls = 0;
 const realPlan = {schema: 'ops.semlint.real-input.v1', cases: [{id: 'case-1', input: sample},
   {id: 'case-missing', input: {...sample, context: []}}]};
@@ -610,7 +712,7 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, realEntryControls, fixtureHttpCalls,
+  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, realEntryControls, fixtureHttpCalls,
 }));
 }
 
