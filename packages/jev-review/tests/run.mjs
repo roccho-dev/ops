@@ -208,6 +208,103 @@ const inconsistent = {...sample, subject: new Proxy({...sample.subject}, {getOwn
 await assert.rejects(() => semlint(inconsistent, noCalls), /^Error: INVALID_SEMLINT_INPUT$/);
 semlintCases += 2;
 
+// V2 supplies predicates; independent truth/threshold labels are not provider data.
+const provided = {
+  schema: 'ops.semlint.input.v2', subject: {...sample.subject}, context: [...sample.context],
+  checks: [
+    {id: 'fixture.authority.one', axis: 'Aligned', concern: 'This subject claims an unsupported authority.', requiredRoles: ['authorityContract'], crossLinks: ['Measurable']},
+    {id: 'fixture.authority.two', axis: 'Aligned', concern: 'This subject silently changes the declared scope.', requiredRoles: [], crossLinks: []},
+    {id: 'fixture.feedback', axis: 'Closed', concern: 'Completion is claimed without the required observation.', requiredRoles: ['completionContract'], crossLinks: ['Measurable']},
+  ],
+};
+let providedCases = 0, providedCallbacks = 0;
+const providedMock = async (s,q) => {
+  providedCallbacks++;
+  assert.equal(Object.isFrozen(s.checks[0].requiredRoles), true);
+  assert.equal(Object.isFrozen(q), true);
+  assert.equal(JSON.stringify({s,q}).includes('INDEPENDENT_GOLD_LABEL'), false);
+  return {model:JEV_MODEL, answers:Object.fromEntries(Object.keys(q).map((key) => [key,{type:'noul',noul:0.5}])), usage:{input_tokens:4, output_tokens:1}};
+};
+const supplied = await semlint(provided, async (s,q) => {
+  assert.deepEqual(s, provided);
+  assert.deepEqual(Object.keys(q), ['q0','q1']);
+  assert.ok(q.q0.instructions.includes(provided.checks[0].concern));
+  assert.ok(q.q1.instructions.includes(provided.checks[1].concern));
+  assert.deepEqual(q.q0.criteria, {true:'The concern is present in the declared state.', false:'The concern is absent from the declared state.'});
+  return providedMock(s,q);
+});
+assert.equal(supplied.schema, 'ops.semlint.result.v2');
+assert.deepEqual(supplied.counts, {selected:3,sendable:2,evaluated:2,missing:1});
+assert.deepEqual(supplied.records.map((r)=>[r.rule,r.question,r.status]), [
+  ['fixture.authority.one','Aligned','OBSERVED'], ['fixture.authority.two','Aligned','OBSERVED'], ['fixture.feedback','Closed','INCOMPLETE'],
+]);
+assert.deepEqual(supplied.records[2].missingRoles, ['completionContract']);
+assert.deepEqual(supplied.records[0].crossLinks, ['Measurable']);
+assert.deepEqual(supplied.accounting.usage, {input_tokens:4,output_tokens:1});
+assert.equal(supplied.accounting.callbackAttempts,1);
+assert.equal(supplied.accounting.providerHttpCalls,null);
+assert.equal(supplied.accounting.cost,null);
+providedCases++;
+const nothing = await semlint({...provided,checks:[]}, noCalls);
+assert.equal(nothing.schema,'ops.semlint.result.v2'); assert.deepEqual(nothing.records,[]);
+assert.deepEqual(nothing.counts,{selected:0,sendable:0,evaluated:0,missing:0}); assert.equal(nothing.accounting.callbackAttempts,0);
+const unavailable = await semlint({...provided,context:[],checks:[provided.checks[0]]}, noCalls);
+assert.equal(unavailable.records[0].status,'INCOMPLETE'); assert.equal(unavailable.accounting.callbackAttempts,0);
+const artifactOnly = await semlint({...provided,context:[],checks:[provided.checks[1]]},providedMock);
+assert.equal(artifactOnly.records[0].status,'OBSERVED'); assert.deepEqual(artifactOnly.records[0].contextRefs,[]);
+const legitimateGrant = await semlint({...provided,context:grant.context},providedMock);
+assert.equal(legitimateGrant.records[0].contextRefs.length,2);
+providedCases+=4;
+for(const change of [
+  x=>{x.schema='ops.semlint.input.v3';}, x=>{x.checks[0].extra=true;},
+  x=>{x.checks[0].id='';}, x=>{x.checks[0].axis='Seventh';}, x=>{x.checks[0].concern='';},
+  x=>{x.checks[0].concern='\ud800';}, x=>{x.checks[0].requiredRoles.push('authorityContract');},
+  x=>{x.checks[0].requiredRoles=[''];}, x=>{x.checks[0].crossLinks=['Aligned'];},
+  x=>{x.checks[0].crossLinks=['Measurable','Measurable'];}, x=>{x.checks[0].crossLinks=['Seventh'];},
+  x=>{x.checks[1].id=x.checks[0].id;}, x=>{x.checks[0].requiredRoles='authorityContract';},
+  x=>{delete x.checks[0].requiredRoles;}, x=>{delete x.checks[0].requiredRoles[0];},
+  x=>{Object.defineProperty(x.checks[0],'concern',{get(){throw new Error(canary);}});},
+  x=>{Object.defineProperty(x.checks[0].requiredRoles,'0',{get(){throw new Error(canary);}});},
+]) {
+  const x=structuredClone(provided); change(x);
+  await assert.rejects(()=>semlint(x,noCalls),/^Error: INVALID_SEMLINT_INPUT$/);
+  providedCases++;
+}
+const changedConcern=structuredClone(provided); changedConcern.checks[0].concern='A distinct declared violation predicate.';
+const changedResult=await semlint(changedConcern,providedMock);
+assert.notEqual(changedResult.inputDigest,supplied.inputDigest); assert.notEqual(changedResult.questionDigest,supplied.questionDigest);
+const moving=structuredClone(provided); let releaseProvided;
+const pendingProvided=semlint(moving,async(s,q)=>{
+  await new Promise(resolve=>{releaseProvided=resolve;});
+  assert.equal(s.checks[0].concern,provided.checks[0].concern);
+  assert.deepEqual(s.checks[0].requiredRoles,provided.checks[0].requiredRoles);
+  assert.ok(q.q0.instructions.includes(provided.checks[0].concern));
+  return providedMock(s,q);
+});
+moving.checks[0].concern=canary; moving.checks[0].requiredRoles.push('other'); releaseProvided();
+assert.equal((await pendingProvided).inputDigest,supplied.inputDigest);
+let criterionReads=0;
+const proxyCriteria={...provided,checks:[new Proxy({...provided.checks[0]}, {get(target,key){if(key==='concern')criterionReads++;return key==='concern'?canary:target[key];}})]};
+const proxyResult=await semlint(proxyCriteria,async(s,q)=>{assert.equal(s.checks[0].concern,provided.checks[0].concern);return providedMock(s,q);});
+assert.equal(criterionReads,0);assert.equal(proxyResult.records[0].status,'OBSERVED');
+providedCases+=3;
+for(const [reply,status,cause] of [
+  [()=>({model:'other',answers:{q0:{type:'noul',noul:0.5}}}),'EVIDENCE_INVALID','JEV_MODEL_MISMATCH'],
+  [()=>({model:JEV_MODEL,answers:{q0:{type:'noul',noul:0.5}}}),'EVIDENCE_INVALID','INVALID_JEV_ANSWERS'],
+  [()=>{throw new Error(canary);},'EXECUTION_ERROR','EVALUATION_FAILED'],
+]) {
+  const result=await semlint(provided,async()=>{providedCallbacks++;return reply();});
+  assert.equal(result.records[0].status,status); assert.equal(result.records[0].cause,cause);
+  assert.equal(result.records[1].status,status);assert.equal(result.records[2].status,'INCOMPLETE');
+  assert.equal(result.accounting.callbackAttempts,1);assert.equal(result.accounting.validatedCalls,0);
+  assert.equal(JSON.stringify(result).includes(canary),false);providedCases++;
+}
+const largeCriterion=structuredClone(provided);largeCriterion.checks[0].concern='x'.repeat(29000);
+const largeResult=await semlint(largeCriterion,noCalls);
+assert.equal(largeResult.records[0].status,'EXECUTION_ERROR');assert.equal(largeResult.accounting.callbackAttempts,0);
+assert.equal(largeResult.records[2].status,'INCOMPLETE'); providedCases++;
+assert.equal((await semlint(sample,mock)).schema,'ops.semlint.result.v1');
+
 console.log(JSON.stringify({
   status: 'PASS',
   core: 'semantic-evaluate',
@@ -215,4 +312,5 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
+  providedCases, providedCallbacks,
 }));

@@ -10,6 +10,7 @@ const catalog = [
   ['Measurable', 'measurable.attempt-accounting', ['accountingContract', 'registeredCases'], 'Failed, missing or invalid attempts disappear or receive semantic-success credit. Empty or unknown required coverage is not success; invalid evidence cannot erase an observed wrong decision.', []],
   ['Improving', 'improving.comparable-evidence', ['qualityContract', 'baselineEvidence'], 'Improvement lacks a comparable failure/cause/metric/regression/evidence chain. Explicit justified tradeoffs and identified multiple causes are legitimate.', []],
 ];
+const axes = catalog.map((row) => row[0]);
 const hash = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const fail = () => { throw new Error('INVALID_SEMLINT_INPUT'); };
 const string = (x, nonempty = true) => typeof x === 'string' && x.isWellFormed() && (!nonempty || x.trim().length > 0);
@@ -43,12 +44,17 @@ function record(x, keys) {
 }
 function snapshot(input) {
   const root = copyRecord(input, ['schema', 'subject', 'context', 'checks']);
+  const version2 = root.schema === 'ops.semlint.input.v2';
+  if (!version2 && root.schema !== 'ops.semlint.input.v1') fail();
   const state = {schema: root.schema,
     subject: copyRecord(root.subject, ['kind', 'ref', 'revision', 'scope', 'content', 'sha256']),
     context: copyList(root.context).map((x) => copyRecord(x, ['role', 'ref', 'revision', 'content', 'sha256'])),
-    checks: copyList(root.checks)};
+    checks: copyList(root.checks).map((x) => {
+      if (!version2) return x;
+      const row = copyRecord(x, ['id', 'axis', 'concern', 'requiredRoles', 'crossLinks']);
+      return {...row, requiredRoles: copyList(row.requiredRoles), crossLinks: copyList(row.crossLinks)};
+    })};
   // Validate only this descriptor-value snapshot, never reread caller properties.
-  if (state.schema !== 'ops.semlint.input.v1') fail();
   record(state.subject, ['kind', 'ref', 'revision', 'scope', 'content', 'sha256']);
   if (!['ci-artifact', 'log-entry'].includes(state.subject.kind)) fail();
   const identities = new Set();
@@ -58,7 +64,14 @@ function snapshot(input) {
     if (identities.has(id)) fail();
     identities.add(id);
   }
-  if (!state.checks.every((id) => string(id) && catalog.some((row) => row[1] === id))
+  if (version2) {
+    if (!state.checks.every((row) => string(row.id) && axes.includes(row.axis) && string(row.concern)
+      && row.requiredRoles.every((role) => string(role))
+      && new Set(row.requiredRoles).size === row.requiredRoles.length
+      && row.crossLinks.every((axis) => axes.includes(axis) && axis !== row.axis)
+      && new Set(row.crossLinks).size === row.crossLinks.length)
+      || new Set(state.checks.map((row) => row.id)).size !== state.checks.length) fail();
+  } else if (!state.checks.every((id) => string(id) && catalog.some((row) => row[1] === id))
     || new Set(state.checks).size !== state.checks.length) fail();
   return state;
 }
@@ -79,8 +92,10 @@ export async function semlint(input, ask) {
   let state;
   try { state = freeze(snapshot(input)); } catch { fail(); }
   if (typeof ask !== 'function') fail();
-  const records = catalog.map(([question, rule, roles, , crossLinks]) => {
-    const selected = state.checks.includes(rule);
+  const version2 = state.schema === 'ops.semlint.input.v2';
+  const rules = version2 ? state.checks.map((row) => [row.axis, row.id, row.requiredRoles, row.concern, row.crossLinks]) : catalog;
+  const records = rules.map(([question, rule, roles, , crossLinks]) => {
+    const selected = version2 || state.checks.includes(rule);
     const missingRoles = selected ? roles.filter((role) => !state.context.some((x) => x.role === role && x.content.trim())) : [];
     return { question, rule, subject: state.subject.ref,
       status: !selected ? 'NOT_SELECTED' : missingRoles.length ? 'INCOMPLETE' : 'OBSERVED',
@@ -90,8 +105,8 @@ export async function semlint(input, ask) {
   });
   const items = records.filter((x) => x.status === 'OBSERVED').map((x) => ({
     theme: x.question, subject: [state.subject.kind, state.subject.ref, state.subject.revision, x.rule],
-    concern: catalog.find((row) => row[1] === x.rule)[3] }));
-  const themes = catalog.map((row) => row[0]);
+    concern: rules.find((row) => row[1] === x.rule)[3] }));
+  const themes = axes;
   const questionDigest = hash(JSON.stringify({themes, items}));
   let callbackAttempts = 0, validatedCalls = 0, usage = null;
   const start = performance.now();
@@ -115,7 +130,7 @@ export async function semlint(input, ask) {
     validatedCalls = 0; usage = null;
     for (const row of records) if (row.status === 'OBSERVED') { row.status = status; row.noul = null; row.cause = cause; }
   }
-  return { schema: 'ops.semlint.result.v1', inputDigest: hash(JSON.stringify(state)), questionDigest,
+  return { schema: version2 ? 'ops.semlint.result.v2' : 'ops.semlint.result.v1', inputDigest: hash(JSON.stringify(state)), questionDigest,
     records,
     counts: { selected: state.checks.length, sendable: items.length,
       evaluated: records.filter((x) => x.status === 'OBSERVED').length,
