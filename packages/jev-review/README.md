@@ -143,3 +143,45 @@ Tests add finite catalog/source/rule/question correspondence, legal/broken mater
 Existing generated `checks.jev-review` and full exact-head Nix CI run the existing test entry. The repo-health-specific workflow alone is not proof that jev-review tests ran. Machine completion requires this bounded API/docs, existing API regression, registered mechanical checks, actual supplied module bytes/source closure and independent exact-head source review. No unauthorized provider call is needed for that mechanical terminal.
 
 Real availability/semantic quality/usefulness/improvement remain NOT_RUN/NOT_PROVEN until a separate finite prospective plan adopts exact inputs/questions/source/context/model, independent expectations, approved target, budget and all-attempt human/provider cost/time accounting. The existing model validator is already fixed; future real-run permission, availability, comparison criteria and budget are separate and currently unadopted. Do not inherit consumed or old proof. This PR does not close #471, expand #453, adopt a gate, implement D/Adapter/wake, or prove business value.
+
+## Provided criteria and finite real verification — agreed contract, implementation pending
+
+This continuation evaluates natural-language subjects against declared natural-language criteria under the six stable semlint axes, reusing the existing Jev evaluator. Core-direct automatic tests accept CI-artifact and log-entry data; no event fetch/dispatch adapter or merge/block authority is introduced. This bootstrap documents the contract agreed through 90-C2 and PROCESS-C1; v2 source implementation and real evaluation have not started. External session contract agreement is not GitHub source review or performance evidence.
+
+### Exact v2 input and v1 compatibility
+
+```text
+{schema:'ops.semlint.input.v2',
+ subject:{kind,ref,revision,scope,content,sha256},
+ context:[{role,ref,revision,content,sha256}],
+ checks:[{id,axis,concern,requiredRoles,crossLinks}]}
+```
+
+All records are exact plain data. Subject kind is ci-artifact or log-entry. Axis and crossLinks use Aligned, Closed, Unique, Minimal, Measurable, Improving. Each id is unique per request. Concern is caller-provided nonempty natural language describing what violation is being evaluated; the existing question asks how likely that concern is present. RequiredRoles contains unique declared context-role strings and may be empty for an artifact-only criterion. CrossLinks contains unique axes excluding the primary axis. Multiple criteria under one axis are legal. Context identity (role,ref,revision) is unique; distinct legitimate base/grant refs remain legal. Existing well-formed-string and UTF-8 SHA binding applies. Digests prove bytes, not accepted authority, freshness or adoption.
+
+The caller owns criterion meaning, primary-axis selection, necessary context and accepted-source provenance. Runtime does not infer these from prose. Checks select this request's criteria, not proved applicability; omitted criteria are untested. Empty checks mean zero calls and no clean proof. Missing/empty required-role content produces INCOMPLETE and no question for that criterion; supported records remain observable. Subject, context and criterion data are captured once, validated, hashed and frozen before evaluation.
+
+V1 input, fixed catalog, six-record result and existing behavior remain compatible. V2 result edition is explicit, with one record per declared criterion, retaining question (primary axis), rule (id), subject, status, noul, contextRefs, missingRoles, cause and crossLinks, plus existing digests/counts/accounting/claim ceiling. Absence of fixed-catalog records in v2 is not evidence of complete six-axis or purpose coverage.
+
+`X = frozenSnapshot(subject, context, checks)`
+`Q = declared criteria with available required roles`
+`J = existing evaluate(X, Q, ask)`
+`L = criterion records + identity + missing/cause + whole-attempt accounting`
+
+Existing model/answer validation and byte budgets remain. Invalid input is a closed error before callback; the caller retains that attempt in evaluation accounting. EVIDENCE_INVALID and EXECUTION_ERROR remain distinct from valid semantic UNKNOWN. Noul is finite [0,1], not a boolean finding, truth threshold or permission. ContextRefs are pointers, not proof the model read or used a source. Observed usage/time is retained; actual HTTP count or monetary cost is not invented when absent. Domain authority of L is zero; computation, HTTP, usage and cost need not be physically zero.
+
+### Independent evaluation and recall
+
+Independent expectation, threshold, case classification and evaluation labels stay outside provider state/questions. Nonleak is caller duty plus finite payload-spy evidence, not arbitrary-prose oracle detection. Positive means the independently preregistered concern is present. A valid observed Noul >= the preregistered threshold counts as detection. Threshold calibration precedes fresh confirmation; threshold and gold belong to the external evaluation plan, not the semantic Core input.
+
+The registered unit is exact subject × primary criterion; source/case clusters are retained for independence. Confirmation positives are nonempty. Recall = TP/(TP+FN) must be at least 0.90, with TP+FN equal all registered confirmation positives. Positive missing/not-run/invalid/execution failures receive no success credit and retain FN cause. Negative execution errors receive no TN credit. Independently unjudgeable gold is declared before outcomes, not removed post hoc. One predicate score cannot credit all distinct defects. Identical data with a changed kind is not an independent case. Surface/criterion/cluster breakdowns accompany the aggregate; finite observed recall is not a universal population guarantee.
+
+Legal negative controls expose all-CONCERN escape. False alerts, precision/FPR and all-UNKNOWN behavior are reported separately. Finite population, independent reference, threshold, comparison identity and negative/economic acceptance values are frozen before confirmation, not selected after scores. These values remain unadopted at this bootstrap; prior portfolio floors do not transfer. Quality, all-attempt provider usage/cost/latency and human setup/preparation/read/review/correction/readback effort use matched comparisons. AI elapsed time is not human minutes. NO_EFFECT/HARM can end an evaluation, not establish improvement success.
+
+### Execution and operating process
+
+Default tests/CI use mocks and zero provider HTTP calls. An authorized finite real test composes the same installed module with existing askJev inside an approved target-owned one-child route. Secret provenance/route readiness is separate from module availability. No new CLI/live workflow/client or inline-decrypt route is implied. Local real calls remain in the finite provider-attempt accounting. Exact maximum calls/input size/time and route permission follow the adopted bounded plan and existing authority; genuine gaps are escalated rather than filled from arbitrary key/environment presence. A new dollar-budget question is not mandatory when the existing authorization suffices. Current real route and evaluation are NOT_READY/NOT_RUN.
+
+CI budget is at most 200 series-caused workflow-run attempts since the User first stated 200; prior consumption carries forward, never resets at Source GO. Automatic/manual/rerun/cancelled and series-caused downstream/source-snapshot attempts count. Multiple jobs within one attempt do not count again. Before a push/merge, existing trigger fanout and in-flight reservations are deducted; uncertain reservations are not released by assumption. Local non-CI checks consume zero CI. CI count is not Jev POST count or unlimited-funds authorization. Existing PR/Issue evidence retains run refs/counts; no new ledger.
+
+Process: meaningful contract bootstrap and actual PR-body same-version readback → sole-W three-path implementation and default-offline tests → exact-head CI and independent R counter → authorized finite calibration → confirmation-contract freeze → same-byte fresh real confirmation and preregistered independent verification → bounded causal correction and affected-proof refresh → Root guarded merge/canonical readback and bounded-purpose terminal. Nonsecret route diagnosis and independent reference preparation run in parallel with docs/source work. Runtime/test edits await the separate Source GO after actual PR-body agreement; real execution awaits the concrete adopted plan and route authority. Ordinary failures stay in the correction loop; budget exhaustion or missing authority is recorded honestly. Machine completion cannot substitute for the real practical purpose. The previously completed initial #471 design remains closed; this continuation does not automatically reopen or close it.
