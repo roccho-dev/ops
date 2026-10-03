@@ -18,32 +18,49 @@ const exact = (x, keys) => x && [Object.prototype, null].includes(Object.getProt
     const p = Object.getOwnPropertyDescriptor(x, k);
     return p && p.enumerable && Object.hasOwn(p, 'value');
   });
-const list = (x) => Array.isArray(x) && Reflect.ownKeys(x).length === x.length + 1
-  && Array.from({ length: x.length }, (_, i) => Object.getOwnPropertyDescriptor(x, String(i)))
-    .every((p) => p && p.enumerable && Object.hasOwn(p, 'value'));
+function copyRecord(x, keys) {
+  if (!exact(x, keys)) fail();
+  return Object.fromEntries(keys.map((k) => {
+    const p = Object.getOwnPropertyDescriptor(x, k);
+    if (!p || !p.enumerable || !Object.hasOwn(p, 'value')) fail();
+    return [k, p.value];
+  }));
+}
+function copyList(x) {
+  const length = x && Object.getOwnPropertyDescriptor(x, 'length');
+  if (!Array.isArray(x) || !length || !Object.hasOwn(length, 'value')
+    || !Number.isSafeInteger(length.value) || length.value < 0
+    || Reflect.ownKeys(x).length !== length.value + 1) fail();
+  return Array.from({length: length.value}, (_, i) => {
+    const p = Object.getOwnPropertyDescriptor(x, String(i));
+    if (!p || !p.enumerable || !Object.hasOwn(p, 'value')) fail();
+    return p.value;
+  });
+}
 function record(x, keys) {
   if (!exact(x, keys) || !keys.every((k) => string(x[k], k !== 'content'))
     || !/^[a-f0-9]{64}$/.test(x.sha256) || hash(x.content) !== x.sha256) fail();
 }
 function snapshot(input) {
-  if (!exact(input, ['schema', 'subject', 'context', 'checks']) || input.schema !== 'ops.semlint.input.v1') fail();
-  record(input.subject, ['kind', 'ref', 'revision', 'scope', 'content', 'sha256']);
-  if (!['ci-artifact', 'log-entry'].includes(input.subject.kind) || !list(input.context) || !list(input.checks)) fail();
+  const root = copyRecord(input, ['schema', 'subject', 'context', 'checks']);
+  const state = {schema: root.schema,
+    subject: copyRecord(root.subject, ['kind', 'ref', 'revision', 'scope', 'content', 'sha256']),
+    context: copyList(root.context).map((x) => copyRecord(x, ['role', 'ref', 'revision', 'content', 'sha256'])),
+    checks: copyList(root.checks)};
+  // Validate only this descriptor-value snapshot, never reread caller properties.
+  if (state.schema !== 'ops.semlint.input.v1') fail();
+  record(state.subject, ['kind', 'ref', 'revision', 'scope', 'content', 'sha256']);
+  if (!['ci-artifact', 'log-entry'].includes(state.subject.kind)) fail();
   const identities = new Set();
-  for (const row of input.context) {
+  for (const row of state.context) {
     record(row, ['role', 'ref', 'revision', 'content', 'sha256']);
     const id = JSON.stringify([row.role, row.ref, row.revision]);
     if (identities.has(id)) fail();
     identities.add(id);
   }
-  if (!input.checks.every((id) => string(id) && catalog.some((row) => row[1] === id))
-    || new Set(input.checks).size !== input.checks.length) fail();
-  // Fixed field order also makes the input binding independent of object property order.
-  const copy = (x, keys) => Object.fromEntries(keys.map((k) => [k, x[k]]));
-  return { schema: input.schema,
-    subject: copy(input.subject, ['kind', 'ref', 'revision', 'scope', 'content', 'sha256']),
-    context: input.context.map((x) => copy(x, ['role', 'ref', 'revision', 'content', 'sha256'])),
-    checks: [...input.checks] };
+  if (!state.checks.every((id) => string(id) && catalog.some((row) => row[1] === id))
+    || new Set(state.checks).size !== state.checks.length) fail();
+  return state;
 }
 function freeze(x) {
   if (x && typeof x === 'object') { Object.values(x).forEach(freeze); Object.freeze(x); }

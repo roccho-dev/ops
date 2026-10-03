@@ -191,6 +191,22 @@ const thrownProxy = await semlint(sample, async () => {throw new Proxy({}, {getO
 assert.equal(thrownProxy.records[0].cause, 'EVALUATION_FAILED');
 assert.equal(JSON.stringify(thrownProxy).includes(canary), false);
 semlintCases += 3;
+let changingReads = 0;
+const changing = {...sample, subject: new Proxy({...sample.subject}, {get(target,key) {
+  if (key === 'content') return ++changingReads < 3 ? target.content : 'changed';
+  return target[key];
+}})};
+const changingResult = await semlint(changing, async (s,q) => {
+  assert.equal(s.subject.sha256, digest(s.subject.content));
+  assert.equal(s.subject.content, sample.subject.content); return mock(s,q);
+});
+assert.equal(changingReads, 0); assert.equal(changingResult.records[0].status, 'OBSERVED');
+const inconsistent = {...sample, subject: new Proxy({...sample.subject}, {getOwnPropertyDescriptor(target,key) {
+  const p = Object.getOwnPropertyDescriptor(target,key);
+  return key === 'content' ? {...p, value: 'changed'} : p;
+}})};
+await assert.rejects(() => semlint(inconsistent, noCalls), /^Error: INVALID_SEMLINT_INPUT$/);
+semlintCases += 2;
 
 console.log(JSON.stringify({
   status: 'PASS',
