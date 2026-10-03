@@ -1,0 +1,195 @@
+// Offline process proof: real temporary Git state, fake runtime/check executables.
+// These fixtures are never evidence of real Winnow or actual Nix execution.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createServer } from 'node:http';
+import { execFile, execFileSync } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const exec = promisify(execFile);
+const here = dirname(fileURLToPath(import.meta.url));
+
+for (const mode of ['paired', 'timeout', 'model-missing']) test(`offline proof adapter: ${mode}`, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-fixture-')), out = join(root, 'out'), bin = join(root, 'bin');
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/api/version') return res.end(JSON.stringify({ version: '0.7.5' }));
+    if (req.url === '/api/tags' || req.url === '/api/ps') return res.end(JSON.stringify({ models: mode === 'model-missing' ? [] : [{ name: 'winnow:e4b', digest: 'a'.repeat(64) }] }));
+    let body = ''; for await (const chunk of req) body += chunk;
+    const request = JSON.parse(body); requests++;
+    assert.deepEqual(request.state.changedPaths, [' changed-path ']);
+    assert.ok(!body.includes('conclusion'));
+    res.end(JSON.stringify({ model: 'winnow:e4b', answers: { q0: { type: 'noul', noul: 0.1 }, q1: { type: 'noul', noul: 0.9 } } }));
+  });
+  try {
+    mkdirSync(out); mkdirSync(bin); mkdirSync(join(root, '.github/workflows'), { recursive: true });
+    mkdirSync(join(root, 'packages/ci-relevance-shadow'), { recursive: true });
+    for (const name of ['winnow.mjs', 'proof.mjs']) cpSync(join(here, name), join(root, 'packages/ci-relevance-shadow', name));
+    writeFileSync(join(root, '.github/workflows/nix-check.yml'), 'nix-build packages/cdp-tty/proof.nix --no-out-link\nnix flake check --show-trace\n');
+    writeFileSync(join(root, '.gitignore'), 'out/\nbin/\n');
+    for (const name of ['nix', 'nix-build']) writeFileSync(join(bin, name), `#!/bin/sh\nprintf '${name}\\n' >> '${out}/calls'\nexit ${mode === 'timeout' && name === 'nix-build' ? '124' : '0'}\n`, { mode: 0o755 });
+    git('init', '-q'); git('config', 'user.email', 'fixture@example.invalid'); git('config', 'user.name', 'fixture');
+    git('add', '.'); git('commit', '-qm', 'base'); const base = git('rev-parse', 'HEAD');
+    writeFileSync(join(root, ' changed-path '), 'exact whitespace path\n'); git('add', '.'); git('commit', '-qm', 'change');
+    writeFileSync(join(out, 'runtime-files.json'), JSON.stringify({ archiveSha256: 'b'.repeat(64), binarySha256: 'c'.repeat(64), fixture: true }));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, WINNOW_PORT: String(server.address().port),
+      PROOF_BASE: base, PROOF_HEAD: git('rev-parse', 'HEAD') };
+    let code = 0;
+    try { await exec(process.execPath, [join(root, 'packages/ci-relevance-shadow/proof.mjs'), out], { cwd: root, env }); }
+    catch (error) { code = error.code; }
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'));
+    assert.equal(report.schema, 'ops.winnowCiRelevanceProof.v2');
+    assert.equal(report.referenceKind, 'bounded-ci-replay');
+    assert.deepEqual(report.referenceUniverse.map(x => x.name), ['cdp-tty-proof', 'flake-check']);
+    assert.equal(report.result, 'UNKNOWN'); assert.equal(report.authority, false); assert.equal(report.effect, false);
+    if (mode === 'model-missing') {
+      assert.equal(code, 2); assert.equal(requests, 0); assert.equal(report.attemptedReferenceChecks, 0);
+      assert.equal(report.reason, 'MODEL_DIGEST_UNAVAILABLE');
+    } else {
+      assert.equal(requests, 1); assert.equal(report.attemptedReferenceChecks, 2);
+      assert.equal(readFileSync(join(out, 'calls'), 'utf8'), 'nix-build\nnix\n');
+      assert.equal(code, mode === 'paired' ? 0 : 2);
+      if (mode === 'paired') {
+        const paired = JSON.parse(readFileSync(join(out, 'paired.json'), 'utf8'));
+        assert.equal(paired.referenceKind, report.referenceKind);
+        assert.deepEqual(paired.referenceUniverse, report.referenceUniverse);
+        assert.ok(!Object.keys(paired).some(key => key.startsWith('fullCi')));
+        assert.equal(report.observation, 'PAIRED'); assert.equal(report.cost.actualSavedExecutionMs, 0);
+        assert.deepEqual(JSON.parse(readFileSync(join(out, 'shadow.json'), 'utf8')).wouldSelect, ['flake-check']);
+      } else {
+        assert.equal(report.reason, 'REFERENCE_NOT_EXECUTED');
+        assert.equal(report.observation, 'REFERENCE_INCOMPLETE');
+        assert.equal(report.completedReferenceChecks, 1);
+        assert.throws(() => readFileSync(join(out, 'paired.json')), /ENOENT/);
+      }
+    }
+  } finally { await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('successor CI keeps offline proof reachable without repeating the finite live experiment', () => {
+  const workflow = readFileSync(new URL('../../.github/workflows/nix-check.yml', import.meta.url), 'utf8');
+  assert.ok(workflow.includes('  ci-relevance-shadow-offline:'));
+  assert.ok(workflow.includes('node --test packages/ci-relevance-shadow/test.mjs packages/ci-relevance-shadow/proof.test.mjs'));
+  assert.ok(!workflow.includes('  winnow-relevance-proof:'));
+  assert.ok(!workflow.includes('node packages/ci-relevance-shadow/proof.mjs'));
+  assert.ok(!workflow.includes('Materialize experimental Ollaya'));
+  assert.ok(workflow.includes('  cdp-tty-proof:')); assert.ok(workflow.includes('  flake-check:'));
+});
+
+for (const mode of ['prepared', 'tampered', 'invalid-json', 'invalid-utf8', 'null-command', 'over-budget'])
+test(`detached prepare-input is provider/process-free: ${mode}`, async () => {
+  const { createHash } = await import('node:crypto');
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-detached-')), out = join(root, 'out');
+  const h = b => createHash('sha256').update(b).digest('hex');
+  // Developer fixture only; unrelated to any evaluation root or hidden oracle.
+  const i = { baseSha: '6'.repeat(40), headSha: '7'.repeat(40), treeSha: '8'.repeat(40),
+    changedPaths: ['mock.txt'], patches: [{ filename: 'mock.txt', patch: '@@ -1 +1 @@\n-before\n+after\n' }],
+    beforeFacts: null, candidates: [{ id: 'mock-workflow/job', name: 'check' }], topK: 1 };
+  if (mode === 'null-command') i.candidates[0].script = null;
+  if (mode === 'over-budget') i.patches[0].patch = 'x'.repeat(32768);
+  const bytes = mode === 'invalid-json' ? Buffer.from('{') : mode === 'invalid-utf8' ? Buffer.from([0xff]) : Buffer.from(JSON.stringify(i));
+  const expected = mode === 'tampered' ? '0'.repeat(64) : h(bytes);
+  try {
+    const inputPath = join(root, 'input.json'); writeFileSync(inputPath, bytes);
+    const guard = `import cp from 'node:child_process';
+      import { syncBuiltinESMExports } from 'node:module';
+      import { pathToFileURL } from 'node:url';
+      const forbidden = () => { throw new Error('provider/process forbidden'); };
+      globalThis.fetch = forbidden; cp.execFileSync = forbidden; cp.spawnSync = forbidden;
+      syncBuiltinESMExports();
+      const [proof, ...args] = process.argv.slice(1); process.argv = [process.execPath, proof, ...args];
+      await import(pathToFileURL(proof).href);`;
+    const args = ['--input-type=module', '-e', guard, join(here, 'proof.mjs'), out, 'prepare-input', inputPath, expected];
+    let exitCode = 0;
+    try { await exec(process.execPath, args, { cwd: root, env: { ...process.env, PATH: '', WINNOW_PORT: 'not-used' } }); }
+    catch (e) { exitCode = e.code; }
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'));
+    assert.equal(report.result, 'UNKNOWN'); assert.equal(report.authority, false); assert.equal(report.effect, false);
+    assert.equal(report.providerAttempts, 0); assert.equal(report.attemptedReferenceChecks, 0);
+    assert.throws(() => readFileSync(join(out, 'shadow.json')), /ENOENT/);
+    assert.throws(() => readFileSync(join(out, 'paired.json')), /ENOENT/);
+    if (mode === 'prepared') {
+      assert.equal(exitCode, 0, report.reason); assert.equal(report.observation, 'INPUT_PREPARED');
+      assert.equal(report.inputBytesSha256, expected); assert.equal(report.treeSha, i.treeSha);
+      assert.equal(report.providerOutput, null); assert.equal(report.wouldSelect, null); assert.equal(report.wouldOmit, null);
+      assert.equal(report.pairAdmissible, false);
+      const prepared = JSON.parse(readFileSync(join(out, 'prepared.json'), 'utf8'));
+      assert.deepEqual(prepared.input, i); assert.deepEqual(prepared.request.state.candidates, i.candidates);
+      assert.deepEqual(prepared.request.state.patches, i.patches);
+      // Successful preparation is not idempotent permission to overwrite prior evidence.
+      await assert.rejects(exec(process.execPath, args, { cwd: root }), /EEXIST/);
+    } else {
+      assert.equal(exitCode, 2, report.reason); assert.equal(report.observation, 'NOT_RUN');
+      assert.throws(() => readFileSync(join(out, 'prepared.json')), /ENOENT/);
+      if (mode === 'tampered') assert.equal(report.reason, 'INPUT_BYTES_MISMATCH');
+      if (mode === 'over-budget') assert.equal(report.reason, 'WINNOW_INPUT_BUDGET_EXCEEDED');
+    }
+    assert.deepEqual(readFileSync(inputPath), bytes);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('provider-detached scores only the verified detached identities and seals no reference', async () => {
+  const { createHash } = await import('node:crypto');
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-formal-provider-')), out = join(root, 'out');
+  const h = b => createHash('sha256').update(b).digest('hex');
+  const input = { baseSha: '4'.repeat(40), headSha: '5'.repeat(40), treeSha: '6'.repeat(40),
+    changedPaths: ['formal.txt'], patches: [{ filename: 'formal.txt', patch: '@@ -1 +1 @@\n-before\n+after\n' }],
+    beforeFacts: 'pre-change fact', candidates: [
+      { id: 'workflow-a/job-a', name: 'job-a' }, { id: 'workflow-b/job-b', name: 'job-b' }], topK: 1 };
+  const bytes = Buffer.from(JSON.stringify(input)), packet = join(root, 'packet.json');
+  writeFileSync(packet, bytes); mkdirSync(out); writeFileSync(join(out, 'runtime-files.json'),
+    JSON.stringify({ archiveSha256: 'b'.repeat(64), binarySha256: 'c'.repeat(64) }));
+  let requests = 0;
+  const server = createServer(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/api/version') return res.end(JSON.stringify({ version: '0.7.5' }));
+    if (req.url === '/api/tags' || req.url === '/api/ps')
+      return res.end(JSON.stringify({ models: [{ name: 'winnow:e4b', digest: 'a'.repeat(64), device: 'cpu', size_vram: 0 }] }));
+    let body = ''; for await (const chunk of req) body += chunk; requests++;
+    const request = JSON.parse(body);
+    assert.deepEqual(request.state.candidates, input.candidates);
+    assert.deepEqual(request.state.patches, input.patches);
+    assert.ok(!body.includes('conclusion')); assert.ok(!body.includes('script'));
+    res.end(JSON.stringify({ model: 'winnow:e4b',
+      answers: { q0: { type: 'noul', noul: 0.2 }, q1: { type: 'noul', noul: 0.8 } } }));
+  });
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    await exec(process.execPath, [join(here, 'proof.mjs'), out, 'provider-detached', packet, h(bytes)],
+      { cwd: root, env: { ...process.env, WINNOW_PORT: String(server.address().port) } });
+    const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'));
+    const shadow = JSON.parse(readFileSync(join(out, 'shadow.json'), 'utf8'));
+    assert.equal(requests, 1); assert.equal(report.observation, 'PROVIDER_EXECUTED');
+    assert.equal(report.referenceKind, null); assert.equal(report.providerAttempts, 1);
+    assert.equal(report.attemptedReferenceChecks, 0); assert.equal(report.completedReferenceChecks, 0);
+    assert.equal(report.pairAdmissible, false); assert.equal(report.comparisonOwner, 'product-r');
+    assert.deepEqual(report.wouldSelect, ['workflow-b/job-b']); assert.deepEqual(shadow.input, input);
+    assert.throws(() => readFileSync(join(out, 'reference.json')), /ENOENT/);
+    assert.throws(() => readFileSync(join(out, 'paired.json')), /ENOENT/);
+  } finally { await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('provider-detached rejects model-visible commands before runtime/provider access', async () => {
+  const { createHash } = await import('node:crypto');
+  const root = mkdtempSync(join(tmpdir(), 'lane-a-formal-command-')), out = join(root, 'out');
+  const input = { baseSha: '4'.repeat(40), headSha: '5'.repeat(40), treeSha: '6'.repeat(40),
+    changedPaths: ['formal.txt'], patches: [{ filename: 'formal.txt', patch: '@@ -1 +1 @@\n-a\n+b\n' }],
+    beforeFacts: null, candidates: [{ id: 'workflow/job', name: 'job', script: 'echo forbidden' }], topK: 1 };
+  const bytes = Buffer.from(JSON.stringify(input)), packet = join(root, 'packet.json');
+  writeFileSync(packet, bytes);
+  let code = 0;
+  try { await exec(process.execPath, [join(here, 'proof.mjs'), out, 'provider-detached', packet,
+    createHash('sha256').update(bytes).digest('hex')], { cwd: root, env: { ...process.env, WINNOW_PORT: '1' } }); }
+  catch (error) { code = error.code; }
+  const report = JSON.parse(readFileSync(join(out, 'report.json'), 'utf8'));
+  assert.equal(code, 2); assert.equal(report.reason, 'FORMAL_INPUT_COMMAND_FORBIDDEN');
+  assert.equal(report.providerAttempts, 0); assert.equal(report.observation, 'NOT_RUN');
+  rmSync(root, { recursive: true, force: true });
+});

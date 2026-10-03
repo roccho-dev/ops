@@ -37,3 +37,4 @@
 {"deps":["nodejs"],"kind":"check","name":"parallel-development-jev-phases","script":"packages/parallel-development/tests/run.mjs"}
 {"deps":["nodejs","jev-review"],"kind":"check","name":"jev-review","script":"packages/jev-review/tests/run.mjs"}
 {"deps":["nodejs","jev-review"],"kind":"check","name":"jev-arbitrary-iteration","script":"experiments/jev-iteration/test.mjs"}
+{"deps":["nodejs"],"kind":"check","name":"ci-relevance-shadow","script":"packages/ci-relevance-shadow/test.mjs"}
