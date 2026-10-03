@@ -86,13 +86,13 @@ Jev   = semantic evidence
 caller = decision / effect / readback
 ```
 
-## Bounded semlint contract — implementation pending
+## Bounded semlint contract — finite API implemented, quality unproved
 
 Refs: ops#471 body, append5962211453, C2/5966152566 and C2-R/5966263702. This section is the bounded specification under this PR, not completion of all #471 design rules, operating adoption or semantic-quality proof. External understanding agreement is not GitHub source review.
 
 ### Boundary and entry
 
-The intended `semlint(input, ask)` export in `semlint.mjs` is a thin consumer of existing `evaluate(state, {themes, items}, ask)`. CI artifacts and append-only log entries use the same input and output. It returns evidence under Aligned, Closed, Unique, Minimal, Measurable and Improving. Existing generic CLI/APIs stay unchanged. No new CLI, provider HTTP, link fetching, actor launch, registry or persistent store is introduced. The supplied callback belongs to caller composition; this consumer reads no credentials.
+The `semlint(input, ask)` export in `semlint.mjs` is a thin consumer of existing `evaluate(state, {themes, items}, ask)`. CI artifacts and append-only log entries use the same input and output. It returns evidence under Aligned, Closed, Unique, Minimal, Measurable and Improving. Existing generic CLI/APIs stay unchanged. No new CLI, provider HTTP, link fetching, actor launch, registry or persistent store is introduced. The supplied callback belongs to caller composition; this consumer reads no credentials.
 
 `domain_effect_authority(semlint)=0`: lint results grant no merge/block/dispatch/accepted-write/credential authority. A separately authorized evaluator may incur provider HTTP, computation, usage and cost. Noul is concern-hypothesis evidence, not a verified finding, calibrated cross-axis score or clean/violation verdict.
 
