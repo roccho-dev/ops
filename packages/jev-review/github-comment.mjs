@@ -96,6 +96,8 @@ export function composeResultComment(request, resultValue) {
       || (result.accounting.validatedCalls === 0 && result.accounting.usage !== null)) throw new Error('INVALID_RESULT_ACCOUNTING');
     const sent = result.records.filter((_, j) => expected.records[j].status === 'OBSERVED');
     if (new Set(sent.map((x) => JSON.stringify([x.status, x.cause]))).size > 1) throw new Error('INVALID_RESULT_BATCH');
+    const expectedCallbacks = sent.length && sent[0].cause !== 'EVALUATION_PREFLIGHT_FAILED' ? 1 : 0;
+    if (result.accounting.callbackAttempts !== expectedCallbacks) throw new Error('INVALID_RESULT_ACCOUNTING');
   }
   const accounting = output.accounting;
   if (!exact(accounting, ['callbackAttempts', 'validatedCalls', 'providerHttpCalls', 'cost'])

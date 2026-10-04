@@ -138,6 +138,11 @@ partial.cases[0].result.counts.evaluated = 5;
 assert.throws(() => composeResultComment(request, partial), /INVALID_RESULT_ACCOUNTING/);
 const failedValidated = copy(failed); failedValidated.cases[0].result.accounting.validatedCalls = 1;
 assert.throws(() => composeResultComment(request, failedValidated), /INVALID_RESULT_ACCOUNTING/);
+const noSendRequest = await admitIssueComment({ ...event, comment: { ...event.comment,
+  body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: incomplete.cases }) } }, config);
+assert.ok(composeResultComment(noSendRequest, incompleteResult).includes('INCOMPLETE'));
+const falseCallback = copy(incompleteResult); falseCallback.cases[0].result.accounting.callbackAttempts = 1;
+assert.throws(() => composeResultComment(noSendRequest, falseCallback), /INVALID_RESULT_ACCOUNTING/);
 assert.ok(composeResultComment(request, mismatch).includes('EVIDENCE_INVALID'));
 assert.ok(composeResultComment(request, deadline).includes('EXECUTION_ERROR'));
 
