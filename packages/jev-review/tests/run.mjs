@@ -655,6 +655,94 @@ for(const kind of ['model','answer','throw']){
   assert.equal(out.accounting.callbackAttempts,1);assert.equal(out.accounting.validatedCalls,0);assert.equal(JSON.stringify(out).includes(canary),false);structuredControls++;
 }
 
+// V6 lossless target presentation: syntax blocks are not separate claims.
+let blockControls = 0;
+const blockNote=' The ordered blocks in subject.content together contain one complete evaluation target; their byte ranges refer to the original subject text, and block boundaries do not separate independent claims or limit corrections and exceptions.';
+const asV6=input=>({...structuredClone(input),schema:'ops.semlint.input.v6'});
+function expectedBlocked(raw,texts) {
+  const state=expectedProjection(raw);state.schema='ops.semlint.evaluation-state.v2';let cursor=raw.subject.evaluationSpan.startByte;
+  state.subject.content=texts.map(text=>{const startByte=cursor;cursor+=Buffer.byteLength(text);return {startByte,endByte:cursor,text};});
+  assert.equal(cursor,raw.subject.evaluationSpan.endByte);
+  const checks=raw.checks.filter(check=>check.requiredRoles.every(role=>state.context.some(row=>row.role===role&&row.content.trim())));
+  const items=checks.map(check=>({theme:check.axis,subject:[raw.subject.kind,raw.subject.ref,raw.subject.revision,check.id],concern:check.concern}));
+  const questions=Object.fromEntries(checks.map((check,i)=>{const q=expectedAtomicQuestion(state,check);q.instructions.interpretation+=blockNote;return ['q'+i,q];}));
+  return {state,questions,digest:digest(JSON.stringify({themes:semlintThemes,items,questions}))};
+}
+for(const texts of [['single α🙂'],['\n \t\r\nA\r\n\r\n','B\r\r','C\n\t'],['A\n\n\n','B'],['~~~text\n\n','quoted\n\n','~~~\n\n','Correction: the earlier statement is superseded.'],['Original claim.\n\n','Authorized exception and correction remain relevant.']]){
+  const input=asV6(structuredInput),selected=texts.join('');input.subject.content='prefix🙂'+selected+'suffix';input.subject.sha256=digest(input.subject.content);
+  input.subject.evaluationSpan={startByte:Buffer.byteLength('prefix🙂'),endByte:Buffer.byteLength('prefix🙂'+selected)};
+  const before=JSON.stringify(input),expected=expectedBlocked(input,texts);
+  const out=await semlint(input,async(s,q)=>{
+    assert.deepEqual(s,expected.state);assert.deepEqual(q,expected.questions);
+    assert.equal(s.subject.content.map(x=>x.text).join(''),selected);assert.equal(s.subject.sha256,digest(selected));
+    assert.equal(s.subject.rawSha256,input.subject.sha256);assert.ok(Object.isFrozen(s.subject.content));
+    assert.ok(s.subject.content.every(x=>Object.isFrozen(x)));assert.deepEqual(s.context,expectedProjection(input).context);
+    validateJevBudget(s,q);return structuredAsk(s,q);
+  });
+  assert.equal(JSON.stringify(input),before);assert.equal(out.schema,'ops.semlint.result.v6');assert.equal(out.inputDigest,digest(before));
+  assert.equal(out.questionDigest,expected.digest);assert.equal(out.projection.stateDigest,digest(JSON.stringify(expected.state)));
+  assert.equal(out.projection.spanDigest,digest(JSON.stringify({subject:input.subject.evaluationSpan,context:input.context.map(x=>x.evaluationSpan)})));
+  assert.deepEqual(out.records,structuredResult.records);assert.deepEqual(out.counts,structuredResult.counts);blockControls++;
+}
+for(const mode of ['empty','missing']){
+  const input=asV6(structuredInput);if(mode==='empty')input.checks=[];else {input.context=[];input.checks=input.checks.filter(x=>x.requiredRoles.length);}
+  const expected=expectedBlocked(input,[input.subject.content]);const out=await semlint(input,noCalls);
+  assert.equal(out.accounting.callbackAttempts,0);assert.equal(out.questionDigest,expected.digest);
+  assert.equal(out.projection.stateDigest,digest(JSON.stringify(expected.state)));blockControls++;
+}
+for(const mutate of [x=>x.subject.evaluationSpan={startByte:0,endByte:0},x=>x.subject.evaluationSpan.startByte=1,
+  x=>Object.defineProperty(x.subject,'content',{get(){throw Error(canary);}}),x=>x.checks[0].predicate.true={...rubric,extra:'bad'}]){
+  const input=asV6(structuredInput);input.subject.content='🙂target';input.subject.sha256=digest(input.subject.content);input.subject.evaluationSpan=fullSpan(input.subject.content);mutate(input);
+  await assert.rejects(()=>semlint(input,noCalls),/INVALID_SEMLINT_INPUT/);blockControls++;
+}
+const blockMoving=asV6(structuredInput),blockExpected=expectedBlocked(blockMoving,[blockMoving.subject.content]);let releaseBlock;
+const blockPending=semlint(blockMoving,async(s,q)=>{await new Promise(resolve=>releaseBlock=resolve);assert.deepEqual(s,blockExpected.state);assert.deepEqual(q,blockExpected.questions);return structuredAsk(s,q);});
+blockMoving.subject.content=canary;blockMoving.checks[0].predicate.true.outcomeCondition=canary;releaseBlock();
+assert.equal((await blockPending).questionDigest,blockExpected.digest);blockControls++;
+for(const mode of ['raw','zero','missing','badDescription','blankSubject','final']){
+  const input=mode==='badDescription'||mode==='blankSubject'?asV6(structuredInput):mode==='final'?asV6(structuredFinal):asV6(atomicLarge);
+  if(mode==='zero')input.checks=[];
+  if(mode==='missing')input.context.forEach(x=>x.evaluationSpan={startByte:0,endByte:0});
+  if(mode==='badDescription')input.checks[0].predicate.true={...rubric,extra:'bad'};
+  if(mode==='blankSubject')input.subject.evaluationSpan={startByte:0,endByte:0};
+  let http=0;const out=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'first',input:asV6(structuredInput)},{id:'late',input}]},
+    {key:canary,fetchImpl:async()=>{http++;throw Error(canary);}});
+  assert.equal(http,0);assert.equal(out.attemptedHttpCalls,0);assert.deepEqual(out.cases.map(x=>x.status),['NOT_RUN','INVALID_INPUT']);blockControls++;
+}
+const blockedFinal=asV6(structuredFinal),blockedFinalExpected=expectedBlocked(blockedFinal,[blockedFinal.subject.content]);
+const blockedRefused=await semlint(blockedFinal,noCalls);assert.equal(blockedRefused.accounting.callbackAttempts,0);
+assert.equal(blockedRefused.records[0].cause,'EVALUATION_PREFLIGHT_FAILED');assert.equal(blockedRefused.questionDigest,blockedFinalExpected.digest);blockControls++;
+for(const kind of ['model','answer','throw']){
+  const out=await semlint(asV6(structuredInput),async()=>{if(kind==='throw')throw Error(canary);return kind==='model'?{model:canary,answers:{}}:{model:JEV_MODEL,answers:{}};});
+  assert.equal(out.accounting.callbackAttempts,1);assert.equal(out.accounting.validatedCalls,0);assert.equal(JSON.stringify(out).includes(canary),false);blockControls++;
+}
+const blockedOverhead=asV6(structuredInput);blockedOverhead.subject.content='a\n\n'.repeat(600);
+blockedOverhead.subject.sha256=digest(blockedOverhead.subject.content);blockedOverhead.subject.evaluationSpan=fullSpan(blockedOverhead.subject.content);
+validateJevBudget(blockedOverhead,{});
+const overheadExpected=expectedBlocked(blockedOverhead,Array(600).fill('a\n\n'));
+assert.throws(()=>validateJevBudget(overheadExpected.state,{}),/state budget exceeded/);
+const overheadRefused=await semlint(blockedOverhead,noCalls);assert.equal(overheadRefused.accounting.callbackAttempts,0);
+assert.equal(overheadRefused.questionDigest,overheadExpected.digest);assert.equal(overheadRefused.records[0].cause,'EVALUATION_PREFLIGHT_FAILED');
+let overheadHttp=0;const overheadPlan=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'first',input:asV6(structuredInput)},{id:'late',input:blockedOverhead}]},
+  {key:canary,fetchImpl:async()=>{overheadHttp++;throw Error(canary);}});
+assert.equal(overheadHttp,0);assert.equal(overheadPlan.attemptedHttpCalls,0);blockControls++;
+const blockedAggregate=asV6(structuredInput);blockedAggregate.checks=Array.from({length:75},(_,i)=>({id:'b'+i,axis:'Aligned',concern:'c',requiredRoles:[],crossLinks:[],predicate:{question:'q',true:'t',false:'f'}}));
+validateJevBudget(blockedAggregate,{});
+const aggregateExpected=expectedBlocked(blockedAggregate,[blockedAggregate.subject.content]);
+assert.throws(()=>validateJevBudget(aggregateExpected.state,aggregateExpected.questions),/request budget exceeded/);
+const aggregateRefused=await semlint(blockedAggregate,noCalls);assert.equal(aggregateRefused.accounting.callbackAttempts,0);
+assert.equal(aggregateRefused.questionDigest,aggregateExpected.digest);blockControls++;
+const blockCaptured=asV6(structuredInput),blockDescriptors=Object.fromEntries(rubricKeys.map(key=>[key,0]));
+blockCaptured.checks[0].predicate.true=new Proxy(blockCaptured.checks[0].predicate.true,{get(){throw Error(canary);},getOwnPropertyDescriptor(target,key){const d=Reflect.getOwnPropertyDescriptor(target,key);if(Object.hasOwn(blockDescriptors,key)){blockDescriptors[key]++;return {...d,value:blockDescriptors[key]===1?d.value:canary};}return d;}});
+await semlint(blockCaptured,async(s,q)=>{assert.deepEqual(q,expectedBlocked(asV6(structuredInput),[structuredInput.subject.content]).questions);return structuredAsk(s,q);});
+assert.deepEqual(blockDescriptors,Object.fromEntries(rubricKeys.map(key=>[key,1])));blockControls++;
+let blockHttp=0;
+const blockReal=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'blocks',input:asV6(structuredInput)}]},
+  {key:canary,fetchImpl:async(url,init)=>{blockHttp++;const wire=JSON.parse(init.body);assert.equal(wire.state.schema,'ops.semlint.evaluation-state.v2');
+    assert.deepEqual(wire.state.subject.content,expectedBlocked(asV6(structuredInput),[structuredInput.subject.content]).state.subject.content);
+    return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(wire.questions).map(id=>[id,{type:'noul',noul:.5}]))}),{status:200});}});
+assert.equal(blockHttp,1);assert.equal(blockReal.attemptedHttpCalls,1);assert.equal(blockReal.cases[0].result.schema,'ops.semlint.result.v6');blockControls++;
+
 let realEntryControls = 0, fixtureHttpCalls = 0;
 const realPlan = {schema: 'ops.semlint.real-input.v1', cases: [{id: 'case-1', input: sample},
   {id: 'case-missing', input: {...sample, context: []}}]};
@@ -712,7 +800,7 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, realEntryControls, fixtureHttpCalls,
+  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, blockControls, realEntryControls, fixtureHttpCalls,
 }));
 }
 
