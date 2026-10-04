@@ -133,6 +133,11 @@ falseMissing.cases[0].result.records[0].noul = null;
 assert.throws(() => composeResultComment(request, falseMissing), /INVALID_RESULT_RECORD/);
 const extra = copy(result); extra.cases[0].result.extra = 'private';
 assert.throws(() => composeResultComment(request, extra), /RESULT_IDENTITY_MISMATCH/);
+const partial = copy(result); partial.cases[0].result.records[0] = { ...partial.cases[0].result.records[0], status: 'EXECUTION_ERROR', cause: 'EVALUATION_FAILED', noul: null };
+partial.cases[0].result.counts.evaluated = 5;
+assert.throws(() => composeResultComment(request, partial), /INVALID_RESULT_ACCOUNTING/);
+const failedValidated = copy(failed); failedValidated.cases[0].result.accounting.validatedCalls = 1;
+assert.throws(() => composeResultComment(request, failedValidated), /INVALID_RESULT_ACCOUNTING/);
 assert.ok(composeResultComment(request, mismatch).includes('EVIDENCE_INVALID'));
 assert.ok(composeResultComment(request, deadline).includes('EXECUTION_ERROR'));
 

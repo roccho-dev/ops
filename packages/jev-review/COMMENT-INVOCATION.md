@@ -94,7 +94,7 @@ and independently demonstrate the same bounded effects and UNKNOWN handling.
 closed finite accounting. Result bodies are capped at 32 KiB; no update/delete API exists.
 The eventual append is a new comment, not a GitHub guarantee of intrinsic immutability.
 The eventual transport must bind exact author/comment ID/target/body and then independently
-read them back; `verifyResultReadback` performs the exact comparison. Mutable GitHub comments
+read them back; `verifyResultReadback` performs the exact comparison. Observations
 are compared to the separately supplied exact positive append receipt ID (fifth argument),
 not just any positive ID with the same body and author. Mutable GitHub comments
 can drift and a later mismatch must remain a mismatch. Result text is never a new authorizer.

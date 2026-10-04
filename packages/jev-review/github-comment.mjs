@@ -83,19 +83,25 @@ export function composeResultComment(request, resultValue) {
         || !['OBSERVED', 'NOT_SELECTED', 'INCOMPLETE', 'EXECUTION_ERROR', 'EVIDENCE_INVALID'].includes(record.status)
         || (binding.status !== 'OBSERVED' && (record.status !== binding.status || record.cause !== binding.cause))
         || (binding.status === 'OBSERVED' && !['OBSERVED', 'EXECUTION_ERROR', 'EVIDENCE_INVALID'].includes(record.status))
-        || (['EXECUTION_ERROR', 'EVIDENCE_INVALID'].includes(record.status) && !['EVALUATION_PREFLIGHT_FAILED', 'EVALUATION_FAILED', 'JEV_MODEL_MISMATCH', 'INVALID_JEV_ANSWERS', 'INVALID_JEV_JSON'].includes(record.cause))
+        || (record.status === 'EXECUTION_ERROR' && !['EVALUATION_PREFLIGHT_FAILED', 'EVALUATION_FAILED'].includes(record.cause))
+        || (record.status === 'EVIDENCE_INVALID' && !['JEV_MODEL_MISMATCH', 'INVALID_JEV_ANSWERS', 'INVALID_JEV_JSON'].includes(record.cause))
         || (record.status === 'OBSERVED' ? !Number.isFinite(record.noul) || record.noul < 0 || record.noul > 1 || record.cause !== null : record.noul !== null)) throw new Error('INVALID_RESULT_RECORD');
     }
     const counts = { selected: request.prepared.plan.cases[i].input.checks.length, sendable: expected.sendable,
       evaluated: result.records.filter((x) => x.status === 'OBSERVED').length,
       missing: result.records.filter((x) => x.status === 'INCOMPLETE').length };
     if (!exact(result.counts, Object.keys(counts)) || Object.keys(counts).some((k) => result.counts[k] !== counts[k])
-      || (counts.evaluated > 0 && result.accounting.validatedCalls !== 1)) throw new Error('INVALID_RESULT_ACCOUNTING');
+      || ![0, expected.sendable].includes(counts.evaluated)
+      || result.accounting.validatedCalls !== (counts.evaluated > 0 ? 1 : 0)
+      || (result.accounting.validatedCalls === 0 && result.accounting.usage !== null)) throw new Error('INVALID_RESULT_ACCOUNTING');
+    const sent = result.records.filter((_, j) => expected.records[j].status === 'OBSERVED');
+    if (new Set(sent.map((x) => JSON.stringify([x.status, x.cause]))).size > 1) throw new Error('INVALID_RESULT_BATCH');
   }
   const accounting = output.accounting;
   if (!exact(accounting, ['callbackAttempts', 'validatedCalls', 'providerHttpCalls', 'cost'])
     || !Number.isSafeInteger(accounting.callbackAttempts) || accounting.callbackAttempts < 0 || accounting.callbackAttempts > request.prepared.plannedCalls
     || accounting.validatedCalls !== output.cases.reduce((n, x) => n + x.result.accounting.validatedCalls, 0)
+    || accounting.callbackAttempts > output.cases.reduce((n, x) => n + x.result.accounting.callbackAttempts, 0)
     || accounting.validatedCalls > accounting.callbackAttempts || accounting.providerHttpCalls !== null || accounting.cost !== null) throw new Error('INVALID_RESULT_ACCOUNTING');
   const body = RESULT_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-result.v1', requestDigest: request.requestDigest,
     identity: request.identity, authority: false, result: output }) + '\n';
