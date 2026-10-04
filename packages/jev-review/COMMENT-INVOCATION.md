@@ -15,6 +15,11 @@ No quality-series merge or PASS is required here.
   It does not import test fixtures or gold, and does not run default tests.
 - `tests/github-comment.mjs`: secret-free fixtures and executable stdin/error checks.
   The existing Nix CI runs the separate `jev-comment-functional` check.
+- `tests/run.mjs`: compatibility dispatch at the existing owner's fixed program path.
+  No arguments retain the existing machine-test body and expectations. Exact single
+  `--semlint-real` calls the shared `ownerMain` production handler; other arguments
+  produce a closed refusal. Machine-only imports, fixtures and gold are isolated inside
+  the no-argument function and are not loaded/executed by the real mode.
 
 Actual event executor, serialized admission, target owner deployment, supply, permissions and
 result append transport are **NOT_CONFIGURED / UNVERIFIED by this source slice**. Fixtures do
@@ -65,6 +70,12 @@ gold or authority flag is accepted in that input. All cases are snapshot-validat
 existing semlint/evaluate before provider work. Synthetic preflight answers and accounting
 are discarded; they never enter execution evidence.
 
+The existing `ops-jev --semlint-real` launcher fixes `tests/run.mjs --semlint-real`.
+That exact compatibility path now delegates to the same exported stdin handler instead
+of returning mock `PASS`. This source does not alter the launcher or prove its adoption:
+current guarded target, accepted exact source/closure and actual supply must still be
+independently read back under a separate live boundary. No caller data chooses code.
+
 Structural upper bounds are 1 MiB encoded input, 24 unique neutral case IDs, 24 callback
 invocations, 15 seconds per provider operation and 60 seconds for the whole plan.
 Trusted limits may only reduce them. These bounds are not a live spending grant or a quality
@@ -72,17 +83,36 @@ budget. A live contract must separately fix the finite allowed calls/timeout/tar
 and authorize the actual owner entry. The CLI uses these fixed structural limits; a caller
 using smaller admitted limits must preserve them at the actual fixed entry integration.
 
-Only the target owner injects `JEV_API_KEY`, after whole-plan admission. Consumers never
-read, decrypt, copy or forward it. Existing `askJev` sends pinned `jev-1.13.0` native named
+Only the target owner injects `JEV_API_KEY`. The existing launcher may place it in the
+child environment before that child validates stdin; this is NOT a claim that the child
+has no secret until admission. Caller admission precedes owner launch, and the shared
+child handler revalidates the whole plan before reading the key or doing provider work.
+Consumers never read, decrypt, copy or forward it. Existing `askJev` sends pinned `jev-1.13.0` native named
 Noul questions, explicit criteria, fixed official endpoint, redirect refusal and finite timeout.
 No automatic retry is made. Input errors output only a closed error enum, not raw child or
 provider diagnostics. Execution failures retain canonical per-item statuses and null values.
 
+Input remains `ops.semlint.real-input.v1`; output is explicitly `ops.semlint.real-result.v2`
+because native evidence is a new closed shape, not PR473's distinct `real-output.v1` wire.
+Catalog-v1 per-case semantic results and Issue request/result envelopes retain their identities.
+
 `runPlan` counts actual invocations of the supplied owner callback. The canonical per-case
 callback counter separately counts its invocation wrapper (which may reject on deadline
-before the owner callback). Validated calls are distinct. Native HTTP calls and cost remain
-`null` (unknown), never synthetic zeros or derived from preflight. The owning runtime must
-provide real-effect accounting separately. Raw output claims bounded evidence, not truth,
+before the owner callback). Validated calls are distinct. Generic callback fixtures retain
+`provider:null` per case and null native totals, never inferred HTTP counters.
+`executeOwnerPlan` instead observes the existing `askJev` fetch boundary without a second
+client: increment `attemptedHttpCalls` immediately before fetch; `completedHttpCalls` after
+response receipt; `validatedResponses` only after pinned-model/answer validation. Successful
+response bytes are consumed once under the original signal and exposed only as SHA256 digest.
+The closed per-case receipt also has status class, validated model, allowlisted usage and
+elapsed time. No raw body, authorization header, key or arbitrary error text is published.
+Unknown response completion is `unknownHttpCalls=attempted-completed`, not a claim of free
+or zero remote work; there are no retries. No-send/pre-send failures retain observed zero
+HTTP attempts, while request throw/timeout retains attempted=1/completed=0/unknown=1.
+Native totals are independently summed from receipts. Canonical per-case `providerHttpCalls`
+and all `cost` remain null because that semantic layer cannot observe them and no cost
+estimator is adopted. Neither fixtures nor this observer proves a real paid receipt before
+authorized target execution. Raw output claims bounded evidence, not truth,
 aggregate quality, a merge verdict or authority.
 
 ## Append/readback and replay
@@ -107,7 +137,13 @@ can drift and a later mismatch must remain a mismatch. Result text is never a ne
 
 Run `node packages/jev-review/tests/github-comment.mjs` for secret-free preliminary evidence.
 SOURCE acceptance additionally requires actual `jev-comment-functional` Linux Nix CI at the
-published exact head and independent R acceptance. Neither replaces the real authorized
+published exact head, existing `jev-review` Linux Nix machine parity and independent R acceptance.
+The shared dispatch file overlaps [quality PR473](https://github.com/roccho-dev/ops/pull/473),
+but this dedicated canonical-source branch changes only dispatch/import-body isolation,
+not PR473's branch/head, semantics, quality implementation or expectations. Future quality
+upstream alignment must reconcile this production delegation rather than silently replace
+it with a duplicate live handler. Quality acceptance is not a gate for this functional slice.
+Neither check replaces the real authorized
 Issue request → existing owner execution → real provider → new result comment → independent
 readback proof. ops#483 stays unfinished until that runtime/config/supply/normal-path evidence
 exists, with proportionate non-trigger/failure controls and finite effect admission.

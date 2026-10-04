@@ -89,23 +89,61 @@ export async function runPlan(prepared, ask, { now = () => performance.now() } =
       if (callbackAttempts >= prepared.limits.maxCalls) fail('ENTRY_CALL_BUDGET_EXCEEDED');
       callbackAttempts++;
       // ask owns the bounded provider operation; this module never retries it.
-      return ask(state, questions, { timeoutMs: Math.max(1, Math.floor(Math.min(remaining, prepared.limits.timeoutMs))) });
+      return ask(state, questions, { caseId: row.id, timeoutMs: Math.max(1, Math.floor(Math.min(remaining, prepared.limits.timeoutMs))) });
     });
-    cases.push({ id: row.id, result });
+    cases.push({ id: row.id, result, provider: null });
   }
-  return { schema: 'ops.semlint.real-result.v1', model: JEV_MODEL, planDigest: prepared.planDigest, cases,
+  return { schema: 'ops.semlint.real-result.v2', model: JEV_MODEL, planDigest: prepared.planDigest, cases,
     accounting: { callbackAttempts, validatedCalls: cases.reduce((n, x) => n + x.result.accounting.validatedCalls, 0),
-      providerHttpCalls: null, cost: null }, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' };
+      providerHttpCalls: null, completedHttpCalls: null, validatedResponses: null, unknownHttpCalls: null,
+      cost: null }, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' };
 }
 
 export async function executeOwnerPlan(prepared, key, fetchImpl = fetch) {
-  return runPlan(prepared, (state, questions, { timeoutMs }) => askJev(state, questions, {
-    key, endpoint: 'https://api.typesafe.ai/v1/systemone', timeoutMs, fetchImpl,
-  }));
+  if (!admitted.has(prepared) || typeof fetchImpl !== 'function') fail('ENTRY_NOT_ADMITTED');
+  const providers = new Map(prepared.plan.cases.map(({ id }) => [id, {
+    attemptedHttpCalls: 0, completedHttpCalls: 0, validatedResponses: 0, statusClass: 'NOT_RUN',
+    validatedModel: null, usage: null, elapsedMs: 0, responseDigest: null,
+  }]));
+  let nativeAttempts = 0;
+  const output = await runPlan(prepared, async (state, questions, { caseId, timeoutMs }) => {
+    const provider = providers.get(caseId), start = performance.now();
+    try {
+      // Observe the existing client at the native fetch boundary, not at its callback wrapper.
+      const observedFetch = async (url, init) => {
+        if (url !== 'https://api.typesafe.ai/v1/systemone' || init.method !== 'POST' || init.redirect !== 'error'
+          || !(init.signal instanceof AbortSignal) || nativeAttempts >= prepared.limits.maxCalls) fail('ENTRY_REQUEST_REFUSED');
+        init.signal.throwIfAborted();
+        nativeAttempts++; provider.attemptedHttpCalls++; provider.statusClass = 'REQUEST_ERROR';
+        const response = await fetchImpl(url, init);
+        provider.completedHttpCalls++; provider.statusClass = 'HTTP_' + Math.floor(response.status / 100) + 'XX';
+        if (!response.ok) return response;
+        // Same response/body/signal, consumed once. No clone, independent timer or retry.
+        const bytes = Buffer.from(await response.arrayBuffer());
+        init.signal.throwIfAborted();
+        provider.responseDigest = createHash('sha256').update(bytes).digest('hex');
+        return { ok: response.ok, status: response.status, json: async () => JSON.parse(bytes.toString('utf8')) };
+      };
+      const answer = await askJev(state, questions, {
+        key, endpoint: 'https://api.typesafe.ai/v1/systemone', timeoutMs, fetchImpl: observedFetch,
+      });
+      provider.validatedResponses = 1; provider.validatedModel = JEV_MODEL; provider.statusClass = 'VALIDATED_RESPONSE';
+      const usage = Object.entries(answer.usage).filter(([name]) => ['input_tokens', 'output_tokens', 'total_tokens'].includes(name));
+      provider.usage = usage.length ? Object.fromEntries(usage) : null;
+      return answer;
+    } finally { provider.elapsedMs = performance.now() - start; }
+  });
+  for (const row of output.cases) row.provider = providers.get(row.id);
+  output.accounting.providerHttpCalls = nativeAttempts;
+  output.accounting.completedHttpCalls = output.cases.reduce((n, x) => n + x.provider.completedHttpCalls, 0);
+  output.accounting.validatedResponses = output.cases.reduce((n, x) => n + x.provider.validatedResponses, 0);
+  // Request throw/timeout does not prove that the remote service performed zero work.
+  output.accounting.unknownHttpCalls = nativeAttempts - output.accounting.completedHttpCalls;
+  return output;
 }
 
-async function main() {
-  if (process.argv.length !== 2) fail('INVALID_ENTRY_ARGS');
+// Shared fixed-program stdin handler. It does not interpret argv or choose executable code.
+export async function ownerMain() {
   let bytes = 0, chunks = [];
   for await (const chunk of process.stdin) {
     bytes += chunk.length;
@@ -121,12 +159,17 @@ async function main() {
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
+export function entryError(error) {
     const allowed = ['INVALID_ENTRY_ARGS', 'ENTRY_INPUT_TOO_LARGE', 'INVALID_ENTRY_JSON', 'INVALID_ENTRY_PLAN',
       'INVALID_ENTRY_CASE', 'INVALID_ENTRY_SEMLINT', 'ENTRY_PREFLIGHT_FAILED', 'ENTRY_CALL_BUDGET_EXCEEDED'];
     process.stdout.write(JSON.stringify({ schema: 'ops.semlint.entry-error.v1', status: 'REJECTED',
       cause: allowed.includes(error?.message) ? error.message : 'ENTRY_FAILED', authority: false }) + '\n');
     process.exitCode = 1;
-  });
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  (async () => {
+    if (process.argv.length !== 2) fail('INVALID_ENTRY_ARGS');
+    await ownerMain();
+  })().catch(entryError);
 }
