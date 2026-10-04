@@ -36,6 +36,7 @@
 {"deps":["git","nodejs","repo-health"],"kind":"check","name":"repo-health","script":"packages/repo-health/tests/run.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"parallel-development-jev-phases","script":"packages/parallel-development/tests/run.mjs"}
 {"deps":["nodejs","jev-review"],"kind":"check","name":"jev-review","script":"packages/jev-review/tests/run.mjs"}
+{"deps":["nodejs","jev-review"],"kind":"check","name":"jev-comment-functional","script":"packages/jev-review/tests/github-comment.mjs"}
 {"deps":["nodejs","jev-review"],"kind":"check","name":"jev-arbitrary-iteration","script":"experiments/jev-iteration/test.mjs"}
 {"deps":["nodejs"],"kind":"check","name":"semcmp","script":"packages/semcmp/tests/run.mjs"}
 {"deps":["nodejs","semcmp"],"kind":"check","name":"semcmp-cli","script":"packages/semcmp/tests/cli.mjs"}
