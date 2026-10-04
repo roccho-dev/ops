@@ -1,8 +1,23 @@
-# semcmp contract proposal
+# semcmp
 
-Status: **CONTRACT_PROPOSAL / NO IMPLEMENTATION**
+Status: **ADOPTED CONTRACT / CONTROLLED JS AND PACKAGE IMPLEMENTATION**
 
 Refs: roccho-dev/adrs#526, roccho-dev/adrs#481, roccho-dev/adrs#484, roccho-dev/edits#125, roccho-dev/apps#46, roccho-dev/ops#403.
+
+## Current implementation and evidence
+
+The shared responsibility contract is accepted in [ops #479](https://github.com/roccho-dev/ops/pull/479).
+The available implementation has three bounded evidence levels:
+
+- [ops #480](https://github.com/roccho-dev/ops/pull/480): JS composition of a supplied proposer with existing Jev evaluation/ranking, preserving query and original proposal records. Two caller-shaped controls are not two real surface integrations.
+- [ops #481](https://github.com/roccho-dev/ops/pull/481): installed `#semcmp` CLI and its Node/module closure, with controlled process/package checks and no provider calls.
+- [edits #127](https://github.com/roccho-dev/edits/pull/127) and [#128](https://github.com/roccho-dev/edits/pull/128): installed Vim-to-semcmp connection and native comparison of representation/meaning/evidence, exercised with test-only transport. Fresh input, returned order, typed handle/base, preview/cancel and local editing are mechanically checked; representation insertion is not an effect or adoption.
+
+Human understanding and Readline acceptance, real Jev ranking quality, actual
+apps/Voice use of the same evaluated proposals, general candidate production,
+the public consumer entry/wire, and typed selection handoff to the existing
+Decision boundary remain unproved. Commit/Admit/Accepted remains outside semcmp.
+Hand-authored candidates and controlled scores do not establish those outcomes.
 
 ## Purpose
 
@@ -162,11 +177,10 @@ large after-edit↓
 
 Do not optimize prose quality independently of Decision reachability.
 
-## Non-goals of this PR
+## Boundaries and remaining work
 
-This PR does not:
+The implementation does not:
 
-- implement semcmp;
 - freeze the exact JSON/JS field schema;
 - choose a server or hosting model;
 - create an apps- or edits-specific candidate engine;
@@ -175,12 +189,14 @@ This PR does not:
 - define Commit/Admit/State Port persistence;
 - claim fuzzy understanding quality is proven.
 
-The next implementation PR should be justified only after this shared contract is accepted and should start with the smallest two-consumer proof that edits and apps can both send the same contract shape and receive selectable ordered proposals.
+The controlled two-caller proof and installed Vim connection do not complete
+the shared consumer contract. Actual apps/edits use of the same evaluated
+proposal set and the existing Decision handoff still need their own evidence.
 
 ## Initial JS PoC — controlled composition
 
-The contract-only status above records merged #479. This first implementation
-proves mechanical composition, not fuzzy understanding or real consumer integration.
+The JS module proves mechanical composition, not fuzzy understanding or real
+consumer integration. Installed CLI and Vim evidence are separate levels above.
 
 ```js
 import { semcmp } from './semcmp.mjs';
@@ -216,8 +232,8 @@ Run `node packages/semcmp/tests/run.mjs`, or the existing generated Nix
 caller-shaped projections, heterogeneous text/relation data, fresh input,
 identity/evidence/order correspondence, reversed input order, ties, callback
 mutation, empty sets and failures. They make no provider calls. Fixture scores
-prove correspondence and composition only; intended@1/K, selection quality,
-real Jev, actual apps/edits integration and business value remain unproved.
+prove correspondence and composition only; they do not establish intended@1/K,
+selection quality, real Jev, actual consumer integration or business value.
 Selection/cancel stays outside this calculation, and neither executes meaning.
 
 ## Installed executable
@@ -244,5 +260,5 @@ There is no retry, implicit example fallback or raw exception output.
 imports, with a test-only Node fetch preload. Two fresh queries reorder the same
 heterogeneous candidate data while retaining identity, meaning and evidence.
 Empty, invalid and provider-failure cases are also checked. No network call is
-made; these controls establish process/package correspondence, not real Jev
-quality, Human UX, actual apps/edits integration or adoption.
+made; these CLI controls establish process/package correspondence, not real Jev
+quality, Human UX, shared apps/edits evaluation or adoption.
