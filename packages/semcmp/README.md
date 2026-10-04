@@ -176,3 +176,46 @@ This PR does not:
 - claim fuzzy understanding quality is proven.
 
 The next implementation PR should be justified only after this shared contract is accepted and should start with the smallest two-consumer proof that edits and apps can both send the same contract shape and receive selectable ordered proposals.
+
+## Initial JS PoC — controlled composition
+
+The contract-only status above records merged #479. This first implementation
+proves mechanical composition, not fuzzy understanding or real consumer integration.
+
+```js
+import { semcmp } from './semcmp.mjs';
+const result = await semcmp({ input, state, focus }, { propose, ask });
+// result = { query, proposals, evaluation }
+// each proposal = { id, meaning, representation, evidence: { theme, noul } }
+```
+
+This private JS candidate API accepts plain JSON data. Input, State, Focus and
+meaning have no domain enum; the example types do not close alpha or beta.
+`propose(query)` supplies a finite array of `{id, meaning, representation}`;
+IDs must be unique nonempty strings and representation must be nonempty text.
+The caller supplies `ask(state, questions)` through existing Jev composition.
+There is no credential lookup, HTTP, server, CLI or effect in this module.
+
+The query is captured before awaiting propose, and returned proposals before
+awaiting evaluation. Callbacks receive separate copies. The existing shared
+`evaluate` validates judgments and coverage; `rankJudgments` orders all supplied
+proposals under one `intent-fit` hypothesis: the proposal expresses a Decision
+intended by the supplied Input, State and Focus. Descending Noul orders evidence
+for that hypothesis, not truth, permission or adoption. No threshold, cross-theme
+calibration or truncation is added. Ties retain the existing subject ordering.
+Original IDs and meaning data survive ordering; JavaScript object identity is not
+promised. Raw judgments, calls, coverage and usage remain in `evaluation`.
+
+Invalid queries/composition/proposals and duplicate IDs throw before asking.
+Proposal-generation failure is `PROPOSE_FAILED`; evaluation/model/response
+failures remain exceptions from the shared evaluator. An empty proposal set has
+zero evaluator calls and an empty result; it is not evidence of semantic success.
+
+Run `node packages/semcmp/tests/run.mjs`, or the existing generated Nix
+`checks.<system>.semcmp`. The controlled proposer and evaluator test two
+caller-shaped projections, heterogeneous text/relation data, fresh input,
+identity/evidence/order correspondence, reversed input order, ties, callback
+mutation, empty sets and failures. They make no provider calls. Fixture scores
+prove correspondence and composition only; intended@1/K, selection quality,
+real Jev, actual apps/edits integration and business value remain unproved.
+Selection/cancel stays outside this calculation, and neither executes meaning.
