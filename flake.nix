@@ -70,6 +70,7 @@
           cdp-tty = nixpkgs.legacyPackages.${system}.callPackage ./packages/cdp-tty { };
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
+          semcmp = nixpkgs.legacyPackages.${system}.callPackage ./packages/semcmp/default.nix { };
           jev-worker-esm = packages.${system}.jev.workerESM;
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
