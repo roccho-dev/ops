@@ -47,6 +47,10 @@ records and their exact revisions, full contents and SHA256 values. `input.check
 the requested existing catalog IDs. Unknown keys, unauthorized target/requester, edits,
 result comments, malformed/oversized data and invalid later cases are rejected before
 any real callback. Valid context shortages remain `INCOMPLETE`, not fabricated context.
+Issue admission also rejects plans whose known record/identity projection plus conservative
+closed scalar/accounting reserves exceeds the 32 KiB result cap, before any paid callback.
+The CLI's structural plan cap is distinct; the Issue entry may admit fewer cases to preserve
+single-comment delivery. The projection is size-only and never execution evidence.
 Unselected records remain `NOT_SELECTED`. Six rule/question/raw-record bindings are preserved.
 
 Identity binds the full comment body digest and revision, author, target, adopted source,

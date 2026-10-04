@@ -102,6 +102,12 @@ for (const altered of [
   { ...event, comment: { ...event.comment, body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: plan.cases, limits: config.limits }) } },
 ]) assert.equal((await admitIssueComment(altered, config)).status, 'NOT_ADMITTED');
 assert.equal((await admitIssueComment(event, { ...config, endpoint: 'bad' })).status, 'NOT_ADMITTED');
+const unpostable = Array.from({ length: 24 }, (_, i) => ({ id: `many-${i}`, input }));
+const unpostableRequest = await admitIssueComment({ ...event, comment: { ...event.comment,
+  body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: unpostable }) } }, config);
+assert.equal(unpostableRequest.status, 'NOT_ADMITTED');
+assert.equal(unpostableRequest.cause, 'RESULT_WOULD_EXCEED_COMMENT_CAP');
+assert.equal(calls, 1);
 const newRevision = await admitIssueComment({ ...event, comment: { ...event.comment, revision: 'new-revision' } }, config);
 assert.notEqual(newRevision.requestDigest, request.requestDigest);
 const newSource = await admitIssueComment(event, { ...config, executionSource: 'b'.repeat(40) });

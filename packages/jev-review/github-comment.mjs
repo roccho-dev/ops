@@ -3,6 +3,7 @@ import { JEV_MODEL } from './core.mjs';
 
 export const REQUEST_PREFIX = '/jev-evaluate\n';
 export const RESULT_PREFIX = '<!-- ops-jev-result-v1 -->\n';
+const RESULT_BYTE_CAP = 32768;
 const sha = (x) => typeof x === 'string' && /^[a-f0-9]{40}$/.test(x);
 const positive = (x) => Number.isSafeInteger(x) && x > 0;
 const text = (x) => typeof x === 'string' && x.trim().length > 0;
@@ -46,6 +47,18 @@ export async function admitIssueComment(eventValue, configValue) {
     author: event.comment.author, revision: event.comment.revision, bodyDigest: digest(event.comment.body),
     executionSource: config.executionSource, configDigest: digest(config), planDigest: prepared.planDigest });
   const request = Object.freeze({ status: 'ADMITTED', identity, requestDigest: digest(identity), prepared, authority: false });
+  // Known repeated record/identity strings plus a conservative scalar/accounting reserve per case.
+  // This is size admission only, not a synthetic result or execution receipt.
+  const projection = { schema: 'ops.jev.issue-result.v1', requestDigest: request.requestDigest, identity,
+    authority: false, result: { schema: 'ops.semlint.real-result.v1', model: JEV_MODEL, planDigest: prepared.planDigest,
+      cases: prepared.expected.map((x) => ({ id: x.id, result: { schema: 'ops.semlint.result.v1',
+        inputDigest: x.inputDigest, questionDigest: x.questionDigest, records: x.records.map((r) => ({ ...r, noul: null })),
+        counts: {}, accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' } })),
+      accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' } };
+  // 2048 bytes covers all bounded enum/numeric fields and three allowed usage counters per case;
+  // 1024 covers outer accounting. Every variable string already occurs in projection.
+  const maxOutputBytes = Buffer.byteLength(RESULT_PREFIX + JSON.stringify(projection) + '\n', 'utf8') + 1024 + 2048 * prepared.plan.cases.length;
+  if (maxOutputBytes > RESULT_BYTE_CAP) return reject('RESULT_WOULD_EXCEED_COMMENT_CAP');
   requests.add(request);
   return request;
 }
@@ -107,7 +120,7 @@ export function composeResultComment(request, resultValue) {
     || accounting.validatedCalls > accounting.callbackAttempts || accounting.providerHttpCalls !== null || accounting.cost !== null) throw new Error('INVALID_RESULT_ACCOUNTING');
   const body = RESULT_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-result.v1', requestDigest: request.requestDigest,
     identity: request.identity, authority: false, result: output }) + '\n';
-  if (Buffer.byteLength(body, 'utf8') > 32768) throw new Error('RESULT_COMMENT_TOO_LARGE');
+  if (Buffer.byteLength(body, 'utf8') > RESULT_BYTE_CAP) throw new Error('RESULT_COMMENT_TOO_LARGE');
   return body;
 }
 
