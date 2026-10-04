@@ -1,13 +1,16 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { JEV_MODEL } from '../core.mjs';
-import { evaluate } from '../review.mjs';
-import { createHash } from 'node:crypto';
-import { semlint } from '../semlint.mjs';
-import { rankJudgments } from '../rank.mjs';
-import { evaluateInput, parseJsonl, rowsForEvaluation, serializeJsonl, validateCliInput, writeAndReadback } from '../bin/jev-review.mjs';
+import { ownerMain, entryError } from '../semlint-entry.mjs';
+
+async function runMachineTests() {
+const { default: assert } = await import('node:assert/strict');
+const { default: fs } = await import('node:fs');
+const { default: os } = await import('node:os');
+const { default: path } = await import('node:path');
+const { JEV_MODEL } = await import('../core.mjs');
+const { evaluate } = await import('../review.mjs');
+const { createHash } = await import('node:crypto');
+const { semlint } = await import('../semlint.mjs');
+const { rankJudgments } = await import('../rank.mjs');
+const { evaluateInput, parseJsonl, rowsForEvaluation, serializeJsonl, validateCliInput, writeAndReadback } = await import('../bin/jev-review.mjs');
 
 const state = { purpose: 'fixture' };
 const themes = ['purpose', 'scope'];
@@ -216,3 +219,9 @@ console.log(JSON.stringify({
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
 }));
+}
+
+// Compatibility at the existing owner launcher's fixed path, not a program selector.
+if (process.argv.length === 2) await runMachineTests();
+else if (process.argv.length === 3 && process.argv[2] === '--semlint-real') await ownerMain().catch(entryError);
+else entryError(new Error('INVALID_ENTRY_ARGS'));

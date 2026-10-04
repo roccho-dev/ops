@@ -87,9 +87,17 @@ const ownerResult = await executeOwnerPlan(prepared, 'synthetic-only-not-a-key',
   fixtureHttp++; assert.equal(url, 'https://api.typesafe.ai/v1/systemone'); assert.equal(options.redirect, 'error');
   assert.equal(options.method, 'POST'); assert.ok(options.signal instanceof AbortSignal);
   const body = JSON.parse(options.body); assert.equal(body.model, JEV_MODEL); assert.deepEqual(body.state, input);
-  return { ok: true, json: async () => ({ model: JEV_MODEL, answers: Object.fromEntries(Object.keys(body.questions).map((key) => [key, { type: 'noul', noul: 0.2 }])) }) };
+  return new Response(JSON.stringify({ model: JEV_MODEL,
+    answers: Object.fromEntries(Object.keys(body.questions).map((key) => [key, { type: 'noul', noul: 0.2 }])) }), { status: 200 });
 });
 assert.equal(fixtureHttp, 1); assert.equal(ownerResult.accounting.validatedCalls, 1);
+assert.equal(ownerResult.schema, 'ops.semlint.real-result.v2');
+assert.deepEqual(ownerResult.accounting, { callbackAttempts: 1, validatedCalls: 1, providerHttpCalls: 1,
+  completedHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0, cost: null });
+assert.equal(ownerResult.cases[0].provider.validatedModel, JEV_MODEL);
+assert.equal(ownerResult.cases[0].provider.statusClass, 'VALIDATED_RESPONSE');
+assert.match(ownerResult.cases[0].provider.responseDigest, /^[a-f0-9]{64}$/);
+assert.equal(ownerResult.cases[0].provider.usage, null);
 
 const request = await admitIssueComment(event, config);
 assert.equal(request.status, 'ADMITTED'); assert.equal(request.prepared.planDigest, prepared.planDigest);
@@ -122,6 +130,9 @@ for (const state of ['STARTED', 'UNKNOWN', 'FAILED', 'anything']) assert.equal(n
 assert.equal(nextIssueEffect(newRevision, { requestDigest: request.requestDigest, state: 'EVALUATED' }).effect, 'NONE');
 assert.equal(nextIssueEffect(copy(request)).effect, 'NONE');
 const body = composeResultComment(request, result);
+const nativeBody = composeResultComment(request, ownerResult);
+assert.ok(nativeBody.includes('VALIDATED_RESPONSE'));
+assert.equal(nativeBody.includes('synthetic-only-not-a-key'), false);
 assert.ok(body.startsWith(RESULT_PREFIX)); assert.equal(JSON.parse(body.slice(RESULT_PREFIX.length)).authority, false);
 const observed = { repository: config.repository, issue: config.issue, id: 11, author: 'fixture-poster', body };
 assert.equal(verifyResultReadback(request, body, observed, 'fixture-poster', 11), true);
@@ -179,8 +190,107 @@ assert.equal(child.status, 0); assert.equal(child.stderr, ''); assert.equal(JSON
 const badChild = spawnSync(process.execPath, [entry], { input: 'not json private-fixture', encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
 assert.equal(badChild.status, 1); assert.equal(badChild.stderr, '');
 assert.equal(JSON.parse(badChild.stdout).cause, 'INVALID_ENTRY_JSON'); assert.equal(badChild.stdout.includes('private-fixture'), false);
+const compatibility = fileURLToPath(new URL('./run.mjs', import.meta.url));
+const runChild = (program, args, stdin) => spawnSync(process.execPath, [program, ...args], {
+  input: stdin, encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000,
+});
+const normalMachine = runChild(compatibility, [], '');
+assert.equal(normalMachine.status, 0); assert.equal(normalMachine.stderr, '');
+assert.deepEqual(JSON.parse(normalMachine.stdout), { status: 'PASS', core: 'semantic-evaluate', ranking: 'derived',
+  cli: 'json-input-jsonl-output-readback', semanticThresholds: 0, semlintCases: 37, semlintCallbacks: 18,
+  realProviderCalls: 0, semanticQuality: 'NOT_PROVEN' });
+for (const program of [entry, compatibility]) {
+  const argv = program === entry ? [] : ['--semlint-real'];
+  for (const [stdin, status, expectedSchema] of [
+    [JSON.stringify(unselected), 0, 'ops.semlint.real-result.v2'],
+    [JSON.stringify(plan), 0, 'ops.semlint.real-result.v2'], // key missing, no native attempt
+    [JSON.stringify(bad), 1, 'ops.semlint.entry-error.v1'],
+    ['private invalid json', 1, 'ops.semlint.entry-error.v1'],
+  ]) {
+    const observed = runChild(program, argv, stdin), value = JSON.parse(observed.stdout);
+    assert.equal(observed.status, status); assert.equal(observed.stderr, ''); assert.equal(value.schema, expectedSchema);
+    assert.equal(observed.stdout.includes('PASS'), false); assert.equal(observed.stdout.includes('private invalid'), false);
+    if (status === 0) {
+      assert.equal(value.accounting.providerHttpCalls, 0); assert.equal(value.accounting.unknownHttpCalls, 0);
+      assert.equal(value.cases[0].provider.statusClass, 'NOT_RUN');
+      if (stdin === JSON.stringify(plan)) assert.ok(value.cases[0].result.records.every((r) => r.status === 'EXECUTION_ERROR'));
+    }
+  }
+}
+for (const argv of [['--unknown'], ['--semlint-real', 'extra'], ['--semlint-real=true']]) {
+  const refused = runChild(compatibility, argv, JSON.stringify(plan));
+  assert.equal(refused.status, 1); assert.equal(refused.stderr, '');
+  assert.equal(JSON.parse(refused.stdout).cause, 'INVALID_ENTRY_ARGS'); assert.equal(refused.stdout.includes('PASS'), false);
+}
+assert.equal(runChild(entry, ['--semlint-real'], JSON.stringify(plan)).status, 1);
+
+// Native fetch evidence is independent of callback counters, never paid/live fixture work.
+let nativeFixtures = 0;
+const canary = 'PRIVATE_NATIVE_CANARY';
+const keyMissing = await executeOwnerPlan(prepared, undefined, async () => { throw new Error('must not fetch'); });
+assert.equal(keyMissing.accounting.callbackAttempts, 1); assert.equal(keyMissing.accounting.providerHttpCalls, 0);
+assert.ok(composeResultComment(request, keyMissing).includes('EXECUTION_ERROR'));
+const noSendOwner = await executeOwnerPlan(await preparePlan(incomplete), undefined, async () => { throw new Error('must not fetch'); });
+assert.equal(noSendOwner.accounting.providerHttpCalls, 0); assert.equal(noSendOwner.accounting.completedHttpCalls, 0);
+assert.ok(composeResultComment(noSendRequest, noSendOwner).includes('INCOMPLETE'));
+for (const [mode, completed, validated, unknown] of [
+  ['throw', 0, 0, 1], ['http', 1, 0, 0], ['body', 1, 0, 0], ['json', 1, 0, 0],
+  ['model', 1, 0, 0], ['answers', 1, 0, 0], ['valid', 1, 1, 0],
+]) {
+  let reads = 0, nativeBodyText;
+  const native = await executeOwnerPlan(prepared, canary, async (url, init) => {
+    nativeFixtures++;
+    assert.equal(url, 'https://api.typesafe.ai/v1/systemone'); assert.ok(init.signal instanceof AbortSignal);
+    if (mode === 'throw') throw new Error(canary);
+    const response = mode === 'json' ? canary : JSON.stringify({ model: mode === 'model' ? canary : JEV_MODEL,
+      answers: mode === 'answers' ? {} : Object.fromEntries(Object.keys(JSON.parse(init.body).questions).map((k) => [k, { type: 'noul', noul: 0.4 }])),
+      usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7, private: canary } });
+    nativeBodyText = response;
+    return { status: mode === 'http' ? 503 : 200, ok: mode !== 'http', arrayBuffer: async () => {
+      reads++; if (mode === 'body') throw new Error(canary); return Buffer.from(response);
+    }, json: () => { throw new Error('original json must not be consumed'); } };
+  });
+  const receipt = native.cases[0].provider;
+  assert.equal(native.accounting.providerHttpCalls, 1); assert.equal(native.accounting.completedHttpCalls, completed);
+  assert.equal(native.accounting.validatedResponses, validated); assert.equal(native.accounting.unknownHttpCalls, unknown);
+  assert.equal(receipt.validatedModel, validated ? JEV_MODEL : null);
+  assert.equal(reads, ['throw', 'http'].includes(mode) ? 0 : 1);
+  assert.equal(receipt.responseDigest, ['throw', 'http', 'body'].includes(mode) ? null : hash(nativeBodyText));
+  const comment = composeResultComment(request, native);
+  assert.equal(comment.includes(canary), false); assert.equal(comment.includes('private'), false);
+  assert.ok(Buffer.byteLength(comment) < 32768);
+  if (validated) assert.deepEqual(receipt.usage, { input_tokens: 5, output_tokens: 2, total_tokens: 7 });
+  for (const alter of [
+    p => { p.cases[0].provider.extra = canary; }, p => { p.cases[0].provider.completedHttpCalls = 2; },
+    p => { p.accounting.unknownHttpCalls = 99; }, p => { p.cases[0].provider.responseDigest = [hash('x')]; },
+    p => { p.cases[0].provider.usage = { private: canary }; }, p => { p.cases[0].provider = null; },
+  ]) { const poison = copy(native); alter(poison); assert.throws(() => composeResultComment(request, poison), /INVALID_PROVIDER_ACCOUNTING/); }
+}
+let laterNative = 0;
+const twoNative = await executeOwnerPlan(await preparePlan(two), canary, async (_, init) => {
+  laterNative++;
+  return new Response(JSON.stringify({ model: JEV_MODEL,
+    answers: laterNative === 1 ? Object.fromEntries(Object.keys(JSON.parse(init.body).questions).map((k) => [k, { type: 'noul', noul: 0.1 }])) : {} }), { status: 200 });
+});
+assert.equal(laterNative, 2); assert.equal(twoNative.accounting.providerHttpCalls, 2); assert.equal(twoNative.accounting.validatedResponses, 1);
+assert.ok(composeResultComment(twoRequest, twoNative).includes('EVIDENCE_INVALID'));
+const bodyTimeout = await executeOwnerPlan(await preparePlan(plan, { ...ENTRY_LIMITS, timeoutMs: 10 }), canary, async (_, init) => {
+  nativeFixtures++;
+  return {
+  ok: true, status: 200, arrayBuffer: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(init.signal.aborted, true); return Buffer.from('{}');
+  },
+  };
+});
+assert.equal(bodyTimeout.accounting.providerHttpCalls, 1); assert.equal(bodyTimeout.accounting.completedHttpCalls, 1);
+assert.equal(bodyTimeout.accounting.validatedResponses, 0); assert.equal(bodyTimeout.cases[0].provider.responseDigest, null);
+assert.ok(composeResultComment(request, bodyTimeout).includes('EXECUTION_ERROR'));
+let lateInvalidNative = 0;
+await assert.rejects(async () => executeOwnerPlan(await preparePlan(bad), canary, async () => { lateInvalidNative++; }), /INVALID_ENTRY_SEMLINT/);
+assert.equal(lateInvalidNative, 0);
 const source = fs.readFileSync(entry, 'utf8');
 assert.equal(/from ['"].*(?:tests|fixtures|gold)/.test(source), false);
 assert.equal(source.includes('process.env.JEV_API_URL'), false);
 console.log(JSON.stringify({ status: 'PASS', check: 'jev-comment-functional', realProviderCalls: 0,
-  githubEffects: 0, fixtureNativeHttp: fixtureHttp, claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_COMPLETION' }));
+  githubEffects: 0, fixtureNativeHttp: fixtureHttp + nativeFixtures + laterNative, claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_COMPLETION' }));

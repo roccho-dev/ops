@@ -10,12 +10,29 @@ const text = (x) => typeof x === 'string' && x.trim().length > 0;
 const reject = (cause) => ({ status: 'NOT_ADMITTED', cause, authority: false });
 const requests = new WeakSet();
 const nonnegative = (x) => Number.isFinite(x) && x >= 0;
+const validUsage = (x) => x === null || (x && !Array.isArray(x)
+  && Object.entries(x).every(([k, v]) => ['input_tokens', 'output_tokens', 'total_tokens'].includes(k) && nonnegative(v)));
 function validAccounting(a) {
   return exact(a, ['callbackAttempts', 'validatedCalls', 'usage', 'elapsedMs', 'providerHttpCalls', 'cost'])
     && [0, 1].includes(a.callbackAttempts) && [0, 1].includes(a.validatedCalls) && a.validatedCalls <= a.callbackAttempts
     && nonnegative(a.elapsedMs) && a.providerHttpCalls === null && a.cost === null
-    && (a.usage === null || (a.usage && !Array.isArray(a.usage)
-      && Object.entries(a.usage).every(([k, v]) => ['input_tokens', 'output_tokens', 'total_tokens'].includes(k) && nonnegative(v))));
+    && validUsage(a.usage);
+}
+
+function validProvider(p, result) {
+  if (!exact(p, ['attemptedHttpCalls', 'completedHttpCalls', 'validatedResponses', 'statusClass',
+    'validatedModel', 'usage', 'elapsedMs', 'responseDigest'])
+    || ![0, 1].includes(p.attemptedHttpCalls) || ![0, 1].includes(p.completedHttpCalls) || ![0, 1].includes(p.validatedResponses)
+    || p.completedHttpCalls > p.attemptedHttpCalls || p.validatedResponses > p.completedHttpCalls
+    || p.attemptedHttpCalls > result.accounting.callbackAttempts || p.validatedResponses !== result.accounting.validatedCalls
+    || !nonnegative(p.elapsedMs) || !validUsage(p.usage)
+    || (p.responseDigest !== null && (typeof p.responseDigest !== 'string' || !/^[a-f0-9]{64}$/.test(p.responseDigest)))) return false;
+  if (p.attemptedHttpCalls === 0 && (p.statusClass !== 'NOT_RUN' || p.responseDigest !== null)) return false;
+  if (p.attemptedHttpCalls === 1 && p.completedHttpCalls === 0 && (p.statusClass !== 'REQUEST_ERROR' || p.responseDigest !== null)) return false;
+  if (p.completedHttpCalls === 1 && !['HTTP_1XX', 'HTTP_2XX', 'HTTP_3XX', 'HTTP_4XX', 'HTTP_5XX', 'VALIDATED_RESPONSE'].includes(p.statusClass)) return false;
+  if (p.validatedResponses === 0) return p.statusClass !== 'VALIDATED_RESPONSE' && p.validatedModel === null && p.usage === null;
+  return p.statusClass === 'VALIDATED_RESPONSE' && p.validatedModel === JEV_MODEL && p.responseDigest !== null
+    && JSON.stringify(p.usage) === JSON.stringify(result.accounting.usage);
 }
 
 // Config is an independently supplied trusted grant, never merged with comment JSON.
@@ -50,14 +67,15 @@ export async function admitIssueComment(eventValue, configValue) {
   // Known repeated record/identity strings plus a conservative scalar/accounting reserve per case.
   // This is size admission only, not a synthetic result or execution receipt.
   const projection = { schema: 'ops.jev.issue-result.v1', requestDigest: request.requestDigest, identity,
-    authority: false, result: { schema: 'ops.semlint.real-result.v1', model: JEV_MODEL, planDigest: prepared.planDigest,
+    authority: false, result: { schema: 'ops.semlint.real-result.v2', model: JEV_MODEL, planDigest: prepared.planDigest,
       cases: prepared.expected.map((x) => ({ id: x.id, result: { schema: 'ops.semlint.result.v1',
         inputDigest: x.inputDigest, questionDigest: x.questionDigest, records: x.records.map((r) => ({ ...r, noul: null })),
-        counts: {}, accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' } })),
+        counts: {}, accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' }, provider: {} })),
       accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' } };
-  // 2048 bytes covers all bounded enum/numeric fields and three allowed usage counters per case;
-  // 1024 covers outer accounting. Every variable string already occurs in projection.
-  const maxOutputBytes = Buffer.byteLength(RESULT_PREFIX + JSON.stringify(projection) + '\n', 'utf8') + 1024 + 2048 * prepared.plan.cases.length;
+  // 3072 bytes covers canonical scalar/accounting plus the closed native receipt's enums,
+  // SHA256 and counters (including up to three finite usage counters); 1024 covers totals.
+  // No response body, arbitrary model string or answers are repeated in the receipt.
+  const maxOutputBytes = Buffer.byteLength(RESULT_PREFIX + JSON.stringify(projection) + '\n', 'utf8') + 1024 + 3072 * prepared.plan.cases.length;
   if (maxOutputBytes > RESULT_BYTE_CAP) return reject('RESULT_WOULD_EXCEED_COMMENT_CAP');
   requests.add(request);
   return request;
@@ -78,13 +96,13 @@ export function composeResultComment(request, resultValue) {
   if (!requests.has(request)) throw new Error('REQUEST_NOT_ADMITTED');
   const output = snapshotJson(resultValue);
   if (!exact(output, ['schema', 'model', 'planDigest', 'cases', 'accounting', 'claimCeiling'])
-    || output.schema !== 'ops.semlint.real-result.v1' || output.model !== JEV_MODEL
+    || output.schema !== 'ops.semlint.real-result.v2' || output.model !== JEV_MODEL
     || output.planDigest !== request.prepared.planDigest
     || output.claimCeiling !== 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY'
     || !Array.isArray(output.cases) || output.cases.length !== request.prepared.expected.length) throw new Error('RESULT_IDENTITY_MISMATCH');
   for (let i = 0; i < output.cases.length; i++) {
     const row = output.cases[i], expected = request.prepared.expected[i], result = row?.result;
-    if (!exact(row, ['id', 'result']) || row.id !== expected.id || result?.schema !== 'ops.semlint.result.v1'
+    if (!exact(row, ['id', 'result', 'provider']) || row.id !== expected.id || result?.schema !== 'ops.semlint.result.v1'
       || !exact(result, ['schema', 'inputDigest', 'questionDigest', 'records', 'counts', 'accounting', 'claimCeiling'])
       || result.inputDigest !== expected.inputDigest || result.questionDigest !== expected.questionDigest
       || result.claimCeiling !== output.claimCeiling || !validAccounting(result.accounting)
@@ -111,13 +129,25 @@ export function composeResultComment(request, resultValue) {
     if (new Set(sent.map((x) => JSON.stringify([x.status, x.cause]))).size > 1) throw new Error('INVALID_RESULT_BATCH');
     const expectedCallbacks = sent.length && sent[0].cause !== 'EVALUATION_PREFLIGHT_FAILED' ? 1 : 0;
     if (result.accounting.callbackAttempts !== expectedCallbacks) throw new Error('INVALID_RESULT_ACCOUNTING');
+    if (row.provider !== null && !validProvider(row.provider, result)) throw new Error('INVALID_PROVIDER_ACCOUNTING');
   }
   const accounting = output.accounting;
-  if (!exact(accounting, ['callbackAttempts', 'validatedCalls', 'providerHttpCalls', 'cost'])
+  if (!exact(accounting, ['callbackAttempts', 'validatedCalls', 'providerHttpCalls', 'completedHttpCalls', 'validatedResponses', 'unknownHttpCalls', 'cost'])
     || !Number.isSafeInteger(accounting.callbackAttempts) || accounting.callbackAttempts < 0 || accounting.callbackAttempts > request.prepared.plannedCalls
     || accounting.validatedCalls !== output.cases.reduce((n, x) => n + x.result.accounting.validatedCalls, 0)
     || accounting.callbackAttempts > output.cases.reduce((n, x) => n + x.result.accounting.callbackAttempts, 0)
-    || accounting.validatedCalls > accounting.callbackAttempts || accounting.providerHttpCalls !== null || accounting.cost !== null) throw new Error('INVALID_RESULT_ACCOUNTING');
+    || accounting.validatedCalls > accounting.callbackAttempts || accounting.cost !== null) throw new Error('INVALID_RESULT_ACCOUNTING');
+  const native = output.cases.filter((x) => x.provider !== null);
+  if (native.length === 0) {
+    if (['providerHttpCalls', 'completedHttpCalls', 'validatedResponses', 'unknownHttpCalls'].some((k) => accounting[k] !== null)) throw new Error('INVALID_PROVIDER_ACCOUNTING');
+  } else {
+    if (native.length !== output.cases.length
+      || accounting.providerHttpCalls !== native.reduce((n, x) => n + x.provider.attemptedHttpCalls, 0)
+      || accounting.completedHttpCalls !== native.reduce((n, x) => n + x.provider.completedHttpCalls, 0)
+      || accounting.validatedResponses !== native.reduce((n, x) => n + x.provider.validatedResponses, 0)
+      || accounting.unknownHttpCalls !== accounting.providerHttpCalls - accounting.completedHttpCalls
+      || accounting.providerHttpCalls > accounting.callbackAttempts) throw new Error('INVALID_PROVIDER_ACCOUNTING');
+  }
   const body = RESULT_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-result.v1', requestDigest: request.requestDigest,
     identity: request.identity, authority: false, result: output }) + '\n';
   if (Buffer.byteLength(body, 'utf8') > RESULT_BYTE_CAP) throw new Error('RESULT_COMMENT_TOO_LARGE');
