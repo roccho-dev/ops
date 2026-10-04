@@ -219,3 +219,30 @@ mutation, empty sets and failures. They make no provider calls. Fixture scores
 prove correspondence and composition only; intended@1/K, selection quality,
 real Jev, actual apps/edits integration and business value remain unproved.
 Selection/cancel stays outside this calculation, and neither executes meaning.
+
+## Installed executable
+
+`nix build .#semcmp` supplies `bin/semcmp`, Node and only the runtime modules of
+semcmp and jev-review. It needs no sibling checkout or working-directory layout.
+Its private stdin envelope is `{query, proposals}`: the consumer captures its
+configured candidate data once, and supplies the query and that same array.
+Stdout is one JSON result from the existing semcmp calculation. The envelope is
+an implementation adapter, not a newly frozen shared wire contract.
+
+For nonempty candidates the executable reuses `askJev` with `JEV_API_KEY`,
+`JEV_API_URL` (default `https://api.typesafe.ai/v1/systemone`) and
+`JEV_TIMEOUT_MS` (default 15000). The supplied candidates are evaluated against
+the fresh Input, State and Focus; no semantic generator or effect is added.
+`share/semcmp/artifact.jsonl` declares `jev-api`; it does not supply credentials.
+Existing target launchers can bind specific programs; installing semcmp does not
+extend their allowed commands or authorize a credential-bearing launch.
+Empty candidates make no provider call. Invalid input, missing capability and
+provider failure exit nonzero, with no result and a bounded diagnostic code.
+There is no retry, implicit example fallback or raw exception output.
+
+`checks.<system>.semcmp-cli` runs the installed executable, including sibling
+imports, with a test-only Node fetch preload. Two fresh queries reorder the same
+heterogeneous candidate data while retaining identity, meaning and evidence.
+Empty, invalid and provider-failure cases are also checked. No network call is
+made; these controls establish process/package correspondence, not real Jev
+quality, Human UX, actual apps/edits integration or adoption.
