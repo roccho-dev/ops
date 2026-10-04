@@ -1,0 +1,109 @@
+# Issue invocation SOURCE contract
+
+This is the non-quality source slice for [ops#483](https://github.com/roccho-dev/ops/issues/483).
+The catalog and semantic meaning remain in `semlint.mjs` / [ops#471](https://github.com/roccho-dev/ops/issues/471).
+Usefulness and future quality are separate [ops#482](https://github.com/roccho-dev/ops/issues/482) work.
+No quality-series merge or PASS is required here.
+
+## Files and boundaries
+
+- `github-comment.mjs`: deterministic Issue-specific admission, identity, next-effect decision,
+  raw result composition and exact readback comparison. It has no transport, persistence,
+  credential access, checkout, dispatch, process launch or GitHub mutation.
+- `semlint-entry.mjs`: formally callable owner entry. Its runtime imports only existing
+  `core.mjs`, `jev.mjs`, `semlint.mjs` and their production closure plus Node builtins.
+  It does not import test fixtures or gold, and does not run default tests.
+- `tests/github-comment.mjs`: secret-free fixtures and executable stdin/error checks.
+  The existing Nix CI runs the separate `jev-comment-functional` check.
+
+Actual event executor, serialized admission, target owner deployment, supply, permissions and
+result append transport are **NOT_CONFIGURED / UNVERIFIED by this source slice**. Fixtures do
+not prove live at-most-effect, parallel exclusion, paid-call accounting or Issue completion.
+There is no new workflow, package, client, secret store, bridge, queue or ledger.
+
+## Caller data and trusted grant
+
+The caller obtains an authenticated event snapshot, preserving repository, issue, comment ID,
+author, exact revision and full body. `admitIssueComment(event, config)` accepts exactly:
+
+```js
+event = { repository, issue, action: 'created', comment: { id, author, revision, body } };
+config = { repository, issue, requesters, executionSource, limits };
+```
+
+The independently trusted config fixes the target Issue, exact allowed requester names,
+adopted 40-hex execution source and finite limits. Config is never inferred from a result
+comment or merged with comment data. `executionSource` is a recorded adopted source identity,
+not a program selector. No ref in an Issue is checked out, imported or executed.
+
+An explicit request body begins with the exact `/jev-evaluate` line followed by JSON:
+
+```json
+{"schema":"ops.jev.issue-request.v1","cases":[{"id":"request-1","input":{"schema":"ops.semlint.input.v1","subject":{},"context":[],"checks":[]}}]}
+```
+
+The abbreviated subject above is not valid input: supply the full canonical subject/context
+records and their exact revisions, full contents and SHA256 values. `input.checks` contains
+the requested existing catalog IDs. Unknown keys, unauthorized target/requester, edits,
+result comments, malformed/oversized data and invalid later cases are rejected before
+any real callback. Valid context shortages remain `INCOMPLETE`, not fabricated context.
+Unselected records remain `NOT_SELECTED`. Six rule/question/raw-record bindings are preserved.
+
+Identity binds the full comment body digest and revision, author, target, adopted source,
+trusted config digest and exact plan digest. Edits require a distinct request identity;
+old results cannot be relabeled as evaluations of a newer subject/input/config/source.
+
+## Formal owner entry
+
+The fixed target owner may execute `node semlint-entry.mjs` without arguments, supplying
+stdin `{schema:'ops.semlint.real-input.v1',cases:[{id,input}]}`. No endpoint/model/program,
+gold or authority flag is accepted in that input. All cases are snapshot-validated using
+existing semlint/evaluate before provider work. Synthetic preflight answers and accounting
+are discarded; they never enter execution evidence.
+
+Structural upper bounds are 1 MiB encoded input, 24 unique neutral case IDs, 24 callback
+invocations, 15 seconds per provider operation and 60 seconds for the whole plan.
+Trusted limits may only reduce them. These bounds are not a live spending grant or a quality
+budget. A live contract must separately fix the finite allowed calls/timeout/target/source
+and authorize the actual owner entry. The CLI uses these fixed structural limits; a caller
+using smaller admitted limits must preserve them at the actual fixed entry integration.
+
+Only the target owner injects `JEV_API_KEY`, after whole-plan admission. Consumers never
+read, decrypt, copy or forward it. Existing `askJev` sends pinned `jev-1.13.0` native named
+Noul questions, explicit criteria, fixed official endpoint, redirect refusal and finite timeout.
+No automatic retry is made. Input errors output only a closed error enum, not raw child or
+provider diagnostics. Execution failures retain canonical per-item statuses and null values.
+
+`runPlan` counts actual invocations of the supplied owner callback. The canonical per-case
+callback counter separately counts its invocation wrapper (which may reject on deadline
+before the owner callback). Validated calls are distinct. Native HTTP calls and cost remain
+`null` (unknown), never synthetic zeros or derived from preflight. The owning runtime must
+provide real-effect accounting separately. Raw output claims bounded evidence, not truth,
+aggregate quality, a merge verdict or authority.
+
+## Append/readback and replay
+
+`nextIssueEffect` is only a pure decision over attributable prior executor state. With no
+prior attempt it proposes evaluation. `EVALUATED` permits delivery of an existing result
+without a paid recall; `APPENDED` permits readback only. Started/failed/unknown/unrecognized
+state or an identity mismatch requires reconciliation, never blind retry.
+It does not make two concurrent callers safe: the actual executor must serialize admission
+and independently demonstrate the same bounded effects and UNKNOWN handling.
+
+`composeResultComment` validates plan/case/question/input identity, six raw records and
+closed finite accounting. Result bodies are capped at 32 KiB; no update/delete API exists.
+The eventual append is a new comment, not a GitHub guarantee of intrinsic immutability.
+The eventual transport must bind exact author/comment ID/target/body and then independently
+read them back; `verifyResultReadback` performs the exact comparison. Mutable GitHub comments
+are compared to the separately supplied exact positive append receipt ID (fifth argument),
+not just any positive ID with the same body and author. Mutable GitHub comments
+can drift and a later mismatch must remain a mismatch. Result text is never a new authorizer.
+
+## Evidence ceiling
+
+Run `node packages/jev-review/tests/github-comment.mjs` for secret-free preliminary evidence.
+SOURCE acceptance additionally requires actual `jev-comment-functional` Linux Nix CI at the
+published exact head and independent R acceptance. Neither replaces the real authorized
+Issue request → existing owner execution → real provider → new result comment → independent
+readback proof. ops#483 stays unfinished until that runtime/config/supply/normal-path evidence
+exists, with proportionate non-trigger/failure controls and finite effect admission.
