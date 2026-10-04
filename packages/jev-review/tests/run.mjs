@@ -743,6 +743,65 @@ const blockReal=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id
     return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(wire.questions).map(id=>[id,{type:'noul',noul:.5}]))}),{status:200});}});
 assert.equal(blockHttp,1);assert.equal(blockReal.attemptedHttpCalls,1);assert.equal(blockReal.cases[0].result.schema,'ops.semlint.result.v6');blockControls++;
 
+// V7 changes only the top-level provider-state member order, not its values.
+let subjectLastControls = 0;
+const asV7=input=>({...structuredClone(input),schema:'ops.semlint.input.v7'});
+const expectedSubjectLast=input=>{const s=expectedProjection(input);return {schema:s.schema,context:s.context,subject:s.subject};};
+for(const input5 of [structuredInput,asV5(atomicInput)]){
+  const input7=asV7(input5),before=JSON.stringify(input7),expected=expectedSubjectLast(input7);
+  const ordinary=await semlint(input5,structuredAsk);
+  const out=await semlint(input7,async(s,q)=>{
+    assert.deepEqual(s,expectedProjection(input5));assert.deepEqual(Object.keys(s),['schema','context','subject']);
+    assert.equal(JSON.stringify(s),JSON.stringify(expected));assert.deepEqual(q,expectedAtomic(input5).questions);
+    assert.ok(Object.isFrozen(s));assert.ok(Object.isFrozen(s.subject));assert.ok(Object.isFrozen(s.context));
+    validateJevBudget(s,q);return structuredAsk(s,q);
+  });
+  assert.equal(JSON.stringify(input7),before);assert.equal(out.inputDigest,digest(before));
+  assert.notEqual(out.inputDigest,ordinary.inputDigest);assert.equal(out.schema,'ops.semlint.result.v7');
+  assert.equal(out.questionDigest,ordinary.questionDigest);
+  assert.equal(out.projection.stateDigest,digest(JSON.stringify(expected)));assert.notEqual(out.projection.stateDigest,ordinary.projection.stateDigest);
+  const normalized={...out,schema:ordinary.schema,inputDigest:ordinary.inputDigest,projection:{...out.projection,stateDigest:ordinary.projection.stateDigest}};
+  assert.deepEqual(noElapsed(normalized),noElapsed(ordinary));subjectLastControls++;
+}
+for(const mode of ['empty','missing']){
+  const input=asV7(structuredInput);if(mode==='empty')input.checks=[];else{input.context=[];input.checks=input.checks.filter(x=>x.requiredRoles.length);}
+  const out=await semlint(input,noCalls);assert.equal(out.accounting.callbackAttempts,0);
+  assert.equal(out.questionDigest,expectedAtomic(input).digest);assert.equal(out.projection.stateDigest,digest(JSON.stringify(expectedSubjectLast(input))));subjectLastControls++;
+}
+for(const kind of ['model','answer','throw']){
+  const ask=async()=>{if(kind==='throw')throw Error(canary);return kind==='model'?{model:canary,answers:{}}:{model:JEV_MODEL,answers:{}};};
+  const base=await semlint(structuredInput,ask),out=await semlint(asV7(structuredInput),ask);
+  assert.equal(out.accounting.callbackAttempts,1);assert.equal(out.accounting.validatedCalls,0);assert.equal(JSON.stringify(out).includes(canary),false);
+  assert.deepEqual(noElapsed({...out,schema:base.schema,inputDigest:base.inputDigest,projection:{...out.projection,stateDigest:base.projection.stateDigest}}),noElapsed(base));subjectLastControls++;
+}
+for(const mode of ['raw','zero','missing','badDescription','blankSubject','final']){
+  const input=mode==='badDescription'||mode==='blankSubject'?asV7(structuredInput):mode==='final'?asV7(structuredFinal):asV7(atomicLarge);
+  if(mode==='zero')input.checks=[];
+  if(mode==='missing')input.context.forEach(x=>x.evaluationSpan={startByte:0,endByte:0});
+  if(mode==='badDescription')input.checks[0].predicate.true={...rubric,extra:'bad'};
+  if(mode==='blankSubject')input.subject.evaluationSpan={startByte:0,endByte:0};
+  let http=0;const out=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'first',input:asV7(structuredInput)},{id:'late',input}]},
+    {key:canary,fetchImpl:async()=>{http++;throw Error(canary);}});
+  assert.equal(http,0);assert.equal(out.attemptedHttpCalls,0);assert.deepEqual(out.cases.map(x=>x.status),['NOT_RUN','INVALID_INPUT']);subjectLastControls++;
+}
+const lastMoving=asV7(structuredInput),lastExpected=expectedSubjectLast(lastMoving);let releaseLast;
+const lastPending=semlint(lastMoving,async(s,q)=>{await new Promise(resolve=>releaseLast=resolve);assert.equal(JSON.stringify(s),JSON.stringify(lastExpected));assert.deepEqual(q,structuredExpected.questions);return structuredAsk(s,q);});
+lastMoving.subject.content=canary;lastMoving.context.reverse();lastMoving.checks[0].predicate.true.outcomeCondition=canary;releaseLast();
+assert.equal((await lastPending).questionDigest,structuredExpected.digest);subjectLastControls++;
+const lastCaptured=asV7(structuredInput),lastDescriptors=Object.fromEntries(rubricKeys.map(key=>[key,0]));
+lastCaptured.checks[0].predicate.true=new Proxy(lastCaptured.checks[0].predicate.true,{get(){throw Error(canary);},getOwnPropertyDescriptor(target,key){const p=Reflect.getOwnPropertyDescriptor(target,key);if(Object.hasOwn(lastDescriptors,key)){lastDescriptors[key]++;return {...p,value:lastDescriptors[key]===1?p.value:canary};}return p;}});
+await semlint(lastCaptured,async(s,q)=>{assert.deepEqual(q,structuredExpected.questions);return structuredAsk(s,q);});
+assert.deepEqual(lastDescriptors,Object.fromEntries(rubricKeys.map(key=>[key,1])));subjectLastControls++;
+let subjectLastHttp=0;
+const subjectLastReal=await runRealPlan({schema:'ops.semlint.real-input.v1',cases:[{id:'last',input:asV7(structuredInput)}]},
+ {key:canary,fetchImpl:async(url,init)=>{subjectLastHttp++;const wire=JSON.parse(init.body);
+   assert.deepEqual(Object.keys(wire),['model','state','questions']);assert.equal(wire.model,JEV_MODEL);
+   assert.deepEqual(Object.keys(wire.state),['schema','context','subject']);assert.equal(JSON.stringify(wire.state),JSON.stringify(expectedSubjectLast(asV7(structuredInput))));
+   assert.deepEqual(wire.questions,structuredExpected.questions);
+   assert.equal(init.body,JSON.stringify({model:JEV_MODEL,state:expectedSubjectLast(asV7(structuredInput)),questions:structuredExpected.questions}));
+   return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(wire.questions).map(id=>[id,{type:'noul',noul:.5}]))}),{status:200});}});
+assert.equal(subjectLastHttp,1);assert.equal(subjectLastReal.attemptedHttpCalls,1);assert.equal(subjectLastReal.cases[0].result.schema,'ops.semlint.result.v7');subjectLastControls++;
+
 let realEntryControls = 0, fixtureHttpCalls = 0;
 const realPlan = {schema: 'ops.semlint.real-input.v1', cases: [{id: 'case-1', input: sample},
   {id: 'case-missing', input: {...sample, context: []}}]};
@@ -800,7 +859,7 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, blockControls, realEntryControls, fixtureHttpCalls,
+  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, blockControls, subjectLastControls, realEntryControls, fixtureHttpCalls,
 }));
 }
 

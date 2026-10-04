@@ -89,7 +89,7 @@ function copyDescription(x) {
 }
 function snapshot(input) {
   const root = copyRecord(input, ['schema', 'subject', 'context', 'checks']);
-  const version5 = ['ops.semlint.input.v5', 'ops.semlint.input.v6'].includes(root.schema);
+  const version5 = ['ops.semlint.input.v5', 'ops.semlint.input.v6', 'ops.semlint.input.v7'].includes(root.schema);
   const version4 = version5 || root.schema === 'ops.semlint.input.v4';
   const version3 = version4 || root.schema === 'ops.semlint.input.v3';
   const version2 = version3 || root.schema === 'ops.semlint.input.v2';
@@ -148,13 +148,15 @@ function projectionState(raw) {
   const content = select(raw.subject);
   if (!content.trim()) fail();
   const version6 = raw.schema === 'ops.semlint.input.v6';
-  return freeze({schema: version6 ? 'ops.semlint.evaluation-state.v2' : 'ops.semlint.evaluation-state.v1',
+  const state = {schema: version6 ? 'ops.semlint.evaluation-state.v2' : 'ops.semlint.evaluation-state.v1',
     subject: {kind: raw.subject.kind, ref: raw.subject.ref, revision: raw.subject.revision,
       scope: raw.subject.scope, content: version6 ? targetBlocks(content, raw.subject.evaluationSpan.startByte) : content, sha256: hash(content), rawSha256: raw.subject.sha256,
       evaluationSpan: {...raw.subject.evaluationSpan}},
     context: raw.context.map((row) => { const content = select(row); return {
       role: row.role, ref: row.ref, revision: row.revision, content, sha256: hash(content),
-      rawSha256: row.sha256, evaluationSpan: {...row.evaluationSpan}}; })});
+      rawSha256: row.sha256, evaluationSpan: {...row.evaluationSpan}}; })};
+  return freeze(raw.schema === 'ops.semlint.input.v7'
+    ? {schema: state.schema, context: state.context, subject: state.subject} : state);
 }
 function targetBlocks(content, origin) {
   const bytes = Buffer.from(content, 'utf8');
@@ -188,7 +190,7 @@ export async function semlint(input, ask) {
   let state;
   try { state = freeze(snapshot(input)); } catch { fail(); }
   if (typeof ask !== 'function') fail();
-  const version3 = ['ops.semlint.input.v3', 'ops.semlint.input.v4', 'ops.semlint.input.v5', 'ops.semlint.input.v6'].includes(state.schema);
+  const version3 = ['ops.semlint.input.v3', 'ops.semlint.input.v4', 'ops.semlint.input.v5', 'ops.semlint.input.v6', 'ops.semlint.input.v7'].includes(state.schema);
   const version2 = version3 || state.schema === 'ops.semlint.input.v2';
   if (version3) return projectedLint(state, ask);
   const rules = version2 ? state.checks.map((row) => [row.axis, row.id, row.requiredRoles, row.concern, row.crossLinks]) : catalog;
@@ -267,7 +269,7 @@ async function projectedLint(raw, ask) {
       subject: [raw.subject.kind, raw.subject.ref, raw.subject.revision, row.rule],
       concern: raw.checks.find((check) => check.id === row.rule).concern}));
     const finalQuestions = freeze(Object.fromEntries(items.map((item, i) => ['q' + i,
-      (['ops.semlint.input.v4', 'ops.semlint.input.v5', 'ops.semlint.input.v6'].includes(raw.schema) ? atomicQuestion : providedQuestion)(state,
+      (['ops.semlint.input.v4', 'ops.semlint.input.v5', 'ops.semlint.input.v6', 'ops.semlint.input.v7'].includes(raw.schema) ? atomicQuestion : providedQuestion)(state,
         raw.checks.find((check) => check.id === item.subject[3]))])));
     questionDigest = hash(JSON.stringify({themes, items, questions: finalQuestions}));
     validateJevBudget(raw, {});
@@ -290,7 +292,7 @@ async function projectedLint(raw, ask) {
     validatedCalls = 0; usage = null;
     for (const row of records) if (row.status === 'OBSERVED') { row.status = status; row.noul = null; row.cause = cause; }
   }
-  return {schema: raw.schema === 'ops.semlint.input.v6' ? 'ops.semlint.result.v6' : raw.schema === 'ops.semlint.input.v5' ? 'ops.semlint.result.v5' : raw.schema === 'ops.semlint.input.v4' ? 'ops.semlint.result.v4' : 'ops.semlint.result.v3', inputDigest: hash(JSON.stringify(raw)), questionDigest,
+  return {schema: raw.schema === 'ops.semlint.input.v7' ? 'ops.semlint.result.v7' : raw.schema === 'ops.semlint.input.v6' ? 'ops.semlint.result.v6' : raw.schema === 'ops.semlint.input.v5' ? 'ops.semlint.result.v5' : raw.schema === 'ops.semlint.input.v4' ? 'ops.semlint.result.v4' : 'ops.semlint.result.v3', inputDigest: hash(JSON.stringify(raw)), questionDigest,
     records, counts: {selected: raw.checks.length, sendable: items.length,
       evaluated: records.filter((row) => row.status === 'OBSERVED').length,
       missing: records.filter((row) => row.status === 'INCOMPLETE').length},
