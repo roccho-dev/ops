@@ -334,8 +334,9 @@ The existing `nix-check` workflow provides this exact runtime as bytes, not just
   - Exports the complete closure as one `nix-store --export`.
   - Writes `provenance.json` (`ops.jev-review.runtime-provenance/1`) containing: commit/tree, run identity, root/entry/Node/source paths, every provided file's SHA256, export bytes/SHA256, and each closure member's narHash/narSize.
   - Uploads both files as `jev-review-runtime-<sha>` with `retention-days: 90`. The repository's own retention cap may shorten that.
+  - Prints one line, `jev_review_runtime root=… source=… export_sha256=… bytes=… provenance_sha256=…`, to the producer step's own job log and to the uploaded flake log. It also exposes the export and provenance SHA256 as job outputs, so both digests can be read without the artifact.
 - `jev-review-fresh-consumer` receives only that upload. It has no checkout, flake evaluation or build.
-  - It checks the export SHA256 against the producer job output (a channel independent of the artifact), then the provenance against the export bytes.
+  - It pins `provenance.json` to the producer's provenance SHA256 before parsing it, checks the export SHA256 against the producer job output (a channel independent of the artifact), then checks the provenance against the export bytes.
   - It requires the root and source to be absent before a root `nix-store --import`, then compares closure narHash/narSize and runs `nix-store --verify-path`.
   - It compares the wrapper line and every provided file hash.
   - It runs the provided `tests/run.mjs` and `tests/github-comment.mjs` from the imported bytes with `env -i`, no key, and no network namespace.

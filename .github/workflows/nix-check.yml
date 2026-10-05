@@ -42,6 +42,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       jev_review_export_sha256: ${{ steps.jev_review_runtime.outputs.export_sha256 }}
+      jev_review_provenance_sha256: ${{ steps.jev_review_runtime.outputs.provenance_sha256 }}
       jev_review_root: ${{ steps.jev_review_runtime.outputs.root }}
     steps:
       - uses: actions/checkout@v4
@@ -117,8 +118,11 @@ jobs:
                 closure: ($info[0] | (if type == "array" then . else to_entries | map(.value + { path: .key }) end)
                   | map({ path, narHash, narSize }) | sort_by(.path)) },
               claim: "MECHANICAL_PROVISION_NOT_LIVE_OR_SEMANTIC_QUALITY" }' > jev-review-runtime/provenance.json
-          printf 'jev_review_runtime root=%s source=%s export_sha256=%s bytes=%s\n' "$root" "$source" "$digest" "$bytes" >> nix-flake-check.log
-          { echo "export_sha256=$digest"; echo "root=$root"; } >> "$GITHUB_OUTPUT"
+          provenance_digest="$(sha256sum jev-review-runtime/provenance.json | cut -d' ' -f1)"
+          # Same line in this job's own log and the uploaded flake log: digests are readable without the artifact.
+          printf 'jev_review_runtime root=%s source=%s export_sha256=%s bytes=%s provenance_sha256=%s\n' \
+            "$root" "$source" "$digest" "$bytes" "$provenance_digest" | tee -a nix-flake-check.log
+          { echo "export_sha256=$digest"; echo "provenance_sha256=$provenance_digest"; echo "root=$root"; } >> "$GITHUB_OUTPUT"
       - name: Upload provided jev-review runtime
         uses: actions/upload-artifact@v4
         with:
@@ -144,6 +148,7 @@ jobs:
     env:
       EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       EXPORT_SHA256: ${{ needs.flake-check.outputs.jev_review_export_sha256 }}
+      PROVENANCE_SHA256: ${{ needs.flake-check.outputs.jev_review_provenance_sha256 }}
       ROOT: ${{ needs.flake-check.outputs.jev_review_root }}
     steps:
       - uses: cachix/install-nix-action@v31
@@ -161,6 +166,8 @@ jobs:
           test ! -e flake.nix
           f=runtime/jev-review-runtime.nix-export p=runtime/provenance.json
           test "$(cd runtime && find . -type f -printf '%f\n' | sort | paste -sd ' ')" = "jev-review-runtime.nix-export provenance.json"
+          [[ $EXPORT_SHA256 =~ ^[0-9a-f]{64}$ && $PROVENANCE_SHA256 =~ ^[0-9a-f]{64}$ ]] # producer job outputs present
+          test "$(sha256sum "$p" | cut -d' ' -f1)" = "$PROVENANCE_SHA256" # pinned before provenance is parsed
           test "$(sha256sum "$f" | cut -d' ' -f1)" = "$EXPORT_SHA256" # digest from the producer job output, not the artifact
           jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg root "$ROOT" --arg digest "$EXPORT_SHA256" \
             --argjson bytes "$(stat -c %s "$f")" '
@@ -200,6 +207,6 @@ jobs:
           jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' comment.json
           {
             echo "### Provided jev-review fresh consumer"
-            echo "- exact ops SHA: $EXACT_SHA; export sha256: $EXPORT_SHA256"
+            echo "- exact ops SHA: $EXACT_SHA; export sha256: $EXPORT_SHA256; provenance sha256: $PROVENANCE_SHA256"
             echo "- imported closure verified; tests ran from the imported bytes only; mechanical provision, not live quality"
           } >> "$GITHUB_STEP_SUMMARY"
