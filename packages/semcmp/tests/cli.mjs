@@ -83,6 +83,45 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     refuse({ query, proposals }, 'INVALID_TIMEOUT', 'ok', { JEV_TIMEOUT_MS: '0' });
     refuse({ query, proposals }, 'INVALID_ARGUMENTS', 'ok', {}, ['unexpected']);
     for (const mode of ['http', 'throw', 'json', 'model', 'answers']) refuse({ query, proposals }, 'JEV_FAILED', mode, {}, [], true);
+
+    // Configured proposer: each partial input gets its own finite candidates; the CLI adds none.
+    const proposer = path.join(root, 'proposer.mjs');
+    fs.writeFileSync(proposer, `const all = ${JSON.stringify(proposals)};
+export function propose({ input }) {
+  if (input === 'boom') throw new Error('private proposer detail');
+  if (input === 'bad') return [{ id: 'x' }];
+  return input === 'u' ? [] : input === 'ux' ? all.slice(0, 2) : all.slice(1);
+}
+`);
+    fs.writeFileSync(path.join(root, 'noexport.mjs'), 'export const other = 1;\n');
+    const offered = { ux: proposals.slice(0, 2), 'uxはこう': proposals.slice(1) };
+    for (const input of ['u', 'ux', 'uxはこう']) {
+      const q = { ...query, input, state: { ...query.state, working: [input] } };
+      const result = run({ query: q }, input === 'u' ? 'throw' : 'ok', input === 'u' ? { JEV_API_KEY: '' } : {}, ['--propose', proposer]);
+      assert.equal(result.status, 0);
+      assert.equal(result.stderr, '');
+      const output = JSON.parse(result.stdout);
+      assert.deepEqual(output.query, q);
+      if (input === 'u') {
+        assert.deepEqual(output.proposals, []);
+        assert.equal(output.evaluation.calls, 0);
+        assert.equal(fs.existsSync(trace), false);
+        continue;
+      }
+      // The stub prefers p2 when offered; ties keep the proposer's order.
+      assert.deepEqual(output.proposals.map(({ evidence, ...original }) => original), offered[input]);
+      assert.ok(output.proposals.every(({ evidence }) => evidence.theme === 'intent-fit' && Number.isFinite(evidence.noul)));
+      assert.deepEqual(JSON.parse(fs.readFileSync(trace, 'utf8')).payload.state, { query: q, proposals: offered[input] });
+    }
+    const asProposer = (input) => ({ query: { ...query, input } });
+    refuse(asProposer('boom'), 'PROPOSE_FAILED', 'ok', {}, ['--propose', proposer]);
+    refuse(asProposer('bad'), 'INVALID_PROPOSALS', 'ok', {}, ['--propose', proposer]);
+    refuse({ query, proposals }, 'INVALID_INPUT', 'ok', {}, ['--propose', proposer]);
+    refuse({ query }, 'INVALID_INPUT');
+    refuse({ query }, 'INVALID_ARGUMENTS', 'ok', {}, ['--propose']);
+    refuse({ query }, 'INVALID_ARGUMENTS', 'ok', {}, ['--propose', 'proposer.mjs']);
+    refuse({ query }, 'INVALID_PROPOSER', 'ok', {}, ['--propose', path.join(root, 'absent.mjs')]);
+    refuse({ query }, 'INVALID_PROPOSER', 'ok', {}, ['--propose', path.join(root, 'noexport.mjs')]);
     if (!process.env.SEMCMP_ENTRY) {
       const executable = process.env.SEMCMP_BIN || process.env.PATH.split(path.delimiter)
         .map(dir => path.join(dir, 'semcmp')).find(file => fs.existsSync(file));
@@ -100,7 +139,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       assert.deepEqual(JSON.parse(linked.stdout), JSON.parse(direct.stdout));
       assert.deepEqual(JSON.parse(linked.stdout).query, query);
     }
-    console.log('semcmp installed CLI: fresh query, typed order, empty and closed failures passed');
+    console.log('semcmp installed CLI: fresh query, typed order, configured partial-input proposer, empty and closed failures passed');
   } finally {
     assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));
     fs.rmSync(root, { recursive: true, force: true });
