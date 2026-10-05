@@ -240,10 +240,16 @@ Selection/cancel stays outside this calculation, and neither executes meaning.
 
 `nix build .#semcmp` supplies `bin/semcmp`, Node and only the runtime modules of
 semcmp and jev-review. It needs no sibling checkout or working-directory layout.
-Its private stdin envelope is `{query, proposals}`: the consumer captures its
-configured candidate data once, and supplies the query and that same array.
-Stdout is one JSON result from the existing semcmp calculation. The envelope is
-an implementation adapter, not a newly frozen shared wire contract.
+Without arguments its private stdin envelope is `{query, proposals}`: the
+consumer captures its configured candidate data once, and supplies the query
+and that same array. With `--propose /absolute/proposer.mjs` the stdin envelope
+is `{query}` and the module's exported `propose(query)` supplies the candidates
+for that exact query, so partial input may yield none or a different set. The
+caller chooses the mode; the executable never falls back from one to the other,
+and ships no proposer, registry or example catalog. Stdout is one JSON result
+from the existing semcmp calculation, whose `query` identifies what it answers.
+Both envelopes are implementation adapters, not a frozen shared wire contract,
+and a catalog remains a fixture input rather than Proposal authority.
 
 For nonempty candidates the executable reuses `askJev` with `JEV_API_KEY`,
 `JEV_API_URL` (default `https://api.typesafe.ai/v1/systemone`) and
@@ -252,13 +258,18 @@ the fresh Input, State and Focus; no semantic generator or effect is added.
 `share/semcmp/artifact.jsonl` declares `jev-api`; it does not supply credentials.
 Existing target launchers can bind specific programs; installing semcmp does not
 extend their allowed commands or authorize a credential-bearing launch.
-Empty candidates make no provider call. Invalid input, missing capability and
-provider failure exit nonzero, with no result and a bounded diagnostic code.
+Empty candidates make no provider call. Invalid input, an unusable proposer
+module (`INVALID_PROPOSER`), proposer failure (`PROPOSE_FAILED`), missing
+capability and provider failure exit nonzero, with no result and a bounded
+diagnostic code.
 There is no retry, implicit example fallback or raw exception output.
 
 `checks.<system>.semcmp-cli` runs the installed executable, including sibling
 imports, with a test-only Node fetch preload. Two fresh queries reorder the same
 heterogeneous candidate data while retaining identity, meaning and evidence.
-Empty, invalid and provider-failure cases are also checked. No network call is
+A test-owned proposer then answers the partial inputs `u`, `ux` and `uxはこう`
+with none (zero provider calls) and two different sets, carried losslessly with
+the exact query. Empty, invalid, proposer and provider-failure cases are also
+checked. No network call is
 made; these CLI controls establish process/package correspondence, not real Jev
 quality, Human UX, shared apps/edits evaluation or adoption.
