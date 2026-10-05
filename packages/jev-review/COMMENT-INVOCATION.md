@@ -65,7 +65,8 @@ old results cannot be relabeled as evaluations of a newer subject/input/config/s
 ## Formal owner entry
 
 The fixed target owner may execute `node semlint-entry.mjs` without arguments, supplying
-stdin `{schema:'ops.semlint.real-input.v1',cases:[{id,input}]}`. No endpoint/model/program,
+stdin `{schema:'ops.semlint.real-input.v1',cases:[{id,input}]}`, optionally with the exact
+five-key `limits` described below. No endpoint/model/program,
 gold or authority flag is accepted in that input. All cases are snapshot-validated using
 existing semlint/evaluate before provider work. Synthetic preflight answers and accounting
 are discarded; they never enter execution evidence.
@@ -80,8 +81,24 @@ Structural upper bounds are 1 MiB encoded input, 24 unique neutral case IDs, 24 
 invocations, 15 seconds per provider operation and 60 seconds for the whole plan.
 Trusted limits may only reduce them. These bounds are not a live spending grant or a quality
 budget. A live contract must separately fix the finite allowed calls/timeout/target/source
-and authorize the actual owner entry. The CLI uses these fixed structural limits; a caller
-using smaller admitted limits must preserve them at the actual fixed entry integration.
+and authorize the actual owner entry.
+
+Trusted smaller limits reach the fixed entry through the plan itself. `preparePlan(plan, ceiling)`
+derives effective limits (an embedded `limits` may only reduce the ceiling; enlarging, partial,
+extra-key or non-integer values fail closed as `INVALID_ENTRY_LIMITS`). Whenever the effective
+limits differ from the structural ones, the canonical `prepared.plan` embeds all five values in
+fixed key order; structural limits are represented by omission, so the two-key input stays valid
+and unchanged. Issue admission passes `config.limits` as the ceiling, so `request.prepared.plan`
+is the exact owner stdin and `planDigest` binds cases plus effective limits. A result produced
+under any other limits (including only a different timeout) fails `composeResultComment` with
+`RESULT_IDENTITY_MISMATCH`; no extra field or ledger is added. Enforcement points: stdin reading
+keeps the 1 MiB structural cap; the child's `preparePlan` applies the effective
+`maxInputBytes` to the canonical plan JSON, `maxCases`/`maxCalls` before any callback or key use,
+and `runPlan`/`executeOwnerPlan` apply `timeoutMs`/`deadlineMs`/`maxCalls`. Issue body bytes are
+a separate admission measure. Issue content still cannot carry `limits`. Local secret-free tests
+run both fixed programs as children with only `globalThis.fetch` replaced by a counting fixture,
+a synthetic key and no inherited environment. They are not evidence that the target launcher
+passes stdin unchanged, of Linux CI, or of target adoption.
 
 Only the target owner injects `JEV_API_KEY`. The existing launcher may place it in the
 child environment before that child validates stdin; this is NOT a claim that the child

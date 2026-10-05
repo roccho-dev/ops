@@ -47,15 +47,26 @@ export function snapshotJson(value, seen = new Set()) {
 export function entryLimits(value = ENTRY_LIMITS) {
   const limits = snapshotJson(value);
   if (!exact(limits, Object.keys(ENTRY_LIMITS)) || Object.entries(limits).some(([k, v]) => !Number.isSafeInteger(v) || v < 1 || v > ENTRY_LIMITS[k])) fail('INVALID_ENTRY_LIMITS');
-  return freeze(limits);
+  // Canonical key order, so equal effective limits always produce the same plan digest.
+  return freeze(Object.fromEntries(Object.keys(ENTRY_LIMITS).map((k) => [k, limits[k]])));
 }
+const structural = (limits) => Object.keys(ENTRY_LIMITS).every((k) => limits[k] === ENTRY_LIMITS[k]);
 
 const admitted = new WeakSet();
+// limitValue is the caller's ceiling. An owner input may carry its own `limits`, which may only
+// reduce that ceiling. Effective non-structural limits are always embedded in the canonical plan,
+// so the fixed owner entry receives them on stdin and planDigest binds all five values.
 export async function preparePlan(value, limitValue = ENTRY_LIMITS) {
-  const limits = entryLimits(limitValue);
-  const plan = snapshotJson(value);
+  const ceiling = entryLimits(limitValue);
+  const input = snapshotJson(value);
+  if (Buffer.byteLength(JSON.stringify(input), 'utf8') > ceiling.maxInputBytes) fail('ENTRY_INPUT_TOO_LARGE');
+  const embedded = input && Object.hasOwn(input, 'limits');
+  if (!exact(input, embedded ? ['schema', 'cases', 'limits'] : ['schema', 'cases'])) fail('INVALID_ENTRY_PLAN');
+  const limits = embedded ? entryLimits(input.limits) : ceiling;
+  if (Object.keys(ENTRY_LIMITS).some((k) => limits[k] > ceiling[k])) fail('INVALID_ENTRY_LIMITS');
+  const plan = structural(limits) ? { schema: input.schema, cases: input.cases } : { schema: input.schema, cases: input.cases, limits: { ...limits } };
   if (Buffer.byteLength(JSON.stringify(plan), 'utf8') > limits.maxInputBytes) fail('ENTRY_INPUT_TOO_LARGE');
-  if (!exact(plan, ['schema', 'cases']) || plan.schema !== 'ops.semlint.real-input.v1'
+  if (plan.schema !== 'ops.semlint.real-input.v1'
     || !Array.isArray(plan.cases) || !plan.cases.length || plan.cases.length > limits.maxCases) fail('INVALID_ENTRY_PLAN');
   const ids = new Set(), expected = [];
   for (const row of plan.cases) {
@@ -164,7 +175,7 @@ export async function ownerMain() {
 }
 
 export function entryError(error) {
-    const allowed = ['INVALID_ENTRY_ARGS', 'ENTRY_INPUT_TOO_LARGE', 'INVALID_ENTRY_JSON', 'INVALID_ENTRY_PLAN',
+    const allowed = ['INVALID_ENTRY_ARGS', 'ENTRY_INPUT_TOO_LARGE', 'INVALID_ENTRY_JSON', 'INVALID_ENTRY_PLAN', 'INVALID_ENTRY_LIMITS',
       'INVALID_ENTRY_CASE', 'INVALID_ENTRY_SEMLINT', 'ENTRY_PREFLIGHT_FAILED', 'ENTRY_CALL_BUDGET_EXCEEDED'];
     process.stdout.write(JSON.stringify({ schema: 'ops.semlint.entry-error.v1', status: 'REJECTED',
       cause: allowed.includes(error?.message) ? error.message : 'ENTRY_FAILED', authority: false }) + '\n');
