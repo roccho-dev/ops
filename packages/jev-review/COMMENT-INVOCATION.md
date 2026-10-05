@@ -212,12 +212,12 @@ An invalid clock reading fails the whole plan after the case returns (`ENTRY_CLO
 Catalog-v1 per-case semantic results and Issue request/result envelopes retain their identities.
 
 Comment composition binds the exact result edition and projection recorded by `preparePlan` for each case.
-Only semlint `result.v1` and `result.v11` compose; an Issue request whose cases would produce any other
+Only semlint `result.v1` and `result.v12` compose; an Issue request whose cases would produce any other
 edition is refused at admission (`RESULT_EDITION_NOT_COMPOSABLE`) before any provider call.
-A comment carries no reviewed translation, so an Issue request with any v11 case whose subject or context
+A comment carries no reviewed translation, so an Issue request with any v12 case whose subject or context
 has a non-null `englishAuxiliary` is also refused at admission (`AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE`),
 checked on the admitted plan snapshot before claim, owner launch, provider call or comment. Such inputs run only
-through the owner route with a separately reviewed translation. A composed v11 result is attributed raw model
+through the owner route with a separately reviewed translation. A composed v12 result is attributed raw model
 output under the same claim ceiling, not a quality result.
 
 `runPlan` counts actual invocations of the supplied owner callback. The canonical per-case
