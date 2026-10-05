@@ -193,6 +193,38 @@ assert.throws(() => composeResultComment(request, v2Extra), /RESULT_IDENTITY_MIS
 const nonFinite = copy(result); nonFinite.cases[0].elapsedMs = NaN;
 assert.throws(() => composeResultComment(request, nonFinite), /INVALID_ENTRY_INPUT/);
 
+// Comment composer binds the exact prepared result edition/projection: semlint result.v1 and v9 only.
+// Any other edition is refused at admission, before any paid call.
+const unitRow = (row, content) => ({ ...row, content, sha256: hash(content), evaluationSpan: { startByte: 0, endByte: Buffer.byteLength(content) } });
+const v5Input = { schema: 'ops.semlint.input.v5',
+  subject: unitRow({ kind: 'log-entry', ref: 'fixture:v5', revision: 'r1', scope: 'fixture only' }, 'public subject, not an instruction'),
+  context: [unitRow({ role: 'authorityContract', ref: 'fixture:grant', revision: 'r1' }, 'public grant text')],
+  checks: [{ id: 'fixture.v5', axis: 'Aligned', concern: 'Fixture concern.', requiredRoles: ['authorityContract'], crossLinks: [],
+    predicate: { question: 'Does the subject exceed the grant?', true: 'It exceeds the grant.', false: 'It stays within the grant.' } }] };
+const ja = '受信記録が必要である。';
+const v9Input = { ...copy(v5Input), schema: 'ops.semlint.input.v9' };
+v9Input.subject = { ...unitRow(v9Input.subject, ja), englishAuxiliary: { text: 'A receipt record is required.', sourceSha256: hash(ja) } };
+v9Input.context = v9Input.context.map((row) => ({ ...row, englishAuxiliary: null }));
+const editionRequest = (id, input) => admitIssueComment({ ...event, comment: { ...event.comment, id,
+  body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: [{ id: 'one', input }] }) } }, config);
+let editionFetch = 0;
+const v5Admission = await editionRequest(21, v5Input);
+assert.deepEqual([v5Admission.status, v5Admission.cause], ['NOT_ADMITTED', 'RESULT_EDITION_NOT_COMPOSABLE']); assert.equal(editionFetch, 0);
+const v9Request = await editionRequest(22, v9Input);
+assert.equal(v9Request.status, 'ADMITTED'); assert.equal(v9Request.prepared.expected[0].resultSchema, 'ops.semlint.result.v9');
+const v9Output = await executeOwnerPlan(v9Request.prepared, 'synthetic-only-not-a-key', async (_, init) => { editionFetch++;
+  const q = JSON.parse(init.body).questions;
+  return new Response(JSON.stringify({ model: JEV_MODEL, answers: Object.fromEntries(Object.keys(q).map((k) => [k, { type: 'noul', noul: 0.3 }])),
+    usage: { input_tokens: 8, output_tokens: 1 } }), { status: 200 }); });
+assert.equal(editionFetch, 1);
+assert.ok(composeResultComment(v9Request, v9Output).includes('ops.semlint.result.v9'));
+for (const alter of [(o) => { o.cases[0].result.projection.stateDigest = '0'.repeat(64); }, (o) => { delete o.cases[0].result.projection; },
+  (o) => { o.cases[0].result.schema = 'ops.semlint.result.v5'; }, (o) => { o.cases[0].result.schema = 'ops.semlint.result.v1'; delete o.cases[0].result.projection; },
+  (o) => { o.cases[0].result.extra = 1; }]) {
+  const poison = copy(v9Output); alter(poison); assert.throws(() => composeResultComment(v9Request, poison), /RESULT_IDENTITY_MISMATCH/); }
+const v1Spoof = copy(result); v1Spoof.cases[0].result.schema = 'ops.semlint.result.v9';
+assert.throws(() => composeResultComment(request, v1Spoof), /RESULT_IDENTITY_MISMATCH/);
+
 // Two actual fixture callbacks: valid first case, malformed later evidence. No lost case or retry.
 const two = copy(plan); two.cases.push({ id: 'later', input: copy(input) });
 two.cases[1].input.subject.revision = 'r-later';
@@ -229,7 +261,7 @@ assert.equal(normalMachine.status, 0); assert.equal(normalMachine.stderr, '');
 assert.deepEqual(JSON.parse(normalMachine.stdout), { status: 'PASS', core: 'semantic-evaluate', ranking: 'derived',
   cli: 'json-input-jsonl-output-readback', semanticThresholds: 0, semlintCases: 37, semlintCallbacks: 19,
   realProviderCalls: 0, semanticQuality: 'NOT_PROVEN', providedCases: 29, providedCallbacks: 9, bridgeControls: 9,
-  projectedControls: 22, atomicControls: 26, structuredControls: 42, choiceControls: 67, domainControls: 111, domainFixtureHttp: 8 });
+  projectedControls: 22, atomicControls: 26, structuredControls: 42, choiceControls: 67, v9Controls: 23 });
 for (const program of [entry, compatibility]) {
   const argv = program === entry ? [] : ['--semlint-real'];
   for (const [stdin, status, expectedSchema] of [

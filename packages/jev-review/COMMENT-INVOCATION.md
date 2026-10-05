@@ -211,6 +211,10 @@ An invalid clock reading fails the whole plan after the case returns (`ENTRY_CLO
 `ENTRY_FAILED`); any native requests already sent then have no receipt and remain UNKNOWN, never zero.
 Catalog-v1 per-case semantic results and Issue request/result envelopes retain their identities.
 
+Comment composition binds the exact result edition and projection recorded by `preparePlan` for each case.
+Only semlint `result.v1` and `result.v9` compose; an Issue request whose cases would produce any other
+edition is refused at admission (`RESULT_EDITION_NOT_COMPOSABLE`) before any provider call.
+
 `runPlan` counts actual invocations of the supplied owner callback. The canonical per-case
 callback counter separately counts its invocation wrapper (which may reject on deadline
 before the owner callback). Validated calls are distinct. Generic callback fixtures retain

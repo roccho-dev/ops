@@ -80,7 +80,9 @@ export async function preparePlan(value, limitValue = ENTRY_LIMITS) {
     if (preflight.records.some((x) => x.status === 'EXECUTION_ERROR' || x.status === 'EVIDENCE_INVALID')) fail('ENTRY_PREFLIGHT_FAILED');
     // Synthetic values, usage, elapsed time and callback counts are NOT execution evidence.
     expected.push({ id: row.id, inputDigest: preflight.inputDigest, questionDigest: preflight.questionDigest,
-      sendable: preflight.counts.sendable, records: preflight.records.map(({ noul, ...record }) => record) });
+      sendable: preflight.counts.sendable, records: preflight.records.map(({ noul, ...record }) => record),
+      // Exact result edition and projection the real call must return; consumers bind to them.
+      resultSchema: preflight.schema, projection: preflight.projection ?? null });
   }
   const plannedCalls = expected.filter((x) => x.sendable > 0).length;
   if (plannedCalls > limits.maxCalls) fail('ENTRY_CALL_BUDGET_EXCEEDED');

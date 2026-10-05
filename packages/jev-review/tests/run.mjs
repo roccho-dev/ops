@@ -11,7 +11,6 @@ const { createHash } = await import('node:crypto');
 const { semlint } = await import('../semlint.mjs');
 const { validateChoiceAnswer } = await import('../jev.mjs');
 const { ENTRY_LIMITS, preparePlan, executeOwnerPlan } = await import('../semlint-entry.mjs');
-const { DOMAIN_CRITERIA, constructDomainInput, foldDomainParents, domainPlan, foldDomainOutput } = await import('../semlint-domain.mjs');
 const { rankJudgments } = await import('../rank.mjs');
 const { evaluateInput, parseJsonl, rowsForEvaluation, serializeJsonl, validateCliInput, writeAndReadback } = await import('../bin/jev-review.mjs');
 // The canonical owner entry admits the whole plan before any native request.
@@ -684,102 +683,56 @@ for(const input of [asV8(atomicLarge),asV8(structuredFinal),{...asV8(structuredI
 // The shared owner preflight supplies Noul-shaped synthetic answers, so a valid v8 Choice plan is refused before any native request.
 await refusedBeforeFetch([{id:'choice',input:choiceInput}]);choiceControls++;
 
-// Opt-in P29 caller: fixed adopted criteria, Core-derived bindings, all-valid decision OR, fail-closed.
-let domainControls=0, domainFixtureHttp=0;
-const domainText='A report and an implicit proposed completion rule remain distinct targets. 語\n';
-const domainContext='Applicable grants, corrections, history and required observations are supplied as original data.';
-const domainInput=(criteria,content=domainText)=>({schema:'ops.semlint.input.v5',
-  subject:{kind:'ci-artifact',ref:'public:subject',revision:'synthetic',scope:'declared-public-whole',content,sha256:digest(content),evaluationSpan:{startByte:0,endByte:Buffer.byteLength(content)}},
-  context:[...new Set(criteria.flatMap(c=>c.requiredRoles))].map((role,i)=>({role,ref:'public:context:'+i,revision:'synthetic',content:domainContext,sha256:digest(domainContext),evaluationSpan:{startByte:0,endByte:Buffer.byteLength(domainContext)}})),
-  checks:criteria.map((c,i)=>({id:'parent-'+i,axis:c.axis,concern:c.concern,requiredRoles:[...c.requiredRoles],crossLinks:[...c.crossLinks],predicate:structuredClone(c.predicate)}))});
-const scored=(scores,usage={input_tokens:7,output_tokens:2})=>async(_,q)=>({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map((k,i)=>[k,{type:'noul',noul:scores[i]??.2}])),usage});
-assert.equal(DOMAIN_CRITERIA.length,9);assert.equal(DOMAIN_CRITERIA.filter(c=>c.split).length,3);
-for(const c of DOMAIN_CRITERIA){
-  const input=domainInput([c]),before=JSON.stringify(input),a=await constructDomainInput(input);
-  const same=(x,y)=>assert.equal(JSON.stringify(x),JSON.stringify(y));
-  assert.equal(JSON.stringify(input),before);same(a.input.subject,input.subject);same(a.input.context,input.context);
-  if(!c.split){same(a.input.checks,input.checks);same(a.groups[0].domains,['IDENTITY']);}
-  else{assert.deepEqual(a.groups[0].domains,['A_MINUS_E','E']);
-    assert.deepEqual(a.groups[0].childRules,['A_MINUS_E','E'].map(d=>'p29-'+digest('parent-0')+'-'+d));
-    for(const [i,child] of a.input.checks.entries()){const d=['A_MINUS_E','E'][i];
-      assert.ok(child.predicate.question.startsWith(c.split[d].question+'\n\n'));
-      for(const side of ['true','false'])for(const k of Object.keys(c.predicate[side]))assert.equal(child.predicate[side][k],k==='targetAssertion'?c.split[d].targetAssertion:c.predicate[side][k]);}}
-  const res=await semlint(a.input,scored([.2,.9]));const f=foldDomainParents(a,res,.8);
-  assert.equal(f.status,'VALID');assert.equal(f.parents[0].decision,!!c.split);domainControls++;
-  assert.equal(foldDomainParents(a,await semlint(a.input,scored([.2,.2])),.8).parents[0].decision,false);domainControls++;
-}
-const allA=await constructDomainInput(domainInput(DOMAIN_CRITERIA));assert.equal(allA.input.checks.length,12);assert.equal(allA.groups.length,9);
-const allR=await semlint(allA.input,scored([]));assert.equal(allR.accounting.callbackAttempts,1);assert.equal(foldDomainParents(allA,allR,.65).parents.length,9);domainControls++;
-const splitC=DOMAIN_CRITERIA.find(c=>c.split);
-for(const bad of [{...domainInput([splitC]),schema:'ops.semlint.input.v4'},{...domainInput([splitC]),checks:[]},{...domainInput([splitC]),extra:1},
-  (()=>{const x=domainInput([splitC]);x.checks[0].predicate.question+=' altered';return x;})(),
-  (()=>{const x=domainInput([splitC,DOMAIN_CRITERIA[0]]);x.checks[1].id='p29-'+digest('parent-0')+'-E';return x;})(),
-  (()=>{const x=domainInput([splitC]);Object.defineProperty(x.subject,'content',{enumerable:true,get(){throw Error('getter');}});return x;})()]){
-  await assert.rejects(()=>constructDomainInput(bad),/INVALID_DOMAIN_INPUT/);domainControls++;}
-const da=await constructDomainInput(domainInput([splitC])),good=await semlint(da.input,scored([.2,.9]));
-assert.equal(foldDomainParents(da,good,.8).status,'VALID');
-for(const mutate of [r=>r.schema='ops.semlint.result.v4',r=>r.inputDigest='0'.repeat(64),r=>r.questionDigest='0'.repeat(64),r=>r.projection.stateDigest='0'.repeat(64),
-  r=>r.records.pop(),r=>r.records.push(structuredClone(r.records[0])),r=>r.records.reverse(),r=>r.records[1]=structuredClone(r.records[0]),
-  r=>r.records[0].question='Unique',r=>r.records[0].rule='foreign',r=>r.records[0].subject='foreign',r=>r.records[0].contextRefs[0].sha256='0'.repeat(64),
-  r=>r.records[0].crossLinks=['Aligned'],r=>r.records[0].missingRoles=['x'],r=>r.records[0].cause='EVALUATION_FAILED',r=>r.records[0].status='EXECUTION_ERROR',
-  r=>r.records[0].noul=null,r=>r.records[0].noul=1.1,r=>r.records[0].noul='0.9',r=>r.records[0].extra=1,r=>r.counts.missing=1,
-  r=>r.accounting.callbackAttempts=2,r=>r.accounting.validatedCalls=0,r=>r.accounting.providerHttpCalls=1,r=>r.accounting.cost=0,r=>r.accounting.elapsedMs=-1,
-  r=>r.accounting.usage=null,r=>delete r.accounting.usage.input_tokens,r=>delete r.accounting.usage.output_tokens,r=>r.accounting.usage.total_tokens=99,
-  r=>r.accounting.usage.other=1,r=>r.accounting.usage.input_tokens=1.5,r=>r.claimCeiling='TRUTH',r=>r.extra=true]){
-  const r=structuredClone(good);mutate(r);const f=foldDomainParents(da,r,.8);assert.equal(f.status,'INVALID');assert.equal(f.parents,null);domainControls++;}
-const withTotal=structuredClone(good);withTotal.accounting.usage.total_tokens=9;assert.equal(foldDomainParents(da,withTotal,.8).status,'VALID');
-assert.equal(foldDomainParents(da,good,.7).status,'INVALID');assert.equal(foldDomainParents(structuredClone(da),good,.8).status,'INVALID');domainControls++;
-const domainCases=[{id:'split',assembly:da},{id:'all',assembly:allA}];
-const domainFetch=(mode)=>async(url,init)=>{domainFixtureHttp++;const q=JSON.parse(init.body).questions;
-  if(mode==='http')return new Response('{}',{status:503});
-  const usage=mode==='total'?{input_tokens:11,output_tokens:4,total_tokens:15}:{input_tokens:11,output_tokens:4};
-  return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.85}])),usage}),{status:200});};
-const domainOut=await executeOwnerPlan(await preparePlan(domainPlan(domainCases)),'FIXTURE_CANARY',domainFetch('ok'));
-assert.equal(domainFixtureHttp,2);assert.equal(domainOut.accounting.providerHttpCalls,2);// one native batch per case, no extra POST
-const graded=foldDomainOutput(domainCases,domainOut,.8);assert.equal(graded.status,'VALID');
-for(const c of graded.cases){assert.ok(c.caseOuterMs>=0&&c.coreInnerMs>=0&&c.providerElapsedMs>=0);assert.equal(JSON.stringify(c.usage),'{"input_tokens":11,"output_tokens":4}');}
-assert.equal(graded.cases[1].parents.length,9);domainControls++;
-const v2=structuredClone(domainOut);v2.schema='ops.semlint.real-result.v2';v2.cases.forEach(c=>delete c.elapsedMs);
-assert.equal(foldDomainOutput(domainCases,v2,.8).cause,'CASE_OUTER_REQUIRED');domainControls++;
-for(const mutate of [o=>delete o.cases[0].elapsedMs,o=>o.cases[0].elapsedMs=-1,o=>o.planDigest='0'.repeat(64),o=>o.cases.pop(),o=>o.cases[0].id='other',
-  o=>o.cases[0].provider=null,o=>o.cases[0].provider.statusClass='HTTP_2XX',o=>o.cases[0].provider.extra=1,o=>o.cases[0].result.records.pop()]){
-  const o=structuredClone(domainOut);mutate(o);assert.equal(foldDomainOutput(domainCases,o,.8).status,'INVALID');domainControls++;}
-const failedNative=await executeOwnerPlan(await preparePlan(domainPlan(domainCases)),'FIXTURE_CANARY',domainFetch('http'));
-const gradedFail=foldDomainOutput(domainCases,failedNative,.8);assert.equal(gradedFail.status,'INVALID');assert.equal(gradedFail.cause,'OUTER_ACCOUNTING');assert.equal(gradedFail.cases,null);
-assert.equal(domainFixtureHttp,4);domainControls++;
-// Native envelope: closed outer accounting (each counter = case count, unknown 0, cost null) refuses the whole
-// receipt; a closed provider receipt (usage equal to validated Core usage, lowercase digest, nonnegative clock) refuses its row.
-const totalOut=await executeOwnerPlan(await preparePlan(domainPlan(domainCases)),'FIXTURE_CANARY',domainFetch('total'));
-assert.equal(foldDomainOutput(domainCases,totalOut,.8).status,'VALID');assert.equal(domainFixtureHttp,6);domainControls++;
-for(const [name,mutate] of [['missing_outer_accounting',o=>delete o.accounting],['wrong_unknown_calls',o=>o.accounting.unknownHttpCalls=1],
-  ['extra_accounting_key',o=>o.accounting.extra=0],['missing_counter',o=>delete o.accounting.validatedResponses],['cost_claim',o=>o.accounting.cost=0],
-  ...['callbackAttempts','validatedCalls','providerHttpCalls','completedHttpCalls','validatedResponses'].flatMap(k=>[
-    ['high_'+k,o=>o.accounting[k]++],['low_'+k,o=>o.accounting[k]--],['string_'+k,o=>o.accounting[k]=String(o.accounting[k])]])]){
-  const o=structuredClone(domainOut);mutate(o);const g=foldDomainOutput(domainCases,o,.8);
-  assert.equal(g.status,'INVALID',name);assert.equal(g.cases,null,name);
-  assert.equal(g.cause,name==='missing_outer_accounting'?'OUTPUT_IDENTITY':'OUTER_ACCOUNTING',name);domainControls++;}
-for(const [name,mutate] of [['missing_provider_usage',p=>delete p.usage],['null_provider_usage',p=>p.usage=null],
-  ['mismatched_provider_usage',p=>p.usage.input_tokens=12],['provider_only_total',p=>p.usage.total_tokens=15],['provider_extra_usage',p=>p.usage.private=1],
-  ['invalid_response_digest',p=>p.responseDigest='x'],['null_response_digest',p=>p.responseDigest=null],['upper_response_digest',p=>p.responseDigest=p.responseDigest.toUpperCase()],
-  ['short_response_digest',p=>p.responseDigest=p.responseDigest.slice(1)],['negative_api_clock',p=>p.elapsedMs=-1],['string_api_clock',p=>p.elapsedMs='1']]){
-  const o=structuredClone(domainOut);mutate(o.cases[0].provider);const g=foldDomainOutput(domainCases,o,.8);
-  assert.equal(g.status,'INVALID',name);assert.equal(g.cases[0].cause,'NATIVE_RECEIPT',name);assert.equal(g.cases[0].parents,null,name);
-  assert.equal(g.cases[1].status,'VALID',name);domainControls++;}
-const nonFiniteApi=structuredClone(domainOut);nonFiniteApi.cases[0].provider.elapsedMs=NaN;
-assert.equal(foldDomainOutput(domainCases,nonFiniteApi,.8).cause,'INVALID_OUTPUT_SHAPE');domainControls++;
-// Trusted reduced limits travel in the plan exactly as the owner entry canonicalizes them; planDigest binds them.
-const capped={maxCases:2,maxCalls:2,maxInputBytes:ENTRY_LIMITS.maxInputBytes,timeoutMs:ENTRY_LIMITS.timeoutMs,deadlineMs:ENTRY_LIMITS.deadlineMs};
-assert.equal(JSON.stringify(domainPlan(domainCases,{...ENTRY_LIMITS})),JSON.stringify(domainPlan(domainCases)));
-const cappedPrepared=await preparePlan(domainPlan(domainCases,{deadlineMs:60000,timeoutMs:15000,maxCalls:2,maxInputBytes:ENTRY_LIMITS.maxInputBytes,maxCases:2}));
-assert.deepEqual(Object.keys(cappedPrepared.plan),['schema','cases','limits']);assert.equal(JSON.stringify(cappedPrepared.plan.limits),JSON.stringify(capped));
-const cappedOut=await executeOwnerPlan(cappedPrepared,'FIXTURE_CANARY',domainFetch('ok'));assert.equal(domainFixtureHttp,8);
-assert.equal(foldDomainOutput(domainCases,cappedOut,.8,capped).status,'VALID');
-assert.equal(foldDomainOutput(domainCases,cappedOut,.8).cause,'OUTPUT_IDENTITY');
-assert.equal(foldDomainOutput(domainCases,cappedOut,.8,{...capped,timeoutMs:14000}).cause,'OUTPUT_IDENTITY');
-assert.equal(foldDomainOutput(domainCases,domainOut,.8,capped).cause,'OUTPUT_IDENTITY');domainControls++;
-for(const bad of [{...capped,maxCases:25},{...capped,extra:1},{maxCases:2},{...capped,timeoutMs:1.5},{...capped,maxCalls:0}]){
-  assert.throws(()=>domainPlan(domainCases,bad),/INVALID_DOMAIN_INPUT/);domainControls++;}
-
+// v9 bundle: target-last state, a required non-authoritative English auxiliary bound to selected CJK text,
+// identical predicate/criteria plus one fixed authority note; v1-v5/v8 are untouched.
+let v9Controls=0;
+const NOTE=" englishAuxiliary, when not null, is a non-authoritative English translation of that unit's selected original text; the original content alone governs meaning, scope and wording.";
+const withSpan=(row,content)=>({...row,content,sha256:digest(content),evaluationSpan:{startByte:0,endByte:Buffer.byteLength(content)}});
+const asV9=(x)=>{const y=structuredClone(x);y.schema='ops.semlint.input.v9';y.subject.englishAuxiliary=null;y.context.forEach(r=>r.englishAuxiliary=null);return y;};
+const capture=async(input)=>{let wire=null;const result=await semlint(input,async(s,q)=>{wire={s:JSON.parse(JSON.stringify(s)),q:JSON.parse(JSON.stringify(q))};return {model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.4}])),usage:{input_tokens:9,output_tokens:1}};});return {result,wire};};
+const v5Run=await capture(structuredInput), v9Run=await capture(asV9(structuredInput));
+assert.deepEqual(Object.keys(v9Run.wire.s),['schema','context','subject']);assert.equal(v9Run.wire.s.schema,'ops.semlint.evaluation-state.v3');
+const dropAux=({englishAuxiliary,...row})=>row;
+assert.deepEqual(dropAux(v9Run.wire.s.subject),v5Run.wire.s.subject);assert.deepEqual(v9Run.wire.s.context.map(dropAux),v5Run.wire.s.context);
+assert.ok([v9Run.wire.s.subject,...v9Run.wire.s.context].every(r=>r.englishAuxiliary===null));v9Controls++;
+for(const k of Object.keys(v5Run.wire.q)){const a=v5Run.wire.q[k],b=v9Run.wire.q[k];
+  assert.deepEqual(b.criteria,a.criteria);assert.equal(b.instructions.question,a.instructions.question);
+  assert.equal(b.instructions.interpretation,a.instructions.interpretation+NOTE);
+  assert.deepEqual({...b.instructions,interpretation:null},{...a.instructions,interpretation:null});}
+assert.equal(v9Run.result.schema,'ops.semlint.result.v9');assert.equal(v5Run.result.schema,'ops.semlint.result.v5');
+assert.deepEqual(v9Run.result.records.map(r=>r.noul),v5Run.result.records.map(r=>r.noul));v9Controls++;
+const ja='配送receiptだけで完了を確定し、自律起動とは称さない。\n';
+const cjk=asV9(structuredInput);Object.assign(cjk.subject,withSpan(cjk.subject,ja));
+cjk.subject.englishAuxiliary={text:'Confirm completion from the delivery receipt alone, and do not call it autonomous wake.\n',sourceSha256:digest(ja)};
+const cjkRun=await capture(cjk);assert.deepEqual(cjkRun.wire.s.subject.englishAuxiliary,{text:cjk.subject.englishAuxiliary.text});
+assert.equal(JSON.stringify(cjkRun.wire.s).includes(digest(ja)+'"'),true);// selected sha of the original stays; aux sha is not model-facing
+assert.equal(JSON.stringify(cjkRun.wire).includes('sourceSha256'),false);assert.equal(cjkRun.result.accounting.callbackAttempts,1);v9Controls++;
+for(const [script,text] of [['Hangul','한국어 문장입니다.\n'],['Katakana','テスト\n'],['Han','完了\n']]){
+  const a=asV9(structuredInput);Object.assign(a.subject,withSpan(a.subject,text));
+  await assert.rejects(()=>semlint(a,noCalls),/INVALID_SEMLINT_INPUT/,script);
+  a.subject.englishAuxiliary={text:'x',sourceSha256:digest(text)};assert.equal((await capture(a)).result.accounting.callbackAttempts,1,script);v9Controls++;}
+const commonOnly=asV9(structuredInput);Object.assign(commonOnly.subject,withSpan(commonOnly.subject,'Plain text with full stop。\n'));
+assert.equal((await capture(commonOnly)).result.accounting.callbackAttempts,1);v9Controls++;// U+3002 is Script=Common: no auxiliary required
+for(const [name,mutate] of [['missing key',x=>delete x.subject.englishAuxiliary],['null on CJK',x=>x.subject.englishAuxiliary=null],
+  ['object on non-CJK context',x=>x.context[0].englishAuxiliary={text:'t',sourceSha256:digest(x.context[0].content)}],
+  ['sha mismatch',x=>x.subject.englishAuxiliary.sourceSha256='0'.repeat(64)],['uppercase sha',x=>x.subject.englishAuxiliary.sourceSha256=x.subject.englishAuxiliary.sourceSha256.toUpperCase()],
+  ['extra aux key',x=>x.subject.englishAuxiliary.lang='en'],['missing sha',x=>delete x.subject.englishAuxiliary.sourceSha256],
+  ['blank text',x=>x.subject.englishAuxiliary.text='  '],['non-string text',x=>x.subject.englishAuxiliary.text=7],['aux string',x=>x.subject.englishAuxiliary='text'],
+  ['getter aux',x=>{const t=x.subject.englishAuxiliary.text;delete x.subject.englishAuxiliary.text;Object.defineProperty(x.subject.englishAuxiliary,'text',{enumerable:true,get(){return t;}});}],
+  ['v5 with aux key',x=>{x.schema='ops.semlint.input.v5';}]]){
+  const x=structuredClone(cjk);mutate(x);let calls=0;
+  await assert.rejects(()=>semlint(x,async()=>{calls++;}),/INVALID_SEMLINT_INPUT/,name);assert.equal(calls,0,name);v9Controls++;}
+const huge=structuredClone(cjk);huge.subject.englishAuxiliary.text='x'.repeat(28001);
+const hugeRun=await semlint(huge,noCalls);assert.equal(hugeRun.accounting.callbackAttempts,0);// raw cap counts the auxiliary
+assert.ok(hugeRun.records.every(r=>r.status!=='OBSERVED')&&hugeRun.records.some(r=>r.status==='EXECUTION_ERROR'),JSON.stringify(hugeRun.records.map(r=>[r.status,r.cause])));v9Controls++;
+for(const legacy of [asV5(atomicInput),structuredInput,asV8(structuredInput)]){assert.equal(JSON.stringify(await capture(legacy).then(r=>r.wire.s)).includes('englishAuxiliary'),false);}v9Controls++;
+const v9Prepared=await preparePlan({schema:'ops.semlint.real-input.v1',cases:[{id:'v9',input:cjk},{id:'v5',input:structuredInput}]});
+assert.deepEqual(v9Prepared.expected.map(x=>x.resultSchema),['ops.semlint.result.v9','ops.semlint.result.v5']);assert.ok(v9Prepared.expected.every(x=>x.projection&&x.projection.schema==='ops.semlint.projection.v1'));
+let v9Http=0;const v9Out=await executeOwnerPlan(v9Prepared,'FIXTURE_CANARY',async(url,init)=>{v9Http++;const q=JSON.parse(init.body).questions;
+  return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.6}])),usage:{input_tokens:5,output_tokens:1}}),{status:200});});
+assert.equal(v9Http,2);assert.equal(v9Out.schema,'ops.semlint.real-result.v3');assert.equal(v9Out.accounting.providerHttpCalls,2);
+assert.equal(v9Out.cases[0].result.schema,'ops.semlint.result.v9');assert.deepEqual(v9Out.cases[0].result.projection,v9Prepared.expected[0].projection);v9Controls++;
+await assert.rejects(()=>preparePlan({schema:'ops.semlint.real-input.v1',cases:[{id:'bad',input:{...cjk,subject:{...cjk.subject,englishAuxiliary:null}}}]}),/INVALID_ENTRY_SEMLINT/);v9Controls++;
 console.log(JSON.stringify({
   status: 'PASS',
   core: 'semantic-evaluate',
@@ -787,7 +740,7 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, choiceControls, domainControls, domainFixtureHttp,
+  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, choiceControls, v9Controls,
 }));
 }
 
