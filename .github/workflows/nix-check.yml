@@ -177,7 +177,8 @@ jobs:
             and ($root | test("^/nix/store/[0-9a-z]{32}-jev-review$")) and (.runtime.source | test("^/nix/store/[0-9a-z]{32}-jev-review$"))
             and (.runtime.node | test("^/nix/store/[0-9a-z]{32}-nodejs-[^/ ]+/bin/node$"))
             and (.runtime.source as $s | any(.runtime.closure[]; .path == $root) and any(.runtime.closure[]; .path == $s))
-            and (.runtime.files | has("semlint-domain.mjs") and has("semlint-entry.mjs") and has("tests/run.mjs") and has("tests/github-comment.mjs"))' "$p" >/dev/null
+            and (.runtime.files | has("semlint.mjs") and has("semlint-entry.mjs") and has("github-comment.mjs") and has("issue-executor.mjs")
+              and has("tests/run.mjs") and has("tests/github-comment.mjs") and has("tests/issue-executor.mjs") and (has("semlint-domain.mjs") | not))' "$p" >/dev/null
           source="$(jq -r .runtime.source "$p")" node="$(jq -r .runtime.node "$p")"
           test ! -e "$ROOT" # only the import below can supply the runtime
           test ! -e "$source"
@@ -202,9 +203,12 @@ jobs:
           # Clean environment, no key, no network namespace beyond loopback; fixture fetches only.
           run() { sudo unshare --net -- env -i HOME="$(mktemp -d)" TMPDIR="$(mktemp -d)" LANG=C.UTF-8 "$node" "$source/tests/$1"; }
           run run.mjs > machine.json
-          jq -e '.status == "PASS" and .realProviderCalls == 0 and .semanticQuality == "NOT_PROVEN" and .domainControls > 0' machine.json
+          # Control counts prove the provided tests ran; they are not quality evidence.
+          jq -e '.status == "PASS" and .realProviderCalls == 0 and .semanticQuality == "NOT_PROVEN" and .v9Controls > 0 and (has("domainControls") | not)' machine.json
           run github-comment.mjs > comment.json
           jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' comment.json
+          run issue-executor.mjs > executor.json
+          jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' executor.json
           {
             echo "### Provided jev-review fresh consumer"
             echo "- exact ops SHA: $EXACT_SHA; export sha256: $EXPORT_SHA256; provenance sha256: $PROVENANCE_SHA256"

@@ -334,7 +334,7 @@ The existing `nix-check` workflow provides this exact runtime as bytes, not just
   - It pins `provenance.json` to the producer's provenance SHA256 before parsing it, checks the export SHA256 against the producer job output (a channel independent of the artifact), then checks the provenance against the export bytes.
   - It requires the root and source to be absent before a root `nix-store --import`, then compares closure narHash/narSize and runs `nix-store --verify-path`.
   - It compares the wrapper line and every provided file hash.
-  - It runs the provided `tests/run.mjs` and `tests/github-comment.mjs` from the imported bytes with `env -i`, no key, and no network namespace.
+  - It runs the provided `tests/run.mjs`, `tests/github-comment.mjs` and `tests/issue-executor.mjs` from the imported bytes with `env -i`, no key, and no network namespace.
   - Any mismatch, missing module or modified archive fails the job.
 
 This proves mechanical provision of the same bytes to a clean consumer. It is not a live call and not semantic quality.
