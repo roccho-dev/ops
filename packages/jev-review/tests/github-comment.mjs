@@ -285,12 +285,122 @@ const bodyTimeout = await executeOwnerPlan(await preparePlan(plan, { ...ENTRY_LI
 });
 assert.equal(bodyTimeout.accounting.providerHttpCalls, 1); assert.equal(bodyTimeout.accounting.completedHttpCalls, 1);
 assert.equal(bodyTimeout.accounting.validatedResponses, 0); assert.equal(bodyTimeout.cases[0].provider.responseDigest, null);
-assert.ok(composeResultComment(request, bodyTimeout).includes('EXECUTION_ERROR'));
+const timeoutRequest = await admitIssueComment(event, { ...config, limits: { ...ENTRY_LIMITS, timeoutMs: 10 } });
+assert.ok(composeResultComment(timeoutRequest, bodyTimeout).includes('EXECUTION_ERROR'));
+assert.throws(() => composeResultComment(request, bodyTimeout), /RESULT_IDENTITY_MISMATCH/); // limits are bound
 let lateInvalidNative = 0;
 await assert.rejects(async () => executeOwnerPlan(await preparePlan(bad), canary, async () => { lateInvalidNative++; }), /INVALID_ENTRY_SEMLINT/);
 assert.equal(lateInvalidNative, 0);
 const source = fs.readFileSync(entry, 'utf8');
 assert.equal(/from ['"].*(?:tests|fixtures|gold)/.test(source), false);
 assert.equal(source.includes('process.env.JEV_API_URL'), false);
+const existingFixtureHttp = fixtureHttp + nativeFixtures + laterNative;
+assert.equal(existingFixtureHttp, 11);
+
+// Caller caps: trusted smaller limits reach and constrain the fixed owner entry.
+const small = { maxCases: 2, maxCalls: 1, maxInputBytes: 65536, timeoutMs: 5000, deadlineMs: 20000 };
+const pureSmall = await preparePlan(plan, small);
+assert.deepEqual(copy(pureSmall.plan.limits), small); assert.notEqual(pureSmall.planDigest, prepared.planDigest);
+assert.equal((await preparePlan(pureSmall.plan)).planDigest, pureSmall.planDigest); // embedded form is canonical
+assert.equal((await preparePlan({ ...plan, limits: { ...ENTRY_LIMITS } })).planDigest, prepared.planDigest);
+const reordered = Object.fromEntries(Object.entries(small).reverse());
+assert.equal((await preparePlan({ ...plan, limits: reordered })).planDigest, pureSmall.planDigest);
+await assert.rejects(preparePlan(pureSmall.plan, { ...small, maxCalls: 1, timeoutMs: 4999 }), /INVALID_ENTRY_LIMITS/);
+for (const limits of [{ ...small, maxCalls: 25 }, { ...small, extra: 1 }, { maxCases: 1 }, { ...small, timeoutMs: 0 }, { ...small, deadlineMs: '1' }, null]) {
+  await assert.rejects(preparePlan({ ...plan, limits }), /INVALID_ENTRY_(?:LIMITS|INPUT)/);
+}
+const smallRequest = await admitIssueComment(event, { ...config, limits: small });
+assert.equal(smallRequest.status, 'ADMITTED');
+assert.deepEqual(copy(smallRequest.prepared.plan.limits), small); assert.deepEqual(copy(smallRequest.prepared.limits), small);
+assert.equal(smallRequest.prepared.planDigest, pureSmall.planDigest);
+assert.notEqual(smallRequest.identity.planDigest, request.identity.planDigest);
+// Issue content still cannot carry or expand limits.
+assert.equal((await admitIssueComment({ ...event, comment: { ...event.comment, body: REQUEST_PREFIX
+  + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: plan.cases, limits: ENTRY_LIMITS }) } }, { ...config, limits: small })).status, 'NOT_ADMITTED');
+const smallTwo = await admitIssueComment({ ...event, comment: { ...event.comment, body: REQUEST_PREFIX
+  + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: two.cases }) } }, { ...config, limits: small });
+assert.equal(smallTwo.status, 'NOT_ADMITTED'); // two sendable cases exceed maxCalls 1 before any callback
+
+// Formal owner path: unchanged programs/argv/stdin, globalThis.fetch replaced by a counting fixture.
+// The fixture counts on stderr, separately from the entry's own stdout accounting.
+const fakeFetch = `globalThis.fetch = async (url, init) => {
+  process.stderr.write('FIXTURE_FETCH\\n');
+  const body = JSON.parse(init.body);
+  if (body.state.subject.ref === 'fixture:hang') {
+    // Like a pending socket, keep the loop alive; AbortSignal.timeout alone does not.
+    const pending = setInterval(() => {}, 1000);
+    await new Promise((resolve) => init.signal.addEventListener('abort', resolve, { once: true }));
+    clearInterval(pending);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    throw new Error('fixture aborted');
+  }
+  return new Response(JSON.stringify({ model: ${JSON.stringify(JEV_MODEL)},
+    answers: Object.fromEntries(Object.keys(body.questions).map((k) => [k, { type: 'noul', noul: 0.3 }])) }), { status: 200 });
+};`;
+const importFlag = '--import=data:text/javascript,' + encodeURIComponent(fakeFetch);
+const syntheticKey = 'synthetic-fixture-key-not-a-secret';
+let childFixtureHttp = 0;
+const ownerChild = (program, stdin) => {
+  const argv = program === entry ? [] : ['--semlint-real'];
+  const run = spawnSync(process.execPath, [importFlag, program, ...argv], { input: stdin, encoding: 'utf8',
+    env: { LANG: 'C.UTF-8', JEV_API_KEY: syntheticKey }, timeout: 20000 });
+  const fetches = run.stderr.split('\n').filter((x) => x === 'FIXTURE_FETCH').length;
+  assert.equal(run.stderr.replaceAll('FIXTURE_FETCH\n', ''), '');
+  assert.equal(run.stdout.includes(syntheticKey), false);
+  childFixtureHttp += fetches;
+  return { status: run.status, value: JSON.parse(run.stdout), fetches };
+};
+const hang = copy(input); hang.subject.ref = 'fixture:hang';
+const deadlinePlan = { schema: 'ops.semlint.real-input.v1', limits: { ...small, maxCalls: 2, timeoutMs: 15000, deadlineMs: 300 },
+  cases: [{ id: 'first', input: hang }, { id: 'second', input: copy(input) }] };
+for (const program of [entry, compatibility]) {
+  // Positive control: same mechanism, admitted small plan, fixture actually reached once.
+  const normal = ownerChild(program, JSON.stringify(smallRequest.prepared.plan));
+  assert.equal(normal.status, 0); assert.equal(normal.fetches, 1);
+  assert.equal(normal.value.planDigest, smallRequest.prepared.planDigest);
+  assert.deepEqual(normal.value.accounting, { callbackAttempts: 1, validatedCalls: 1, providerHttpCalls: 1,
+    completedHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0, cost: null });
+  // Representative Issue -> formal invocation -> fixture result -> composition at the same limits.
+  const composed = composeResultComment(smallRequest, normal.value);
+  assert.ok(composed.includes('VALIDATED_RESPONSE')); assert.equal(composed.includes(syntheticKey), false);
+  assert.equal(verifyResultReadback(smallRequest, composed, { repository: config.repository, issue: config.issue, id: 21,
+    author: 'fixture-poster', body: composed }, 'fixture-poster', 21), true);
+  // Binding: a structural-limit or one-value-different run cannot be composed into the small request.
+  const structuralRun = ownerChild(program, JSON.stringify(plan));
+  assert.equal(structuralRun.status, 0); assert.equal(structuralRun.fetches, 1);
+  assert.throws(() => composeResultComment(smallRequest, structuralRun.value), /RESULT_IDENTITY_MISMATCH/);
+  const otherTimeout = ownerChild(program, JSON.stringify({ ...plan, limits: { ...small, timeoutMs: 4000 } }));
+  assert.equal(otherTimeout.status, 0);
+  assert.throws(() => composeResultComment(smallRequest, otherTimeout.value), /RESULT_IDENTITY_MISMATCH/);
+  assert.throws(() => composeResultComment(request, normal.value), /RESULT_IDENTITY_MISMATCH/);
+  // Over-budget/invalid whole plans refuse before any fixture fetch, with the synthetic key present.
+  for (const [stdin, cause] of [
+    [{ ...two, limits: { ...small, maxCases: 1 } }, 'INVALID_ENTRY_PLAN'],
+    [{ ...two, limits: small }, 'ENTRY_CALL_BUDGET_EXCEEDED'],
+    [{ ...plan, limits: { ...small, maxInputBytes: 1000 } }, 'ENTRY_INPUT_TOO_LARGE'],
+    [{ ...plan, limits: { ...small, maxCalls: 25 } }, 'INVALID_ENTRY_LIMITS'],
+    [{ ...plan, limits: { ...small, extra: 1 } }, 'INVALID_ENTRY_LIMITS'],
+    [{ ...plan, limits: { maxCalls: 1 } }, 'INVALID_ENTRY_LIMITS'],
+    [{ ...bad, limits: { ...small, maxCalls: 2 } }, 'INVALID_ENTRY_SEMLINT'],
+  ]) {
+    const refused = ownerChild(program, JSON.stringify(stdin));
+    assert.equal(refused.status, 1); assert.equal(refused.fetches, 0);
+    assert.equal(refused.value.schema, 'ops.semlint.entry-error.v1'); assert.equal(refused.value.cause, cause);
+  }
+  // Smaller per-call timeout is actually applied: aborted request stays REQUEST_ERROR/unknown.
+  const timed = ownerChild(program, JSON.stringify({ schema: plan.schema, limits: { ...small, timeoutMs: 50 }, cases: [{ id: 'hang', input: hang }] }));
+  assert.equal(timed.status, 0); assert.equal(timed.fetches, 1);
+  assert.deepEqual(timed.value.accounting, { callbackAttempts: 1, validatedCalls: 0, providerHttpCalls: 1,
+    completedHttpCalls: 0, validatedResponses: 0, unknownHttpCalls: 1, cost: null });
+  assert.equal(timed.value.cases[0].provider.statusClass, 'REQUEST_ERROR');
+  assert.ok(timed.value.cases[0].result.records.every((x) => x.status === 'EXECUTION_ERROR' && x.noul === null));
+  // Smaller whole-plan deadline: the later case is refused before its fetch.
+  const late = ownerChild(program, JSON.stringify(deadlinePlan));
+  assert.equal(late.status, 0); assert.equal(late.fetches, 1);
+  assert.equal(late.value.accounting.providerHttpCalls, 1); assert.equal(late.value.accounting.unknownHttpCalls, 1);
+  assert.equal(late.value.cases[1].provider.attemptedHttpCalls, 0); assert.equal(late.value.cases[1].provider.statusClass, 'NOT_RUN');
+  assert.ok(late.value.cases[1].result.records.every((x) => x.status === 'EXECUTION_ERROR'));
+}
 console.log(JSON.stringify({ status: 'PASS', check: 'jev-comment-functional', realProviderCalls: 0,
-  githubEffects: 0, fixtureNativeHttp: fixtureHttp + nativeFixtures + laterNative, claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_COMPLETION' }));
+  githubEffects: 0, fixtureNativeHttp: existingFixtureHttp + childFixtureHttp, existingFixtureHttp, childFixtureHttp,
+  claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_COMPLETION' }));
