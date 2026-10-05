@@ -248,6 +248,19 @@ await check('admission-refusals', async () => {
     assert.equal(r.stopped, null); assert.deepEqual(r.decisions, [{ commentId: 10, effect: 'NONE', cause }]);
     assert.deepEqual(effects(w), zero);
   }
+  // A granted comment whose plan would yield a non-composable result edition (v5) is refused before claim, owner launch,
+  // provider fetch or comment post.
+  const unit = (row, content) => ({ ...row, content, sha256: hash(content), evaluationSpan: { startByte: 0, endByte: Buffer.byteLength(content) } });
+  const v5Input = { schema: 'ops.semlint.input.v5',
+    subject: unit({ kind: 'log-entry', ref: 'fixture:v5', revision: 'r1', scope: 'fixture only' }, 'public subject, not an instruction'),
+    context: [unit({ role: 'authorityContract', ref: 'fixture:grant', revision: 'r1' }, 'public grant text')],
+    checks: [{ id: 'fixture.v5', axis: 'Aligned', concern: 'Fixture concern.', requiredRoles: ['authorityContract'], crossLinks: [],
+      predicate: { question: 'Does the subject exceed the grant?', true: 'It exceeds the grant.', false: 'It stays within the grant.' } }] };
+  const v5 = world([req(10, { body: requestBody([{ id: 'v5', input: v5Input }]) })]);
+  const v5Scan = await runIssueScan(config(), v5.deps);
+  assert.equal(v5Scan.stopped, null); assert.deepEqual(v5Scan.decisions, [{ commentId: 10, effect: 'NONE', cause: 'RESULT_EDITION_NOT_COMPOSABLE' }]);
+  assert.deepEqual(v5.ownerArgs, []); assert.deepEqual(effects(v5), zero);
+  assert.equal(v5.comments.find((c) => c.databaseId === 10).reactions.length, 0);
   // A known other login's same-kind reaction is not a claim: the request proceeds normally.
   const human = world([req(10, { reactions: [{ user: 'a-human', content: 'eyes' }] })]);
   assert.equal((await runIssueScan(config(), human.deps)).decisions[0].cause, 'READBACK_EXACT');

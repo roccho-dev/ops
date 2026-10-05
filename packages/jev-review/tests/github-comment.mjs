@@ -209,7 +209,8 @@ const editionRequest = (id, input) => admitIssueComment({ ...event, comment: { .
   body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: [{ id: 'one', input }] }) } }, config);
 let editionFetch = 0;
 const v5Admission = await editionRequest(21, v5Input);
-assert.deepEqual([v5Admission.status, v5Admission.cause], ['NOT_ADMITTED', 'RESULT_EDITION_NOT_COMPOSABLE']); assert.equal(editionFetch, 0);
+// Pure-function admission refusal; the executor-level zero-effect proof is in tests/issue-executor.mjs.
+assert.deepEqual([v5Admission.status, v5Admission.cause], ['NOT_ADMITTED', 'RESULT_EDITION_NOT_COMPOSABLE']);
 const v9Request = await editionRequest(22, v9Input);
 assert.equal(v9Request.status, 'ADMITTED'); assert.equal(v9Request.prepared.expected[0].resultSchema, 'ops.semlint.result.v9');
 const v9Output = await executeOwnerPlan(v9Request.prepared, 'synthetic-only-not-a-key', async (_, init) => { editionFetch++;
