@@ -97,6 +97,8 @@ shape plus one per-case `elapsedMs`, read from `runPlan`'s injected clock immedi
 the whole semlint call (finite, nonnegative instants required). `provider.elapsedMs` keeps its narrower
 native-fetch meaning. The result receiver accepts exactly closed v2 or closed v3 and refuses unknown
 versions or extra/missing keys; the producer emits v3 only. PR473's former `real-output.v1` handler is removed.
+An invalid clock reading fails the whole plan after the case returns (`ENTRY_CLOCK_INVALID`, reported as
+`ENTRY_FAILED`); any native requests already sent then have no receipt and remain UNKNOWN, never zero.
 Catalog-v1 per-case semantic results and Issue request/result envelopes retain their identities.
 
 `runPlan` counts actual invocations of the supplied owner callback. The canonical per-case

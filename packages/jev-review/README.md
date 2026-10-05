@@ -313,8 +313,32 @@ The prospectively agreed combined source includes canonical inputs, explicit v6/
 - `foldDomainParents(assembly, result, τ)`, τ ∈ {.50, .65, .80}:
   VALID ⇔ closed v5 result/record/accounting/usage shapes ∧ binding equality (order included) ∧ every child OBSERVED with cause null and finite noul ∈ [0,1] ∧ callbackAttempts = validatedCalls = 1 ∧ providerHttpCalls = cost = null ∧ finite Core elapsedMs ≥ 0 ∧ integer input/output usage (total optional, = input + output when present).
   D_parent(τ) = VALID ∧ ∃ child: noul ≥ τ. A decision OR, not a probability OR. INVALID gives `parents: null`, never FALSE/TN.
-- `domainPlan(cases)` builds the exact `real-input.v1` plan for the existing owner entry; `foldDomainOutput(cases, output, τ)` grades only a closed `real-result.v3` receipt bound to that plan digest, with one validated native call per case. A v2 receipt is `CASE_OUTER_REQUIRED`.
+- `domainPlan(cases)` builds the exact `real-input.v1` plan for the existing owner entry. `foldDomainOutput(cases, output, τ)` grades only a closed `real-result.v3` receipt bound to that plan digest:
+  - Envelope: each outer counter (callback, validated, provider, completed, validated-response) equals the case count, `unknownHttpCalls = 0`, `cost = null`, and no key is missing or extra. Otherwise the whole receipt is INVALID with `cases: null`, so no case or parent is trusted. A v2 receipt is `CASE_OUTER_REQUIRED`.
+  - Row: one validated native call per case, provider usage exactly equal to the validated Core usage, a lowercase 64-hex response digest, and finite nonnegative case-outer and provider clocks. Otherwise only that row is INVALID with `parents: null`.
+- Matching is exact on the stored criteria, including JSON property order inside each predicate. Core treats property order as free, but this caller refuses a reordered predicate (fail-closed; send the criteria as listed in `DOMAIN_CRITERIA`).
 
 Clocks, by owner: case-outer = `cases[].elapsedMs` (v3), measured by the owner entry's injected clock immediately around the whole semlint call; Core-inner = `result.accounting.elapsedMs`; native fetch = `provider.elapsedMs`. They are never substituted for each other. The owner preflight also runs Core once with synthetic answers outside case-outer; that is setup cost, not a hidden efficiency. Comparisons are only between arms measured by the same v3 producer, not against values recorded by the removed v1 handler.
 
 Ceiling: the source supplies the method only. Synthetic controls and byte parity with the unpaid recipe prove mechanics. Model membership accuracy, detection, cost and time remain unmeasured until the separately authorized real trial. A failed method is removed before any canonical merge, not accumulated.
+
+Invalid-clock receipt limit: `runPlan` refuses a non-finite or decreasing case-outer reading with `ENTRY_CLOCK_INVALID` after that case's semlint call returns. If native requests were already sent in that plan, the owner process exits with the generic `ENTRY_FAILED`, emits no receipt, and those calls stay UNKNOWN (never zero or free). The production clock is `performance.now()`, so this needs an injected faulty clock to occur; it is disclosed, not handled.
+
+### CI provision and fresh consumer (nix-check)
+
+The existing `nix-check` workflow provides this exact runtime as bytes, not just a build log:
+
+- `flake-check`, after the full flake check at the checked SHA:
+  - Builds `#packages.x86_64-linux.jev-review` and requires the wrapper's single fixed `exec <node> <source>/bin/jev-review.mjs` line.
+  - Requires the provided source to equal `packages/jev-review` at that commit.
+  - Exports the complete closure as one `nix-store --export`.
+  - Writes `provenance.json` (`ops.jev-review.runtime-provenance/1`) containing: commit/tree, run identity, root/entry/Node/source paths, every provided file's SHA256, export bytes/SHA256, and each closure member's narHash/narSize.
+  - Uploads both files as `jev-review-runtime-<sha>` with `retention-days: 90`. The repository's own retention cap may shorten that.
+- `jev-review-fresh-consumer` receives only that upload. It has no checkout, flake evaluation or build.
+  - It checks the export SHA256 against the producer job output (a channel independent of the artifact), then the provenance against the export bytes.
+  - It requires the root and source to be absent before a root `nix-store --import`, then compares closure narHash/narSize and runs `nix-store --verify-path`.
+  - It compares the wrapper line and every provided file hash.
+  - It runs the provided `tests/run.mjs` and `tests/github-comment.mjs` from the imported bytes with `env -i`, no key, and no network namespace.
+  - Any mismatch, missing module or modified archive fails the job.
+
+This proves mechanical provision of the same bytes to a clean consumer. It is not a live call and not semantic quality.

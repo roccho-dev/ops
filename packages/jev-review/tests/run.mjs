@@ -732,7 +732,8 @@ assert.equal(foldDomainParents(da,good,.7).status,'INVALID');assert.equal(foldDo
 const domainCases=[{id:'split',assembly:da},{id:'all',assembly:allA}];
 const domainFetch=(mode)=>async(url,init)=>{domainFixtureHttp++;const q=JSON.parse(init.body).questions;
   if(mode==='http')return new Response('{}',{status:503});
-  return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.85}])),usage:{input_tokens:11,output_tokens:4}}),{status:200});};
+  const usage=mode==='total'?{input_tokens:11,output_tokens:4,total_tokens:15}:{input_tokens:11,output_tokens:4};
+  return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.85}])),usage}),{status:200});};
 const domainOut=await executeOwnerPlan(await preparePlan(domainPlan(domainCases)),'FIXTURE_CANARY',domainFetch('ok'));
 assert.equal(domainFixtureHttp,2);assert.equal(domainOut.accounting.providerHttpCalls,2);// one native batch per case, no extra POST
 const graded=foldDomainOutput(domainCases,domainOut,.8);assert.equal(graded.status,'VALID');
@@ -744,8 +745,28 @@ for(const mutate of [o=>delete o.cases[0].elapsedMs,o=>o.cases[0].elapsedMs=-1,o
   o=>o.cases[0].provider=null,o=>o.cases[0].provider.statusClass='HTTP_2XX',o=>o.cases[0].provider.extra=1,o=>o.cases[0].result.records.pop()]){
   const o=structuredClone(domainOut);mutate(o);assert.equal(foldDomainOutput(domainCases,o,.8).status,'INVALID');domainControls++;}
 const failedNative=await executeOwnerPlan(await preparePlan(domainPlan(domainCases)),'FIXTURE_CANARY',domainFetch('http'));
-const gradedFail=foldDomainOutput(domainCases,failedNative,.8);assert.equal(gradedFail.status,'INVALID');assert.ok(gradedFail.cases.every(c=>c.parents===null));
+const gradedFail=foldDomainOutput(domainCases,failedNative,.8);assert.equal(gradedFail.status,'INVALID');assert.equal(gradedFail.cause,'OUTER_ACCOUNTING');assert.equal(gradedFail.cases,null);
 assert.equal(domainFixtureHttp,4);domainControls++;
+// Native envelope: closed outer accounting (each counter = case count, unknown 0, cost null) refuses the whole
+// receipt; a closed provider receipt (usage equal to validated Core usage, lowercase digest, nonnegative clock) refuses its row.
+const totalOut=await executeOwnerPlan(await preparePlan(domainPlan(domainCases)),'FIXTURE_CANARY',domainFetch('total'));
+assert.equal(foldDomainOutput(domainCases,totalOut,.8).status,'VALID');assert.equal(domainFixtureHttp,6);domainControls++;
+for(const [name,mutate] of [['missing_outer_accounting',o=>delete o.accounting],['wrong_unknown_calls',o=>o.accounting.unknownHttpCalls=1],
+  ['extra_accounting_key',o=>o.accounting.extra=0],['missing_counter',o=>delete o.accounting.validatedResponses],['cost_claim',o=>o.accounting.cost=0],
+  ...['callbackAttempts','validatedCalls','providerHttpCalls','completedHttpCalls','validatedResponses'].flatMap(k=>[
+    ['high_'+k,o=>o.accounting[k]++],['low_'+k,o=>o.accounting[k]--],['string_'+k,o=>o.accounting[k]=String(o.accounting[k])]])]){
+  const o=structuredClone(domainOut);mutate(o);const g=foldDomainOutput(domainCases,o,.8);
+  assert.equal(g.status,'INVALID',name);assert.equal(g.cases,null,name);
+  assert.equal(g.cause,name==='missing_outer_accounting'?'OUTPUT_IDENTITY':'OUTER_ACCOUNTING',name);domainControls++;}
+for(const [name,mutate] of [['missing_provider_usage',p=>delete p.usage],['null_provider_usage',p=>p.usage=null],
+  ['mismatched_provider_usage',p=>p.usage.input_tokens=12],['provider_only_total',p=>p.usage.total_tokens=15],['provider_extra_usage',p=>p.usage.private=1],
+  ['invalid_response_digest',p=>p.responseDigest='x'],['null_response_digest',p=>p.responseDigest=null],['upper_response_digest',p=>p.responseDigest=p.responseDigest.toUpperCase()],
+  ['short_response_digest',p=>p.responseDigest=p.responseDigest.slice(1)],['negative_api_clock',p=>p.elapsedMs=-1],['string_api_clock',p=>p.elapsedMs='1']]){
+  const o=structuredClone(domainOut);mutate(o.cases[0].provider);const g=foldDomainOutput(domainCases,o,.8);
+  assert.equal(g.status,'INVALID',name);assert.equal(g.cases[0].cause,'NATIVE_RECEIPT',name);assert.equal(g.cases[0].parents,null,name);
+  assert.equal(g.cases[1].status,'VALID',name);domainControls++;}
+const nonFiniteApi=structuredClone(domainOut);nonFiniteApi.cases[0].provider.elapsedMs=NaN;
+assert.equal(foldDomainOutput(domainCases,nonFiniteApi,.8).cause,'INVALID_OUTPUT_SHAPE');domainControls++;
 
 console.log(JSON.stringify({
   status: 'PASS',

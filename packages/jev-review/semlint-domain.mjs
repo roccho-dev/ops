@@ -285,22 +285,33 @@ export function domainPlan(cases) {
 
 const PROVIDER_KEYS = ['attemptedHttpCalls', 'completedHttpCalls', 'validatedResponses', 'statusClass',
   'validatedModel', 'usage', 'elapsedMs', 'responseDigest'];
+const OUTER_COUNTERS = ['callbackAttempts', 'validatedCalls', 'providerHttpCalls', 'completedHttpCalls', 'validatedResponses'];
+const sameUsage = (a, b) => validUsage(a) && validUsage(b) && Object.keys(a).length === Object.keys(b).length
+  && Object.keys(a).every((k) => a[k] === b[k]);
 // Quality grading requires the v3 receipt: registered case-outer clock plus one validated native call per case.
+// An invalid envelope (identity or outer accounting) yields no trusted case at all; an invalid row keeps parents:null.
 export function foldDomainOutput(cases, value, tau) {
   const plan = domainPlan(cases);
+  const refuse = (cause) => ({ status: 'INVALID', cause, threshold: tau, cases: null });
   let out;
-  try { out = snapshotJson(value); } catch { return { status: 'INVALID', cause: 'INVALID_OUTPUT_SHAPE', cases: null }; }
+  try { out = snapshotJson(value); } catch { return refuse('INVALID_OUTPUT_SHAPE'); }
   if (!exact(out, ['schema', 'model', 'planDigest', 'cases', 'accounting', 'claimCeiling'])
     || out.schema !== 'ops.semlint.real-result.v3' || out.model !== JEV_MODEL || out.planDigest !== digest(plan)
     || out.claimCeiling !== CEILING || !Array.isArray(out.cases) || out.cases.length !== cases.length) {
-    return { status: 'INVALID', cause: out?.schema === 'ops.semlint.real-result.v2' ? 'CASE_OUTER_REQUIRED' : 'OUTPUT_IDENTITY', cases: null };
+    return refuse(out?.schema === 'ops.semlint.real-result.v2' ? 'CASE_OUTER_REQUIRED' : 'OUTPUT_IDENTITY');
   }
+  // Every domain case is sendable, so each outer counter is exactly the case count; no unknown request, no cost claim.
+  const a = out.accounting;
+  if (!exact(a, [...OUTER_COUNTERS, 'unknownHttpCalls', 'cost']) || a.unknownHttpCalls !== 0 || a.cost !== null
+    || OUTER_COUNTERS.some((k) => a[k] !== cases.length)) return refuse('OUTER_ACCOUNTING');
   const graded = out.cases.map((row, i) => {
     const p = row?.provider, bad = (cause) => ({ id: cases[i].id, status: 'INVALID', cause, parents: null });
     if (!exact(row, ['id', 'result', 'provider', 'elapsedMs']) || row.id !== cases[i].id
       || !Number.isFinite(row.elapsedMs) || row.elapsedMs < 0) return bad('CASE_OUTER_OR_IDENTITY');
     if (!exact(p, PROVIDER_KEYS) || p.attemptedHttpCalls !== 1 || p.completedHttpCalls !== 1 || p.validatedResponses !== 1
-      || p.statusClass !== 'VALIDATED_RESPONSE' || p.validatedModel !== JEV_MODEL || !Number.isFinite(p.elapsedMs)) return bad('NATIVE_RECEIPT');
+      || p.statusClass !== 'VALIDATED_RESPONSE' || p.validatedModel !== JEV_MODEL || !Number.isFinite(p.elapsedMs) || p.elapsedMs < 0
+      || typeof p.responseDigest !== 'string' || !/^[a-f0-9]{64}$/.test(p.responseDigest)
+      || !sameUsage(p.usage, row.result?.accounting?.usage)) return bad('NATIVE_RECEIPT');
     const folded = foldDomainParents(cases[i].assembly, row.result, tau);
     if (folded.status !== 'VALID') return { id: row.id, ...folded };
     return { id: row.id, ...folded, caseOuterMs: row.elapsedMs, coreInnerMs: row.result.accounting.elapsedMs,
