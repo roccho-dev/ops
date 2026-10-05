@@ -261,12 +261,12 @@ await check('admission-refusals', async () => {
   assert.equal(v5Scan.stopped, null); assert.deepEqual(v5Scan.decisions, [{ commentId: 10, effect: 'NONE', cause: 'RESULT_EDITION_NOT_COMPOSABLE' }]);
   assert.deepEqual(v5.ownerArgs, []); assert.deepEqual(effects(v5), zero);
   assert.equal(v5.comments.find((c) => c.databaseId === 10).reactions.length, 0);
-  // A granted v10 comment carrying an English auxiliary, and a retired v9 comment, are refused the same way:
+  // A granted v11 comment carrying an English auxiliary, and retired v10/v9 comments, are refused the same way:
   // no claim, owner launch, provider fetch or comment post.
   const ja = '受信記録が必要である。';
-  const v10Aux = { ...v5Input, schema: 'ops.semlint.input.v10', context: v5Input.context.map((row) => ({ ...row, englishAuxiliary: null })),
+  const v11Aux = { ...v5Input, schema: 'ops.semlint.input.v11', context: v5Input.context.map((row) => ({ ...row, englishAuxiliary: null })),
     subject: { ...unit(v5Input.subject, ja), englishAuxiliary: { text: 'A receipt record is required.', sourceSha256: hash(ja) } } };
-  for (const [input, cause] of [[v10Aux, 'AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE'], [{ ...v10Aux, schema: 'ops.semlint.input.v9' }, 'INVALID_REQUEST_OR_ADMISSION']]) {
+  for (const [input, cause] of [[v11Aux, 'AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE'], [{ ...v11Aux, schema: 'ops.semlint.input.v10' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v11Aux, schema: 'ops.semlint.input.v9' }, 'INVALID_REQUEST_OR_ADMISSION']]) {
     const w = world([req(10, { body: requestBody([{ id: 'one', input }]) })]);
     const scan = await runIssueScan(config(), w.deps);
     assert.equal(scan.stopped, null); assert.deepEqual(scan.decisions, [{ commentId: 10, effect: 'NONE', cause }]);

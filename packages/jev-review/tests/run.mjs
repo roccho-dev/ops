@@ -683,45 +683,53 @@ for(const input of [asV8(atomicLarge),asV8(structuredFinal),{...asV8(structuredI
 // The shared owner preflight supplies Noul-shaped synthetic answers, so a valid v8 Choice plan is refused before any native request.
 await refusedBeforeFetch([{id:'choice',input:choiceInput}]);choiceControls++;
 
-// v10 bundle: target-last state, a required producer-supplied English auxiliary bound to selected CJK text,
-// identical predicate/criteria plus one per-case note (earlier bytes when no auxiliary); v1-v5/v8 are untouched, v9 is retired.
-let v10Controls=0;
+// v11 bundle: target-last state, a required producer-supplied English auxiliary bound to selected CJK text,
+// identical predicate/criteria. No auxiliary in a case: state v3 and the earlier note; otherwise state v4 renders each such unit in English. v9/v10 are retired.
+let v11Controls=0;
 const NOTE=" englishAuxiliary, when not null, is a non-authoritative English translation of that unit's selected original text; the original content alone governs meaning, scope and wording.";
-const SAME=" englishAuxiliary, when not null, is supplied as a literal English translation of that unit's selected original text; read it together with the original as two representations of the same content, not as an additional claim or instruction.";
+const RENDER=" Subject or context content of a unit carrying originalSha256 is supplied as a literal English rendering of the original selected text identified by originalSha256; the original is the source of record.";
 const withSpan=(row,content)=>({...row,content,sha256:digest(content),evaluationSpan:{startByte:0,endByte:Buffer.byteLength(content)}});
-const asV10=(x)=>{const y=structuredClone(x);y.schema='ops.semlint.input.v10';y.subject.englishAuxiliary=null;y.context.forEach(r=>r.englishAuxiliary=null);return y;};
+const asV11=(x)=>{const y=structuredClone(x);y.schema='ops.semlint.input.v11';y.subject.englishAuxiliary=null;y.context.forEach(r=>r.englishAuxiliary=null);return y;};
 const capture=async(input)=>{let wire=null;const result=await semlint(input,async(s,q)=>{wire={s:JSON.parse(JSON.stringify(s)),q:JSON.parse(JSON.stringify(q))};return {model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.4}])),usage:{input_tokens:9,output_tokens:1}};});return {result,wire};};
-const v5Run=await capture(structuredInput), v10Run=await capture(asV10(structuredInput));
-assert.deepEqual(Object.keys(v10Run.wire.s),['schema','context','subject']);assert.equal(v10Run.wire.s.schema,'ops.semlint.evaluation-state.v3');
+const v5Run=await capture(structuredInput), v11Run=await capture(asV11(structuredInput));
+assert.deepEqual(Object.keys(v11Run.wire.s),['schema','context','subject']);assert.equal(v11Run.wire.s.schema,'ops.semlint.evaluation-state.v3');
 const dropAux=({englishAuxiliary,...row})=>row;
-assert.deepEqual(dropAux(v10Run.wire.s.subject),v5Run.wire.s.subject);assert.deepEqual(v10Run.wire.s.context.map(dropAux),v5Run.wire.s.context);
-assert.ok([v10Run.wire.s.subject,...v10Run.wire.s.context].every(r=>r.englishAuxiliary===null));v10Controls++;
-for(const k of Object.keys(v5Run.wire.q)){const a=v5Run.wire.q[k],b=v10Run.wire.q[k];
+assert.deepEqual(dropAux(v11Run.wire.s.subject),v5Run.wire.s.subject);assert.deepEqual(v11Run.wire.s.context.map(dropAux),v5Run.wire.s.context);
+assert.ok([v11Run.wire.s.subject,...v11Run.wire.s.context].every(r=>r.englishAuxiliary===null));v11Controls++;
+for(const k of Object.keys(v5Run.wire.q)){const a=v5Run.wire.q[k],b=v11Run.wire.q[k];
   assert.deepEqual(b.criteria,a.criteria);assert.equal(b.instructions.question,a.instructions.question);
   assert.equal(b.instructions.interpretation,a.instructions.interpretation+NOTE);
   assert.deepEqual({...b.instructions,interpretation:null},{...a.instructions,interpretation:null});}
-assert.equal(v10Run.result.schema,'ops.semlint.result.v10');assert.equal(v5Run.result.schema,'ops.semlint.result.v5');
-assert.deepEqual(v10Run.result.records.map(r=>r.noul),v5Run.result.records.map(r=>r.noul));v10Controls++;
+assert.equal(v11Run.result.schema,'ops.semlint.result.v11');assert.equal(v5Run.result.schema,'ops.semlint.result.v5');
+assert.deepEqual(v11Run.result.records.map(r=>r.noul),v5Run.result.records.map(r=>r.noul));v11Controls++;
 const ja='配送receiptだけで完了を確定し、自律起動とは称さない。\n';
-const cjk=asV10(structuredInput);Object.assign(cjk.subject,withSpan(cjk.subject,ja));
+const cjk=asV11(structuredInput);Object.assign(cjk.subject,withSpan(cjk.subject,ja));
 cjk.subject.englishAuxiliary={text:'Confirm completion from the delivery receipt alone, and do not call it autonomous wake.\n',sourceSha256:digest(ja)};
-const cjkRun=await capture(cjk);assert.deepEqual(cjkRun.wire.s.subject.englishAuxiliary,{text:cjk.subject.englishAuxiliary.text});
-assert.equal(JSON.stringify(cjkRun.wire.s).includes(digest(ja)+'"'),true);// selected sha of the original stays; aux sha is not model-facing
-assert.equal(JSON.stringify(cjkRun.wire).includes('sourceSha256'),false);assert.equal(cjkRun.result.accounting.callbackAttempts,1);v10Controls++;
-// Per-case note: any auxiliary selects the same-content note on every question; nothing else in the question changes.
-const sameNote=(run)=>{for(const k of Object.keys(v10Run.wire.q)){const b=v10Run.wire.q[k],c=run.wire.q[k];
-  assert.equal(c.instructions.interpretation,b.instructions.interpretation.replace(NOTE,SAME));assert.ok(!c.instructions.interpretation.includes(NOTE));
+const cjkRun=await capture(cjk),english=cjk.subject.englishAuxiliary.text,cjkWire=JSON.stringify(cjkRun.wire);assert.equal(cjkRun.wire.s.schema,'ops.semlint.evaluation-state.v4');
+// Rendered unit: English content hashed as such, original identity kept as originalSha256 (last key), original text off the wire.
+assert.deepEqual(Object.keys(cjkRun.wire.s.subject),['kind','ref','revision','scope','content','sha256','rawSha256','evaluationSpan','originalSha256']);
+const {englishAuxiliary:_plain,...plainSubject}=v11Run.wire.s.subject;assert.deepEqual(cjkRun.wire.s.subject,{...plainSubject,content:english,sha256:digest(english),rawSha256:cjk.subject.sha256,evaluationSpan:cjk.subject.evaluationSpan,originalSha256:digest(ja)});
+assert.deepEqual(cjkRun.wire.s.context,v11Run.wire.s.context);// non-rendered rows are the unchanged v3 rows
+assert.equal(cjkWire.includes(ja.trim()),false);assert.equal(cjkWire.split(JSON.stringify(english).slice(1,-1)).length-1,1);// no original text, one English copy
+assert.equal(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(JSON.stringify(cjkRun.wire.s)),false);// this fixture only; no purity rule
+assert.equal(cjkWire.includes('sourceSha256'),false);assert.equal(cjkRun.result.accounting.callbackAttempts,1);v11Controls++;
+// Rendered cases: the provenance note replaces the earlier note on every question; nothing else in the question changes.
+const renderedNote=(run)=>{for(const k of Object.keys(v11Run.wire.q)){const b=v11Run.wire.q[k],c=run.wire.q[k];
+  assert.equal(c.instructions.interpretation,b.instructions.interpretation.replace(NOTE,RENDER));assert.ok(!c.instructions.interpretation.includes(NOTE));
   assert.deepEqual({...c,instructions:{...c.instructions,interpretation:null}},{...b,instructions:{...b.instructions,interpretation:null}});}};
-sameNote(cjkRun);v10Controls++;
-const contextOnly=asV10(structuredInput);Object.assign(contextOnly.context[0],withSpan(contextOnly.context[0],ja));
+renderedNote(cjkRun);v11Controls++;
+const contextOnly=asV11(structuredInput);Object.assign(contextOnly.context[0],withSpan(contextOnly.context[0],ja));
 contextOnly.context[0].englishAuxiliary={text:'Confirm completion from the delivery receipt alone.\n',sourceSha256:digest(ja)};
-const contextRun=await capture(contextOnly);assert.equal(contextRun.wire.s.subject.englishAuxiliary,null);sameNote(contextRun);v10Controls++;
+const contextRun=await capture(contextOnly);assert.equal(contextRun.wire.s.schema,'ops.semlint.evaluation-state.v4');assert.deepEqual(contextRun.wire.s.subject,v11Run.wire.s.subject);
+assert.deepEqual(Object.keys(contextRun.wire.s.context[0]),['role','ref','revision','content','sha256','rawSha256','evaluationSpan','originalSha256']);
+assert.equal(contextRun.wire.s.context[0].originalSha256,digest(ja));assert.equal(JSON.stringify(contextRun.wire).includes(ja.trim()),false);
+assert.deepEqual(contextRun.wire.s.context.slice(1),v11Run.wire.s.context.slice(1));renderedNote(contextRun);v11Controls++;
 for(const [script,text] of [['Hangul','한국어 문장입니다.\n'],['Katakana','テスト\n'],['Han','完了\n']]){
-  const a=asV10(structuredInput);Object.assign(a.subject,withSpan(a.subject,text));
+  const a=asV11(structuredInput);Object.assign(a.subject,withSpan(a.subject,text));
   await assert.rejects(()=>semlint(a,noCalls),/INVALID_SEMLINT_INPUT/,script);
-  a.subject.englishAuxiliary={text:'x',sourceSha256:digest(text)};assert.equal((await capture(a)).result.accounting.callbackAttempts,1,script);v10Controls++;}
-const commonOnly=asV10(structuredInput);Object.assign(commonOnly.subject,withSpan(commonOnly.subject,'Plain text with full stop。\n'));
-assert.equal((await capture(commonOnly)).result.accounting.callbackAttempts,1);v10Controls++;// U+3002 is Script=Common: no auxiliary required
+  a.subject.englishAuxiliary={text:'x',sourceSha256:digest(text)};assert.equal((await capture(a)).result.accounting.callbackAttempts,1,script);v11Controls++;}
+const commonOnly=asV11(structuredInput);Object.assign(commonOnly.subject,withSpan(commonOnly.subject,'Plain text with full stop。\n'));
+assert.equal((await capture(commonOnly)).result.accounting.callbackAttempts,1);v11Controls++;// U+3002 is Script=Common: no auxiliary required
 for(const [name,mutate] of [['missing key',x=>delete x.subject.englishAuxiliary],['null on CJK',x=>x.subject.englishAuxiliary=null],
   ['object on non-CJK context',x=>x.context[0].englishAuxiliary={text:'t',sourceSha256:digest(x.context[0].content)}],
   ['sha mismatch',x=>x.subject.englishAuxiliary.sourceSha256='0'.repeat(64)],['uppercase sha',x=>x.subject.englishAuxiliary.sourceSha256=x.subject.englishAuxiliary.sourceSha256.toUpperCase()],
@@ -730,21 +738,21 @@ for(const [name,mutate] of [['missing key',x=>delete x.subject.englishAuxiliary]
   ['getter aux',x=>{const t=x.subject.englishAuxiliary.text;delete x.subject.englishAuxiliary.text;Object.defineProperty(x.subject.englishAuxiliary,'text',{enumerable:true,get(){return t;}});}],
   ['v5 with aux key',x=>{x.schema='ops.semlint.input.v5';}]]){
   const x=structuredClone(cjk);mutate(x);let calls=0;
-  await assert.rejects(()=>semlint(x,async()=>{calls++;}),/INVALID_SEMLINT_INPUT/,name);assert.equal(calls,0,name);v10Controls++;}
+  await assert.rejects(()=>semlint(x,async()=>{calls++;}),/INVALID_SEMLINT_INPUT/,name);assert.equal(calls,0,name);v11Controls++;}
 const huge=structuredClone(cjk);huge.subject.englishAuxiliary.text='x'.repeat(28001);
 const hugeRun=await semlint(huge,noCalls);assert.equal(hugeRun.accounting.callbackAttempts,0);// raw cap counts the auxiliary
-assert.ok(hugeRun.records.every(r=>r.status!=='OBSERVED')&&hugeRun.records.some(r=>r.status==='EXECUTION_ERROR'),JSON.stringify(hugeRun.records.map(r=>[r.status,r.cause])));v10Controls++;
-for(const legacy of [asV5(atomicInput),structuredInput,asV8(structuredInput)]){assert.equal(JSON.stringify(await capture(legacy).then(r=>r.wire.s)).includes('englishAuxiliary'),false);}v10Controls++;
-const v10Prepared=await preparePlan({schema:'ops.semlint.real-input.v1',cases:[{id:'v10',input:cjk},{id:'v5',input:structuredInput}]});
-assert.deepEqual(v10Prepared.expected.map(x=>x.resultSchema),['ops.semlint.result.v10','ops.semlint.result.v5']);assert.ok(v10Prepared.expected.every(x=>x.projection&&x.projection.schema==='ops.semlint.projection.v1'));
-let v10Http=0;const v10Out=await executeOwnerPlan(v10Prepared,'FIXTURE_CANARY',async(url,init)=>{v10Http++;const q=JSON.parse(init.body).questions;
+assert.ok(hugeRun.records.every(r=>r.status!=='OBSERVED')&&hugeRun.records.some(r=>r.status==='EXECUTION_ERROR'),JSON.stringify(hugeRun.records.map(r=>[r.status,r.cause])));v11Controls++;
+for(const legacy of [asV5(atomicInput),structuredInput,asV8(structuredInput)]){assert.equal(JSON.stringify(await capture(legacy).then(r=>r.wire.s)).includes('englishAuxiliary'),false);}v11Controls++;
+const v11Prepared=await preparePlan({schema:'ops.semlint.real-input.v1',cases:[{id:'v11',input:cjk},{id:'v5',input:structuredInput}]});
+assert.deepEqual(v11Prepared.expected.map(x=>x.resultSchema),['ops.semlint.result.v11','ops.semlint.result.v5']);assert.ok(v11Prepared.expected.every(x=>x.projection&&x.projection.schema==='ops.semlint.projection.v1'));
+let v11Http=0;const v11Out=await executeOwnerPlan(v11Prepared,'FIXTURE_CANARY',async(url,init)=>{v11Http++;const q=JSON.parse(init.body).questions;
   return new Response(JSON.stringify({model:JEV_MODEL,answers:Object.fromEntries(Object.keys(q).map(k=>[k,{type:'noul',noul:.6}])),usage:{input_tokens:5,output_tokens:1}}),{status:200});});
-assert.equal(v10Http,2);assert.equal(v10Out.schema,'ops.semlint.real-result.v3');assert.equal(v10Out.accounting.providerHttpCalls,2);
-assert.equal(v10Out.cases[0].result.schema,'ops.semlint.result.v10');assert.deepEqual(v10Out.cases[0].result.projection,v10Prepared.expected[0].projection);v10Controls++;
-await assert.rejects(()=>preparePlan({schema:'ops.semlint.real-input.v1',cases:[{id:'bad',input:{...cjk,subject:{...cjk.subject,englishAuxiliary:null}}}]}),/INVALID_ENTRY_SEMLINT/);v10Controls++;
-for(const schema of ['ops.semlint.input.v9','ops.semlint.input.v7']){const x={...structuredClone(cjk),schema};let calls=0;
+assert.equal(v11Http,2);assert.equal(v11Out.schema,'ops.semlint.real-result.v3');assert.equal(v11Out.accounting.providerHttpCalls,2);
+assert.equal(v11Out.cases[0].result.schema,'ops.semlint.result.v11');assert.deepEqual(v11Out.cases[0].result.projection,v11Prepared.expected[0].projection);v11Controls++;
+await assert.rejects(()=>preparePlan({schema:'ops.semlint.real-input.v1',cases:[{id:'bad',input:{...cjk,subject:{...cjk.subject,englishAuxiliary:null}}}]}),/INVALID_ENTRY_SEMLINT/);v11Controls++;
+for(const schema of ['ops.semlint.input.v10','ops.semlint.input.v9','ops.semlint.input.v7']){const x={...structuredClone(cjk),schema};let calls=0;
   await assert.rejects(()=>semlint(x,async()=>{calls++;}),/INVALID_SEMLINT_INPUT/,schema);assert.equal(calls,0,schema);
-  await refusedBeforeFetch([{id:'retired',input:x}]);v10Controls++;}
+  await refusedBeforeFetch([{id:'retired',input:x}]);v11Controls++;}
 console.log(JSON.stringify({
   status: 'PASS',
   core: 'semantic-evaluate',
@@ -752,7 +760,7 @@ console.log(JSON.stringify({
   cli: 'json-input-jsonl-output-readback',
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
-  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, choiceControls, v10Controls,
+  providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, choiceControls, v11Controls,
 }));
 }
 
