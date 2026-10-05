@@ -51,7 +51,15 @@ static; spending across versions accumulates the newly granted IDs, which is the
 
 Scan order, stopping all later effects in the run at the first UNKNOWN:
 1. Read every Issue comment through GraphQL with complete pagination. Errors, missing pages, count
-   mismatch, malformed nodes or duplicate IDs stop the scan with no claim. Incomplete reactions of the
+   mismatch, non-object nodes or duplicate IDs stop the scan with no claim. Comment identity comes only
+   from `fullDatabaseId` (GraphQL `BigInt`, wire-encoded as a string); the Int32 `databaseId` cannot
+   represent real REST comment IDs and is not requested. The string must be `^[1-9][0-9]*$`, a safe
+   integer and round-trip exactly; it then equals the REST comment `id` used for claim, append and
+   readback. The opaque node `id` is compared, never decoded. A node whose ID fails this rule or whose key
+   set differs from the requested fields (for example an unrequested `databaseId`) is unidentifiable: it is
+   excluded and counted (`unidentifiedComments`) rather than stopping the scan, because every effect is
+   keyed by a verified exact ID; a granted ID that cannot be identified is `NOT_FOUND` with zero effect.
+   A re-read that is unidentifiable is UNKNOWN. Incomplete reactions of the
    source-constant claim kind (`eyes`) hold only that comment (`CLAIMS_INCOMPLETE`). Result comments
    count only when authored by `executorLogin`; copies by anyone else are ignored (counted in
    `ignoredResults`), so they can neither fake delivery nor block it.
@@ -102,8 +110,14 @@ Every claim remains: after `STARTED`, a refusal, a withheld result or any UNKNOW
 is never re-evaluated. Re-running needs a new request comment and a new grant version. The source
 calls no delete/update provider API. At-most-effect holds only while provider state stays intact:
 removal of the claim reaction or of history by anyone holding `executorLogin` credentials (or an
-administrator) is outside this proof and is not detectable by the source. A change of
-`executorLogin` is not automatic: other principals' claims stop as `UNRECOGNIZED`.
+administrator) is outside this proof and is not detectable by the source.
+
+At-most-effect is per fixed `executorLogin`. No principal migration is currently authorized. Because a
+known other login's reaction is ignored (only unattributable reactions are held), claims made by a former
+executor are invisible to a new one: under a changed `executorLogin`, an ID that the old principal
+already claimed or paid for would be evaluated again. The source cannot guarantee migration exclusion.
+Any future, separately authorized migration therefore requires the grant author to exclude from the new
+grant every comment ID previously granted to or claimed by the old principal.
 
 ## Caller data and trusted grant
 

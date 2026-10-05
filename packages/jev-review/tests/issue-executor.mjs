@@ -7,7 +7,7 @@ import { JEV_MODEL } from '../core.mjs';
 import { semlint } from '../semlint.mjs';
 import { ENTRY_LIMITS, preparePlan, executeOwnerPlan } from '../semlint-entry.mjs';
 import { REQUEST_PREFIX, RESULT_PREFIX, admitIssueSnapshot, validateExecutorConfig } from '../github-comment.mjs';
-import { GH, OPS_JEV, CLAIM, LIST_QUERY, NODE_QUERY, PRE_PROVIDER_CAUSES, runIssueScan, parseHttp, classifyOwnerOutput } from '../issue-executor.mjs';
+import { GH, OPS_JEV, CLAIM, LIST_QUERY, NODE_QUERY, PRE_PROVIDER_CAUSES, runIssueScan, parseHttp, classifyOwnerOutput, decodeFullDatabaseId } from '../issue-executor.mjs';
 
 // Secret-free fixtures only: an in-memory GitHub and an in-process owner running the real fixed entry functions
 // with a counting fetch. Nothing here is real-provider, reaction or posting evidence.
@@ -34,7 +34,10 @@ function world(comments, { page = 2 } = {}) {
     updatedAt: '2026-10-05T08:00:00Z', lastEditedAt: null, includesCreatedEdit: false, edits: 0, reactions: [], ...c })),
   nextId: 1000, calls: { gh: 0, list: 0, node: 0, claim: 0, post: 0, owner: 0, fetch: 0 }, files: new Set(), hooks: {}, ownerArgs: [], ownerStdin: [], clock: NOW };
   const params = (args) => { const p = {}; for (let i = 0; i < args.length; i++) if (args[i] === '-f' || args[i] === '-F') { const [k, ...v] = args[++i].split('='); p[k] = v.join('='); } return p; };
-  const node = (c) => ({ id: `IC_${c.databaseId}`, databaseId: c.databaseId, author: c.author === null ? null : { login: c.author }, body: c.body,
+  // Official wire: fullDatabaseId is BigInt, encoded as a string; legacy Int databaseId is never returned
+  // because it is never requested. `wireId`/`extraKeys` model malformed or mismatched wire nodes.
+  const node = (c) => ({ ...c.extraKeys, id: `IC_${c.databaseId}`, fullDatabaseId: 'wireId' in c ? c.wireId : String(c.databaseId),
+    author: c.author === null ? null : { login: c.author }, body: c.body,
     createdAt: c.createdAt, updatedAt: c.updatedAt, lastEditedAt: c.lastEditedAt, includesCreatedEdit: c.includesCreatedEdit,
     userContentEdits: c.edits === null ? null : { totalCount: c.edits },
     reactions: { totalCount: c.reactions.length + (c.hiddenReactions ?? 0),
@@ -45,6 +48,13 @@ function world(comments, { page = 2 } = {}) {
     if (args.join(' ') === 'api user') return { status: 0, stdout: JSON.stringify({ login: w.principal }) };
     if (args[1] === 'graphql') {
       const p = params(args);
+      // Independent of the exported constants: the production query text must select exactly these
+      // comment fields and must not request the Int32 databaseId.
+      for (const field of ['id', 'fullDatabaseId', 'author{login}', 'body', 'createdAt', 'updatedAt', 'lastEditedAt',
+        'includesCreatedEdit', 'userContentEdits{totalCount}', 'reactions(content:EYES,first:100){totalCount nodes{content user{login}}}']) {
+        assert.ok(new RegExp(`(^|[\\s{])${field.replace(/[{}()[\]:,]/g, '\\$&')}(?=[\\s}])`).test(p.query), field);
+      }
+      assert.equal(/\bdatabaseId\b/.test(p.query), false);
       if (p.query === NODE_QUERY) {
         w.calls.node++;
         if (w.hooks.reread) return w.hooks.reread(w);
@@ -423,6 +433,38 @@ await check('real-entry-classification', async () => {
   const surrogate = child('{"schema":"ops.semlint.real-input.v1","cases":[{"id":"a","input":"\\ud800"}]}');
   assert.equal(JSON.parse(surrogate.stdout).cause, 'ENTRY_FAILED');
   assert.deepEqual(classifyOwnerOutput(surrogate), { kind: 'UNKNOWN' });
+});
+
+// Real-scale IDs (above Int32, e.g. the observed REST id 5969636905) through grant, claim, re-read, append,
+// readback and replay; malformed or mismatched wire IDs hold only that comment with zero effect.
+await check('real-scale-ids', async () => {
+  const BIG = 5969636905;
+  const w = world([req(BIG)]); w.nextId = 5969700001;
+  const r = await runIssueScan(config([BIG]), w.deps);
+  assert.equal(r.stopped, null); assert.equal(r.decisions[0].commentId, BIG); assert.equal(r.decisions[0].cause, 'READBACK_EXACT');
+  assert.equal(r.decisions[0].resultId, 5969700001); assert.equal(w.calls.node, 1);
+  assert.deepEqual(w.comments[0].reactions, [{ user: EXECUTOR, content: 'eyes' }]);
+  const identity = JSON.parse(w.comments.at(-1).body.slice(RESULT_PREFIX.length)).identity;
+  assert.equal(identity.commentId, BIG); assert.equal(identity.nodeId, `IC_${BIG}`);
+  assert.equal((await runIssueScan(config([BIG]), w.deps)).decisions[0].cause, 'READBACK_ONLY');
+  assert.deepEqual(effects(w), { claim: 1, owner: 1, fetch: 1, post: 1 });
+  for (const [wire, extra] of [[BIG], ['0'], ['-1'], ['05969636905'], ['1e10'], [' 1'], ['9007199254740993'], [null],
+    [String(BIG), { databaseId: null }], [String(BIG), { databaseId: 1674670121 }]]) {
+    const bad = { ...req(BIG), wireId: wire, ...(extra ? { extraKeys: extra } : {}) };
+    // The malformed granted node is unidentifiable: it can only be NOT_FOUND, and an unrelated valid
+    // granted request in the same scan is still processed (no global stop).
+    const m = world([bad, req(10)]);
+    const rm = await runIssueScan(config([BIG, 10], { grant: { ...config([BIG, 10]).grant } }), m.deps);
+    assert.equal(rm.stopped, null); assert.equal(rm.unidentifiedComments, 1);
+    assert.deepEqual(rm.decisions.map((x) => [x.commentId, x.cause]), [[10, 'READBACK_EXACT'], [BIG, 'NOT_FOUND']]);
+    assert.deepEqual(m.comments[0].reactions, []); assert.equal(m.calls.owner, 1); assert.equal(m.calls.post, 1);
+  }
+  // Re-read returning an unidentifiable node stops before the paid call.
+  const rr = world([req(BIG)]);
+  rr.hooks.afterClaim = (_, c, reply) => { c.wireId = BIG; return reply; };
+  assert.equal((await runIssueScan(config([BIG]), rr.deps)).stopped.stage, 'reread'); assert.equal(rr.calls.owner, 0);
+  assert.equal(decodeFullDatabaseId(String(BIG)), BIG); assert.equal(decodeFullDatabaseId(BIG), null);
+  assert.equal(decodeFullDatabaseId('9007199254740991'), 9007199254740991); assert.equal(decodeFullDatabaseId('9007199254740992'), null);
 });
 
 // Static boundary: no delete/update provider API, no key access, fixed executables only.

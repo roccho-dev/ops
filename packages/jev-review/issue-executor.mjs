@@ -12,7 +12,9 @@ export const OPS_JEV = '/nix/var/nix/profiles/windows-dev/bin/ops-jev';
 export const CLAIM = Object.freeze({ rest: 'eyes', graphql: 'EYES' });
 const PRE_PROVIDER_CAUSES = ['INVALID_ENTRY_ARGS', 'ENTRY_INPUT_TOO_LARGE', 'INVALID_ENTRY_JSON', 'INVALID_ENTRY_PLAN',
   'INVALID_ENTRY_LIMITS', 'INVALID_ENTRY_CASE', 'INVALID_ENTRY_SEMLINT', 'ENTRY_PREFLIGHT_FAILED', 'ENTRY_CALL_BUDGET_EXCEEDED'];
-const FIELDS = 'id databaseId author{login} body createdAt updatedAt lastEditedAt includesCreatedEdit userContentEdits{totalCount} '
+// IssueComment.databaseId is Int (signed 32-bit) and cannot represent real REST comment IDs; fullDatabaseId is
+// BigInt, whose wire encoding is a string. Only fullDatabaseId is requested.
+const FIELDS = 'id fullDatabaseId author{login} body createdAt updatedAt lastEditedAt includesCreatedEdit userContentEdits{totalCount} '
   + `reactions(content:${CLAIM.graphql},first:100){totalCount nodes{content user{login}}}`;
 export const LIST_QUERY = 'query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name)'
   + `{issue(number:$number){comments(first:100,after:$after){totalCount pageInfo{hasNextPage endCursor} nodes{${FIELDS}}}}}}`;
@@ -38,14 +40,26 @@ async function ghJson(deps, args, input) {
   return out && out.status === 0 ? json(out.stdout) : undefined;
 }
 
-// Map one GraphQL IssueComment to the admission snapshot plus its claim list. An incomplete or malformed
+// BigInt wire string -> exact positive safe integer, or null. No rounding, opaque node-id decoding or fallback.
+export function decodeFullDatabaseId(value) {
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) && String(n) === value ? n : null;
+}
+const NODE_KEYS = ['author', 'body', 'createdAt', 'fullDatabaseId', 'id', 'includesCreatedEdit', 'lastEditedAt', 'reactions', 'updatedAt', 'userContentEdits'];
+
+// Map one GraphQL IssueComment to the admission snapshot plus its claim list. Returns undefined for a
+// non-object node, and null for a node that cannot be identified (key set differs from the requested
+// fields, or fullDatabaseId is not an exact safe positive integer string). An incomplete or malformed
 // reaction list yields claims=null: only that comment is held, the rest of the scan continues.
 function mapNode(node, repository, issue) {
   if (!node || typeof node !== 'object' || Array.isArray(node)) return undefined;
+  const databaseId = decodeFullDatabaseId(node.fullDatabaseId);
+  if (databaseId === null || JSON.stringify(Object.keys(node).sort()) !== JSON.stringify(NODE_KEYS)) return null;
   const r = node.reactions;
   const complete = r && Array.isArray(r.nodes) && r.totalCount === r.nodes.length && r.nodes.every((x) => x && x.content === CLAIM.graphql);
   return {
-    snapshot: { repository, issue, comment: { id: node.id, databaseId: node.databaseId, author: node.author?.login ?? null,
+    snapshot: { repository, issue, comment: { id: node.id, databaseId, author: node.author?.login ?? null,
       body: node.body, createdAt: node.createdAt, updatedAt: node.updatedAt, lastEditedAt: node.lastEditedAt,
       includesCreatedEdit: node.includesCreatedEdit, userContentEditsTotal: node.userContentEdits?.totalCount ?? null } },
     claims: complete ? r.nodes.map((x) => x.user?.login ?? null) : null,
@@ -78,14 +92,18 @@ async function readIssue(deps, config) {
     nodes.push(...c.nodes);
     if (!c.pageInfo.hasNextPage) {
       if (nodes.length !== total) return undefined;
-      const mapped = nodes.map((n) => mapNode(n, config.repository, config.issue));
-      if (mapped.some((x) => !x)) return undefined;
+      const all = nodes.map((n) => mapNode(n, config.repository, config.issue));
+      if (all.some((x) => x === undefined)) return undefined;
+      // An unidentifiable comment is excluded, not a global stop: every effect is keyed by a verified
+      // exact ID, so a granted ID that may hide behind it is simply NOT_FOUND with zero effect.
+      const mapped = all.filter((x) => x !== null);
       const ids = mapped.map((x) => x.snapshot.comment.databaseId);
       if (new Set(ids).size !== ids.length) return undefined;
       const prefixed = mapped.filter((x) => typeof x.snapshot.comment.body === 'string' && x.snapshot.comment.body.startsWith(RESULT_PREFIX));
       // Only the trusted result author can deliver; copies by anyone else are ignored and only counted.
       const ours = prefixed.filter((x) => x.snapshot.comment.author === config.executorLogin);
       return { byId: new Map(mapped.map((x) => [x.snapshot.comment.databaseId, x])), ignoredResults: prefixed.length - ours.length,
+        unidentifiedComments: all.length - mapped.length,
         results: ours.map((x) => ({ databaseId: x.snapshot.comment.databaseId, author: x.snapshot.comment.author, body: x.snapshot.comment.body })) };
     }
     if (typeof c.pageInfo.endCursor !== 'string' || c.pageInfo.endCursor === after) return undefined;
@@ -119,6 +137,7 @@ export async function runIssueScan(configValue, deps) {
   const scan = await readIssue(deps, config);
   if (!scan) return stop('snapshot', 'SNAPSHOT_UNKNOWN');
   receipt.ignoredResults = scan.ignoredResults;
+  receipt.unidentifiedComments = scan.unidentifiedComments;
   const repo = config.repository;
   // Expiry is observed from the injected clock immediately before each new effect, never reused from scan start.
   const expired = () => { const t = deps.now(); return !Number.isFinite(t) || t >= Date.parse(config.grant.expiresAt); };
