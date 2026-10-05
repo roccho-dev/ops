@@ -112,9 +112,6 @@ export function propose({ input }) {
       assert.deepEqual(output.proposals.map(({ evidence, ...original }) => original), offered[input]);
       assert.ok(output.proposals.every(({ evidence }) => evidence.theme === 'intent-fit' && Number.isFinite(evidence.noul)));
       assert.deepEqual(JSON.parse(fs.readFileSync(trace, 'utf8')).payload.state, { query: q, proposals: offered[input] });
-      const vimItems = output.proposals.map((p) => ({ word: p.representation, user_data: p }));
-      const voiceChoices = output.proposals.map((p) => ({ label: p.representation, id: p.id }));
-      assert.deepEqual(vimItems.map((item) => item.user_data.id), voiceChoices.map((choice) => choice.id));
     }
     const asProposer = (input) => ({ query: { ...query, input } });
     refuse(asProposer('boom'), 'PROPOSE_FAILED', 'ok', {}, ['--propose', proposer]);
