@@ -10,8 +10,8 @@ const text = (x) => typeof x === 'string' && x.trim().length > 0;
 const reject = (cause) => ({ status: 'NOT_ADMITTED', cause, authority: false });
 const requests = new WeakSet();
 const nonnegative = (x) => Number.isFinite(x) && x >= 0;
-// Semlint result editions the comment composer binds exactly (v1 and the v9 bundle); all others are refused at admission.
-const COMPOSABLE_RESULTS = Object.freeze(['ops.semlint.result.v1', 'ops.semlint.result.v9']);
+// Semlint result editions the comment composer binds exactly (v1 and the v10 bundle); all others are refused at admission.
+const COMPOSABLE_RESULTS = Object.freeze(['ops.semlint.result.v1', 'ops.semlint.result.v10']);
 // Exactly two closed receipt shapes: v2 (unchanged) and v3 (adds one per-case outer clock).
 const RESULT_ROW_KEYS = Object.freeze({
   'ops.semlint.real-result.v2': ['id', 'result', 'provider'],
@@ -79,6 +79,10 @@ async function admitBody(config, limits, author, body, identityOf) {
   } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
   // Only result editions this composer binds exactly may be admitted; anything else is refused before any paid call.
   if (prepared.expected.some((x) => !COMPOSABLE_RESULTS.includes(x.resultSchema))) return reject('RESULT_EDITION_NOT_COMPOSABLE');
+  // A comment carries no audited translation: any v10 English auxiliary needs the frozen owner route.
+  // Checked on the Core-admitted snapshot, before identity, claim, owner, provider or comment.
+  if (prepared.plan.cases.some(({ input }) => input.schema === 'ops.semlint.input.v10'
+    && [input.subject, ...input.context].some((row) => row.englishAuxiliary !== null))) return reject('AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE');
   const identity = Object.freeze(identityOf(prepared.planDigest));
   const request = Object.freeze({ status: 'ADMITTED', identity, requestDigest: digest(identity), prepared, authority: false });
   // Known repeated record/identity strings plus a conservative scalar/accounting reserve per case.
