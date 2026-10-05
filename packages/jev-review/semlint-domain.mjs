@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import { JEV_MODEL } from './core.mjs';
 import { semlint } from './semlint.mjs';
-import { digest, snapshotJson } from './semlint-entry.mjs';
+import { ENTRY_LIMITS, digest, entryLimits, snapshotJson } from './semlint-entry.mjs';
 
 const hash = (x) => createHash('sha256').update(x, 'utf8').digest('hex');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -277,10 +277,15 @@ export function foldDomainParents(assembly, value, tau) {
     childScores: g.childRules.map((id) => score.get(id)), decision: g.childRules.some((id) => score.get(id) >= tau) })) };
 }
 
-// The exact public plan for the existing owner entry.
-export function domainPlan(cases) {
+// The exact public plan for the existing owner entry. Optional trusted limits use the entry's own canonical form:
+// structural limits are omitted, reduced ones are embedded in fixed key order, so planDigest binds them.
+export function domainPlan(cases, limits) {
   if (!Array.isArray(cases) || !cases.length || cases.some((c) => !exact(c, ['id', 'assembly']) || !assemblies.has(c.assembly))) fail();
-  return { schema: 'ops.semlint.real-input.v1', cases: cases.map((c) => ({ id: c.id, input: c.assembly.input })) };
+  const plan = { schema: 'ops.semlint.real-input.v1', cases: cases.map((c) => ({ id: c.id, input: c.assembly.input })) };
+  if (limits === undefined) return plan;
+  let effective;
+  try { effective = entryLimits(limits); } catch { fail(); }
+  return Object.keys(ENTRY_LIMITS).every((k) => effective[k] === ENTRY_LIMITS[k]) ? plan : { ...plan, limits: { ...effective } };
 }
 
 const PROVIDER_KEYS = ['attemptedHttpCalls', 'completedHttpCalls', 'validatedResponses', 'statusClass',
@@ -290,8 +295,8 @@ const sameUsage = (a, b) => validUsage(a) && validUsage(b) && Object.keys(a).len
   && Object.keys(a).every((k) => a[k] === b[k]);
 // Quality grading requires the v3 receipt: registered case-outer clock plus one validated native call per case.
 // An invalid envelope (identity or outer accounting) yields no trusted case at all; an invalid row keeps parents:null.
-export function foldDomainOutput(cases, value, tau) {
-  const plan = domainPlan(cases);
+export function foldDomainOutput(cases, value, tau, limits) {
+  const plan = domainPlan(cases, limits);
   const refuse = (cause) => ({ status: 'INVALID', cause, threshold: tau, cases: null });
   let out;
   try { out = snapshotJson(value); } catch { return refuse('INVALID_OUTPUT_SHAPE'); }

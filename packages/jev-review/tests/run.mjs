@@ -10,7 +10,7 @@ const { evaluate } = await import('../review.mjs');
 const { createHash } = await import('node:crypto');
 const { semlint } = await import('../semlint.mjs');
 const { validateChoiceAnswer } = await import('../jev.mjs');
-const { preparePlan, executeOwnerPlan } = await import('../semlint-entry.mjs');
+const { ENTRY_LIMITS, preparePlan, executeOwnerPlan } = await import('../semlint-entry.mjs');
 const { DOMAIN_CRITERIA, constructDomainInput, foldDomainParents, domainPlan, foldDomainOutput } = await import('../semlint-domain.mjs');
 const { rankJudgments } = await import('../rank.mjs');
 const { evaluateInput, parseJsonl, rowsForEvaluation, serializeJsonl, validateCliInput, writeAndReadback } = await import('../bin/jev-review.mjs');
@@ -767,6 +767,18 @@ for(const [name,mutate] of [['missing_provider_usage',p=>delete p.usage],['null_
   assert.equal(g.cases[1].status,'VALID',name);domainControls++;}
 const nonFiniteApi=structuredClone(domainOut);nonFiniteApi.cases[0].provider.elapsedMs=NaN;
 assert.equal(foldDomainOutput(domainCases,nonFiniteApi,.8).cause,'INVALID_OUTPUT_SHAPE');domainControls++;
+// Trusted reduced limits travel in the plan exactly as the owner entry canonicalizes them; planDigest binds them.
+const capped={maxCases:2,maxCalls:2,maxInputBytes:ENTRY_LIMITS.maxInputBytes,timeoutMs:ENTRY_LIMITS.timeoutMs,deadlineMs:ENTRY_LIMITS.deadlineMs};
+assert.equal(JSON.stringify(domainPlan(domainCases,{...ENTRY_LIMITS})),JSON.stringify(domainPlan(domainCases)));
+const cappedPrepared=await preparePlan(domainPlan(domainCases,{deadlineMs:60000,timeoutMs:15000,maxCalls:2,maxInputBytes:ENTRY_LIMITS.maxInputBytes,maxCases:2}));
+assert.deepEqual(Object.keys(cappedPrepared.plan),['schema','cases','limits']);assert.equal(JSON.stringify(cappedPrepared.plan.limits),JSON.stringify(capped));
+const cappedOut=await executeOwnerPlan(cappedPrepared,'FIXTURE_CANARY',domainFetch('ok'));assert.equal(domainFixtureHttp,8);
+assert.equal(foldDomainOutput(domainCases,cappedOut,.8,capped).status,'VALID');
+assert.equal(foldDomainOutput(domainCases,cappedOut,.8).cause,'OUTPUT_IDENTITY');
+assert.equal(foldDomainOutput(domainCases,cappedOut,.8,{...capped,timeoutMs:14000}).cause,'OUTPUT_IDENTITY');
+assert.equal(foldDomainOutput(domainCases,domainOut,.8,capped).cause,'OUTPUT_IDENTITY');domainControls++;
+for(const bad of [{...capped,maxCases:25},{...capped,extra:1},{maxCases:2},{...capped,timeoutMs:1.5},{...capped,maxCalls:0}]){
+  assert.throws(()=>domainPlan(domainCases,bad),/INVALID_DOMAIN_INPUT/);domainControls++;}
 
 console.log(JSON.stringify({
   status: 'PASS',
