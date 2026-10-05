@@ -21,10 +21,103 @@ No quality-series merge or PASS is required here.
   produce a closed refusal. Machine-only imports, fixtures and gold are isolated inside
   the no-argument function and are not loaded/executed by the real mode.
 
-Actual event executor, serialized admission, target owner deployment, supply, permissions and
-result append transport are **NOT_CONFIGURED / UNVERIFIED by this source slice**. Fixtures do
-not prove live at-most-effect, parallel exclusion, paid-call accounting or Issue completion.
+- `issue-executor.mjs`: one finite scan (`node issue-executor.mjs --config <absolute path>`) over a
+  trusted exact-ID grant; see "Issue executor" below. No daemon, loop, timer, queue or ledger.
+- `tests/issue-executor.mjs`: secret-free fixtures through the same adapter code with injected
+  process runner and clock (`jev-issue-executor` check).
+
+Target owner deployment, supply, adoption of the fixed executables, permissions and live provider
+behavior are **NOT_CONFIGURED / UNVERIFIED by this source**. Fixtures do not prove live
+at-most-effect, real 201/200 semantics, paid-call accounting or Issue completion.
 There is no new workflow, package, client, secret store, bridge, queue or ledger.
+
+## Issue executor
+
+Trusted config (exact keys, non-secret, P-owned): `repository, issue, requesters, executionSource,
+limits, executorLogin, owner{envsSha, opsSha}, grant{version, commentIds, totalCalls, totalPosts,
+totalClaims, expiresAt, postIncomplete}`. `opsSha` must equal `executionSource`. No executable path,
+argv, program or cwd is accepted; the adapter's only executables are the source constants
+`/nix/var/nix/profiles/windows-dev/bin/gh` and `/nix/var/nix/profiles/windows-dev/bin/ops-jev`
+(candidates declared by the owner profile source, windows `0d77745` `oci/dev/nix.nix`; their target
+adoption is not implied). The owner argv is fixed: `--semlint-real --envs-sha <envsSha> --ops-sha <opsSha>`,
+and stdin is the admitted `request.prepared.plan` (cases plus effective caller caps). The executor
+never reads, decrypts or forwards a key; it inherits its cwd (the owner gh wrapper selects the owner
+only inside a bound clone) and verifies `gh api user` equals `executorLogin` before any read.
+
+Finite grant, checked before any effect: exact nonempty duplicate-free `commentIds` (S), expiry,
+`|S| × limits.maxCalls ≤ totalCalls`, `|S| ≤ totalPosts`, `|S| ≤ totalClaims`. Observed claim or
+result counts are never a budget semaphore. Within one grant version the worst case is therefore
+static; spending across versions accumulates the newly granted IDs, which is the grant author's decision.
+
+Scan order, stopping all later effects in the run at the first UNKNOWN:
+1. Read every Issue comment through GraphQL with complete pagination. Errors, missing pages, count
+   mismatch, non-object nodes or duplicate IDs stop the scan with no claim. Comment identity comes only
+   from `fullDatabaseId` (GraphQL `BigInt`, wire-encoded as a string); the Int32 `databaseId` cannot
+   represent real REST comment IDs and is not requested. The string must be `^[1-9][0-9]*$`, a safe
+   integer and round-trip exactly; it then equals the REST comment `id` used for claim, append and
+   readback. The opaque node `id` is compared, never decoded. A node whose ID fails this rule or whose key
+   set differs from the requested fields (for example an unrequested `databaseId`) is unidentifiable: it is
+   excluded and counted (`unidentifiedComments`) rather than stopping the scan, because every effect is
+   keyed by a verified exact ID; a granted ID that cannot be identified is `NOT_FOUND` with zero effect.
+   A re-read that is unidentifiable is UNKNOWN. Incomplete reactions of the
+   source-constant claim kind (`eyes`) hold only that comment (`CLAIMS_INCOMPLETE`). Result comments
+   count only when authored by `executorLogin`; copies by anyone else are ignored (counted in
+   `ignoredResults`), so they can neither fake delivery nor block it.
+2. `admitIssueSnapshot` (distinct from the `created` webhook path; no action is fabricated):
+   exact provider fields, comment ∈ S, and a conservative edit filter (`lastEditedAt` null,
+   `includesCreatedEdit` false, zero `userContentEdits`). The filter refuses edit signals; it is not
+   proof that provider history was never edited. Identity binds node id, database id, author,
+   `updatedAt`, body digest, observation kind, source and the full config digest.
+3. `deriveIssuePrior` from provider state only. Only `executorLogin`'s reaction is a claim: a known
+   other login's same-kind reaction is not a claim and grants no principal migration, so it is ignored;
+   an unattributable (null/deleted-user) reaction or a duplicate claim is held as `UNRECOGNIZED`.
+   Our claim without a matching trusted result is `STARTED`; our claim plus one verified trusted result
+   is `APPENDED` (readback only). `nextIssueEffect` maps these.
+4. Re-check expiry from the injected clock, then claim with `gh api -i`: only a raw `201` whose body
+   names `executorLogin` and `eyes` proceeds. `200` is already claimed; any other status, unparsable
+   output or a different user stops.
+5. Re-read the comment after the claim and before any paid call; any change of the snapshot, loss of
+   our claim, an unattributable reaction or incomplete reactions stop as `DRIFT_AFTER_CLAIM` with the
+   claim retained.
+6. Re-check expiry, then launch the fixed owner. Only exit 1 with an exact closed entry-error
+   (`schema` `ops.semlint.entry-error.v1`, `status` `REJECTED`, `authority` false, one of the nine
+   pre-provider causes and no other key) is `REFUSED_BEFORE_PROVIDER`; exit 0 with a `real-result.v2`
+   that composes for this request proceeds; anything else (`ENTRY_FAILED`, empty or malformed stdout,
+   launcher refusal) is UNKNOWN, because a launcher failure and a child crash cannot be distinguished
+   from stdout. The nine causes are a copy of the entry's closed allowed set, fixed by a test.
+7. Unless `grant.postIncomplete`, a result that is not fully validated with zero unknown calls is
+   withheld (claim retained, no post).
+8. Re-check expiry. Expiry is one hard permission boundary for every effect, including delivery of an
+   already paid result: after `expiresAt` nothing is posted; the receipt reports
+   `GRANT_EXPIRED_BEFORE_APPEND` with the paid accounting and the claim keeps the ID `STARTED`. A grant
+   never extends itself; delivering that evaluation needs a new request comment under a new grant.
+   Otherwise append once with `gh api -i`; only `201` with an id proceeds, then the comment is re-read
+   and `verifyResultReadback` compares exact ID/repository/Issue/author/body. An unknown post is never
+   reposted; a later scan reconciles it.
+
+Process calls use the existing finite 30-minute per-call timeout constant; a timeout before a write
+is a read failure (no effect), during a claim/append/launch it is UNKNOWN and retained.
+
+Supply candidate (not proven): the existing `jev-review` package copies the whole `packages/jev-review`
+directory into its store path and runs its own closure Node, so `issue-executor.mjs` and its siblings
+can be started as `<that node> <that store path>/issue-executor.mjs` without a new bin, helper or
+package row. The same store path is the one the owner launcher extracts for `tests/run.mjs`. Not
+proven by this source: that an actual canonical build contains the executor at that path, the exact
+start path on a target, and that the running executor was built from the same commit as `opsSha`
+(`executionSource`); the executor cannot observe its own commit. These are runtime residuals.
+
+Every claim remains: after `STARTED`, a refusal, a withheld result or any UNKNOWN, that comment ID
+is never re-evaluated. Re-running needs a new request comment and a new grant version. The source
+calls no delete/update provider API. At-most-effect holds only while provider state stays intact:
+removal of the claim reaction or of history by anyone holding `executorLogin` credentials (or an
+administrator) is outside this proof and is not detectable by the source.
+
+At-most-effect is per fixed `executorLogin`. No principal migration is currently authorized. Because a
+known other login's reaction is ignored (only unattributable reactions are held), claims made by a former
+executor are invisible to a new one: under a changed `executorLogin`, an ID that the old principal
+already claimed or paid for would be evaluated again. The source cannot guarantee migration exclusion.
+Any future, separately authorized migration therefore requires the grant author to exclude from the new
+grant every comment ID previously granted to or claimed by the old principal.
 
 ## Caller data and trusted grant
 
