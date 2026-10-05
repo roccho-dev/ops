@@ -204,7 +204,7 @@ jobs:
           run() { sudo unshare --net -- env -i HOME="$(mktemp -d)" TMPDIR="$(mktemp -d)" LANG=C.UTF-8 "$node" "$source/tests/$1"; }
           run run.mjs > machine.json
           # Control counts prove the provided tests ran; they are not quality evidence.
-          jq -e '.status == "PASS" and .realProviderCalls == 0 and .semanticQuality == "NOT_PROVEN" and .v13Controls > 0 and (has("v12Controls") | not) and (has("v11Controls") | not) and (has("v10Controls") | not) and (has("v9Controls") | not) and (has("domainControls") | not)' machine.json
+          jq -e '.status == "PASS" and .realProviderCalls == 0 and .semanticQuality == "NOT_PROVEN" and .v14Controls > 0 and (has("v13Controls") | not) and (has("v12Controls") | not) and (has("v11Controls") | not) and (has("v10Controls") | not) and (has("v9Controls") | not) and (has("domainControls") | not)' machine.json
           run github-comment.mjs > comment.json
           jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' comment.json
           run issue-executor.mjs > executor.json
