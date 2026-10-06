@@ -80,6 +80,32 @@ jobs:
           fi
           git diff --exit-code -- flake.lock
           tail -n 80 "$log"
+      - name: Emit selected-consumer non-authority receipt
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          python3 tools/check-final-ci-consumer.py selftest \
+            --claim governance/final-ci-claim.v1.json
+          python3 tools/check-final-ci-consumer.py check \
+            --claim governance/final-ci-claim.v1.json \
+            --candidate-sha "$CANDIDATE_SHA" \
+            --out "$RUNNER_TEMP/final-ci-consumer-receipt.json"
+          python3 - "$RUNNER_TEMP/final-ci-consumer-receipt.json" "$CANDIDATE_SHA" <<'PY'
+          import json, pathlib, sys
+          receipt=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert receipt["status"] == "pass"
+          assert receipt["candidateSha"] == sys.argv[2]
+          assert receipt["authority"] is False
+          assert receipt["allRepositoriesEnforced"] is False
+          PY
+      - name: Upload selected-consumer non-authority receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-ci-consumer-receipt
+          path: ${{ runner.temp }}/final-ci-consumer-receipt.json
+          if-no-files-found: error
       # Provide the exact checked jev-review runtime: its complete closure as one nix-store export plus provenance.
       - name: Export provided jev-review runtime
         id: jev_review_runtime
