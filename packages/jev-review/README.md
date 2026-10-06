@@ -86,6 +86,22 @@ Jev   = semantic evidence
 caller = decision / effect / readback
 ```
 
+## Semlint current status — finite qualified result, known limitation f17
+
+Current source is input/result v14 (described below) through the shared owner entry `semlint-entry.mjs`. Its finite real evaluation in PR #473 (P40 continuation: frozen τ .65 for both arms, no retry, independent preregistered expectations outside model input) ended `MAIN_SCOPE_PASS_WITH_KNOWN_LIMITATION_F17`, and the separate Japanese six-case check passed. Evidence: [current result table](https://github.com/roccho-dev/ops/pull/473#issuecomment-6023592995), [history and remaining-conditions audit](https://github.com/roccho-dev/ops/pull/473#issuecomment-6023337410), [original P40 result (technical FAIL, unchanged)](https://github.com/roccho-dev/ops/pull/473#issuecomment-6012133616), f17 follow-up [#496](https://github.com/roccho-dev/ops/issues/496). The earlier P39 and P40 FAILs remain recorded as FAIL.
+
+- Candidate recall (worst observation per unit): original 12/13 (c04 missed), consumed fresh 10/10, newly sealed fresh 9/10 (n06 missed), each within its preregistered budget of one miss; 31/33 combined is a summary only.
+- New fresh 18: candidate 9TP/1FN/0FP/8TN versus v1-compatible baseline 9TP/1FN/1FP/7TN. Gain A (more correct new-fresh units, 17 vs 16) holds; Gain B does not.
+- Known limitation: f17, a negative unit, remains a raw candidate false positive in every count. It is accepted only as this version's known limitation; improvement is tracked in #496 (open). No other miss or false positive is waived.
+- Independent reproduction, 12 calls run by a separate session: candidate 4TP/0FN/0FP/2TN.
+- Japanese six-case check (standalone strict gate; the f17 acceptance does not apply): candidate 3TP/0FN/0FP/3TN with zero invalid; baseline 2TP/1FN/0FP/3TN is diagnostic only. The eleven English renderings were each produced once and audited for literal fidelity before the calls.
+- Cost and time over all 144 MAIN calls, candidate/baseline: token-estimated fee 1.096×, Core-inner 0.892×, case-outer 0.893× (limits 1.25/1.5/1.5).
+- Accounting at the result: known Jev native POST 1076 (60 in the continuation), unknown 0; CI 264 of 400 attempts.
+
+Limits: these are finite prepared sets graded by internal sessions of the same model family that were exposed to the expectations and method; this is not third-party review, population accuracy, a causal attribution or a noise estimate. For Japanese input, Core judged the audited English renderings, not the Japanese text; there is no product translator and no arbitrary-Japanese claim. Fees are token estimates; preparation, translation and human effort and all-system economics are not measured. Scores are advisory evidence with no merge, block or deploy authority; nothing here performs autonomous merge or deployment or provides live ingress. Entry points in this README are source contracts verified by CI, not a live GitHub deployment.
+
+The sections below keep their adoption-time text as history. Their NOT_RUN, NOT_PROVEN, hypothesis and objective-FALSE statements, and the P3–P20 failures, describe the state when each edition was adopted; only the result above supersedes them, and only within its stated limits.
+
 ## Bounded semlint contract — finite API implemented, quality unproved
 
 Refs: ops#471 body, append5962211453, C2/5966152566 and C2-R/5966263702. This section is the bounded specification under this PR, not completion of all #471 design rules, operating adoption or semantic-quality proof. External understanding agreement is not GitHub source review.
