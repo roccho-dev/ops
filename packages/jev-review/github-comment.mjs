@@ -10,6 +10,13 @@ const text = (x) => typeof x === 'string' && x.trim().length > 0;
 const reject = (cause) => ({ status: 'NOT_ADMITTED', cause, authority: false });
 const requests = new WeakSet();
 const nonnegative = (x) => Number.isFinite(x) && x >= 0;
+// Semlint result editions the comment composer binds exactly (v1 and the v14 bundle); all others are refused at admission.
+const COMPOSABLE_RESULTS = Object.freeze(['ops.semlint.result.v1', 'ops.semlint.result.v14']);
+// Exactly two closed receipt shapes: v2 (unchanged) and v3 (adds one per-case outer clock).
+const RESULT_ROW_KEYS = Object.freeze({
+  'ops.semlint.real-result.v2': ['id', 'result', 'provider'],
+  'ops.semlint.real-result.v3': ['id', 'result', 'provider', 'elapsedMs'],
+});
 const validUsage = (x) => x === null || (x && !Array.isArray(x)
   && Object.entries(x).every(([k, v]) => ['input_tokens', 'output_tokens', 'total_tokens'].includes(k) && nonnegative(v)));
 function validAccounting(a) {
@@ -70,15 +77,23 @@ async function admitBody(config, limits, author, body, identityOf) {
     if (!exact(payload, ['schema', 'cases']) || payload.schema !== 'ops.jev.issue-request.v1') return reject('INVALID_REQUEST');
     prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: payload.cases }, limits);
   } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
+  // Only result editions this composer binds exactly may be admitted; anything else is refused before any paid call.
+  if (prepared.expected.some((x) => !COMPOSABLE_RESULTS.includes(x.resultSchema))) return reject('RESULT_EDITION_NOT_COMPOSABLE');
+  // A comment carries no audited translation: any v14 English auxiliary needs the frozen owner route.
+  // Checked on the Core-admitted snapshot, before identity, claim, owner, provider or comment.
+  if (prepared.plan.cases.some(({ input }) => input.schema === 'ops.semlint.input.v14'
+    && [input.subject, ...input.context].some((row) => row.englishAuxiliary !== null))) return reject('AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE');
   const identity = Object.freeze(identityOf(prepared.planDigest));
   const request = Object.freeze({ status: 'ADMITTED', identity, requestDigest: digest(identity), prepared, authority: false });
   // Known repeated record/identity strings plus a conservative scalar/accounting reserve per case.
   // This is size admission only, not a synthetic result or execution receipt.
   const projection = { schema: 'ops.jev.issue-result.v1', requestDigest: request.requestDigest, identity,
-    authority: false, result: { schema: 'ops.semlint.real-result.v2', model: JEV_MODEL, planDigest: prepared.planDigest,
-      cases: prepared.expected.map((x) => ({ id: x.id, result: { schema: 'ops.semlint.result.v1',
+    authority: false, result: { schema: 'ops.semlint.real-result.v3', model: JEV_MODEL, planDigest: prepared.planDigest,
+      cases: prepared.expected.map((x) => ({ id: x.id, result: { schema: x.resultSchema,
         inputDigest: x.inputDigest, questionDigest: x.questionDigest, records: x.records.map((r) => ({ ...r, noul: null })),
-        counts: {}, accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' }, provider: {} })),
+        counts: {}, accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY',
+        ...(x.projection ? { projection: x.projection } : {}) }, provider: {},
+        elapsedMs: Number.MAX_VALUE })), // longest finite clock rendering; size only, not a measurement
       accounting: {}, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' } };
   // 3072 bytes covers canonical scalar/accounting plus the closed native receipt's enums,
   // SHA256 and counters (including up to three finite usage counters); 1024 covers totals.
@@ -180,14 +195,16 @@ export function composeResultComment(request, resultValue) {
   if (!requests.has(request)) throw new Error('REQUEST_NOT_ADMITTED');
   const output = snapshotJson(resultValue);
   if (!exact(output, ['schema', 'model', 'planDigest', 'cases', 'accounting', 'claimCeiling'])
-    || output.schema !== 'ops.semlint.real-result.v2' || output.model !== JEV_MODEL
+    || !Object.hasOwn(RESULT_ROW_KEYS, output.schema) || output.model !== JEV_MODEL
     || output.planDigest !== request.prepared.planDigest
     || output.claimCeiling !== 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY'
     || !Array.isArray(output.cases) || output.cases.length !== request.prepared.expected.length) throw new Error('RESULT_IDENTITY_MISMATCH');
   for (let i = 0; i < output.cases.length; i++) {
     const row = output.cases[i], expected = request.prepared.expected[i], result = row?.result;
-    if (!exact(row, ['id', 'result', 'provider']) || row.id !== expected.id || result?.schema !== 'ops.semlint.result.v1'
-      || !exact(result, ['schema', 'inputDigest', 'questionDigest', 'records', 'counts', 'accounting', 'claimCeiling'])
+    if (!exact(row, RESULT_ROW_KEYS[output.schema]) || (Object.hasOwn(row, 'elapsedMs') && !nonnegative(row.elapsedMs))
+      || row.id !== expected.id || !COMPOSABLE_RESULTS.includes(result?.schema) || result.schema !== expected.resultSchema
+      || !exact(result, ['schema', 'inputDigest', 'questionDigest', 'records', 'counts', 'accounting', 'claimCeiling', ...(expected.projection ? ['projection'] : [])])
+      || (expected.projection && JSON.stringify(result.projection) !== JSON.stringify(expected.projection))
       || result.inputDigest !== expected.inputDigest || result.questionDigest !== expected.questionDigest
       || result.claimCeiling !== output.claimCeiling || !validAccounting(result.accounting)
       || !Array.isArray(result.records) || result.records.length !== expected.records.length) throw new Error('RESULT_IDENTITY_MISMATCH');

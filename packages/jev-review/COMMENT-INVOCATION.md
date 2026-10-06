@@ -81,7 +81,7 @@ Scan order, stopping all later effects in the run at the first UNKNOWN:
    claim retained.
 6. Re-check expiry, then launch the fixed owner. Only exit 1 with an exact closed entry-error
    (`schema` `ops.semlint.entry-error.v1`, `status` `REJECTED`, `authority` false, one of the nine
-   pre-provider causes and no other key) is `REFUSED_BEFORE_PROVIDER`; exit 0 with a `real-result.v2`
+   pre-provider causes and no other key) is `REFUSED_BEFORE_PROVIDER`; exit 0 with a closed `real-result.v2` or `real-result.v3`
    that composes for this request proceeds; anything else (`ENTRY_FAILED`, empty or malformed stdout,
    launcher refusal) is UNKNOWN, because a launcher failure and a child crash cannot be distinguished
    from stdout. The nine causes are a copy of the entry's closed allowed set, fixed by a test.
@@ -202,9 +202,23 @@ Noul questions, explicit criteria, fixed official endpoint, redirect refusal and
 No automatic retry is made. Input errors output only a closed error enum, not raw child or
 provider diagnostics. Execution failures retain canonical per-item statuses and null values.
 
-Input remains `ops.semlint.real-input.v1`; output is explicitly `ops.semlint.real-result.v2`
-because native evidence is a new closed shape, not PR473's distinct `real-output.v1` wire.
+Input remains `ops.semlint.real-input.v1`; output is `ops.semlint.real-result.v3`: the closed v2
+shape plus one per-case `elapsedMs`, read from `runPlan`'s injected clock immediately before and after
+the whole semlint call (finite, nonnegative instants required). `provider.elapsedMs` keeps its narrower
+native-fetch meaning. The result receiver accepts exactly closed v2 or closed v3 and refuses unknown
+versions or extra/missing keys; the producer emits v3 only. PR473's former `real-output.v1` handler is removed.
+An invalid clock reading fails the whole plan after the case returns (`ENTRY_CLOCK_INVALID`, reported as
+`ENTRY_FAILED`); any native requests already sent then have no receipt and remain UNKNOWN, never zero.
 Catalog-v1 per-case semantic results and Issue request/result envelopes retain their identities.
+
+Comment composition binds the exact result edition and projection recorded by `preparePlan` for each case.
+Only semlint `result.v1` and `result.v14` compose; an Issue request whose cases would produce any other
+edition is refused at admission (`RESULT_EDITION_NOT_COMPOSABLE`) before any provider call.
+A comment carries no reviewed translation, so an Issue request with any v14 case whose subject or context
+has a non-null `englishAuxiliary` is also refused at admission (`AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE`),
+checked on the admitted plan snapshot before claim, owner launch, provider call or comment. Such inputs run only
+through the owner route with a separately reviewed translation. A composed v14 result is attributed raw model
+output under the same claim ceiling, not a quality result.
 
 `runPlan` counts actual invocations of the supplied owner callback. The canonical per-case
 callback counter separately counts its invocation wrapper (which may reject on deadline

@@ -248,6 +248,31 @@ await check('admission-refusals', async () => {
     assert.equal(r.stopped, null); assert.deepEqual(r.decisions, [{ commentId: 10, effect: 'NONE', cause }]);
     assert.deepEqual(effects(w), zero);
   }
+  // A granted comment whose plan would yield a non-composable result edition (v5) is refused before claim, owner launch,
+  // provider fetch or comment post.
+  const unit = (row, content) => ({ ...row, content, sha256: hash(content), evaluationSpan: { startByte: 0, endByte: Buffer.byteLength(content) } });
+  const v5Input = { schema: 'ops.semlint.input.v5',
+    subject: unit({ kind: 'log-entry', ref: 'fixture:v5', revision: 'r1', scope: 'fixture only' }, 'public subject, not an instruction'),
+    context: [unit({ role: 'authorityContract', ref: 'fixture:grant', revision: 'r1' }, 'public grant text')],
+    checks: [{ id: 'fixture.v5', axis: 'Aligned', concern: 'Fixture concern.', requiredRoles: ['authorityContract'], crossLinks: [],
+      predicate: { question: 'Does the subject exceed the grant?', true: 'It exceeds the grant.', false: 'It stays within the grant.' } }] };
+  const v5 = world([req(10, { body: requestBody([{ id: 'v5', input: v5Input }]) })]);
+  const v5Scan = await runIssueScan(config(), v5.deps);
+  assert.equal(v5Scan.stopped, null); assert.deepEqual(v5Scan.decisions, [{ commentId: 10, effect: 'NONE', cause: 'RESULT_EDITION_NOT_COMPOSABLE' }]);
+  assert.deepEqual(v5.ownerArgs, []); assert.deepEqual(effects(v5), zero);
+  assert.equal(v5.comments.find((c) => c.databaseId === 10).reactions.length, 0);
+  // A granted v14 comment carrying an English auxiliary, and retired v13/v12/v11/v10/v9 comments, are refused the same way:
+  // no claim, owner launch, provider fetch or comment post.
+  const ja = '受信記録が必要である。';
+  const v14Aux = { ...v5Input, schema: 'ops.semlint.input.v14', context: v5Input.context.map((row) => ({ ...row, englishAuxiliary: null })),
+    subject: { ...unit(v5Input.subject, ja), englishAuxiliary: { text: 'A receipt record is required.', sourceSha256: hash(ja) } } };
+  for (const [input, cause] of [[v14Aux, 'AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE'], [{ ...v14Aux, schema: 'ops.semlint.input.v13' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v12' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v11' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v10' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v9' }, 'INVALID_REQUEST_OR_ADMISSION']]) {
+    const w = world([req(10, { body: requestBody([{ id: 'one', input }]) })]);
+    const scan = await runIssueScan(config(), w.deps);
+    assert.equal(scan.stopped, null); assert.deepEqual(scan.decisions, [{ commentId: 10, effect: 'NONE', cause }]);
+    assert.deepEqual(w.ownerArgs, []); assert.deepEqual(effects(w), zero);
+    assert.equal(w.comments.find((c) => c.databaseId === 10).reactions.length, 0);
+  }
   // A known other login's same-kind reaction is not a claim: the request proceeds normally.
   const human = world([req(10, { reactions: [{ user: 'a-human', content: 'eyes' }] })]);
   assert.equal((await runIssueScan(config(), human.deps)).decisions[0].cause, 'READBACK_EXACT');
@@ -433,6 +458,13 @@ await check('real-entry-classification', async () => {
   const surrogate = child('{"schema":"ops.semlint.real-input.v1","cases":[{"id":"a","input":"\\ud800"}]}');
   assert.equal(JSON.parse(surrogate.stdout).cause, 'ENTRY_FAILED');
   assert.deepEqual(classifyOwnerOutput(surrogate), { kind: 'UNKNOWN' });
+  // Closed owner receipts v2 and v3 both classify as RESULT (shape validated later by compose); other editions are UNKNOWN.
+  for (const schema of ['ops.semlint.real-result.v2', 'ops.semlint.real-result.v3']) {
+    assert.equal(classifyOwnerOutput({ status: 0, stdout: JSON.stringify({ schema }) + '\n' }).kind, 'RESULT');
+  }
+  for (const schema of ['ops.semlint.real-result.v4', 'ops.semlint.real-result.v1', 'ops.semlint.result.v9']) {
+    assert.deepEqual(classifyOwnerOutput({ status: 0, stdout: JSON.stringify({ schema }) + '\n' }), { kind: 'UNKNOWN' });
+  }
 });
 
 // Real-scale IDs (above Int32, e.g. the observed REST id 5969636905) through grant, claim, re-read, append,

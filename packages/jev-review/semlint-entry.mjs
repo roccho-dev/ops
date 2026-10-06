@@ -80,7 +80,9 @@ export async function preparePlan(value, limitValue = ENTRY_LIMITS) {
     if (preflight.records.some((x) => x.status === 'EXECUTION_ERROR' || x.status === 'EVIDENCE_INVALID')) fail('ENTRY_PREFLIGHT_FAILED');
     // Synthetic values, usage, elapsed time and callback counts are NOT execution evidence.
     expected.push({ id: row.id, inputDigest: preflight.inputDigest, questionDigest: preflight.questionDigest,
-      sendable: preflight.counts.sendable, records: preflight.records.map(({ noul, ...record }) => record) });
+      sendable: preflight.counts.sendable, records: preflight.records.map(({ noul, ...record }) => record),
+      // Exact result edition and projection the real call must return; consumers bind to them.
+      resultSchema: preflight.schema, projection: preflight.projection ?? null });
   }
   const plannedCalls = expected.filter((x) => x.sendable > 0).length;
   if (plannedCalls > limits.maxCalls) fail('ENTRY_CALL_BUDGET_EXCEEDED');
@@ -94,6 +96,8 @@ export async function runPlan(prepared, ask, { now = () => performance.now() } =
   const start = now(), cases = [];
   let callbackAttempts = 0;
   for (const row of prepared.plan.cases) {
+    // Case-outer clock: the whole semlint call, outside Core-inner and provider/API time.
+    const caseStart = now();
     const result = await semlint(row.input, async (state, questions) => {
       const remaining = prepared.limits.deadlineMs - (now() - start);
       if (remaining <= 0) fail('ENTRY_DEADLINE_EXCEEDED');
@@ -102,9 +106,11 @@ export async function runPlan(prepared, ask, { now = () => performance.now() } =
       // ask owns the bounded provider operation; this module never retries it.
       return ask(state, questions, { caseId: row.id, timeoutMs: Math.max(1, Math.floor(Math.min(remaining, prepared.limits.timeoutMs))) });
     });
-    cases.push({ id: row.id, result, provider: null });
+    const caseEnd = now();
+    if (!Number.isFinite(caseStart) || !Number.isFinite(caseEnd) || caseEnd < caseStart) fail('ENTRY_CLOCK_INVALID');
+    cases.push({ id: row.id, result, provider: null, elapsedMs: caseEnd - caseStart });
   }
-  return { schema: 'ops.semlint.real-result.v2', model: JEV_MODEL, planDigest: prepared.planDigest, cases,
+  return { schema: 'ops.semlint.real-result.v3', model: JEV_MODEL, planDigest: prepared.planDigest, cases,
     accounting: { callbackAttempts, validatedCalls: cases.reduce((n, x) => n + x.result.accounting.validatedCalls, 0),
       providerHttpCalls: null, completedHttpCalls: null, validatedResponses: null, unknownHttpCalls: null,
       cost: null }, claimCeiling: 'BOUNDED_EVIDENCE_NOT_SEMANTIC_TRUTH_OR_AUTHORITY' };

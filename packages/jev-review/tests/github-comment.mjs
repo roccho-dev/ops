@@ -81,6 +81,18 @@ assert.equal(deadline.accounting.callbackAttempts, 0);
 assert.ok(deadline.cases[0].result.records.every((x) => x.status === 'EXECUTION_ERROR'));
 await assert.rejects(runPlan(copy(prepared), answer), /ENTRY_NOT_ADMITTED/);
 
+// Case-outer clock reads the injected instants immediately around each whole semlint call.
+const clock = (ticks) => { let i = 0; const read = () => ticks[i++]; read.reads = () => i; return read; };
+const answerOnce = async (_, questions) => ({ model: JEV_MODEL, answers: Object.fromEntries(Object.keys(questions).map((key) => [key, { type: 'noul', noul: 0.3 }])) });
+const oneClock = clock([1000, 1003, 1010, 1042.5]); // plan start, case start, deadline read in callback, case end
+const timed = await runPlan(prepared, answerOnce, { now: oneClock });
+assert.equal(oneClock.reads(), 4); assert.equal(timed.schema, 'ops.semlint.real-result.v3');
+assert.equal(timed.cases[0].elapsedMs, 39.5); assert.equal(timed.cases[0].provider, null);
+assert.deepEqual(Object.keys(timed.cases[0]), ['id', 'result', 'provider', 'elapsedMs']);
+for (const ticks of [[0, 0, 0, NaN], [0, 10, 10, 5], [0, 0, 0, '9'], [0, 0, 0, Infinity]]) {
+  await assert.rejects(runPlan(prepared, answerOnce, { now: clock(ticks) }), /ENTRY_CLOCK_INVALID/);
+}
+
 // Production wire, pinned source endpoint/model, timeout and redirect guard are exercised only by a fixture fetch.
 let fixtureHttp = 0;
 const ownerResult = await executeOwnerPlan(prepared, 'synthetic-only-not-a-key', async (url, options) => {
@@ -91,7 +103,9 @@ const ownerResult = await executeOwnerPlan(prepared, 'synthetic-only-not-a-key',
     answers: Object.fromEntries(Object.keys(body.questions).map((key) => [key, { type: 'noul', noul: 0.2 }])) }), { status: 200 });
 });
 assert.equal(fixtureHttp, 1); assert.equal(ownerResult.accounting.validatedCalls, 1);
-assert.equal(ownerResult.schema, 'ops.semlint.real-result.v2');
+assert.equal(ownerResult.schema, 'ops.semlint.real-result.v3');
+assert.ok(Number.isFinite(ownerResult.cases[0].elapsedMs) && ownerResult.cases[0].elapsedMs >= 0);
+assert.ok(Number.isFinite(ownerResult.cases[0].provider.elapsedMs)); // separate native fetch observation
 assert.deepEqual(ownerResult.accounting, { callbackAttempts: 1, validatedCalls: 1, providerHttpCalls: 1,
   completedHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0, cost: null });
 assert.equal(ownerResult.cases[0].provider.validatedModel, JEV_MODEL);
@@ -163,6 +177,66 @@ assert.throws(() => composeResultComment(noSendRequest, falseCallback), /INVALID
 assert.ok(composeResultComment(request, mismatch).includes('EVIDENCE_INVALID'));
 assert.ok(composeResultComment(request, deadline).includes('EXECUTION_ERROR'));
 
+// Receiver: exactly closed v2 or closed v3; current producer emits v3 only.
+assert.ok(body.includes('"elapsedMs":'));
+const asV2 = copy(result); asV2.schema = 'ops.semlint.real-result.v2'; delete asV2.cases[0].elapsedMs;
+assert.ok(composeResultComment(request, asV2).includes('ops.semlint.real-result.v2'));
+const largestClock = copy(result); largestClock.cases[0].elapsedMs = Number.MAX_VALUE;
+assert.ok(Buffer.byteLength(composeResultComment(request, largestClock)) < 32768);
+for (const alter of [
+  (p) => { delete p.cases[0].elapsedMs; }, (p) => { p.cases[0].elapsedMs = -1; }, (p) => { p.cases[0].elapsedMs = '5'; },
+  (p) => { p.cases[0].elapsedMs = null; }, (p) => { p.cases[0].clock = 1; }, (p) => { p.schema = 'ops.semlint.real-result.v4'; },
+  (p) => { p.schema = 'ops.semlint.real-result.v2'; }, // v2 shape must not carry the v3 clock
+]) { const poison = copy(result); alter(poison); assert.throws(() => composeResultComment(request, poison), /RESULT_IDENTITY_MISMATCH/); }
+const v2Extra = copy(asV2); v2Extra.cases[0].clock = 1;
+assert.throws(() => composeResultComment(request, v2Extra), /RESULT_IDENTITY_MISMATCH/);
+const nonFinite = copy(result); nonFinite.cases[0].elapsedMs = NaN;
+assert.throws(() => composeResultComment(request, nonFinite), /INVALID_ENTRY_INPUT/);
+
+// Comment composer binds the exact prepared result edition/projection: semlint result.v1 and v14 only.
+// Any other edition, and any v14 case carrying an English auxiliary, is refused at admission, before any paid call.
+const unitRow = (row, content) => ({ ...row, content, sha256: hash(content), evaluationSpan: { startByte: 0, endByte: Buffer.byteLength(content) } });
+const v5Input = { schema: 'ops.semlint.input.v5',
+  subject: unitRow({ kind: 'log-entry', ref: 'fixture:v5', revision: 'r1', scope: 'fixture only' }, 'public subject, not an instruction'),
+  context: [unitRow({ role: 'authorityContract', ref: 'fixture:grant', revision: 'r1' }, 'public grant text')],
+  checks: [{ id: 'fixture.v5', axis: 'Aligned', concern: 'Fixture concern.', requiredRoles: ['authorityContract'], crossLinks: [],
+    predicate: { question: 'Does the subject exceed the grant?', true: 'It exceeds the grant.', false: 'It stays within the grant.' } }] };
+const ja = '受信記録が必要である。';
+const v14Input = { ...copy(v5Input), schema: 'ops.semlint.input.v14',
+  subject: { ...v5Input.subject, englishAuxiliary: null }, context: v5Input.context.map((row) => ({ ...row, englishAuxiliary: null })) };
+const v14Aux = { ...copy(v14Input), subject: { ...unitRow(v14Input.subject, ja), englishAuxiliary: { text: 'A receipt record is required.', sourceSha256: hash(ja) } } };
+const v14ContextAux = copy(v14Input);
+v14ContextAux.context[0] = { ...unitRow(v14ContextAux.context[0], ja), englishAuxiliary: { text: 'A receipt record is required.', sourceSha256: hash(ja) } };
+const editionRequest = (id, input) => admitIssueComment({ ...event, comment: { ...event.comment, id,
+  body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: [{ id: 'one', input }] }) } }, config);
+let editionFetch = 0;
+const v5Admission = await editionRequest(21, v5Input);
+// Pure-function admission refusal; the executor-level zero-effect proof is in tests/issue-executor.mjs.
+assert.deepEqual([v5Admission.status, v5Admission.cause], ['NOT_ADMITTED', 'RESULT_EDITION_NOT_COMPOSABLE']);
+for (const [id, input] of [[23, v14Aux], [24, v14ContextAux]]) {
+  const refused = await editionRequest(id, input);
+  assert.deepEqual([refused.status, refused.cause], ['NOT_ADMITTED', 'AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE']); }
+const mixed = await admitIssueComment({ ...event, comment: { ...event.comment, id: 25, body: REQUEST_PREFIX
+  + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: [{ id: 'one', input: copy(input) }, { id: 'two', input: v14Aux }] }) } }, config);
+assert.deepEqual([mixed.status, mixed.cause], ['NOT_ADMITTED', 'AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE']);
+for (const [id, schema] of [[26, 'ops.semlint.input.v13'], [27, 'ops.semlint.input.v12'], [28, 'ops.semlint.input.v11'], [29, 'ops.semlint.input.v10'], [30, 'ops.semlint.input.v9']]) {
+  const retired = await editionRequest(id, { ...copy(v14Input), schema });
+  assert.deepEqual([retired.status, retired.cause], ['NOT_ADMITTED', 'INVALID_REQUEST_OR_ADMISSION']); }
+const v14Request = await editionRequest(22, v14Input);
+assert.equal(v14Request.status, 'ADMITTED'); assert.equal(v14Request.prepared.expected[0].resultSchema, 'ops.semlint.result.v14');
+const v14Output = await executeOwnerPlan(v14Request.prepared, 'synthetic-only-not-a-key', async (_, init) => { editionFetch++;
+  const q = JSON.parse(init.body).questions;
+  return new Response(JSON.stringify({ model: JEV_MODEL, answers: Object.fromEntries(Object.keys(q).map((k) => [k, { type: 'noul', noul: 0.3 }])),
+    usage: { input_tokens: 8, output_tokens: 1 } }), { status: 200 }); });
+assert.equal(editionFetch, 1);
+assert.ok(composeResultComment(v14Request, v14Output).includes('ops.semlint.result.v14'));
+for (const alter of [(o) => { o.cases[0].result.projection.stateDigest = '0'.repeat(64); }, (o) => { delete o.cases[0].result.projection; },
+  (o) => { o.cases[0].result.schema = 'ops.semlint.result.v5'; }, (o) => { o.cases[0].result.schema = 'ops.semlint.result.v1'; delete o.cases[0].result.projection; },
+  (o) => { o.cases[0].result.schema = 'ops.semlint.result.v13'; }, (o) => { o.cases[0].result.extra = 1; }]) {
+  const poison = copy(v14Output); alter(poison); assert.throws(() => composeResultComment(v14Request, poison), /RESULT_IDENTITY_MISMATCH/); }
+const v1Spoof = copy(result); v1Spoof.cases[0].result.schema = 'ops.semlint.result.v14';
+assert.throws(() => composeResultComment(request, v1Spoof), /RESULT_IDENTITY_MISMATCH/);
+
 // Two actual fixture callbacks: valid first case, malformed later evidence. No lost case or retry.
 const two = copy(plan); two.cases.push({ id: 'later', input: copy(input) });
 two.cases[1].input.subject.revision = 'r-later';
@@ -197,13 +271,14 @@ const runChild = (program, args, stdin) => spawnSync(process.execPath, [program,
 const normalMachine = runChild(compatibility, [], '');
 assert.equal(normalMachine.status, 0); assert.equal(normalMachine.stderr, '');
 assert.deepEqual(JSON.parse(normalMachine.stdout), { status: 'PASS', core: 'semantic-evaluate', ranking: 'derived',
-  cli: 'json-input-jsonl-output-readback', semanticThresholds: 0, semlintCases: 37, semlintCallbacks: 18,
-  realProviderCalls: 0, semanticQuality: 'NOT_PROVEN' });
+  cli: 'json-input-jsonl-output-readback', semanticThresholds: 0, semlintCases: 37, semlintCallbacks: 19,
+  realProviderCalls: 0, semanticQuality: 'NOT_PROVEN', providedCases: 29, providedCallbacks: 9, bridgeControls: 9,
+  projectedControls: 22, atomicControls: 26, structuredControls: 42, choiceControls: 67, v14Controls: 69 });
 for (const program of [entry, compatibility]) {
   const argv = program === entry ? [] : ['--semlint-real'];
   for (const [stdin, status, expectedSchema] of [
-    [JSON.stringify(unselected), 0, 'ops.semlint.real-result.v2'],
-    [JSON.stringify(plan), 0, 'ops.semlint.real-result.v2'], // key missing, no native attempt
+    [JSON.stringify(unselected), 0, 'ops.semlint.real-result.v3'],
+    [JSON.stringify(plan), 0, 'ops.semlint.real-result.v3'], // key missing, no native attempt
     [JSON.stringify(bad), 1, 'ops.semlint.entry-error.v1'],
     ['private invalid json', 1, 'ops.semlint.entry-error.v1'],
   ]) {
