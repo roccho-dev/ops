@@ -1,44 +1,29 @@
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { RESULT_PREFIX, validateExecutorConfig, admitIssueSnapshot, deriveIssuePrior, nextIssueEffect,
+import { validateActionsConfig, admitIssueCommand, selectRunRange, deriveIssuePrior, nextIssueEffect,
   composeResultComment, verifyResultReadback } from './github-comment.mjs';
 
-// Source-constant adapter surface. Candidates declared by the owner profile source (windows 0d77745 oci/dev/nix.nix);
-// their adoption on a target is not implied. Config supplies only the two SHA values, never a path/argv/program/cwd.
-export const GH = '/nix/var/nix/profiles/windows-dev/bin/gh';
-export const OPS_JEV = '/nix/var/nix/profiles/windows-dev/bin/ops-jev';
+// GitHub-hosted Actions adapter for one owner literal command (ops#483). `plan` and `post` run without the Jev
+// key; between them the workflow's single key-bearing step runs only the fixed semlint-entry.mjs on plan.json.
+// GitHub is reached only with the run's own GITHUB_TOKEN. No host executable, dispatch, retry loop or ledger.
+export const EXECUTOR_LOGIN = 'github-actions[bot]';
 export const CLAIM = Object.freeze({ rest: 'eyes', graphql: 'EYES' });
 const PRE_PROVIDER_CAUSES = ['INVALID_ENTRY_ARGS', 'ENTRY_INPUT_TOO_LARGE', 'INVALID_ENTRY_JSON', 'INVALID_ENTRY_PLAN',
   'INVALID_ENTRY_LIMITS', 'INVALID_ENTRY_CASE', 'INVALID_ENTRY_SEMLINT', 'ENTRY_PREFLIGHT_FAILED', 'ENTRY_CALL_BUDGET_EXCEEDED'];
+// Subject: body plus body-edit signals only (no generic updatedAt).
+export const ISSUE_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)'
+  + '{issue(number:$number){id number body lastEditedAt includesCreatedEdit userContentEdits{totalCount}}}}';
 // IssueComment.databaseId is Int (signed 32-bit) and cannot represent real REST comment IDs; fullDatabaseId is
 // BigInt, whose wire encoding is a string. Only fullDatabaseId is requested.
-const FIELDS = 'id fullDatabaseId author{login} body createdAt updatedAt lastEditedAt includesCreatedEdit userContentEdits{totalCount} '
-  + `reactions(content:${CLAIM.graphql},first:100){totalCount nodes{content user{login}}}`;
-export const LIST_QUERY = 'query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name)'
-  + `{issue(number:$number){comments(first:100,after:$after){totalCount pageInfo{hasNextPage endCursor} nodes{${FIELDS}}}}}}`;
-export const NODE_QUERY = `query($id:ID!){node(id:$id){... on IssueComment{${FIELDS}}}}`;
-const MAX_PAGES = 1000;
+export const COMMENT_QUERY = 'query($id:ID!){node(id:$id){... on IssueComment{id fullDatabaseId author{login} body '
+  + `lastEditedAt includesCreatedEdit userContentEdits{totalCount} reactions(content:${CLAIM.graphql},first:100){totalCount nodes{content user{login}}}}}}`;
 
 const json = (s) => { try { return JSON.parse(s); } catch { return undefined; } };
 // One JSON line on stdout; anything else is not a parseable result.
 const oneLine = (s) => (typeof s === 'string' && s.endsWith('\n') && s.indexOf('\n') === s.length - 1 ? json(s) : undefined);
-// `gh api -i` prints the raw HTTP status line and headers before the body.
-export function parseHttp(stdout) {
-  if (typeof stdout !== 'string') return null;
-  const m = /^HTTP\/[0-9.]+ (\d{3})\b/.exec(stdout);
-  const split = stdout.search(/\r?\n\r?\n/);
-  if (!m || split < 0) return null;
-  const body = stdout.slice(split).trim();
-  return { status: Number(m[1]), json: body ? json(body) : null };
-}
-
-async function ghJson(deps, args, input) {
-  let out;
-  try { out = await deps.run(GH, args, input); } catch { return undefined; }
-  return out && out.status === 0 ? json(out.stdout) : undefined;
-}
+const positive = (x) => Number.isSafeInteger(x) && x > 0;
+const call = async (deps, method, route, body) => { try { return await deps.github(method, route, body); } catch { return null; } };
 
 // BigInt wire string -> exact positive safe integer, or null. No rounding, opaque node-id decoding or fallback.
 export function decodeFullDatabaseId(value) {
@@ -46,24 +31,41 @@ export function decodeFullDatabaseId(value) {
   const n = Number(value);
   return Number.isSafeInteger(n) && String(n) === value ? n : null;
 }
-const NODE_KEYS = ['author', 'body', 'createdAt', 'fullDatabaseId', 'id', 'includesCreatedEdit', 'lastEditedAt', 'reactions', 'updatedAt', 'userContentEdits'];
+const keysAre = (x, keys) => Boolean(x) && typeof x === 'object' && !Array.isArray(x)
+  && JSON.stringify(Object.keys(x).sort()) === JSON.stringify([...keys].sort());
+const editsTotal = (x) => (keysAre(x.userContentEdits, ['totalCount']) ? x.userContentEdits.totalCount : null);
 
-// Map one GraphQL IssueComment to the admission snapshot plus its claim list. Returns undefined for a
-// non-object node, and null for a node that cannot be identified (key set differs from the requested
-// fields, or fullDatabaseId is not an exact safe positive integer string). An incomplete or malformed
-// reaction list yields claims=null: only that comment is held, the rest of the scan continues.
-function mapNode(node, repository, issue) {
-  if (!node || typeof node !== 'object' || Array.isArray(node)) return undefined;
-  const databaseId = decodeFullDatabaseId(node.fullDatabaseId);
-  if (databaseId === null || JSON.stringify(Object.keys(node).sort()) !== JSON.stringify(NODE_KEYS)) return null;
-  const r = node.reactions;
-  const complete = r && Array.isArray(r.nodes) && r.totalCount === r.nodes.length && r.nodes.every((x) => x && x.content === CLAIM.graphql);
+// Observe the exact Issue subject and the command comment (with its claim reactions). Any error, missing or
+// unrequested field, or an identity that differs from the event is undefined: the caller holds, no guessing.
+async function observe(deps, repository, issueNumber, commentNodeId, commentId) {
+  const [owner, name] = repository.split('/');
+  let iv, cv;
+  try {
+    iv = await deps.graphql(ISSUE_QUERY, { owner, name, number: issueNumber });
+    cv = await deps.graphql(COMMENT_QUERY, { id: commentNodeId });
+  } catch { return undefined; }
+  const i = iv?.data?.repository?.issue, c = cv?.data?.node;
+  if (!iv || iv.errors !== undefined || !cv || cv.errors !== undefined
+    || !keysAre(i, ['id', 'number', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits'])
+    || !keysAre(c, ['id', 'fullDatabaseId', 'author', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits', 'reactions'])
+    || i.number !== issueNumber || c.id !== commentNodeId || decodeFullDatabaseId(c.fullDatabaseId) !== commentId) return undefined;
+  const r = c.reactions;
+  const complete = keysAre(r, ['totalCount', 'nodes']) && Array.isArray(r.nodes) && r.totalCount === r.nodes.length
+    && r.nodes.every((x) => x && x.content === CLAIM.graphql);
   return {
-    snapshot: { repository, issue, comment: { id: node.id, databaseId, author: node.author?.login ?? null,
-      body: node.body, createdAt: node.createdAt, updatedAt: node.updatedAt, lastEditedAt: node.lastEditedAt,
-      includesCreatedEdit: node.includesCreatedEdit, userContentEditsTotal: node.userContentEdits?.totalCount ?? null } },
+    issue: { number: i.number, nodeId: i.id, body: i.body, lastEditedAt: i.lastEditedAt,
+      includesCreatedEdit: i.includesCreatedEdit, userContentEditsTotal: editsTotal(i) },
+    command: { databaseId: commentId, nodeId: c.id, author: c.author?.login ?? null, body: c.body, lastEditedAt: c.lastEditedAt,
+      includesCreatedEdit: c.includesCreatedEdit, userContentEditsTotal: editsTotal(c) },
     claims: complete ? r.nodes.map((x) => x.user?.login ?? null) : null,
   };
+}
+
+// Native workflow state (GET actions/workflows/{id}); disabling stops new runs and, at the next observed
+// checkpoint, running ones. An unreadable state is treated as not active.
+async function workflowState(deps, repository, workflowId) {
+  const res = await call(deps, 'GET', `repos/${repository}/actions/workflows/${workflowId}`);
+  return res?.status === 200 && res.json?.id === workflowId && typeof res.json.state === 'string' ? res.json.state : null;
 }
 
 // Owner stdout is one JSON line. Only an exact closed pre-provider entry-error is a refusal; anything else
@@ -77,168 +79,164 @@ export function classifyOwnerOutput(out) {
 }
 export { PRE_PROVIDER_CAUSES };
 
-async function readIssue(deps, config) {
-  const [owner, name] = config.repository.split('/');
-  const nodes = [];
-  let after = null, total = null;
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const args = ['api', 'graphql', '-f', `query=${LIST_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '-F', `number=${config.issue}`];
-    if (after !== null) args.push('-f', `after=${after}`);
-    const value = await ghJson(deps, args);
-    const c = value?.data?.repository?.issue?.comments;
-    if (!value || value.errors !== undefined || !c || !Array.isArray(c.nodes) || !Number.isSafeInteger(c.totalCount)
-      || (total !== null && c.totalCount !== total) || typeof c.pageInfo?.hasNextPage !== 'boolean') return undefined;
-    total = c.totalCount;
-    nodes.push(...c.nodes);
-    if (!c.pageInfo.hasNextPage) {
-      if (nodes.length !== total) return undefined;
-      const all = nodes.map((n) => mapNode(n, config.repository, config.issue));
-      if (all.some((x) => x === undefined)) return undefined;
-      // An unidentifiable comment is excluded, not a global stop: every effect is keyed by a verified
-      // exact ID, so a granted ID that may hide behind it is simply NOT_FOUND with zero effect.
-      const mapped = all.filter((x) => x !== null);
-      const ids = mapped.map((x) => x.snapshot.comment.databaseId);
-      if (new Set(ids).size !== ids.length) return undefined;
-      const prefixed = mapped.filter((x) => typeof x.snapshot.comment.body === 'string' && x.snapshot.comment.body.startsWith(RESULT_PREFIX));
-      // Only the trusted result author can deliver; copies by anyone else are ignored and only counted.
-      const ours = prefixed.filter((x) => x.snapshot.comment.author === config.executorLogin);
-      return { byId: new Map(mapped.map((x) => [x.snapshot.comment.databaseId, x])), ignoredResults: prefixed.length - ours.length,
-        unidentifiedComments: all.length - mapped.length,
-        results: ours.map((x) => ({ databaseId: x.snapshot.comment.databaseId, author: x.snapshot.comment.author, body: x.snapshot.comment.body })) };
-    }
-    if (typeof c.pageInfo.endCursor !== 'string' || c.pageInfo.endCursor === after) return undefined;
-    after = c.pageInfo.endCursor;
-  }
-  return undefined;
-}
+const RECEIPT = 'ops.jev.issue-actions-receipt.v1';
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-async function readNode(deps, config, nodeId) {
-  const value = await ghJson(deps, ['api', 'graphql', '-f', `query=${NODE_QUERY}`, '-f', `id=${nodeId}`]);
-  if (!value || value.errors !== undefined) return undefined;
-  return mapNode(value?.data?.node, config.repository, config.issue);
-}
-
-function completeResult(output, prepared) {
-  const a = output.accounting;
-  return a.providerHttpCalls === prepared.plannedCalls && a.validatedResponses === a.providerHttpCalls && a.unknownHttpCalls === 0;
-}
-
-// One finite scan over the trusted exact-ID grant. Not a daemon: no loop, timer, queue, ledger or retry.
-// Any UNKNOWN effect stops every later effect in this run; a later scan reconciles from provider state.
-export async function runIssueScan(configValue, deps) {
-  const receipt = { schema: 'ops.jev.issue-scan-receipt.v1', decisions: [], stopped: null, authority: false };
-  const stop = (stage, cause, extra = {}) => { receipt.stopped = { stage, cause, ...extra }; return receipt; };
-  const nowMs = deps.now();
+// Plan one event (no key). Order: settings -> native run identity and reservation -> active workflow ->
+// exact snapshot -> admission -> prior -> raw-201 claim -> re-read -> active. Outcomes: PLANNED, NONE
+// (no provider call), UNKNOWN (claim effect not known). Only PLANNED yields a plan for the fixed entry.
+export async function planIssueCommand(ctx, configValue, deps) {
+  const receipt = { schema: RECEIPT, stage: 'plan', outcome: null, cause: null, claimed: false, providerCalls: 0, authority: false };
+  const end = (outcome, cause, extra = {}) => { Object.assign(receipt, { outcome, cause }, extra); return { receipt, state: { ...receipt } }; };
   let config;
-  try { config = validateExecutorConfig(configValue, nowMs); } catch (error) { return stop('config', error.message); }
-  const who = await ghJson(deps, ['api', 'user']);
-  if (!who) return stop('principal', 'UNKNOWN');
-  if (who.login !== config.executorLogin) return stop('principal', 'PRINCIPAL_MISMATCH');
-  const scan = await readIssue(deps, config);
-  if (!scan) return stop('snapshot', 'SNAPSHOT_UNKNOWN');
-  receipt.ignoredResults = scan.ignoredResults;
-  receipt.unidentifiedComments = scan.unidentifiedComments;
-  const repo = config.repository;
-  // Expiry is observed from the injected clock immediately before each new effect, never reused from scan start.
-  const expired = () => { const t = deps.now(); return !Number.isFinite(t) || t >= Date.parse(config.grant.expiresAt); };
-  for (const commentId of [...config.grant.commentIds].sort((a, b) => a - b)) {
-    const decide = (effect, cause, extra = {}) => receipt.decisions.push({ commentId, effect, cause, ...extra });
-    const seen = scan.byId.get(commentId);
-    if (!seen) { decide('NONE', 'NOT_FOUND'); continue; }
-    const request = await admitIssueSnapshot(seen.snapshot, config, nowMs);
-    if (request.status !== 'ADMITTED') { decide('NONE', request.cause); continue; }
-    if (seen.claims === null) { decide('NONE', 'CLAIMS_INCOMPLETE'); continue; }
-    const prior = deriveIssuePrior(request, { claims: seen.claims, results: scan.results }, config.executorLogin);
-    const next = nextIssueEffect(request, prior);
-    if (next.effect === 'READBACK_ONLY') { decide('APPENDED', 'READBACK_ONLY', { requestDigest: request.requestDigest }); continue; }
-    if (next.effect !== 'EVALUATE') { decide('NONE', prior ? prior.state : next.cause); continue; }
+  try { config = validateActionsConfig(configValue); } catch { return end('NONE', 'INVALID_ACTIONS_CONFIG'); }
+  const e = ctx?.event;
+  if (!e?.comment || !positive(e.comment.id) || typeof e.comment.node_id !== 'string' || typeof e.comment.body !== 'string'
+    || !positive(e.issue?.number) || e.repository?.full_name !== ctx.repository || typeof e.repository?.owner?.login !== 'string') return end('NONE', 'EVENT_UNKNOWN');
+  if (e.issue.pull_request !== undefined && e.issue.pull_request !== null) return end('NONE', 'NOT_AN_ISSUE');
+  receipt.commentId = e.comment.id;
 
-    // Claim: only a raw 201 for this principal and the source-constant kind proceeds to a paid call.
-    if (expired()) { decide('NONE', 'GRANT_EXPIRED'); return stop('claim', 'GRANT_EXPIRED', { commentId }); }
-    let claimOut;
-    try { claimOut = await deps.run(GH, ['api', '-i', '-X', 'POST', `repos/${repo}/issues/comments/${commentId}/reactions`, '-f', `content=${CLAIM.rest}`]); }
-    catch { claimOut = null; }
-    const claim = parseHttp(claimOut?.stdout);
-    if (!claim) { decide('UNKNOWN', 'CLAIM_UNKNOWN'); return stop('claim', 'UNKNOWN', { commentId }); }
-    if (claim.status === 200) { decide('NONE', 'ALREADY_CLAIMED', { claimStatus: 200 }); continue; }
-    if (claim.status !== 201 || claim.json?.user?.login !== config.executorLogin || claim.json?.content !== CLAIM.rest) {
-      decide('UNKNOWN', 'CLAIM_NOT_OURS', { claimStatus: claim.status });
-      return stop('claim', 'CLAIM_NOT_OURS', { commentId, claimStatus: claim.status });
-    }
+  const rr = await call(deps, 'GET', `repos/${ctx.repository}/actions/runs/${ctx.runId}`);
+  const rv = rr?.status === 200 ? rr.json : null;
+  if (!rv) return end('NONE', 'RUN_UNKNOWN');
+  const run = { repository: rv.repository?.full_name, workflowId: rv.workflow_id, path: rv.path, number: rv.run_number, attempt: rv.run_attempt, id: rv.id };
+  if (run.id !== ctx.runId || run.attempt !== ctx.runAttempt || rv.head_sha !== ctx.sha || run.repository !== ctx.repository) return end('NONE', 'RUN_IDENTITY_MISMATCH');
+  receipt.run = { id: run.id, number: run.number, attempt: run.attempt, workflowId: run.workflowId };
+  const selected = selectRunRange(config, run);
+  if (!selected.range) return end('NONE', selected.cause);
+  if (await workflowState(deps, ctx.repository, run.workflowId) !== 'active') return end('NONE', 'WORKFLOW_NOT_ACTIVE');
 
-    // Re-read after claim, before any paid call: the observed comment and claim set must be unchanged.
-    const again = await readNode(deps, config, seen.snapshot.comment.id);
-    if (!again) { decide('UNKNOWN', 'REREAD_UNKNOWN', { claimStatus: 201 }); return stop('reread', 'UNKNOWN', { commentId }); }
-    const claimsOk = (claims) => Array.isArray(claims) && !claims.includes(null) && claims.filter((x) => x === config.executorLogin).length === 1;
-    if (JSON.stringify(again.snapshot) !== JSON.stringify(seen.snapshot) || !claimsOk(again.claims)) {
-      decide('NONE', 'DRIFT_AFTER_CLAIM', { claimStatus: 201 }); continue;
-    }
+  const seen = await observe(deps, ctx.repository, e.issue.number, e.comment.node_id, e.comment.id);
+  if (!seen) return end('NONE', 'SNAPSHOT_UNKNOWN');
+  let context;
+  try { context = config.context.map((c) => ({ role: c.role, path: c.path, content: deps.readFile(c.path) })); }
+  catch { return end('NONE', 'CONTEXT_UNKNOWN'); }
+  const admission = { repository: ctx.repository, owner: e.repository.owner.login, sha: ctx.sha, eventBody: e.comment.body,
+    run: { id: run.id, number: run.number, attempt: run.attempt, workflowId: run.workflowId, path: run.path },
+    issue: seen.issue, command: seen.command, context };
+  const request = await admitIssueCommand(admission, config);
+  if (request.status !== 'ADMITTED') return end('NONE', request.cause);
+  if (seen.claims === null) return end('NONE', 'CLAIMS_INCOMPLETE');
+  // Only EXECUTOR_LOGIN's reaction is a claim; known other logins are ignored, unattributable ones held.
+  const prior = deriveIssuePrior(request, { claims: seen.claims, results: [] }, EXECUTOR_LOGIN);
+  const next = nextIssueEffect(request, prior);
+  if (next.effect !== 'EVALUATE') return end('NONE', prior?.state ?? next.cause);
 
-    // Fixed existing owner entry only; the plan on stdin carries cases and effective caller caps.
-    if (expired()) { decide('NONE', 'GRANT_EXPIRED', { claimStatus: 201 }); return stop('launch', 'GRANT_EXPIRED', { commentId }); }
-    let launched;
-    try {
-      launched = await deps.run(OPS_JEV, ['--semlint-real', '--envs-sha', config.owner.envsSha, '--ops-sha', config.owner.opsSha],
-        JSON.stringify(request.prepared.plan));
-    } catch { launched = null; }
-    const owner = classifyOwnerOutput(launched);
-    if (owner.kind === 'REFUSED') { decide('NONE', 'REFUSED_BEFORE_PROVIDER', { claimStatus: 201, entryCause: owner.cause }); continue; }
-    const value = owner.value;
-    let body;
-    try {
-      if (owner.kind !== 'RESULT') throw new Error('LAUNCH');
-      body = composeResultComment(request, value);
-    } catch { decide('UNKNOWN', 'LAUNCH_UNKNOWN', { claimStatus: 201 }); return stop('launch', 'UNKNOWN', { commentId }); }
-    const accounting = { providerHttpCalls: value.accounting.providerHttpCalls, validatedResponses: value.accounting.validatedResponses,
-      unknownHttpCalls: value.accounting.unknownHttpCalls };
-    if (!config.grant.postIncomplete && !completeResult(value, request.prepared)) { decide('NONE', 'RESULT_WITHHELD', { claimStatus: 201, accounting }); continue; }
-
-    // Expiry is a hard permission boundary for every effect, including delivery of an already paid result:
-    // nothing is posted after expiresAt. The paid attempt is reported here and the claim keeps the ID STARTED.
-    if (expired()) {
-      decide('NONE', 'GRANT_EXPIRED_BEFORE_APPEND', { claimStatus: 201, accounting, requestDigest: request.requestDigest });
-      return stop('append', 'GRANT_EXPIRED', { commentId });
-    }
-    // Append exactly once; an unknown post is never reposted, a later scan reconciles from Issue comments.
-    let postOut;
-    try { postOut = await deps.run(GH, ['api', '-i', '-X', 'POST', `repos/${repo}/issues/${config.issue}/comments`, '--input', '-'], JSON.stringify({ body })); }
-    catch { postOut = null; }
-    const post = parseHttp(postOut?.stdout);
-    const resultId = post?.json?.id;
-    if (!post || post.status !== 201 || !Number.isSafeInteger(resultId) || resultId <= 0) {
-      decide('UNKNOWN', 'APPEND_UNKNOWN', { claimStatus: 201, accounting }); return stop('append', 'UNKNOWN', { commentId });
-    }
-    const read = await ghJson(deps, ['api', `repos/${repo}/issues/comments/${resultId}`]);
-    const where = /^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)\/issues\/(\d+)$/.exec(read?.issue_url ?? '');
-    if (!read || !where) { decide('UNKNOWN', 'READBACK_UNKNOWN', { claimStatus: 201, resultId, accounting }); return stop('readback', 'UNKNOWN', { commentId, resultId }); }
-    const observed = { repository: where[1], issue: Number(where[2]), id: read.id, author: read.user?.login, body: read.body };
-    if (!verifyResultReadback(request, body, observed, config.executorLogin, resultId)) {
-      decide('APPENDED', 'READBACK_MISMATCH', { claimStatus: 201, resultId, accounting }); return stop('readback', 'READBACK_MISMATCH', { commentId, resultId });
-    }
-    decide('APPENDED', 'READBACK_EXACT', { claimStatus: 201, resultId, requestDigest: request.requestDigest, accounting });
+  // Only a raw 201 for this principal and kind proceeds; 200 means another run already claimed this command.
+  const claim = await call(deps, 'POST', `repos/${ctx.repository}/issues/comments/${e.comment.id}/reactions`, { content: CLAIM.rest });
+  if (claim?.status === 200) return end('NONE', 'ALREADY_CLAIMED');
+  if (!claim || claim.status !== 201 || claim.json?.user?.login !== EXECUTOR_LOGIN || claim.json?.content !== CLAIM.rest) {
+    return end('UNKNOWN', claim ? 'CLAIM_NOT_OURS' : 'CLAIM_UNKNOWN', { claimed: 'UNKNOWN' });
   }
-  return receipt;
+  receipt.claimed = true;
+  // Checkpoint before any paid call: same subject, same command, exactly our claim, workflow still active.
+  const again = await observe(deps, ctx.repository, e.issue.number, e.comment.node_id, e.comment.id);
+  if (!again) return end('NONE', 'REREAD_UNKNOWN');
+  if (!same(again.issue, seen.issue) || !same(again.command, seen.command) || again.claims === null || again.claims.includes(null)
+    || again.claims.filter((x) => x === EXECUTOR_LOGIN).length !== 1) return end('NONE', 'DRIFT_BEFORE_CALL');
+  if (await workflowState(deps, ctx.repository, run.workflowId) !== 'active') return end('NONE', 'WORKFLOW_NOT_ACTIVE');
+  const out = end('PLANNED', 'EVALUATE', { providerCalls: null, callsPerRun: selected.callsPerRun, requestDigest: request.requestDigest });
+  return { receipt: out.receipt, state: { ...out.state, admission }, plan: request.prepared.plan };
 }
 
-// Production process boundary: absolute source-constant executables, explicit argv, shell disabled, stderr inherited.
-export const productionDeps = Object.freeze({
-  now: () => Date.now(),
-  run: async (file, args, input = '') => {
-    const r = spawnSync(file, args, { input, encoding: 'utf8', shell: false, stdio: ['pipe', 'pipe', 'inherit'],
-      maxBuffer: 16 << 20, timeout: 30 * 60 * 1000 });
-    return { status: r.error ? null : r.status, stdout: r.stdout ?? '' };
-  },
-});
+// Post one planned result (no key). The request is re-admitted from the run-local state (pure) and must have
+// the same digest. Entry output: exact closed pre-provider refusal -> NONE; v2 result that composes for this
+// request -> post; anything else -> UNKNOWN, never posted or retried. Before posting, workflow must be active
+// and subject/command unchanged; otherwise the paid result is WITHHELD with its real accounting.
+export async function postIssueCommand(stateValue, entryOut, configValue, deps) {
+  const receipt = { schema: RECEIPT, stage: 'post', outcome: null, cause: null, authority: false };
+  const end = (outcome, cause, extra = {}) => ({ receipt: Object.assign(receipt, { outcome, cause }, extra) });
+  if (!stateValue || typeof stateValue !== 'object' || typeof stateValue.outcome !== 'string') return end('UNKNOWN', 'STATE_UNKNOWN');
+  if (stateValue.outcome !== 'PLANNED') { const { admission, ...rest } = stateValue; return { receipt: { ...rest, stage: 'post' } }; }
+  Object.assign(receipt, { commentId: stateValue.commentId, run: stateValue.run, claimed: true, requestDigest: stateValue.requestDigest });
+  const adm = stateValue.admission;
+  const request = await admitIssueCommand(adm, configValue);
+  if (request.status !== 'ADMITTED' || request.requestDigest !== stateValue.requestDigest) return end('UNKNOWN', 'STATE_MISMATCH');
+  const owner = classifyOwnerOutput(entryOut);
+  if (owner.kind === 'REFUSED') return end('NONE', 'REFUSED_BEFORE_PROVIDER', { entryCause: owner.cause, providerCalls: 0 });
+  if (owner.kind !== 'RESULT') return end('UNKNOWN', 'LAUNCH_UNKNOWN', { providerCalls: null });
+  let body;
+  try { body = composeResultComment(request, owner.value); } catch { return end('UNKNOWN', 'RESULT_UNVERIFIED', { providerCalls: null }); }
+  const a = owner.value.accounting;
+  receipt.accounting = { providerHttpCalls: a.providerHttpCalls, completedHttpCalls: a.completedHttpCalls,
+    validatedResponses: a.validatedResponses, unknownHttpCalls: a.unknownHttpCalls };
+  receipt.providerCalls = a.providerHttpCalls;
+  // Honest closed record: not-selected/incomplete/failed items are posted but never counted as complete success.
+  receipt.complete = a.unknownHttpCalls === 0 && a.validatedResponses === request.prepared.plannedCalls
+    && owner.value.cases.every((x) => x.result.records.every((r) => ['OBSERVED', 'NOT_SELECTED'].includes(r.status)));
 
+  if (await workflowState(deps, adm.repository, adm.run.workflowId) !== 'active') return end('WITHHELD', 'WORKFLOW_NOT_ACTIVE');
+  const now = await observe(deps, adm.repository, adm.issue.number, adm.command.nodeId, adm.command.databaseId);
+  if (!now) return end('WITHHELD', 'REREAD_UNKNOWN');
+  if (!same(now.issue, adm.issue) || !same(now.command, adm.command)) return end('WITHHELD', 'DRIFT_AFTER_CALL');
+  const post = await call(deps, 'POST', `repos/${adm.repository}/issues/${adm.issue.number}/comments`, { body });
+  const resultId = post?.json?.id;
+  if (!post || post.status !== 201 || !positive(resultId)) return end('UNKNOWN', 'APPEND_UNKNOWN');
+  receipt.resultId = resultId;
+  const read = await call(deps, 'GET', `repos/${adm.repository}/issues/comments/${resultId}`);
+  const where = /^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)\/issues\/(\d+)$/.exec(read?.json?.issue_url ?? '');
+  if (read?.status !== 200 || !where) return end('UNKNOWN', 'READBACK_UNKNOWN');
+  const observed = { repository: where[1], issue: Number(where[2]), id: read.json.id, author: read.json.user?.login, body: read.json.body };
+  if (!verifyResultReadback(request, body, observed, EXECUTOR_LOGIN, resultId)) return end('MISMATCH', 'READBACK_MISMATCH');
+  return end('APPENDED', 'READBACK_EXACT');
+}
+
+// Production GitHub access: the run's GITHUB_TOKEN only, bounded time, redirects refused, no retry.
+export function githubDeps({ token, apiUrl, graphqlUrl, root }) {
+  const headers = (body) => ({ authorization: `Bearer ${token}`, accept: 'application/vnd.github+json',
+    'x-github-api-version': '2022-11-28', ...(body === undefined ? {} : { 'content-type': 'application/json' }) });
+  const request = async (url, method, body) => {
+    const res = await fetch(url, { method, headers: headers(body), redirect: 'error', signal: AbortSignal.timeout(30000),
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    return { status: res.status, json: text ? json(text) : null };
+  };
+  const base = path.resolve(root);
+  return {
+    github: (method, route, body) => request(`${apiUrl}/${route}`, method, body),
+    graphql: async (query, variables) => {
+      const res = await request(graphqlUrl, 'POST', { query, variables });
+      if (res.status !== 200) throw new Error('GRAPHQL_HTTP');
+      return res.json;
+    },
+    readFile: (rel) => {
+      const abs = path.resolve(base, rel);
+      if (!abs.startsWith(base + path.sep)) throw new Error('CONTEXT_OUTSIDE_SOURCE');
+      return fs.readFileSync(abs, 'utf8');
+    },
+  };
+}
+
+// CLI: `node issue-executor.mjs plan|post <absolute run-local dir>`. Settings are the reviewed issue-actions.json
+// beside this file; context files are read from the checked-out exact source (cwd).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const args = process.argv.slice(2);
-  if (args.length !== 2 || args[0] !== '--config' || !path.isAbsolute(args[1])) {
-    process.stdout.write(JSON.stringify({ schema: 'ops.jev.issue-scan-receipt.v1', stopped: { stage: 'args', cause: 'INVALID_EXECUTOR_ARGS' }, authority: false }) + '\n');
+  const [mode, dir, ...rest] = process.argv.slice(2);
+  const print = (receipt) => process.stdout.write(JSON.stringify(receipt) + '\n');
+  if (rest.length || !['plan', 'post'].includes(mode) || !dir || !path.isAbsolute(dir)) {
+    print({ schema: RECEIPT, outcome: 'NONE', cause: 'INVALID_EXECUTOR_ARGS', authority: false });
     process.exitCode = 2;
   } else {
-    const config = json(fs.readFileSync(args[1], 'utf8'));
-    const receipt = await runIssueScan(config, productionDeps);
-    process.stdout.write(JSON.stringify(receipt) + '\n');
-    process.exitCode = receipt.stopped ? 1 : 0;
+    const config = json(fs.readFileSync(new URL('./issue-actions.json', import.meta.url), 'utf8'));
+    const deps = githubDeps({ token: process.env.GITHUB_TOKEN, apiUrl: process.env.GITHUB_API_URL,
+      graphqlUrl: process.env.GITHUB_GRAPHQL_URL, root: process.cwd() });
+    const file = (name) => path.join(dir, name);
+    if (mode === 'plan') {
+      const ctx = { repository: process.env.GITHUB_REPOSITORY, sha: process.env.GITHUB_SHA,
+        runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+        event: json(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')) };
+      const result = await planIssueCommand(ctx, config, deps);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file('state.json'), JSON.stringify(result.state), { flag: 'wx' });
+      if (result.plan) fs.writeFileSync(file('plan.json'), JSON.stringify(result.plan), { flag: 'wx' });
+      print(result.receipt);
+      process.exitCode = result.receipt.outcome === 'UNKNOWN' ? 1 : 0;
+    } else {
+      const read = (name) => { try { return fs.readFileSync(file(name), 'utf8'); } catch { return null; } };
+      const status = read('entry.status');
+      const entryOut = status === null ? null : { status: Number(status.trim()), stdout: read('entry.out') ?? '' };
+      const result = await postIssueCommand(json(read('state.json') ?? ''), entryOut, config, deps);
+      print(result.receipt);
+      process.exitCode = ['APPENDED', 'NONE'].includes(result.receipt.outcome) ? 0 : 1;
+    }
   }
 }
