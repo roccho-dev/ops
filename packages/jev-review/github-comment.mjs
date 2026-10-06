@@ -1,4 +1,5 @@
-import { preparePlan, entryLimits, digest, exact, snapshotJson } from './semlint-entry.mjs';
+import { createHash } from 'node:crypto';
+import { ENTRY_LIMITS, preparePlan, entryLimits, digest, exact, snapshotJson } from './semlint-entry.mjs';
 import { JEV_MODEL } from './core.mjs';
 
 export const REQUEST_PREFIX = '/jev-evaluate\n';
@@ -77,6 +78,11 @@ async function admitBody(config, limits, author, body, identityOf) {
     if (!exact(payload, ['schema', 'cases']) || payload.schema !== 'ops.jev.issue-request.v1') return reject('INVALID_REQUEST');
     prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: payload.cases }, limits);
   } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
+  return finishRequest(prepared, identityOf);
+}
+
+// Shared result-size admission and registration of an admitted request, for every admission path.
+function finishRequest(prepared, identityOf) {
   // Only result editions this composer binds exactly may be admitted; anything else is refused before any paid call.
   if (prepared.expected.some((x) => !COMPOSABLE_RESULTS.includes(x.resultSchema))) return reject('RESULT_EDITION_NOT_COMPOSABLE');
   // A comment carries no audited translation: any v14 English auxiliary needs the frozen owner route.
@@ -104,54 +110,101 @@ async function admitBody(config, limits, author, body, identityOf) {
   return request;
 }
 
-// Trusted executor config: the base grant plus a fixed principal, owner SHA values and a finite exact-ID grant.
-// No executable path, argv, program or cwd is accepted; those are source constants of the executor.
-export const EXECUTOR_CONFIG_KEYS = ['repository', 'issue', 'requesters', 'executionSource', 'limits', 'executorLogin', 'owner', 'grant'];
-const GRANT_KEYS = ['version', 'commentIds', 'totalCalls', 'totalPosts', 'totalClaims', 'expiresAt', 'postIncomplete'];
-export function validateExecutorConfig(value, nowMs) {
-  let config, limits;
-  try {
-    config = snapshotJson(value);
-    limits = baseConfigValid(config, EXECUTOR_CONFIG_KEYS) && entryLimits(config.limits);
-  } catch { limits = null; }
-  const grant = config?.grant, ids = grant?.commentIds;
-  if (!limits || !text(config.executorLogin) || !exact(config.owner, ['envsSha', 'opsSha'])
-    || !sha(config.owner.envsSha) || !sha(config.owner.opsSha) || config.owner.opsSha !== config.executionSource
-    || !exact(grant, GRANT_KEYS) || !text(grant.version) || typeof grant.postIncomplete !== 'boolean'
-    || !Array.isArray(ids) || !ids.length || !ids.every(positive) || new Set(ids).size !== ids.length
-    || !['totalCalls', 'totalPosts', 'totalClaims'].every((k) => positive(grant[k]))
-    || typeof grant.expiresAt !== 'string' || !Number.isFinite(Date.parse(grant.expiresAt))) throw new Error('INVALID_EXECUTOR_CONFIG');
-  // Worst-case static bound: one raw-201 claim per exact ID, one owner run per claim, one post per ID.
-  if (ids.length * limits.maxCalls > grant.totalCalls || ids.length > grant.totalPosts || ids.length > grant.totalClaims) throw new Error('GRANT_BOUNDS_EXCEEDED');
-  if (!Number.isFinite(nowMs) || nowMs >= Date.parse(grant.expiresAt)) throw new Error('GRANT_EXPIRED');
+// Trusted Actions settings (reviewed source). Target Issue, requester and literal command live only in the
+// workflow guard; Environment/secret binding is outside source. No path to an executable, argv or program.
+export const ACTIONS_CONFIG_KEYS = ['allowedChecks', 'context', 'subjectScope', 'limits', 'runRanges'];
+const RANGE_KEYS = ['repository', 'workflowId', 'path', 'first', 'last', 'reservedCallsPerRun'];
+const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const REPO_PATH = /^(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
+const WORKFLOW_PATH = /^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml$/;
+const freezeDeep = (x) => { if (x && typeof x === 'object') { Object.values(x).forEach(freezeDeep); Object.freeze(x); } return x; };
+export function validateActionsConfig(value) {
+  let config;
+  try { config = snapshotJson(value); entryLimits(config.limits); } catch { throw new Error('INVALID_ACTIONS_CONFIG'); }
+  const ranges = config.runRanges;
+  if (!exact(config, ACTIONS_CONFIG_KEYS) || !text(config.subjectScope)
+    || !Array.isArray(config.allowedChecks) || !config.allowedChecks.length || !config.allowedChecks.every(text)
+    || new Set(config.allowedChecks).size !== config.allowedChecks.length
+    || !Array.isArray(config.context) || !config.context.every((c) => exact(c, ['role', 'path']) && text(c.role) && REPO_PATH.test(c.path))
+    || new Set(config.context.map((c) => JSON.stringify([c.role, c.path]))).size !== config.context.length
+    || !Array.isArray(ranges) || !ranges.every((r) => exact(r, RANGE_KEYS) && REPOSITORY.test(r.repository) && positive(r.workflowId)
+      && WORKFLOW_PATH.test(r.path) && positive(r.first) && positive(r.last) && r.first <= r.last
+      && positive(r.reservedCallsPerRun) && r.reservedCallsPerRun <= ENTRY_LIMITS.maxCalls)) throw new Error('INVALID_ACTIONS_CONFIG');
+  // Reservations never overlap for one native workflow identity, so a run number is admitted by at most one.
+  for (const a of ranges) for (const b of ranges) {
+    if (a !== b && a.repository === b.repository && a.workflowId === b.workflowId && a.first <= b.last && b.first <= a.last) throw new Error('INVALID_ACTIONS_CONFIG');
+  }
   return freezeDeep(config);
 }
-const freezeDeep = (x) => { if (x && typeof x === 'object') { Object.values(x).forEach(freezeDeep); Object.freeze(x); } return x; };
 
-// Authenticated API observation, distinct from a created webhook event: no action is fabricated.
-// The edit signals are a conservative refusal filter, not proof that provider history was never edited.
-export const SNAPSHOT_OBSERVATION = 'API_SNAPSHOT_NO_EDIT_SIGNAL';
-export const SNAPSHOT_COMMENT_KEYS = ['id', 'databaseId', 'author', 'body', 'createdAt', 'updatedAt', 'lastEditedAt', 'includesCreatedEdit', 'userContentEditsTotal'];
+// Hard aggregate bound on attempted consumer provider calls: a provider call is planned only for a
+// first-attempt run whose native repository/workflow id/path/run number fall in one reviewed range, and
+// each run is capped at min(range.reservedCallsPerRun, limits.maxCalls). Total <= sum(width x reserved).
+export function selectRunRange(config, run) {
+  if (!exact(run, ['repository', 'workflowId', 'path', 'number', 'attempt', 'id'])
+    || !positive(run.workflowId) || !positive(run.number) || !positive(run.attempt) || !positive(run.id)) return { cause: 'RUN_UNKNOWN' };
+  if (run.attempt !== 1) return { cause: 'RERUN_NOT_PAID' };
+  const hits = config.runRanges.filter((r) => r.repository === run.repository && r.workflowId === run.workflowId
+    && r.path === run.path && r.first <= run.number && run.number <= r.last);
+  if (hits.length !== 1) return { cause: 'NO_RANGE' };
+  return { range: hits[0], callsPerRun: Math.min(hits[0].reservedCallsPerRun, config.limits.maxCalls) };
+}
+
+// Subject revision from the exact full body and the provider's body-edit signals; generic updatedAt is not
+// used, so unrelated activity is not a revision change. Not a claim of complete or immutable edit history.
+const sha256 = (s) => createHash('sha256').update(s, 'utf8').digest('hex');
 const time = (x) => text(x) && Number.isFinite(Date.parse(x));
-export async function admitIssueSnapshot(snapshotValue, configValue, nowMs) {
-  let config, snap;
-  try { config = validateExecutorConfig(configValue, nowMs); } catch (error) { return reject(error.message); }
+const editSignals = (x) => (x.lastEditedAt === null || time(x.lastEditedAt)) && typeof x.includesCreatedEdit === 'boolean'
+  && Number.isSafeInteger(x.userContentEditsTotal) && x.userContentEditsTotal >= 0;
+export const ISSUE_KEYS = ['number', 'nodeId', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEditsTotal'];
+export const COMMAND_KEYS = ['databaseId', 'nodeId', 'author', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEditsTotal'];
+export function subjectRevision(issue) {
+  return [issue.nodeId, 'sha256:' + sha256(issue.body), issue.lastEditedAt ?? 'unedited',
+    String(issue.userContentEditsTotal), String(issue.includesCreatedEdit)].join('|');
+}
+
+// Owner literal-command admission. The guard already matched owner/body/Issue at the event; this re-checks the
+// observed command against the event, builds the existing semlint input (log-entry subject = exact full Issue
+// body; context = declared repository files at the run's source SHA) and plans with the run's call ceiling.
+export const COMMAND_OBSERVATION = 'ACTIONS_OWNER_LITERAL_COMMAND';
+export async function admitIssueCommand(inputValue, configValue) {
+  let config, input;
+  try { config = validateActionsConfig(configValue); } catch (error) { return reject(error.message); }
   try {
-    snap = snapshotJson(snapshotValue);
-    const c = snap.comment;
-    if (!exact(snap, ['repository', 'issue', 'comment']) || !exact(c, SNAPSHOT_COMMENT_KEYS) || !text(c.id) || !positive(c.databaseId)
-      || !text(c.author) || typeof c.body !== 'string' || !time(c.createdAt) || !time(c.updatedAt)
-      || !(c.lastEditedAt === null || time(c.lastEditedAt)) || typeof c.includesCreatedEdit !== 'boolean'
-      || !Number.isSafeInteger(c.userContentEditsTotal) || c.userContentEditsTotal < 0) return reject('SNAPSHOT_UNKNOWN');
-  } catch { return reject('SNAPSHOT_UNKNOWN'); }
-  const c = snap.comment;
-  if (snap.repository !== config.repository || snap.issue !== config.issue) return reject('TARGET_NOT_AUTHORIZED');
-  if (!config.grant.commentIds.includes(c.databaseId)) return reject('NOT_IN_GRANT');
-  if (c.lastEditedAt !== null || c.includesCreatedEdit || c.userContentEditsTotal !== 0) return reject('EDITED');
-  return admitBody(config, config.limits, c.author, c.body, (planDigest) => ({
-    repository: snap.repository, issue: snap.issue, commentId: c.databaseId, nodeId: c.id, author: c.author,
-    revision: c.updatedAt, bodyDigest: digest(c.body), observation: SNAPSHOT_OBSERVATION,
-    executionSource: config.executionSource, configDigest: digest(config), planDigest }));
+    input = snapshotJson(inputValue);
+    if (!exact(input, ['repository', 'owner', 'sha', 'eventBody', 'run', 'issue', 'command', 'context'])
+      || !REPOSITORY.test(input.repository) || !text(input.owner) || !sha(input.sha) || !text(input.eventBody)
+      || !exact(input.issue, ISSUE_KEYS) || !positive(input.issue.number) || !text(input.issue.nodeId)
+      || typeof input.issue.body !== 'string' || !editSignals(input.issue)
+      || !exact(input.command, COMMAND_KEYS) || !positive(input.command.databaseId) || !text(input.command.nodeId)
+      || !text(input.command.author) || typeof input.command.body !== 'string' || !editSignals(input.command)
+      || !Array.isArray(input.context) || input.context.length !== config.context.length
+      || !input.context.every((c, i) => exact(c, ['role', 'path', 'content']) && c.role === config.context[i].role
+        && c.path === config.context[i].path && typeof c.content === 'string')) return reject('INPUT_UNKNOWN');
+  } catch { return reject('INPUT_UNKNOWN'); }
+  const { issue, command } = input;
+  if (command.author !== input.owner) return reject('COMMAND_NOT_AUTHORIZED');
+  if (command.body !== input.eventBody) return reject('COMMAND_DRIFT');
+  if (command.lastEditedAt !== null || command.includesCreatedEdit || command.userContentEditsTotal !== 0) return reject('EDITED');
+  const selected = selectRunRange(config, { ...input.run, repository: input.repository });
+  if (!selected.range) return reject(selected.cause);
+  const revision = subjectRevision(issue);
+  const semlintInput = { schema: 'ops.semlint.input.v1',
+    subject: { kind: 'log-entry', ref: `https://github.com/${input.repository}/issues/${issue.number}`, revision,
+      scope: config.subjectScope, content: issue.body, sha256: sha256(issue.body) },
+    context: input.context.map((c) => ({ role: c.role, ref: `${c.path}@${input.sha}`, revision: input.sha, content: c.content, sha256: sha256(c.content) })),
+    checks: [...config.allowedChecks] };
+  let prepared;
+  try {
+    prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: [{ id: 'issue', input: semlintInput }] },
+      { ...config.limits, maxCalls: selected.callsPerRun });
+  } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
+  return finishRequest(prepared, (planDigest) => ({
+    repository: input.repository, issue: issue.number, issueNodeId: issue.nodeId, subjectRevision: revision,
+    commentId: command.databaseId, nodeId: command.nodeId, author: command.author, bodyDigest: digest(command.body),
+    observation: COMMAND_OBSERVATION, executionSource: input.sha, configDigest: digest(config),
+    run: { id: input.run.id, number: input.run.number, attempt: input.run.attempt, workflowId: input.run.workflowId },
+    planDigest }));
 }
 
 // Pure prior derivation from provider-native state only: claim reactions of the source-constant kind on the

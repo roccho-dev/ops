@@ -117,7 +117,18 @@
             genPkgs: decl:
             let
               envText = lib.concatMapStringsSep "\n" envLine decl.env;
-              pkgDir = srcRoot + "/${entryDirOf decl.entry}";
+              sourceRoots = [ (entryDirOf decl.entry) ] ++ (decl.sourceSiblings or [ ]);
+              joinedSource = pkgs.runCommand "${decl.name}-sources" { } ''
+                mkdir -p "$out"
+                ${lib.concatMapStringsSep "\n" (sourcePath: ''
+                  cp -R ${srcRoot + "/${sourcePath}"} "$out/${builtins.baseNameOf sourcePath}"
+                '') sourceRoots}
+              '';
+              pkgDir =
+                if decl ? sourceSiblings then
+                  "${joinedSource}/${builtins.baseNameOf (entryDirOf decl.entry)}"
+                else
+                  srcRoot + "/${entryDirOf decl.entry}";
               entryRel = entryRelOf decl.entry;
               # decl.runtime が exec 前置と runtime derivation を選択(node / python)。
               rt = runtimeDrvById.${decl.runtime};
@@ -167,6 +178,23 @@
                   chmod -R u+w source
                   cd source
                   node ${decl.script}
+                  ${lib.optionalString (decl.name == "jev-review") ''
+                    # Execute the installed closure in a clean cwd/process,
+                    # without a key, checkout-relative import or Node override.
+                    mkdir -p "$out/installed"
+                    cd "$out/installed"
+                    printf '%s\n' '{"state":{"purpose":"installed closure smoke"},"themes":["empty"],"items":[],"topK":1}' > input.json
+                    env -i PATH="$PATH" jev-review input.json result.jsonl > receipt.json
+                    node --input-type=module -e '
+                      import fs from "node:fs";
+                      import assert from "node:assert/strict";
+                      const rows = fs.readFileSync("result.jsonl", "utf8").trim().split(/\n/).map(JSON.parse);
+                      assert.equal(rows.at(-1).kind, "jevReview.receipt.v1");
+                      assert.equal(rows.at(-1).calls, 0);
+                      assert.equal(rows.at(-1).authority, false);
+                      assert.equal(JSON.parse(fs.readFileSync("receipt.json", "utf8")).status, "OBSERVED");
+                    '
+                  ''}
                   touch "$out/ok"
                 '';
           }) checkDecls
