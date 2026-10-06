@@ -239,10 +239,16 @@ for (const { url, init } of boundRequests) {
   assert.equal(init.signal instanceof AbortSignal, true);
 }
 providerBindingCases++;
-await assert.rejects(() => askJev(state, questions, {
-  key: canary, endpoint: 'https://untrusted.invalid/', timeoutMs: 1000,
-  fetchImpl: () => { throw new Error('MUST_NOT_CALL'); },
-}), /INVALID_JEV_ENDPOINT/);
+let legacyRequests = 0;
+await askJev(state, questions, {
+  key: canary, endpoint: 'https://invalid.test/never-contacted', timeoutMs: 1000,
+  fetchImpl: async (url, init) => {
+    legacyRequests++; assert.equal(url, 'https://invalid.test/never-contacted');
+    assert.equal(init.redirect, 'error');
+    return new Response(JSON.stringify(responseFor(init)), { status: 200 });
+  },
+});
+assert.equal(legacyRequests, 1);
 providerBindingCases++;
 await assert.rejects(() => bindJevReview({ key: ' ', fetchImpl: () => { throw new Error('MUST_NOT_CALL'); } })
   (state, questions, { timeoutMs: 1000 }), /JEV_API_KEY_REQUIRED/);

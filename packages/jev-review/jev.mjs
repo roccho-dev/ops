@@ -36,8 +36,9 @@ export function bindJevReview({ key, fetchImpl = fetch } = {}) {
   };
 }
 
-// Legacy call signature, not another HTTP client or arbitrary provider selector.
+// Preserve the legacy trusted caller's endpoint configuration. Issue input has
+// no endpoint selector: the fixed owner calls bindJevReview directly instead.
 export async function askJev(state, questions, { key, endpoint = ENDPOINT, timeoutMs, fetchImpl = fetch }) {
-  if (endpoint !== ENDPOINT) throw new Error('INVALID_JEV_ENDPOINT');
-  return bindJevReview({ key, fetchImpl })(state, questions, { timeoutMs });
+  return bindJevReview({ key, fetchImpl: (_url, init) => fetchImpl(endpoint, init) })
+    (state, questions, { timeoutMs });
 }

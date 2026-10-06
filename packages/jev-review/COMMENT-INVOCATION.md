@@ -16,7 +16,8 @@ No quality-series merge or PASS is required here.
 - `jev.mjs`: raw Noul/model/question adapter over the existing
   `packages/jev/src/core.mjs` provider transport. `executeOwnerPlan` binds the credential
   once per owner invocation; the adapter preserves redirect refusal and full-response
-  deadlines. Alternate `JEV_API_URL` values fail closed, not select another endpoint.
+  deadlines. The Issue owner always uses the canonical endpoint; the legacy CLI's
+  separately trusted `JEV_API_URL` setting remains compatible and cannot be chosen by Issue input.
 - `build/packages.jsonl`: declares the existing Jev source sibling. The generated package
   copies only `jev-review` and `jev` into its immutable source closure; the existing
   `jev-review` Nix check also runs the installed binary from a clean cwd/process without a
