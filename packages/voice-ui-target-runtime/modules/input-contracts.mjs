@@ -11,6 +11,7 @@ import {
   normalizeSha256,
   requireCondition,
   sha256File,
+  sha256Bytes,
 } from "./core.mjs";
 
 function providerPath(value, label) {
@@ -24,19 +25,53 @@ function providerPath(value, label) {
 export const NATIVE_DEPLOY_SETTINGS = Object.freeze({ workersDev: true, previewUrls: false, observability: { enabled: false }, tags: [] });
 const DNS_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
 
+// One owner for enforced handoff values and their public requirement projection.
+// This is a runtime contract, not an envs provision claim or an ADRS identity issuer.
+export const PROJECTION_REQUIREMENTS = Object.freeze({
+  kind: "envs.projectionReceipt.v1", stage: "dev", capability: "jev-api",
+  provider: "cloudflare-workers", slot: "JEV_API_KEY", sourceKind: "public_sops",
+  operation: "cloudflare_workers_secret_put", readbackKind: "secret_name_presence",
+});
+
+
 // The approved Workers target: owner-approved data bound by the approved request's digests. It is not authority, not
 // a provider-verified route and not an approval of any real Worker. This adapter serves only the Worker's own
 // workers.dev origin; a custom domain or any path is refused here, before any provider call.
 export function validateWorkersTarget(target) {
   exactObjectKeys(target, ["provider", "accountId", "workerName", "url", "nativeDeploySettings"], "expected target");
-  requireCondition(target.provider === "cloudflare-workers", "expected target provider differs");
-  requireCondition(/^[0-9a-f]{32}$/.test(target.accountId ?? ""), "expected target account id invalid");
-  requireCondition(new RegExp(`^${DNS_LABEL}$`).test(target.workerName ?? ""), "expected target Worker name invalid");
+  requireCondition(target.provider === PROJECTION_REQUIREMENTS.provider, "expected target provider differs");
+  requireCondition(typeof target.accountId === "string" && /^[0-9a-f]{32}$/.test(target.accountId), "expected target account id invalid");
+  requireCondition(typeof target.workerName === "string" && new RegExp(`^${DNS_LABEL}$`).test(target.workerName), "expected target Worker name invalid");
   requireCondition(typeof target.url === "string" && new RegExp(`^https://${target.workerName}\\.${DNS_LABEL}\\.workers\\.dev/$`).test(target.url)
     && new URL(target.url).href === target.url, "expected target URL must be exactly https://<workerName>.<label>.workers.dev/");
   requireCondition(isDeepStrictEqual(target.nativeDeploySettings, NATIVE_DEPLOY_SETTINGS),
     "expected target must acknowledge exactly the native deploy settings");
   return target;
+}
+
+// Declaration only. The installed wrapper supplies opsSha; its caller supplies the
+// independently admitted obligation identity and target. No key, receipt or effect.
+export function projectRequirements(target, obligation, opsSha) {
+  exactSha(opsSha, "requirement source revision");
+  validateWorkersTarget(target);
+  exactObjectKeys(obligation, ["id", "obligation_digest", "binding"], "obligation selector");
+  assertNoPrivateMaterial(obligation);
+  for (const key of ["id", "binding"]) {
+    requireCondition(typeof obligation[key] === "string" && /^[A-Za-z0-9][A-Za-z0-9_.:/@+-]{0,255}$/.test(obligation[key]), "invalid obligation selector");
+  }
+  const meaning = `sha256:${normalizeSha256(obligation.obligation_digest, "obligation digest")}`;
+  const r = PROJECTION_REQUIREMENTS;
+  return {
+    source: { repository: "roccho-dev/ops", revision: opsSha,
+      path: "packages/voice-ui-target-runtime/modules/input-contracts.mjs",
+      digest: `sha256:${sha256Bytes(readFileSync(new URL(import.meta.url)))}` },
+    rows: [{ id: obligation.id, contract: {
+      obligation_digest: meaning, capability: r.capability, consumer: "roccho-dev/ops",
+      stage: r.stage, target: { provider: target.provider, resource: target.workerName, account: target.accountId },
+      slot: r.slot, binding: obligation.binding,
+      profile: [{ role: "projection", operation: r.operation, readback: true, grade: "real" }],
+    } }],
+  };
 }
 
 // ops' expectation of an envs-owned handoff for a Workers target. envs does not produce this shape today, so a real
@@ -46,31 +81,31 @@ export function validateProjectionReceipt(receipt, expectedEnvsSha) {
     "kind", "status", "envs_sha", "environment", "capability", "source", "target",
     "projector", "effect", "readback", "workflow", "created_at",
   ], "projection receipt");
-  requireCondition(receipt.kind === "envs.projectionReceipt.v1", "projection receipt kind differs");
+  requireCondition(receipt.kind === PROJECTION_REQUIREMENTS.kind, "projection receipt kind differs");
   requireCondition(receipt.status === "PASS", "projection receipt is not PASS");
   exactSha(receipt.envs_sha, "projection envs SHA");
   requireCondition(receipt.envs_sha === exactSha(expectedEnvsSha, "expected envs SHA"), "projection envs SHA mismatch");
-  requireCondition(receipt.environment === "dev", "projection environment must be dev");
-  requireCondition(receipt.capability === "jev-api", "projection capability must be jev-api");
+  requireCondition(receipt.environment === PROJECTION_REQUIREMENTS.stage, "projection environment must be dev");
+  requireCondition(receipt.capability === PROJECTION_REQUIREMENTS.capability, "projection capability must be jev-api");
 
   exactObjectKeys(receipt.source, ["kind", "ref", "sha256"], "projection source");
-  requireCondition(receipt.source.kind === "public_sops", "projection source kind differs");
+  requireCondition(receipt.source.kind === PROJECTION_REQUIREMENTS.sourceKind, "projection source kind differs");
   providerPath(receipt.source.ref, "projection source ref");
   normalizeSha256(receipt.source.sha256, "projection ciphertext digest");
 
   exactObjectKeys(receipt.target, ["provider", "account_id", "worker_name", "secret_name"], "projection target");
-  requireCondition(receipt.target.provider === "cloudflare-workers", "projection target provider differs");
+  requireCondition(receipt.target.provider === PROJECTION_REQUIREMENTS.provider, "projection target provider differs");
   requireCondition(typeof receipt.target.account_id === "string" && receipt.target.account_id.length > 0, "projection account id missing");
   requireCondition(typeof receipt.target.worker_name === "string" && receipt.target.worker_name.length > 0, "projection Worker name missing");
-  requireCondition(receipt.target.secret_name === "JEV_API_KEY", "projection target secret differs");
+  requireCondition(receipt.target.secret_name === PROJECTION_REQUIREMENTS.slot, "projection target secret differs");
 
   exactObjectKeys(receipt.projector, ["workflow", "adapter"], "projection projector");
   providerPath(receipt.projector.workflow, "projection workflow");
   providerPath(receipt.projector.adapter, "projection adapter");
   exactObjectKeys(receipt.effect, ["operation", "status"], "projection effect");
-  requireCondition(receipt.effect.operation === "cloudflare_workers_secret_put" && receipt.effect.status === "PASS", "projection effect is not PASS");
+  requireCondition(receipt.effect.operation === PROJECTION_REQUIREMENTS.operation && receipt.effect.status === "PASS", "projection effect is not PASS");
   exactObjectKeys(receipt.readback, ["kind", "status", "present"], "projection readback");
-  requireCondition(receipt.readback.kind === "secret_name_presence" && receipt.readback.status === "PASS" && receipt.readback.present === true, "projection readback is not PASS");
+  requireCondition(receipt.readback.kind === PROJECTION_REQUIREMENTS.readbackKind && receipt.readback.status === "PASS" && receipt.readback.present === true, "projection readback is not PASS");
 
   exactObjectKeys(receipt.workflow, ["repository", "ref", "run_id", "run_attempt"], "projection workflow");
   requireCondition(receipt.workflow.repository === "roccho-dev/envs", "projection workflow repository differs");
@@ -140,7 +175,7 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
   // The product's declared Worker runtime (apps voice-ui-dist/2): exactly this block, bound to listed files.
   requireCondition(JSON.stringify(manifest.runtime) === JSON.stringify({
     assets: { binding: "ASSETS", directory: "site" }, compatibility_date: "2026-09-01", compatibility_flags: [],
-    main_module: "worker/worker.mjs", secrets: [{ capability: "jev-api", name: "JEV_API_KEY" }],
+    main_module: "worker/worker.mjs", secrets: [{ capability: PROJECTION_REQUIREMENTS.capability, name: PROJECTION_REQUIREMENTS.slot }],
   }), "declared Worker runtime differs");
   requireCondition(rows.has(manifest.runtime.main_module), "compiled Worker is missing from artifact closure");
   requireCondition([...rows.keys()].some(p => p.startsWith(`${manifest.runtime.assets.directory}/`)), "static assets are missing from artifact closure");
@@ -152,7 +187,7 @@ export function validateArtifact(root, expectedAppsSha, expectedManifestSha256) 
   const auth = JSON.parse(authLines[0]);
   exactObjectKeys(auth, ["artifact", "kind", "requiredCapabilities"], "artifact auth contract");
   requireCondition(auth.artifact === "voice-ui" && auth.kind === "artifact.auth.v1"
-    && JSON.stringify(auth.requiredCapabilities) === '["jev-api"]', "artifact auth contract differs");
+    && JSON.stringify(auth.requiredCapabilities) === JSON.stringify([PROJECTION_REQUIREMENTS.capability]), "artifact auth contract differs");
 
   return {
     root: artifactRoot,

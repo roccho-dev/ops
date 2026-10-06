@@ -42,3 +42,4 @@
 {"deps":["nodejs"],"kind":"check","name":"semcmp","script":"packages/semcmp/tests/run.mjs"}
 {"deps":["nodejs","semcmp"],"kind":"check","name":"semcmp-cli","script":"packages/semcmp/tests/cli.mjs"}
 {"deps":["nodejs","python3","contract-diff"],"kind":"check","name":"contract-diff","script":"packages/contract-diff/tests/run.mjs"}
+{"deps":["nodejs","contract-diff"],"kind":"check","name":"contract-diff-source-integration","script":"packages/contract-diff/tests/source-integration.mjs"}

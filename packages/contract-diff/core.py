@@ -2,8 +2,8 @@
 
 The caller owns scope, accepted identities, input acquisition and provenance
 admission. Nothing here discovers a source, reads a clock, executes a provider,
-or grants organizational admission. All diagnostics are closed codes; input
-values are never copied into a failure message.
+or grants organizational admission. Diagnostics contain closed codes and validated
+obligation identities, never raw parser errors or unchecked input values.
 """
 from __future__ import annotations
 
@@ -68,7 +68,8 @@ def source(value):
     shape(value, ("repository", "revision", "path", "digest"), field="source")
     for key in ("repository", "path"):
         name(value[key], "source")
-    if not HEX.fullmatch(str(value["revision"])) or not DIGEST.fullmatch(str(value["digest"])):
+    if (not isinstance(value["revision"], str) or not HEX.fullmatch(value["revision"])
+            or not isinstance(value["digest"], str) or not DIGEST.fullmatch(value["digest"])):
         raise InputError("exact_source", "source")
     if value["path"].startswith("/") or ".." in value["path"].split("/"):
         raise InputError("source_path", "source")
@@ -90,18 +91,22 @@ def profile(value):
             raise InputError("schema", "profile")
 
 
-def contract(value):
-    shape(value, FIELDS, field="contract")
-    if not DIGEST.fullmatch(str(value["obligation_digest"])):
-        raise InputError("semantic_digest", "contract")
-    for key in ("capability", "consumer", "stage", "slot", "binding"):
-        name(value[key], "contract")
-    shape(value["target"], ("provider", "resource", "account"), field="target")
-    for key, item in value["target"].items():
+def target(value):
+    shape(value, ("provider", "resource", "account"), field="target")
+    for key, item in value.items():
         if item is not None:
             name(item, "target")
         elif key != "account":
             raise InputError("schema", "target")
+
+
+def contract(value):
+    shape(value, FIELDS, field="contract")
+    if not isinstance(value["obligation_digest"], str) or not DIGEST.fullmatch(value["obligation_digest"]):
+        raise InputError("semantic_digest", "contract")
+    for key in ("capability", "consumer", "stage", "slot", "binding"):
+        name(value[key], "contract")
+    target(value["target"])
     profile(value["profile"])
 
 
@@ -180,7 +185,7 @@ def compare(packet: Mapping[str, Any], admission: Mapping[str, Any]) -> dict:
         U = rows(admission["universe"], "universe")
         for row in U.values():
             shape(row, ("id", "obligation_digest", "profile"), field="universe")
-            if not DIGEST.fullmatch(str(row["obligation_digest"])):
+            if not isinstance(row["obligation_digest"], str) or not DIGEST.fullmatch(row["obligation_digest"]):
                 raise InputError("semantic_digest", "universe")
             profile(row["profile"])
         if set(U) & set(scope["excluded_ids"]):
@@ -228,7 +233,9 @@ def compare(packet: Mapping[str, Any], admission: Mapping[str, Any]) -> dict:
             for key in ("obligation_id", "role", "attempt", "epoch", "slot"):
                 name(row[key], "receipts")
             source(row["source"])
-            shape(row["target"], ("provider", "resource", "account"), field="receipts")
+            target(row["target"])
+            if row["operation"] is not None:
+                name(row["operation"], "receipts")
             if row["status"] not in ("PASS", "FAIL", "NOT_RUN") or row["readback"] not in ("PASS", "FAIL", "NOT_RUN") or row["grade"] not in ("fixture", "source", "real"):
                 raise InputError("schema", "receipts")
         trusted = admission["evidence"]
@@ -251,11 +258,17 @@ def compare(packet: Mapping[str, Any], admission: Mapping[str, Any]) -> dict:
                 for key in ("obligation_digest", "profile"):
                     if canonical(value[key]) != canonical(accepted[key]):
                         finding("CONTRACT_DRIFT", side + "." + key, identity)
+            observation = O.get(identity)
+            # Optional evidence is not mandatory, but two explicit claims may not conflict.
+            p_refs = P[identity].get("evidence_refs", {})
+            if observation is not None:
+                for role, ref in p_refs.items():
+                    if role in observation["refs"] and observation["refs"][role] != ref:
+                        raise InputError("evidence_ref_conflict", "provided")
             requirements = accepted["profile"]
             # Zero evidence requirements is a normal empty selection, not a missing receipt.
             if not requirements:
                 continue
-            observation = O.get(identity)
             if observation is None:
                 finding("EVIDENCE_MISSING", "observation", identity)
                 continue
@@ -286,7 +299,13 @@ def compare(packet: Mapping[str, Any], admission: Mapping[str, Any]) -> dict:
         result = {"kind": "contractDiffResult.v1", "authority": False, "scope": scope["id"],
                   "grade": scope["grade"], "status": "OPEN" if findings else "CLOSED",
                   "findings": sorted(findings, key=lambda f: canonical(f)),
-                  "coverage": {"expected": len(U), "required": len(R), "provided": len(P)}}
+                  "coverage": {"expected": len(U), "required": len(R), "provided": len(P)},
+                  "sources": {"authority": scope["authority"],
+                              **{key: inventory[key]["source"] for key in COLLECTIONS}},
+                  "input_manifest_digest": digest({
+                      "scope": {**scope, "excluded_ids": sorted(scope["excluded_ids"])},
+                      "universe": sorted(U.values(), key=lambda row: row["id"]),
+                      "inventory": inventory, "evidence": trusted})}
         return result
     except InputError as error:
         finding(error.status, error.code)
