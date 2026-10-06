@@ -122,6 +122,25 @@ try {
     assert.equal(result.value.coverage.required, 1); assert.equal(result.value.coverage.provided, 1);
   });
   check("two fresh CLI processes produce the same bytes", () => assert.equal(run().stdout, run().stdout));
+  // Synthetic copies exercise the downstream classification independently of
+  // the provider tests. They are not new source or real receipt claims.
+  const baselineRows = structuredClone(packet.provided.rows);
+  for (const [field, value] of [["stage", "prod"], ["consumer", "roccho-dev/other"], ["capability", "other-capability"]]) {
+    check(`same obligation with actual ${field} drift keeps a provision row`, () => {
+      packet.provided.rows = structuredClone(baselineRows);
+      packet.provided.rows[0].contract[field] = value; admitFixture();
+      const result = run(); assert.equal(result.status, 2);
+      assert.equal(result.value.coverage.provided, 1);
+      assert.ok(result.value.findings.some(f => f.kind === "CONTRACT_DRIFT" && f.field === field));
+      assert.ok(!result.value.findings.some(f => f.kind.startsWith("SUPPLY_")));
+    });
+  }
+  check("a genuinely absent selected relation is supply missing", () => {
+    packet.provided.rows = []; admitFixture();
+    const result = run(); assert.equal(result.status, 2);
+    assert.deepEqual(result.value.findings.map(f => [f.kind, f.field]), [["SUPPLY_MISSING", "provided"]]);
+  });
+  packet.provided.rows = structuredClone(baselineRows); admitFixture();
   check("changing the declaration alone does not fake real evidence", () => {
     packet.provided.rows[0].contract.target = structuredClone(required.rows[0].contract.target); admitFixture();
     const result = run(); assert.equal(result.status, 2);
