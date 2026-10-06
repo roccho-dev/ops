@@ -916,7 +916,6 @@ console.log(JSON.stringify({
   semanticThresholds: 0,
   semlintCases, semlintCallbacks, realProviderCalls: 0, semanticQuality: 'NOT_PROVEN',
   providedCases, providedCallbacks, bridgeControls, projectedControls, atomicControls, structuredControls, choiceControls, v14Controls,
-  providerBindingCases,
 }));
 }
 
