@@ -13,6 +13,14 @@ No quality-series merge or PASS is required here.
 - `semlint-entry.mjs`: formally callable owner entry. Its runtime imports only existing
   `core.mjs`, `jev.mjs`, `semlint.mjs` and their production closure plus Node builtins.
   It does not import test fixtures or gold, and does not run default tests.
+- `jev.mjs`: raw Noul/model/question adapter over the existing
+  `packages/jev/src/core.mjs` provider transport. `executeOwnerPlan` binds the credential
+  once per owner invocation; the adapter preserves redirect refusal and full-response
+  deadlines. Alternate `JEV_API_URL` values fail closed, not select another endpoint.
+- `build/packages.jsonl`: declares the existing Jev source sibling. The generated package
+  copies only `jev-review` and `jev` into its immutable source closure; the existing
+  `jev-review` Nix check also runs the installed binary from a clean cwd/process without a
+  key or Node overrides. Source tests do not substitute for that installed-artifact check.
 - `tests/github-comment.mjs`: secret-free fixtures and executable stdin/error checks.
   The existing Nix CI runs the separate `jev-comment-functional` check.
 - `tests/run.mjs`: compatibility dispatch at the existing owner's fixed program path.
@@ -21,103 +29,90 @@ No quality-series merge or PASS is required here.
   produce a closed refusal. Machine-only imports, fixtures and gold are isolated inside
   the no-argument function and are not loaded/executed by the real mode.
 
-- `issue-executor.mjs`: one finite scan (`node issue-executor.mjs --config <absolute path>`) over a
-  trusted exact-ID grant; see "Issue executor" below. No daemon, loop, timer, queue or ledger.
-- `tests/issue-executor.mjs`: secret-free fixtures through the same adapter code with injected
-  process runner and clock (`jev-issue-executor` check).
+- `.github/workflows/jev-issue-comment.yml`: GitHub-hosted Actions entry for one owner literal
+  command on one approved Issue; see "Actions issue command" below.
+- `issue-actions.json`: reviewed trusted settings (`allowedChecks`, `context`, `subjectScope`,
+  `limits`, `runRanges`).
+- `issue-executor.mjs`: the Actions adapter (`plan` / `post`, no Jev key). No daemon, dispatch,
+  schedule, queue, retry loop or ledger.
+- `tests/issue-executor.mjs`: secret-free fixtures through the same adapter code with an in-memory
+  GitHub and the real entry functions (`jev-issue-executor` check).
 
-Target owner deployment, supply, adoption of the fixed executables, permissions and live provider
-behavior are **NOT_CONFIGURED / UNVERIFIED by this source**. Fixtures do not prove live
-at-most-effect, real 201/200 semantics, paid-call accounting or Issue completion.
-There is no new workflow, package, client, secret store, bridge, queue or ledger.
+The Environment/secret binding, actual Actions runs, live provider behavior and real 201/200
+semantics are **NOT_CONFIGURED / UNVERIFIED by this source**. Fixtures do not prove live
+at-most-effect, paid-call accounting or Issue completion.
 
-## Issue executor
+## Actions issue command
 
-Trusted config (exact keys, non-secret, P-owned): `repository, issue, requesters, executionSource,
-limits, executorLogin, owner{envsSha, opsSha}, grant{version, commentIds, totalCalls, totalPosts,
-totalClaims, expiresAt, postIncomplete}`. `opsSha` must equal `executionSource`. No executable path,
-argv, program or cwd is accepted; the adapter's only executables are the source constants
-`/nix/var/nix/profiles/windows-dev/bin/gh` and `/nix/var/nix/profiles/windows-dev/bin/ops-jev`
-(candidates declared by the owner profile source, windows `0d77745` `oci/dev/nix.nix`; their target
-adoption is not implied). The owner argv is fixed: `--semlint-real --envs-sha <envsSha> --ops-sha <opsSha>`,
-and stdin is the admitted `request.prepared.plan` (cases plus effective caller caps). The executor
-never reads, decrypts or forwards a key; it inherits its cwd (the owner gh wrapper selects the owner
-only inside a bound clone) and verifies `gh api user` equals `executorLogin` before any read.
+The workflow job runs only when the guard matches exactly: Issue `483`, author
+`github.repository_owner`, body exactly `/jev-evaluate`, not a pull request. Target, requester and
+command live only in that guard (no second copy in settings). Wider Issues, requesters or comment
+formats are not covered; they would be a separately reviewed boundary expansion.
 
-Finite grant, checked before any effect: exact nonempty duplicate-free `commentIds` (S), expiry,
-`|S| × limits.maxCalls ≤ totalCalls`, `|S| ≤ totalPosts`, `|S| ≤ totalClaims`. Observed claim or
-result counts are never a budget semaphore. Within one grant version the worst case is therefore
-static; spending across versions accumulates the newly granted IDs, which is the grant author's decision.
+Source hold: the job's static Environment `jev-issue-comment` is declared but its binding is
+NOT_CONFIGURED (an existing compatible Environment and `JEV_API_KEY` are unverified) and the shipped
+`runRanges` is empty, so every run stops with `NO_RANGE` before any read, claim or provider call.
+GitHub creates a referenced Environment on a job's first run; `issue_comment` workflows run only from
+the default branch, so no run happens before adoption, and adoption/merge waits until an existing
+compatible binding (no manual per-run review) is verified. No resource is created by this source.
 
-Scan order, stopping all later effects in the run at the first UNKNOWN:
-1. Read every Issue comment through GraphQL with complete pagination. Errors, missing pages, count
-   mismatch, non-object nodes or duplicate IDs stop the scan with no claim. Comment identity comes only
-   from `fullDatabaseId` (GraphQL `BigInt`, wire-encoded as a string); the Int32 `databaseId` cannot
-   represent real REST comment IDs and is not requested. The string must be `^[1-9][0-9]*$`, a safe
-   integer and round-trip exactly; it then equals the REST comment `id` used for claim, append and
-   readback. The opaque node `id` is compared, never decoded. A node whose ID fails this rule or whose key
-   set differs from the requested fields (for example an unrequested `databaseId`) is unidentifiable: it is
-   excluded and counted (`unidentifiedComments`) rather than stopping the scan, because every effect is
-   keyed by a verified exact ID; a granted ID that cannot be identified is `NOT_FOUND` with zero effect.
-   A re-read that is unidentifiable is UNKNOWN. Incomplete reactions of the
-   source-constant claim kind (`eyes`) hold only that comment (`CLAIMS_INCOMPLETE`). Result comments
-   count only when authored by `executorLogin`; copies by anyone else are ignored (counted in
-   `ignoredResults`), so they can neither fake delivery nor block it.
-2. `admitIssueSnapshot` (distinct from the `created` webhook path; no action is fabricated):
-   exact provider fields, comment ∈ S, and a conservative edit filter (`lastEditedAt` null,
-   `includesCreatedEdit` false, zero `userContentEdits`). The filter refuses edit signals; it is not
-   proof that provider history was never edited. Identity binds node id, database id, author,
-   `updatedAt`, body digest, observation kind, source and the full config digest.
-3. `deriveIssuePrior` from provider state only. Only `executorLogin`'s reaction is a claim: a known
-   other login's same-kind reaction is not a claim and grants no principal migration, so it is ignored;
-   an unattributable (null/deleted-user) reaction or a duplicate claim is held as `UNRECOGNIZED`.
-   Our claim without a matching trusted result is `STARTED`; our claim plus one verified trusted result
-   is `APPENDED` (readback only). `nextIssueEffect` maps these.
-4. Re-check expiry from the injected clock, then claim with `gh api -i`: only a raw `201` whose body
-   names `executorLogin` and `eyes` proceeds. `200` is already claimed; any other status, unparsable
-   output or a different user stops.
-5. Re-read the comment after the claim and before any paid call; any change of the snapshot, loss of
-   our claim, an unattributable reaction or incomplete reactions stop as `DRIFT_AFTER_CLAIM` with the
-   claim retained.
-6. Re-check expiry, then launch the fixed owner. Only exit 1 with an exact closed entry-error
-   (`schema` `ops.semlint.entry-error.v1`, `status` `REJECTED`, `authority` false, one of the nine
-   pre-provider causes and no other key) is `REFUSED_BEFORE_PROVIDER`; exit 0 with a `real-result.v2`
-   that composes for this request proceeds; anything else (`ENTRY_FAILED`, empty or malformed stdout,
-   launcher refusal) is UNKNOWN, because a launcher failure and a child crash cannot be distinguished
-   from stdout. The nine causes are a copy of the entry's closed allowed set, fixed by a test.
-7. Unless `grant.postIncomplete`, a result that is not fully validated with zero unknown calls is
-   withheld (claim retained, no post).
-8. Re-check expiry. Expiry is one hard permission boundary for every effect, including delivery of an
-   already paid result: after `expiresAt` nothing is posted; the receipt reports
-   `GRANT_EXPIRED_BEFORE_APPEND` with the paid accounting and the claim keeps the ID `STARTED`. A grant
-   never extends itself; delivering that evaluation needs a new request comment under a new grant.
-   Otherwise append once with `gh api -i`; only `201` with an id proceeds, then the comment is re-read
-   and `verifyResultReadback` compares exact ID/repository/Issue/author/body. An unknown post is never
-   reposted; a later scan reconciles it.
+Steps (one job): fixed `actions/checkout` at `github.sha` without persisted credentials -> Nix
+toolchain -> resolve the `jev-review` package's own Node and store path from its wrapper before any
+credential use -> `plan` (no Jev key, run `GITHUB_TOKEN`) -> the only key-bearing step runs
+`semlint-entry.mjs` on `plan.json` and keeps its exit status and stdout -> `post` (no Jev key). Files
+between steps live only in the run's temporary directory.
 
-Process calls use the existing finite 30-minute per-call timeout constant; a timeout before a write
-is a read failure (no effect), during a claim/append/launch it is UNKNOWN and retained.
+Hard spend bound (attempted consumer provider calls, not money): a call is planned only for a
+first-attempt run (`run_attempt == 1`) whose native repository, workflow id (from the run API), path
+and run number fall in exactly one reviewed `runRanges` entry; the plan's call cap is
+`min(reservedCallsPerRun, limits.maxCalls)` and the fixed entry enforces it. Total attempted calls are
+at most `Σ (last − first + 1) × reservedCallsPerRun`, independent of comments, reactions or their
+deletion. Ranges never overlap for one workflow id; past ranges are kept and only appended through
+the same review; a changed workflow id (rename/recreation) matches no range and stops until a new
+range is reviewed, which is new authority, not a reset. Every `issue_comment` run, including skipped
+or failed ones, consumes a run number, so ranges can be wasted and exhausted; exhaustion needs a new
+reviewed range, not a per-comment grant. Reruns (`run_attempt > 1`) never spend.
 
-Supply candidate (not proven): the existing `jev-review` package copies the whole `packages/jev-review`
-directory into its store path and runs its own closure Node, so `issue-executor.mjs` and its siblings
-can be started as `<that node> <that store path>/issue-executor.mjs` without a new bin, helper or
-package row. The same store path is the one the owner launcher extracts for `tests/run.mjs`. Not
-proven by this source: that an actual canonical build contains the executor at that path, the exact
-start path on a target, and that the running executor was built from the same commit as `opsSha`
-(`executionSource`); the executor cannot observe its own commit. These are runtime residuals.
+`plan`: settings -> event (Issue, not PR) -> run identity and range -> workflow `state` is `active`
+(`GET actions/workflows/{id}`) -> exact snapshot -> admission -> prior -> claim -> re-read -> active.
+- Snapshot: GraphQL Issue `id number body lastEditedAt includesCreatedEdit userContentEdits` and the
+  command comment `id fullDatabaseId author body lastEditedAt includesCreatedEdit userContentEdits`
+  plus its `eyes` reactions. Comment identity is `fullDatabaseId` (BigInt wire string, exact safe
+  integer round trip, equal to the event's REST id); Int32 `databaseId` and generic `updatedAt` are not
+  requested. Errors, missing or extra fields, or identity mismatch hold with `SNAPSHOT_UNKNOWN`.
+- `admitIssueCommand` (`github-comment.mjs`): the command must still be the owner's unedited event
+  body; the subject is the existing `log-entry` record with the exact full Issue body, ref
+  `https://github.com/<repo>/issues/<n>` and revision = node id, body SHA-256 and the body-edit signals
+  (no generic `updatedAt`, so unrelated activity is not a revision; not a proof of complete edit
+  history); context records are the declared repository files at the run's `github.sha`; checks are
+  `allowedChecks`. The existing `preparePlan` validates catalog IDs and caps. The identity binds Issue,
+  subject revision, command comment, author, source SHA, settings digest, run and plan digest.
+- Prior/claim: only `github-actions[bot]`'s `eyes` is a claim (known other logins ignored,
+  unattributable or incomplete reactions held). A prior claim is `STARTED` (never re-evaluated). Only a
+  raw `201` naming the bot and `eyes` proceeds; `200` is `ALREADY_CLAIMED`; anything else is UNKNOWN.
+- Checkpoint before the paid call: subject, command and our sole claim unchanged and workflow active;
+  otherwise the run holds with no provider call (`DRIFT_BEFORE_CALL`, `WORKFLOW_NOT_ACTIVE`,
+  `REREAD_UNKNOWN`), claim retained.
 
-Every claim remains: after `STARTED`, a refusal, a withheld result or any UNKNOWN, that comment ID
-is never re-evaluated. Re-running needs a new request comment and a new grant version. The source
-calls no delete/update provider API. At-most-effect holds only while provider state stays intact:
-removal of the claim reaction or of history by anyone holding `executorLogin` credentials (or an
-administrator) is outside this proof and is not detectable by the source.
+`post`: the request is re-admitted from the run-local state (pure) and must have the same digest.
+Only exit 1 with an exact closed entry-error (`authority` false, one of the nine pre-provider causes,
+no other key; the set is fixed against the entry by a test) is `REFUSED_BEFORE_PROVIDER`; a
+`real-result.v2` that composes for this request proceeds; anything else (`ENTRY_FAILED`, empty or
+malformed output, no status) is UNKNOWN and never posted. Not-selected, incomplete and failed items
+are appended as honest closed records but the receipt's `complete` is false. Before posting, the
+workflow must still be active and subject/command unchanged; otherwise the paid result is `WITHHELD`
+with its real accounting. Append creates one new comment (never update/delete); only `201` with an id
+proceeds, then `verifyResultReadback` compares exact ID/repository/Issue/author/body. Unknown posts are
+never reposted; mismatches stay mismatches.
 
-At-most-effect is per fixed `executorLogin`. No principal migration is currently authorized. Because a
-known other login's reaction is ignored (only unattributable reactions are held), claims made by a former
-executor are invisible to a new one: under a changed `executorLogin`, an ID that the old principal
-already claimed or paid for would be evaluated again. The source cannot guarantee migration exclusion.
-Any future, separately authorized migration therefore requires the grant author to exclude from the new
-grant every comment ID previously granted to or claimed by the old principal.
+Stop and recovery: disabling the workflow prevents new runs; a run already in progress stops at its
+next observed checkpoint (not instantly; an in-flight provider call is not undone and a cancelled run
+may leave UNKNOWN). There is no dispatch: after a lost event, a stop or an UNKNOWN, the owner reads back
+and reconciles, then posts a new command, which is a new consciously authorized attempt within the
+same run reservation; a claimed or UNKNOWN command is never recalled automatically. The source calls no
+delete/update API. Duplicate exclusion holds only while provider claim/history stays intact; the hard
+spend bound does not depend on it. The executor identity is the fixed `github-actions[bot]`; no
+principal migration is authorized.
 
 ## Caller data and trusted grant
 
@@ -197,7 +192,7 @@ Only the target owner injects `JEV_API_KEY`. The existing launcher may place it 
 child environment before that child validates stdin; this is NOT a claim that the child
 has no secret until admission. Caller admission precedes owner launch, and the shared
 child handler revalidates the whole plan before reading the key or doing provider work.
-Consumers never read, decrypt, copy or forward it. Existing `askJev` sends pinned `jev-1.13.0` native named
+Consumers never read, decrypt, copy or forward it. The shared bound provider sends pinned `jev-1.13.0` native named
 Noul questions, explicit criteria, fixed official endpoint, redirect refusal and finite timeout.
 No automatic retry is made. Input errors output only a closed error enum, not raw child or
 provider diagnostics. Execution failures retain canonical per-item statuses and null values.
@@ -210,7 +205,7 @@ Catalog-v1 per-case semantic results and Issue request/result envelopes retain t
 callback counter separately counts its invocation wrapper (which may reject on deadline
 before the owner callback). Validated calls are distinct. Generic callback fixtures retain
 `provider:null` per case and null native totals, never inferred HTTP counters.
-`executeOwnerPlan` instead observes the existing `askJev` fetch boundary without a second
+`executeOwnerPlan` instead observes the existing shared provider fetch boundary without a second
 client: increment `attemptedHttpCalls` immediately before fetch; `completedHttpCalls` after
 response receipt; `validatedResponses` only after pinned-model/answer validation. Successful
 response bytes are consumed once under the original signal and exposed only as SHA256 digest.

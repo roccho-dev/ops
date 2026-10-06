@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
 import { JEV_MODEL } from './core.mjs';
-import { askJev } from './jev.mjs';
+import { bindJevReview } from './jev.mjs';
 import { semlint } from './semlint.mjs';
 
 export const ENTRY_LIMITS = Object.freeze({ maxCases: 24, maxCalls: 24, maxInputBytes: 1048576, timeoutMs: 15000, deadlineMs: 60000 });
@@ -117,32 +117,36 @@ export async function executeOwnerPlan(prepared, key, fetchImpl = fetch) {
     validatedModel: null, usage: null, elapsedMs: 0, responseDigest: null,
   }]));
   let nativeAttempts = 0;
+  let activeProvider = null;
+  // runPlan is serial. Capture the current case before awaiting the native
+  // operation, so even a late completion remains attributed to its own case.
+  const observedFetch = async (url, init) => {
+    const provider = activeProvider;
+    if (!provider) fail('ENTRY_REQUEST_REFUSED');
+    if (url !== 'https://api.typesafe.ai/v1/systemone' || init.method !== 'POST' || init.redirect !== 'error'
+      || !(init.signal instanceof AbortSignal) || nativeAttempts >= prepared.limits.maxCalls) fail('ENTRY_REQUEST_REFUSED');
+    init.signal.throwIfAborted();
+    nativeAttempts++; provider.attemptedHttpCalls++; provider.statusClass = 'REQUEST_ERROR';
+    const response = await fetchImpl(url, init);
+    provider.completedHttpCalls++; provider.statusClass = 'HTTP_' + Math.floor(response.status / 100) + 'XX';
+    if (!response.ok) return response;
+    // Same response/body/signal, consumed once. No clone, independent timer or retry.
+    const bytes = Buffer.from(await response.arrayBuffer());
+    init.signal.throwIfAborted();
+    provider.responseDigest = createHash('sha256').update(bytes).digest('hex');
+    return { ok: response.ok, status: response.status, json: async () => JSON.parse(bytes.toString('utf8')) };
+  };
+  const ask = bindJevReview({ key, fetchImpl: observedFetch });
   const output = await runPlan(prepared, async (state, questions, { caseId, timeoutMs }) => {
     const provider = providers.get(caseId), start = performance.now();
+    activeProvider = provider;
     try {
-      // Observe the existing client at the native fetch boundary, not at its callback wrapper.
-      const observedFetch = async (url, init) => {
-        if (url !== 'https://api.typesafe.ai/v1/systemone' || init.method !== 'POST' || init.redirect !== 'error'
-          || !(init.signal instanceof AbortSignal) || nativeAttempts >= prepared.limits.maxCalls) fail('ENTRY_REQUEST_REFUSED');
-        init.signal.throwIfAborted();
-        nativeAttempts++; provider.attemptedHttpCalls++; provider.statusClass = 'REQUEST_ERROR';
-        const response = await fetchImpl(url, init);
-        provider.completedHttpCalls++; provider.statusClass = 'HTTP_' + Math.floor(response.status / 100) + 'XX';
-        if (!response.ok) return response;
-        // Same response/body/signal, consumed once. No clone, independent timer or retry.
-        const bytes = Buffer.from(await response.arrayBuffer());
-        init.signal.throwIfAborted();
-        provider.responseDigest = createHash('sha256').update(bytes).digest('hex');
-        return { ok: response.ok, status: response.status, json: async () => JSON.parse(bytes.toString('utf8')) };
-      };
-      const answer = await askJev(state, questions, {
-        key, endpoint: 'https://api.typesafe.ai/v1/systemone', timeoutMs, fetchImpl: observedFetch,
-      });
+      const answer = await ask(state, questions, { timeoutMs });
       provider.validatedResponses = 1; provider.validatedModel = JEV_MODEL; provider.statusClass = 'VALIDATED_RESPONSE';
       const usage = Object.entries(answer.usage).filter(([name]) => ['input_tokens', 'output_tokens', 'total_tokens'].includes(name));
       provider.usage = usage.length ? Object.fromEntries(usage) : null;
       return answer;
-    } finally { provider.elapsedMs = performance.now() - start; }
+    } finally { provider.elapsedMs = performance.now() - start; activeProvider = null; }
   });
   for (const row of output.cases) row.provider = providers.get(row.id);
   output.accounting.providerHttpCalls = nativeAttempts;

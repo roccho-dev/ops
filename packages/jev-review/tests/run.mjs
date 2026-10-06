@@ -9,6 +9,8 @@ const { JEV_MODEL } = await import('../core.mjs');
 const { evaluate } = await import('../review.mjs');
 const { createHash } = await import('node:crypto');
 const { semlint } = await import('../semlint.mjs');
+const { bindJevReview, askJev } = await import('../jev.mjs');
+const { preparePlan, executeOwnerPlan, ENTRY_LIMITS } = await import('../semlint-entry.mjs');
 const { rankJudgments } = await import('../rank.mjs');
 const { evaluateInput, parseJsonl, rowsForEvaluation, serializeJsonl, validateCliInput, writeAndReadback } = await import('../bin/jev-review.mjs');
 
@@ -211,6 +213,75 @@ const inconsistent = {...sample, subject: new Proxy({...sample.subject}, {getOwn
 await assert.rejects(() => semlint(inconsistent, noCalls), /^Error: INVALID_SEMLINT_INPUT$/);
 semlintCases += 2;
 
+// Shared provider binding: synthetic credentials only, no real HTTP. The
+// owner binds once and attributes separate calls to the correct case.
+let providerBindingCases = 0;
+const responseFor = (init) => {
+  const request = JSON.parse(init.body);
+  return { model: JEV_MODEL, answers: Object.fromEntries(Object.keys(request.questions).map((key) =>
+    [key, { type: 'noul', noul: 0.5 }])), usage: { input_tokens: 2 } };
+};
+const questions = { q0: { instructions: 'fixture' } };
+const boundRequests = [];
+const bindingOptions = { key: canary, fetchImpl: async (url, init) => {
+  boundRequests.push({ url, init });
+  return new Response(JSON.stringify(responseFor(init)), { status: 200 });
+} };
+const bound = bindJevReview(bindingOptions);
+bindingOptions.key = 'changed-after-binding';
+await bound(state, questions, { timeoutMs: 1000 });
+await bound(state, questions, { timeoutMs: 1000 });
+assert.equal(boundRequests.length, 2);
+for (const { url, init } of boundRequests) {
+  assert.equal(url, 'https://api.typesafe.ai/v1/systemone');
+  assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'error');
+  assert.equal(init.headers.authorization, `Bearer ${canary}`);
+  assert.equal(init.signal instanceof AbortSignal, true);
+}
+providerBindingCases++;
+await assert.rejects(() => askJev(state, questions, {
+  key: canary, endpoint: 'https://untrusted.invalid/', timeoutMs: 1000,
+  fetchImpl: () => { throw new Error('MUST_NOT_CALL'); },
+}), /INVALID_JEV_ENDPOINT/);
+providerBindingCases++;
+await assert.rejects(() => bindJevReview({ key: ' ', fetchImpl: () => { throw new Error('MUST_NOT_CALL'); } })
+  (state, questions, { timeoutMs: 1000 }), /JEV_API_KEY_REQUIRED/);
+providerBindingCases++;
+await assert.rejects(() => bindJevReview({ key: canary, fetchImpl: async () =>
+  ({ ok: true, status: 200, json: () => new Promise(() => {}) }) })
+  (state, questions, { timeoutMs: 5 }), /JEV_PROVIDER_TIMEOUT/);
+providerBindingCases++;
+await assert.rejects(() => bindJevReview({ key: canary, fetchImpl: async () =>
+  ({ ok: true, status: 200, json: async () => { throw new Error(canary); } }) })
+  (state, questions, { timeoutMs: 1000 }), /INVALID_JEV_JSON/);
+providerBindingCases++;
+let ownerRequests = 0;
+const ownerPlan = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: [
+  { id: 'first', input: sample }, { id: 'later', input: sample },
+], limits: { ...ENTRY_LIMITS, maxCases: 2, maxCalls: 2 } });
+const ownerResult = await executeOwnerPlan(ownerPlan, canary, async (url, init) => {
+  assert.equal(init.redirect, 'error'); ownerRequests++;
+  return ownerRequests === 1 ? new Response(JSON.stringify(responseFor(init)), { status: 200 })
+    : new Response('synthetic rejection', { status: 400 });
+});
+assert.equal(ownerRequests, 2);
+assert.deepEqual(ownerResult.cases.map(({ provider }) => [provider.attemptedHttpCalls,
+  provider.completedHttpCalls, provider.validatedResponses, provider.statusClass]), [
+  [1, 1, 1, 'VALIDATED_RESPONSE'], [1, 1, 0, 'HTTP_4XX'],
+]);
+assert.equal(ownerResult.accounting.providerHttpCalls, 2);
+assert.equal(ownerResult.accounting.validatedResponses, 1);
+assert.equal(ownerResult.accounting.unknownHttpCalls, 0);
+assert.equal(JSON.stringify(ownerResult).includes(canary), false);
+providerBindingCases++;
+const incompletePlan = await preparePlan({ schema: 'ops.semlint.real-input.v1',
+  cases: [{ id: 'incomplete', input: { ...sample, context: [] } }] });
+const incompleteOwner = await executeOwnerPlan(incompletePlan, undefined, () => { throw new Error('MUST_NOT_CALL'); });
+assert.equal(incompleteOwner.accounting.providerHttpCalls, 0);
+assert.equal(incompleteOwner.cases[0].result.records[0].status, 'INCOMPLETE');
+providerBindingCases++;
+
+assert.equal(providerBindingCases, 7);
 console.log(JSON.stringify({
   status: 'PASS',
   core: 'semantic-evaluate',
