@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Read already acquired inputs; no network, credential or effect access."""
+"""Compare acquired inputs or test this installed package; no provider access."""
 import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 from core import InputError, canonical, compare, load_json
 
 MAX_BYTES = 2 * 1024 * 1024
@@ -20,10 +22,20 @@ def read(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--admission", type=Path, required=True,
+    parser.add_argument("--selftest", action="store_true", help="test the same installed core and CLI")
+    parser.add_argument("--input", type=Path)
+    parser.add_argument("--admission", type=Path,
                         help="independently admitted scope/inventory/evidence; not producer self-approval")
     args = parser.parse_args()
+    if args.selftest:
+        if args.input or args.admission:
+            parser.error("selftest does not consume external inputs")
+        import unittest
+        suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern="test_*.py")
+        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        return 0 if result.wasSuccessful() and result.testsRun > 0 and not result.skipped else 1
+    if args.input is None or args.admission is None:
+        parser.error("--input and --admission are required")
     try:
         result = compare(read(args.input), read(args.admission))
     except OSError:
