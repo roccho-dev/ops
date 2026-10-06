@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { main as runtimeMain } from "../../voice-ui-target-runtime/entry.mjs";
 import {
   NATIVE_DEPLOY_SETTINGS, PROJECTION_REQUIREMENTS,
   projectRequirements, validateProjectionReceipt,
@@ -86,6 +87,23 @@ function admitFixture() {
 }
 const scratch = mkdtempSync(path.join(tmpdir(), "contract-diff-source-test-"));
 try {
+  check("ordinary runtime entry generates R without reading effect configuration", () => {
+    const selected = path.join(scratch, "selected.json");
+    writeFileSync(selected, JSON.stringify({ target, obligation }));
+    const config = new Proxy({ opsSha: revision }, { get(value, key) {
+      assert.equal(key, "opsSha", "requirement mode must not access effect configuration");
+      return value[key];
+    } });
+    let output = "";
+    const write = process.stdout.write;
+    try {
+      process.stdout.write = chunk => { output += chunk; return true; };
+      runtimeMain(config, path.join(scratch, "no-runtime-assets"), ["--requirements", selected]);
+    } finally { process.stdout.write = write; }
+    assert.deepEqual(JSON.parse(output), required);
+    writeFileSync(selected, JSON.stringify({ target, obligation, opsSha: "b".repeat(40) }));
+    assert.throws(() => runtimeMain(config, scratch, ["--requirements", selected]));
+  });
   const input = path.join(scratch, "input.json"), accepted = path.join(scratch, "admission.json");
   function run() {
     writeFileSync(input, canonical(packet)); writeFileSync(accepted, canonical(admission));
