@@ -67,12 +67,13 @@ function mapNode(node, repository, issue) {
 }
 
 // Owner stdout is one JSON line. Only an exact closed pre-provider entry-error is a refusal; anything else
-// that is not a v2 result (including ENTRY_FAILED, empty or malformed output) is UNKNOWN.
+// that is not a v2 or v3 result (including ENTRY_FAILED, empty or malformed output) is UNKNOWN.
+// The closed shape of either receipt is validated later by composeResultComment.
 export function classifyOwnerOutput(out) {
   const value = oneLine(out?.stdout);
   if (out?.status === 1 && value && Object.keys(value).length === 4 && value.schema === 'ops.semlint.entry-error.v1'
     && value.status === 'REJECTED' && value.authority === false && PRE_PROVIDER_CAUSES.includes(value.cause)) return { kind: 'REFUSED', cause: value.cause };
-  if (out?.status === 0 && value?.schema === 'ops.semlint.real-result.v2') return { kind: 'RESULT', value };
+  if (out?.status === 0 && ['ops.semlint.real-result.v2', 'ops.semlint.real-result.v3'].includes(value?.schema)) return { kind: 'RESULT', value };
   return { kind: 'UNKNOWN' };
 }
 export { PRE_PROVIDER_CAUSES };

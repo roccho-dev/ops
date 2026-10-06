@@ -40,6 +40,10 @@ jobs:
           if-no-files-found: error
   flake-check:
     runs-on: ubuntu-24.04
+    outputs:
+      jev_review_export_sha256: ${{ steps.jev_review_runtime.outputs.export_sha256 }}
+      jev_review_provenance_sha256: ${{ steps.jev_review_runtime.outputs.provenance_sha256 }}
+      jev_review_root: ${{ steps.jev_review_runtime.outputs.root }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,6 +80,56 @@ jobs:
           fi
           git diff --exit-code -- flake.lock
           tail -n 80 "$log"
+      # Provide the exact checked jev-review runtime: its complete closure as one nix-store export plus provenance.
+      - name: Export provided jev-review runtime
+        id: jev_review_runtime
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          root="$(nix build --no-link --print-out-paths .#packages.x86_64-linux.jev-review)"
+          mapfile -t exec_lines < <(grep '^exec ' "$root/bin/jev-review")
+          test "${#exec_lines[@]}" -eq 1
+          pattern='^exec (/nix/store/[a-z0-9]{32}-nodejs-[^/ ]+/bin/node) (/nix/store/[a-z0-9]{32}-jev-review)/bin/jev-review[.]mjs "[$]@"$'
+          [[ ${exec_lines[0]} =~ $pattern ]]
+          node="${BASH_REMATCH[1]}" source="${BASH_REMATCH[2]}"
+          diff -r "$source" packages/jev-review # provided source is exactly the checked package directory
+          files_json() { (cd "$1" && find . -type f -print0 | xargs -0 sha256sum) | jq -Rn '[inputs | capture("^(?<h>[0-9a-f]{64})  [.]/(?<p>.+)$") | {(.p): .h}] | add'; }
+          mapfile -t closure < <(nix-store --query --requisites "$root")
+          mkdir -p jev-review-runtime
+          export_file=jev-review-runtime/jev-review-runtime.nix-export
+          nix-store --export "${closure[@]}" > "$export_file"
+          bytes="$(stat -c %s "$export_file")" digest="$(sha256sum "$export_file" | cut -d' ' -f1)"
+          test "$bytes" -lt 2147483648
+          nix path-info --json --recursive "$root" > "$RUNNER_TEMP/jev-path-info.json"
+          diff <(printf '%s\n' "${closure[@]}" | sort) \
+            <(jq -r 'if type == "array" then .[].path else keys[] end' "$RUNNER_TEMP/jev-path-info.json" | sort)
+          files_json "$source" > "$RUNNER_TEMP/jev-files.json"
+          jq -n --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXPECTED_SHA" --arg tree "$(git rev-parse 'HEAD^{tree}')" \
+            --arg ref "$GITHUB_WORKFLOW_REF" --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg root "$root" --arg node "$node" --arg source "$source" --argjson bytes "$bytes" --arg digest "$digest" \
+            --slurpfile info "$RUNNER_TEMP/jev-path-info.json" --slurpfile files "$RUNNER_TEMP/jev-files.json" '{
+              schema: "ops.jev-review.runtime-provenance/1",
+              producer: { repository: $repo, workflow_ref: $ref, run_id: $run, run_attempt: $attempt },
+              source: { repository: $repo, commit: $sha, tree: $tree },
+              runtime: { root: $root, entry: "\($root)/bin/jev-review", node: $node, source: $source, files: $files[0],
+                export: { name: "jev-review-runtime.nix-export", format: "nix-store --export", bytes: $bytes, sha256: $digest },
+                closure: ($info[0] | (if type == "array" then . else to_entries | map(.value + { path: .key }) end)
+                  | map({ path, narHash, narSize }) | sort_by(.path)) },
+              claim: "MECHANICAL_PROVISION_NOT_LIVE_OR_SEMANTIC_QUALITY" }' > jev-review-runtime/provenance.json
+          provenance_digest="$(sha256sum jev-review-runtime/provenance.json | cut -d' ' -f1)"
+          # Same line in this job's own log and the uploaded flake log: digests are readable without the artifact.
+          printf 'jev_review_runtime root=%s source=%s export_sha256=%s bytes=%s provenance_sha256=%s\n' \
+            "$root" "$source" "$digest" "$bytes" "$provenance_digest" | tee -a nix-flake-check.log
+          { echo "export_sha256=$digest"; echo "provenance_sha256=$provenance_digest"; echo "root=$root"; } >> "$GITHUB_OUTPUT"
+      - name: Upload provided jev-review runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: jev-review-runtime-${{ github.event.pull_request.head.sha || github.sha }}
+          path: jev-review-runtime/
+          if-no-files-found: error
+          retention-days: 90
       - name: Upload flake check log
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,3 +137,80 @@ jobs:
           name: nix-flake-check-log
           path: nix-flake-check.log
           if-no-files-found: ignore
+  # Fresh consumer of the SAME uploaded bytes: no checkout, no evaluation or build; Nix only imports and verifies.
+  # Mechanical clean start of the provided package, never live semantic evidence.
+  jev-review-fresh-consumer:
+    needs: flake-check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      EXPORT_SHA256: ${{ needs.flake-check.outputs.jev_review_export_sha256 }}
+      PROVENANCE_SHA256: ${{ needs.flake-check.outputs.jev_review_provenance_sha256 }}
+      ROOT: ${{ needs.flake-check.outputs.jev_review_root }}
+    steps:
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - uses: actions/download-artifact@v4
+        with:
+          name: jev-review-runtime-${{ github.event.pull_request.head.sha || github.sha }}
+          path: runtime
+      - name: Import and verify the provided runtime
+        run: |
+          set -euo pipefail
+          test ! -e .git # no repository checkout here
+          test ! -e flake.nix
+          f=runtime/jev-review-runtime.nix-export p=runtime/provenance.json
+          test "$(cd runtime && find . -type f -printf '%f\n' | sort | paste -sd ' ')" = "jev-review-runtime.nix-export provenance.json"
+          [[ $EXPORT_SHA256 =~ ^[0-9a-f]{64}$ && $PROVENANCE_SHA256 =~ ^[0-9a-f]{64}$ ]] # producer job outputs present
+          test "$(sha256sum "$p" | cut -d' ' -f1)" = "$PROVENANCE_SHA256" # pinned before provenance is parsed
+          test "$(sha256sum "$f" | cut -d' ' -f1)" = "$EXPORT_SHA256" # digest from the producer job output, not the artifact
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg root "$ROOT" --arg digest "$EXPORT_SHA256" \
+            --argjson bytes "$(stat -c %s "$f")" '
+            .schema == "ops.jev-review.runtime-provenance/1" and .source.repository == $repo and .source.commit == $sha
+            and .runtime.root == $root and .runtime.entry == "\($root)/bin/jev-review"
+            and .runtime.export.sha256 == $digest and .runtime.export.bytes == $bytes
+            and ($root | test("^/nix/store/[0-9a-z]{32}-jev-review$")) and (.runtime.source | test("^/nix/store/[0-9a-z]{32}-jev-review$"))
+            and (.runtime.node | test("^/nix/store/[0-9a-z]{32}-nodejs-[^/ ]+/bin/node$"))
+            and (.runtime.source as $s | any(.runtime.closure[]; .path == $root) and any(.runtime.closure[]; .path == $s))
+            and (.runtime.files | has("semlint.mjs") and has("semlint-entry.mjs") and has("github-comment.mjs") and has("issue-executor.mjs")
+              and has("tests/run.mjs") and has("tests/github-comment.mjs") and has("tests/issue-executor.mjs") and (has("semlint-domain.mjs") | not))' "$p" >/dev/null
+          source="$(jq -r .runtime.source "$p")" node="$(jq -r .runtime.node "$p")"
+          test ! -e "$ROOT" # only the import below can supply the runtime
+          test ! -e "$source"
+          # Unsigned export: root, whom the Nix daemon trusts, imports it. No build or substitution happens.
+          # shellcheck disable=SC2024 # the runner reads the downloaded export; only nix-store runs as root
+          sudo "$(command -v nix-store)" --import < "$f" > /dev/null
+          canon='map({ path, narHash, narSize }) | sort_by(.path)'
+          native='(if type == "array" then . else to_entries | map(.value + { path: .key }) end)'
+          diff <(nix path-info --json --recursive "$ROOT" | jq -cS "$native | $canon") <(jq -cS ".runtime.closure | $canon" "$p")
+          mapfile -t closure < <(jq -r '.runtime.closure[].path' "$p")
+          nix-store --verify-path "${closure[@]}"
+          mapfile -t exec_lines < <(grep '^exec ' "$ROOT/bin/jev-review")
+          test "${#exec_lines[@]}" -eq 1
+          test "${exec_lines[0]}" = "exec $node $source/bin/jev-review.mjs \"\$@\""
+          files_json() { (cd "$1" && find . -type f -print0 | xargs -0 sha256sum) | jq -Rn '[inputs | capture("^(?<h>[0-9a-f]{64})  [.]/(?<p>.+)$") | {(.p): .h}] | add'; }
+          diff <(files_json "$source" | jq -S .) <(jq -S .runtime.files "$p")
+          printf '%s\n%s\n' "$node" "$source" > "$RUNNER_TEMP/jev-runtime"
+      - name: Run provided unpaid tests from the imported bytes
+        run: |
+          set -euo pipefail
+          { read -r node; read -r source; } < "$RUNNER_TEMP/jev-runtime"
+          # Clean environment, no key, no network namespace beyond loopback; fixture fetches only.
+          run() { sudo unshare --net -- env -i HOME="$(mktemp -d)" TMPDIR="$(mktemp -d)" LANG=C.UTF-8 "$node" "$source/tests/$1"; }
+          run run.mjs > machine.json
+          # Control counts prove the provided tests ran; they are not quality evidence.
+          jq -e '.status == "PASS" and .realProviderCalls == 0 and .semanticQuality == "NOT_PROVEN" and .v14Controls > 0 and (has("v13Controls") | not) and (has("v12Controls") | not) and (has("v11Controls") | not) and (has("v10Controls") | not) and (has("v9Controls") | not) and (has("domainControls") | not)' machine.json
+          run github-comment.mjs > comment.json
+          jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' comment.json
+          run issue-executor.mjs > executor.json
+          jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' executor.json
+          {
+            echo "### Provided jev-review fresh consumer"
+            echo "- exact ops SHA: $EXACT_SHA; export sha256: $EXPORT_SHA256; provenance sha256: $PROVENANCE_SHA256"
+            echo "- imported closure verified; tests ran from the imported bytes only; mechanical provision, not live quality"
+          } >> "$GITHUB_STEP_SUMMARY"
