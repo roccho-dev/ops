@@ -563,18 +563,19 @@ const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.par
 const workflow = repoFile(WF_PATH);
 const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
 const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) => x.path === WF_PATH);
-assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment']);
+assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment', 'workflow_call']);
 assert.equal(boundary.length, 1); assert.equal(boundary[0].classification, 'secret_bearing_effect');
-assert.deepEqual(boundary[0].allowedEvents, ['issue_comment']); assert.ok(boundary[0].binding.startsWith('NOT_CONFIGURED'));
+assert.deepEqual(boundary[0].allowedEvents, ['issue_comment', 'workflow_call']); assert.ok(boundary[0].binding.startsWith('NOT_CONFIGURED'));
 assert.equal(boundary[0].secretScope, 'organization'); assert.equal(Object.hasOwn(boundary[0], 'environment'), false);
 assert.equal(/^\s*environment:/m.test(workflow), false);
-assert.match(workflow, /\non:\n  issue_comment:\n    types: \[created\]\n\n/);
+assert.match(workflow, /\non:\n  issue_comment:\n    types: \[created\]\n  workflow_call:\n/);
 assert.equal(/^\s*(?:workflow_dispatch|schedule|pull_request|pull_request_target|workflow_run|repository_dispatch|concurrency):/m.test(workflow), false);
-for (const part of ['github.event.issue.number == 483', "github.event.repository.owner.type == 'Organization'",
+for (const part of ['github.event.issue.number == 483', 'github.event.issue.number == 52', "github.event_name == 'issue_comment'", "github.event.repository.owner.type == 'Organization'",
   "github.event.comment.body == '/jev-evaluate'", 'github.event.issue.pull_request == null']) assert.ok(workflow.includes(part), part);
 const uses = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 assert.ok(uses.length === 2 && uses.every((u) => /^[A-Za-z0-9_.\/-]+@[0-9a-f]{40}$/.test(u)), uses.join());
-assert.ok(workflow.includes('ref: ${{ github.sha }}') && workflow.includes('persist-credentials: false'));
+assert.ok(workflow.includes('repository: roccho-org/ops') && /ref: [0-9a-f]{40}/.test(workflow) && workflow.includes('persist-credentials: false'));
+assert.ok(workflow.includes('test "$(git rev-parse HEAD)" = "$runtime_source"'));
 const steps = workflow.split('\n      - ').slice(1);
 const keyed = steps.filter((s) => s.includes('secrets.'));
 assert.equal(keyed.length, 1); assert.equal(workflow.match(/secrets\./g).length, 1);

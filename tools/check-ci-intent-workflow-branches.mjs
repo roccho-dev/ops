@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const EXACT = "${{ github.sha }}";
 const JEV_ORG_WORKFLOW = ".github/workflows/jev-issue-comment.yml";
+const JEV_MULTI_GUARD = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && github.event.comment.body == '/jev-evaluate' && github.event.issue.pull_request == null && ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))";
 const JEV_PLAN_RUN = [
   'set -euo pipefail',
   '"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"',
@@ -53,6 +54,9 @@ export function assertIsolatedPublisherPaths(workflow, filename) {
 // Unknown expression forms fail closed instead of being guessed safe.
 function guarded(job, events, allowed, boundary) {
   const guard = typeof job.if === "string" ? job.if.trim().replace(/^\$\{\{\s*|\s*\}\}$/g, "") : "";
+  if (boundary?.path === JEV_ORG_WORKFLOW && boundary.secretScope === "organization"
+    && guard.replace(/\s+/g, " ") === JEV_MULTI_GUARD
+    && same(events, ["issue_comment", "workflow_call"]) && same(allowed, events)) return true;
   if (/[|!()?:]/.test(guard)) return false;
   const parts = guard.split(/\s*&&\s*/);
   return allowed.some(event => {
@@ -142,7 +146,9 @@ export function analyzeEffectWorkflow(workflow, boundary) {
     need(effectNames.length > 0, "declared effect workflow has no visible secret job");
     const allowed = boundary.allowedEvents;
     need(Array.isArray(allowed) && allowed.length > 0
-      && allowed.every(event => ["workflow_dispatch", "issue_comment"].includes(event)), "invalid effect event contract");
+      && allowed.every(event => ["workflow_dispatch", "issue_comment"].includes(event)
+        || (event === "workflow_call" && boundary.path === JEV_ORG_WORKFLOW && boundary.secretScope === "organization")),
+      "invalid effect event contract");
     const contributing = new Set(), visiting = new Set();
     function visit(name) {
       need(typeof name === "string" && jobs[name], `missing upstream job: ${name}`);
@@ -156,7 +162,22 @@ export function analyzeEffectWorkflow(workflow, boundary) {
       const job = jobs[name];
       need(guarded(job, events, allowed, boundary), `${name}: automatic or unsupported event guard`);
       if (boundary.secretScope === "organization") {
-        need(same(events, ["issue_comment"]) && same(allowed, ["issue_comment"]), `${name}: Org effect is issue-comment only`);
+        const reused = same(events, ["issue_comment", "workflow_call"]) && same(allowed, events);
+        need((same(events, ["issue_comment"]) && same(allowed, ["issue_comment"])) || reused,
+          `${name}: Org effect is bounded issue-comment/reusable only`);
+        if (reused) {
+          need(JSON.stringify(workflow.on.workflow_call) === JSON.stringify({secrets:{JEV_API_KEY:{required:true}}}),
+            `${name}: reusable contract must pass only the provider slot`);
+          const checkout = (job.steps ?? []).filter(step => step.uses?.startsWith("actions/checkout@"));
+          need(checkout.length === 1 && checkout[0].with?.repository === "roccho-org/ops"
+            && /^[0-9a-f]{40}$/.test(checkout[0].with?.ref ?? "") && checkout[0].with["persist-credentials"] === false,
+            `${name}: reusable runtime source must be the fixed Ops commit`);
+          const provision = (job.steps ?? []).find(step => step.name === "Resolve fixed jev-review runtime before any credential use");
+          need(provision?.run?.includes(`runtime_source=${checkout[0].with.ref}`)
+            && provision.run.includes('test "$(git rev-parse HEAD)" = "$runtime_source"')
+            && provision.run.includes('echo "JEV_EXECUTION_SOURCE=$runtime_source" >> "$GITHUB_ENV"'),
+            `${name}: runtime source must be checked before credential use`);
+        }
         need(boundary.path === JEV_ORG_WORKFLOW && boundary.secretName === "JEV_API_KEY"
           && !Object.hasOwn(boundary, "environment") && !Object.hasOwn(job, "environment"), `${name}: Org Secret must not use an Environment`);
         const steps = job.steps ?? [], keyed = steps.filter(hasSecret), plans = steps.filter(step => step.id === "plan");
@@ -191,8 +212,13 @@ export function analyzeEffectWorkflow(workflow, boundary) {
           const action = step.uses.match(/^([A-Za-z0-9_.\/-]+)@([0-9a-f]{40})$/);
           need(action && !action[1].startsWith("./"), `${name}: all contributing Actions must use full SHA; local/reusable actions need expansion`);
           if (action[1] === "actions/checkout") {
-            need((step.with?.ref ?? EXACT) === EXACT, `${name}: source must equal exact workflow revision, not a variable name or branch`);
-            need(!step.with?.repository || step.with.repository === "${{ github.repository }}", `${name}: external checkout requires separate artifact admission`);
+            const fixedJev = boundary.path === JEV_ORG_WORKFLOW && boundary.secretScope === "organization"
+              && same(events, ["issue_comment", "workflow_call"]) && step.with?.repository === "roccho-org/ops"
+              && /^[0-9a-f]{40}$/.test(step.with?.ref ?? "") && step.with["persist-credentials"] === false;
+            if (!fixedJev) {
+              need((step.with?.ref ?? EXACT) === EXACT, `${name}: source must equal exact workflow revision, not a variable name or branch`);
+              need(!step.with?.repository || step.with.repository === "${{ github.repository }}", `${name}: external checkout requires separate artifact admission`);
+            }
           }
         }
         if (step.run) {
@@ -283,6 +309,26 @@ export function selftest() {
   assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,secretName:"OTHER"}).issues.length);
   assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,environment:"jev-issue-comment"}).issues.length);
   assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,allowedEvents:["workflow_dispatch"]}).issues.length);
+  const reusablePolicy = {...orgPolicy,allowedEvents:["issue_comment","workflow_call"]};
+  const reusable = structuredClone(org);
+  reusable.on.workflow_call = {secrets:{JEV_API_KEY:{required:true}}};
+  reusable.jobs.evaluate.if = JEV_MULTI_GUARD;
+  const runtime = "a".repeat(40);
+  reusable.jobs.evaluate.steps.unshift(
+    {uses:"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",with:{repository:"roccho-org/ops",ref:runtime,"persist-credentials":false}},
+    {name:"Resolve fixed jev-review runtime before any credential use",run:`runtime_source=${runtime}\ntest "$(git rev-parse HEAD)" = "$runtime_source"\necho "JEV_EXECUTION_SOURCE=$runtime_source" >> "$GITHUB_ENV"`});
+  assert.deepEqual(analyzeEffectWorkflow(reusable,reusablePolicy).issues,[]);
+  const reusableCases = [
+    w=>{w.on.workflow_call.inputs={program:{type:"string"}};},
+    w=>{w.on.workflow_call.secrets.EXTRA={required:true};},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 52","== 53");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("roccho-org/envs","other/envs");},
+    w=>{w.jobs.evaluate.steps[0].with.ref="proposals";},
+    w=>{w.jobs.evaluate.steps[0].with.repository="other/ops";},
+    w=>{w.jobs.evaluate.steps[0].with["persist-credentials"]=true;},
+    w=>{w.jobs.evaluate.steps[1].run="echo ready";},
+  ];
+  for (const mutate of reusableCases) {const w=structuredClone(reusable);mutate(w);assert.ok(analyzeEffectWorkflow(w,reusablePolicy).issues.length);}
   const parity=structuredClone(safe);
   parity.jobs.materialize.steps.push({if:"github.event_name == 'pull_request'",run:"git clone public-fixture"});
   assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
@@ -321,7 +367,7 @@ export function selftest() {
     w=>{w.jobs["worker-effect"].steps[3].run="git fetch origin proposals";},
   ];
   for (const mutate of bridgeCases) {const w=structuredClone(bridge);mutate(w);assert.throws(()=>assertVoiceUiWorkerEffectBridge(w));}
-  return {positive:3,negative:cases.length+2+bridgeCases.length,publisherIsolation:{positive:2,negative:20},workerEffectBridge:{positive:1,negative:bridgeCases.length},jevOrgAdmission:{positive:1,negative:orgCases.length+4}};
+  return {positive:3,negative:cases.length+2+bridgeCases.length,publisherIsolation:{positive:2,negative:20},workerEffectBridge:{positive:1,negative:bridgeCases.length},jevOrgAdmission:{positive:1,negative:orgCases.length+4},jevReusableAdmission:{positive:1,negative:reusableCases.length}};
 }
 
 export function check(root) {
