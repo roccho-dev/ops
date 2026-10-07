@@ -50,6 +50,17 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
+      - name: Prove Lane C whole-D shadow at exact source head
+        shell: bash
+        env:
+          LANE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          source_dir="$RUNNER_TEMP/whole-d-shadow-$LANE_HEAD"
+          git worktree add --detach "$source_dir" "$LANE_HEAD"
+          test "$(git -C "$source_dir" rev-parse HEAD)" = "$LANE_HEAD"
+          echo "whole-d-shadow source-head=$LANE_HEAD" | tee whole-d-shadow.log
+          node --test "$source_dir/packages/jev-dispatcher/whole-d-shadow.test.mjs" 2>&1 | tee -a whole-d-shadow.log
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
@@ -161,7 +172,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nix-flake-check-log
-          path: nix-flake-check.log
+          path: |
+            nix-flake-check.log
+            whole-d-shadow.log
           if-no-files-found: ignore
   # Fresh consumer of the SAME uploaded bytes: no checkout, no evaluation or build; Nix only imports and verifies.
   # Mechanical clean start of the provided package, never live semantic evidence.

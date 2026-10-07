@@ -1,0 +1,119 @@
+{
+  "scope": "Lane C / ops#449 / PR#452 / finite corpus preparation only",
+  "implementationHead": "a9cf7b5759fd38c118f8f63557d4fa8c6a91c57a",
+  "authorityRef": "https://github.com/roccho-dev/ops/issues/449#issuecomment-5898026275",
+  "previousBlockRef": "https://github.com/roccho-dev/ops/pull/452#issuecomment-5898064469",
+  "status": "BLOCK",
+  "reason": "EXTERNAL_OBSERVATION_PROVENANCE_UNAVAILABLE",
+  "experiment": "UNKNOWN / NOT_RUN",
+  "examinedEpisodes": 1,
+  "admittedCases": 0,
+  "selection": {
+    "episode": "adrs#411 / one-launch and subsequent check",
+    "basis": "The existing jev-dispatcher README names this completed R-once proof. One episode was examined for raw-source availability; it is NOT an admitted replay case.",
+    "sourcePath": "packages/jev-dispatcher/README.md",
+    "sourceBlob": "2f427d86c03f228b98092ccc29bb9554a21964b8"
+  },
+  "historicalPolicyProvenance": {
+    "repository": "roccho-dev/adrs",
+    "pullRequest": 411,
+    "mergedAt": "2026-09-25T08:27:51Z",
+    "commit": "191c01ac1f9b63e14f6649c64f3c363daafbfc05",
+    "control": {
+      "path": "policy/control.jsonl",
+      "blob": "ad494106b2aed6075f33295e654ee62f3c6fb22e",
+      "line": 238,
+      "id": "policy.jev.d-replacement.dispatch.v1",
+      "version": "policy-jev-d-replacement-dispatch-r-once-20260925-v1"
+    },
+    "requiredBlobLocators": {
+      "AGENTS.md": "ce77ce01ffd512c18e0899d762f6a37b1b836ef8",
+      "policy/organization.md": "79f91eb3a49a66ebc0a8f3ae96f793e37fc70bc1",
+      "policy/execution.md": "07a2311852cc8799cabc551660b68f9559a5054a",
+      "policy/README.md": "6aeb024d4bd5f648af1632cb86b7bdb18bbf588d"
+    },
+    "status": "historical merged contract located; not a fully frozen/selected model policy or current live GO",
+    "claimCeiling": "PR merge, row identity and blob locators are provenance, not policy correctness. The comparison report itself records a policy defect; it is not silently repaired for this episode."
+  },
+  "reusedAssets": {
+    "policyReader": {
+      "path": "packages/jev-dispatcher/policy-select.mjs",
+      "blob": "10eb8d3d2ad52b43bed49470a364b5cf8924f408"
+    },
+    "dispatcherAudit": {
+      "path": "packages/jev-dispatcher/dispatcher.mjs",
+      "blob": "c4c3d9d04219bfcf869c20d10c5e647b78b0717b"
+    },
+    "questionBuilder": {
+      "path": "packages/jev-review/review.mjs",
+      "blob": "fe1d60406884439589a2d3b097175687f3f092a6"
+    },
+    "historicalExecutorCommit": "9c5ba2e6ef190cf7a7ef04aedcf7eb769e12d6ba"
+  },
+  "observation": {
+    "observedAt": null,
+    "state": null,
+    "history": null,
+    "requiredRawSource": "/home/dev/.claude/projects/-work/b27e547c-14b7-47b9-a72e-7d5fdcdd724c.jsonl",
+    "requiredRuntime": "historical envs-dev-mutable OCI; contemporaneous /proc, exact detached checkout and memory observations",
+    "localAvailability": "Known transcript and both named read-checkout paths are absent here; wslc/ssh are unavailable. No target connection was performed.",
+    "archiveBoundary": {
+      "repository": "roccho-dev/adrs",
+      "commit": "191c01ac1f9b63e14f6649c64f3c363daafbfc05",
+      "path": "records/jev-policy-lint-20260925/README.md",
+      "blob": "19d3041f44df1cf037cd4374222ced83d5254363",
+      "finding": "The archive explicitly excludes full OCI R/W transcripts and retains local snapshot digests plus structural audit reports. A digest alone cannot recover the missing bytes."
+    },
+    "noInference": "Missing raw state is not an empty active/duplicate/history array. Comment publication time is not the original observation instant. No generation, sequence, effect identity or absence is invented."
+  },
+  "freeze": {
+    "modelInput": null,
+    "candidateUniverse": null,
+    "questions": null,
+    "inputSha256": null,
+    "candidatesSha256": null,
+    "questionsSha256": null,
+    "status": "NOT_FROZEN",
+    "reason": "No admissible at-time input; no candidate/query payload was constructed. Null means unavailable, not a frozen empty universe."
+  },
+  "leakageAudit": {
+    "status": "BLOCK / UNPROVEN",
+    "rawBoundaryAvailable": false,
+    "outcomeSummarySeenBeforeAnyCandidateFreeze": true,
+    "candidateConstructionPerformed": false,
+    "syntheticSubstitution": false,
+    "finding": "The discovered post-execution report is answer-bearing. W has read it; this episode cannot be claimed blind. It is quarantined separately, not converted into model state or used to backfill candidate targets. A new source-first freeze requires auditable independent construction and a leakage review."
+  },
+  "comparisonRecord": {
+    "path": "evidence/whole-d-corpus/adrs-411-reference-quarantine.json",
+    "sha256": "4f5fb6003324189dfb8c8b495ad4588978faf1c95794a3c9172eae16f9ffa0b2",
+    "notUsedForCandidateGeneration": true,
+    "exactPairing": "NOT_AVAILABLE"
+  },
+  "missingExternalConditions": [
+    "Raw pre-decision transcript with exact cutoff, generation and event ordering, bound to contemporaneous active/duplicate/checkout/effect observations.",
+    "The complete applicable accepted-policy selection at that cutoff; merge provenance alone is not enough.",
+    "Candidate construction from only that policy and observed input, frozen before comparison and independently checked for leakage.",
+    "Separately retained exact D decision and raw effect/readback; no candidate auto-expansion from the reference."
+  ],
+  "execution": {
+    "providerCalls": 0,
+    "realJev": "NOT_RUN",
+    "providerResponse": null,
+    "semanticCoverage": 0,
+    "secretChanges": 0,
+    "gatewayChanges": 0
+  },
+  "authority": {
+    "merge": 0,
+    "draftRemoval": 0,
+    "adoption": 0,
+    "skip": 0,
+    "liveDispatch": 0,
+    "refire": 0,
+    "terminal": 0,
+    "effect": 0,
+    "contract": 0
+  },
+  "claimCeiling": "This immutable record closes only this finite provenance investigation as BLOCK. It is not a replay corpus, a Jev semantic result, a permanent lane-stop decision, or a new runtime/portfolio state. Authentication would not cure these corpus gaps."
+}
