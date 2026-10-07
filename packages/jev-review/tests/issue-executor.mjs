@@ -197,10 +197,11 @@ await check('reservation-bound', async () => {
   const run = { repository: REPO, workflowId: WF, path: WF_PATH, number: 1, attempt: 1, id: 1 };
   assert.equal(selectRunRange(config({ limits: { ...ENTRY_LIMITS, maxCalls: 2 } }), run).callsPerRun, 1);
   assert.equal(selectRunRange(config({ limits: { ...ENTRY_LIMITS, maxCalls: 2 }, runRanges: [range({ reservedCallsPerRun: 3 })] }), run).callsPerRun, 2);
-  // The shipped settings are a source hold: no provider/target or range, so no effect or snapshot read.
+  // Explicit unconfigured settings stay a source hold, independent of later authorized adoption.
   const shipped = JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8'));
-  assert.deepEqual(validateActionsConfig(shipped).runRanges, []);
-  const s = world(); const rs = await fullRun(s, s.addComment(), { cfg: shipped });
+  validateActionsConfig(shipped);
+  const held = { ...shipped, trustedCallers: [], context: [], runRanges: [], targets: [], provider: null };
+  const s = world(); const rs = await fullRun(s, s.addComment(), { cfg: held });
   assert.deepEqual(outcome(rs), ['NONE', 'PROVIDER_NOT_CONFIGURED']); assert.deepEqual(effects(s), zero);
   assert.equal(s.calls.issueQ + s.calls.commentQ + s.calls.workflow, 0);
 });

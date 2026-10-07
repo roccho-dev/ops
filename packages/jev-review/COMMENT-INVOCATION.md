@@ -1,4 +1,4 @@
-# Issue invocation SOURCE contract
+# Issue invocation contract
 
 Org admission is explicit in the reviewed `issue-actions.json`: `targets` binds
 the actual repository ID and Issue number, and `provider` carries an exact envs
@@ -61,27 +61,32 @@ English-auxiliary owner boundary.
   Runtime provenance v2 additionally binds the supplied shared-provider sibling and verifies
   both source trees and the complete native closure before executing the provided tests.
 
-The Org Secret binding, actual Actions runs, live provider behavior and real 201/200
-semantics are **NOT_CONFIGURED / UNVERIFIED by this source**. Fixtures do not prove live
-at-most-effect, paid-call accounting or Issue completion.
+The reviewed settings now bind the actual envs Org projection receipt at
+envs08a3ff165cc6daf81db160d25ca6d365642f24a4. Its metadata readback proves the
+selected slot, not Jev use. Live Actions/provider/201-200 semantics remain
+UNVERIFIED until actual runs; fixtures do not prove paid-call or Issue completion.
 
 ## Actions issue command
 
-The workflow job requires Issue `483`, an Organization-owned repository, body exactly
-`/jev-evaluate`, and no pull request. The observed command author must be in reviewed
-`trustedCallers`; Organization names are never compared with a person's login. The allowlist
-is not inferred from a public comment. Wider Issues and repository connections remain unimplemented.
+The workflow job requires Org Ops Issue483 or envs Issue52, body exactly
+`/jev-evaluate`, and no pull request. The observed command author must be reviewed
+`roccho-dev`; Organization names are never compared with a person's login.
+Other Issues/repositories stop. The allowlist is not inferred from a public comment.
 
 The only adopted placement direction is envs SOPS SSOT -> Org Secret -> selected Org-owned
 repositories -> fixed provider step. No key is registered in Ops Repository/Environment Secrets,
 and the workflow references no Environment. Rotation updates the same Org slot; it is not a
-one-time-ever projection. Org identity, projection principal, selected repositories and exact
-handoff remain NOT_CONFIGURED; this source does not prove them. Shipped `trustedCallers` and
-`runRanges` are empty. Personal ownership stops with `ORG_REQUIRED`; an empty range stops with
-`NO_RANGE` before any snapshot, claim or provider call. No Org, repository transfer or secret
-change is performed by this source. See ADRS #547 update comment 6031490611 and envs #52.
+one-time-ever projection. Org319185687 selects Ops1275606595/envs1391871347;
+the native projector/current controller and separate metadata readback are recorded in
+the exact envs handoff. This executor performs no secret management.
+The first bounded proof reserves only native run numbers1 and3 for each actual workflow
+Ops377399991/envs377400122: at most four attempted calls total. A result-comment event
+can consume skipped run2. Empty/exhausted ranges stop with `NO_RANGE`; missed slots
+are not replenished automatically. Later reviewed reservations append without resetting
+history. Personal ownership stops with `ORG_REQUIRED`.
+See ADRS #547 update6031490611 and envs #52; rotation/revoke remains separate unfinished work.
 
-Steps (one job): fixed `actions/checkout` at `github.sha` without persisted credentials -> Nix
+Steps (one job): fixed `actions/checkout` of the adopted Ops runtime source, without persisted credentials -> Nix
 toolchain -> resolve the `jev-review` package's own Node and store path from its wrapper before any
 credential use -> `plan` (no Jev key, run `GITHUB_TOKEN`) -> only an admitted `plan.json` sets
 the step output `planned=true` -> the only key-bearing step runs
