@@ -17,5 +17,7 @@
     "timeoutMs": 15000,
     "deadlineMs": 60000
   },
-  "runRanges": []
+  "runRanges": [],
+  "targets": [],
+  "provider": null
 }

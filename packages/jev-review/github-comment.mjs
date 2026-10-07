@@ -112,12 +112,33 @@ function finishRequest(prepared, identityOf) {
 
 // Trusted Actions settings (reviewed source). Requester allowlist is never read from Issue data.
 // Org Secret projection/target is outside this source; no executable, argv or program selector.
-export const ACTIONS_CONFIG_KEYS = ['trustedCallers', 'allowedChecks', 'context', 'subjectScope', 'limits', 'runRanges'];
+export const ACTIONS_CONFIG_KEYS = ['trustedCallers', 'allowedChecks', 'context', 'subjectScope', 'limits', 'runRanges', 'targets', 'provider'];
 const RANGE_KEYS = ['repository', 'workflowId', 'path', 'first', 'last', 'reservedCallsPerRun'];
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const REPO_PATH = /^(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
 const WORKFLOW_PATH = /^\.github\/workflows\/[A-Za-z0-9._-]+\.ya?ml$/;
 const freezeDeep = (x) => { if (x && typeof x === 'object') { Object.values(x).forEach(freezeDeep); Object.freeze(x); } return x; };
+const databaseId = (x) => typeof x === 'string' && /^[1-9][0-9]*$/.test(x);
+function providerValid(value) {
+  if (value === null) return true;
+  if (!exact(value, ['repository', 'revision', 'path', 'receipt']) || !REPOSITORY.test(value.repository) || !sha(value.revision)
+    || value.path !== 'handoffs/dev-jev-api.github-actions.json') return false;
+  const r = value.receipt, t = r?.target;
+  return exact(r, ['kind', 'source', 'binding', 'controller', 'created_at', 'operation', 'target', 'readback', 'provider_use'])
+    && r.kind === 'envs.orgSecretProjectionReceipt.v1' && sha(r.source) && r.binding === 'jev-api.github-actions'
+    && typeof r.controller === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(r.controller)
+    && typeof r.created_at === 'string' && r.created_at.endsWith('Z') && Number.isFinite(Date.parse(r.created_at))
+    && r.operation === 'github_org_secret_put' && r.readback === 'SECRET_NAME_AND_SELECTED_REPOSITORY_IDS' && r.provider_use === 'NOT_RUN'
+    && exact(t, ['provider', 'organization', 'organization_id', 'secret_name', 'repositories', 'repository_ids'])
+    && t.provider === 'github-org-secret' && typeof t.organization === 'string' && /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(t.organization)
+    && value.repository === `${t.organization}/envs` && databaseId(t.organization_id)
+    && t.secret_name === ['JEV', 'API', 'KEY'].join('_')
+    && Array.isArray(t.repositories) && t.repositories.length > 0 && t.repositories.length <= 100
+    && t.repositories.every((repo) => REPOSITORY.test(repo) && repo.startsWith(`${t.organization}/`))
+    && new Set(t.repositories).size === t.repositories.length && Array.isArray(t.repository_ids)
+    && t.repository_ids.length === t.repositories.length && t.repository_ids.every(databaseId)
+    && new Set(t.repository_ids).size === t.repository_ids.length;
+}
 export function validateActionsConfig(value) {
   let config;
   try { config = snapshotJson(value); entryLimits(config.limits); } catch { throw new Error('INVALID_ACTIONS_CONFIG'); }
@@ -129,6 +150,11 @@ export function validateActionsConfig(value) {
     || new Set(config.allowedChecks).size !== config.allowedChecks.length
     || !Array.isArray(config.context) || !config.context.every((c) => exact(c, ['role', 'path']) && text(c.role) && REPO_PATH.test(c.path))
     || new Set(config.context.map((c) => JSON.stringify([c.role, c.path]))).size !== config.context.length
+    || !providerValid(config.provider)
+    || !Array.isArray(config.targets) || !config.targets.every((t) => exact(t, ['repository', 'repositoryId', 'issue'])
+      && REPOSITORY.test(t.repository) && databaseId(t.repositoryId) && positive(t.issue))
+    || new Set(config.targets.map((t) => t.repository)).size !== config.targets.length
+    || new Set(config.targets.map((t) => t.repositoryId)).size !== config.targets.length
     || !Array.isArray(ranges) || !ranges.every((r) => exact(r, RANGE_KEYS) && REPOSITORY.test(r.repository) && positive(r.workflowId)
       && WORKFLOW_PATH.test(r.path) && positive(r.first) && positive(r.last) && r.first <= r.last
       && positive(r.reservedCallsPerRun) && r.reservedCallsPerRun <= ENTRY_LIMITS.maxCalls)) throw new Error('INVALID_ACTIONS_CONFIG');
@@ -136,6 +162,11 @@ export function validateActionsConfig(value) {
   for (const a of ranges) for (const b of ranges) {
     if (a !== b && a.repository === b.repository && a.workflowId === b.workflowId && a.first <= b.last && b.first <= a.last) throw new Error('INVALID_ACTIONS_CONFIG');
   }
+  if (config.provider !== null && config.targets.some((t) => {
+    const target = config.provider.receipt.target;
+    const i = target.repositories.indexOf(t.repository);
+    return i < 0 || target.repository_ids[i] !== t.repositoryId;
+  })) throw new Error('INVALID_ACTIONS_CONFIG');
   return freezeDeep(config);
 }
 

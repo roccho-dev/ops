@@ -1,5 +1,17 @@
 # Issue invocation SOURCE contract
 
+Org admission is explicit in the reviewed `issue-actions.json`: `targets` binds
+the actual repository ID and Issue number, and `provider` carries an exact envs
+Org projection receipt/reference. A plan or `provider_use: PASS` assertion is
+not a projection receipt. Null provider or empty targets remains NOT_CONFIGURED;
+no claim, key-bearing plan or provider call is admitted.
+
+The native caller run is checked against its own `GITHUB_SHA`, repository,
+workflow ID/path/number and first attempt. `JEV_EXECUTION_SOURCE` separately names
+the fixed Ops runtime/its context source; it is never replaced with the caller
+repository's SHA. Result identity keeps the originating repository/Issue and
+that runtime source. The keyless executor receives no provider key.
+
 This is the non-quality source slice for [ops#483](https://github.com/roccho-dev/ops/issues/483).
 The catalog and semantic meaning remain in `semlint.mjs` / [ops#471](https://github.com/roccho-dev/ops/issues/471).
 Usefulness and future quality are separate [ops#482](https://github.com/roccho-dev/ops/issues/482) work.

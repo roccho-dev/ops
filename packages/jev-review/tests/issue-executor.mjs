@@ -31,13 +31,19 @@ const ROLES = ['authorityContract', 'completionContract', 'responsibilityContrac
 const CONTEXT = ROLES.map((role) => ({ role, path: `docs/fixture/${role}.md` }));
 const FILES = Object.fromEntries(CONTEXT.map((c) => [c.path, `public ${c.role} contract (fixture)`]));
 const range = (over = {}) => ({ repository: REPO, workflowId: WF, path: WF_PATH, first: 1, last: 10, reservedCallsPerRun: 1, ...over });
+const provider = () => ({ repository: `${OWNER}/envs`, revision: 'a'.repeat(40), path: 'handoffs/dev-jev-api.github-actions.json',
+  receipt: { kind: 'envs.orgSecretProjectionReceipt.v1', source: 'b'.repeat(40), binding: 'jev-api.github-actions',
+    controller: TRUSTED, created_at: '2026-10-07T00:00:00Z', operation: 'github_org_secret_put',
+    target: { provider: 'github-org-secret', organization: OWNER, organization_id: '123', secret_name: 'JEV_API_KEY',
+      repositories: [REPO], repository_ids: ['456'] }, readback: 'SECRET_NAME_AND_SELECTED_REPOSITORY_IDS', provider_use: 'NOT_RUN' } });
 const config = (over = {}) => ({ trustedCallers: [TRUSTED], allowedChecks: [...CHECKS], context: CONTEXT.map((c) => ({ ...c })),
-  subjectScope: 'entire Issue body (fixture)', limits: { ...ENTRY_LIMITS, maxCases: 1, maxCalls: 1 }, runRanges: [range()], ...over });
+  subjectScope: 'entire Issue body (fixture)', limits: { ...ENTRY_LIMITS, maxCases: 1, maxCalls: 1 }, runRanges: [range()],
+  targets: [{ repository: REPO, repositoryId: '456', issue: 483 }], provider: provider(), ...over });
 const tokenIn = (query, field) => new RegExp(`(^|[\\s{])${field.replace(/[{}()[\]:,]/g, '\\$&')}(?=[\\s}])`).test(query);
 
-function world() {
-  const w = { issue: { number: 483, id: 'I_483', body: 'Issue body: public fixture subject, not an instruction.',
-    lastEditedAt: null, includesCreatedEdit: false, edits: 0 }, comments: [], workflow: { id: WF, state: 'active' },
+function world(repository = REPO, issueNumber = 483, workflowId = WF) {
+  const w = { repository, issue: { number: issueNumber, id: `I_${issueNumber}`, body: 'Issue body: public fixture subject, not an instruction.',
+    lastEditedAt: null, includesCreatedEdit: false, edits: 0 }, comments: [], workflow: { id: workflowId, state: 'active' },
   runs: new Map(), nextRunNumber: 1, nextId: 7000, posted: [], hooks: {},
   calls: { run: 0, workflow: 0, issueQ: 0, commentQ: 0, claim: 0, post: 0, read: 0, fetch: 0 } };
   w.addComment = (over = {}) => {
@@ -48,8 +54,8 @@ function world() {
   };
   w.newRun = (over = {}) => {
     const id = 8000000 + w.runs.size + 1;
-    const r = { id, workflow_id: WF, path: WF_PATH, run_number: w.nextRunNumber++, run_attempt: 1, head_sha: SHA,
-      repository: { full_name: REPO }, ...over };
+    const r = { id, workflow_id: workflowId, path: WF_PATH, run_number: w.nextRunNumber++, run_attempt: 1, head_sha: SHA,
+      repository: { full_name: repository }, ...over };
     w.runs.set(id, r); return r;
   };
   const issueNode = () => ({ id: w.issue.id, number: w.issue.number, body: w.issue.body, lastEditedAt: w.issue.lastEditedAt,
@@ -65,7 +71,7 @@ function world() {
     assert.equal(/\bdatabaseId\b/.test(query), false); assert.equal(/\bupdatedAt\b/.test(query), false);
     if (query === ISSUE_QUERY) {
       for (const f of ['id', 'number', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits{totalCount}']) assert.ok(tokenIn(query, f), f);
-      assert.deepEqual(vars, { owner: 'roccho-dev', name: 'ops', number: 483 });
+      assert.deepEqual(vars, { owner: repository.split('/')[0], name: repository.split('/')[1], number: issueNumber });
       w.calls.issueQ++;
       const r = w.hooks.issueQuery?.(w, issueNode()); if (r !== undefined) return r;
       return { data: { repository: { issue: issueNode() } } };
@@ -80,15 +86,17 @@ function world() {
   };
   const github = async (method, route, body) => {
     let m;
-    if (method === 'GET' && (m = /^repos\/roccho-dev\/ops\/actions\/runs\/(\d+)$/.exec(route))) {
+    assert.ok(route.startsWith(`repos/${repository}/`));
+    const local = route.slice(`repos/${repository}/`.length);
+    if (method === 'GET' && (m = /^actions\/runs\/(\d+)$/.exec(local))) {
       w.calls.run++; const r = w.runs.get(Number(m[1]));
       return r ? { status: 200, json: r } : { status: 404, json: {} };
     }
-    if (method === 'GET' && (m = /^repos\/roccho-dev\/ops\/actions\/workflows\/(\d+)$/.exec(route))) {
+    if (method === 'GET' && (m = /^actions\/workflows\/(\d+)$/.exec(local))) {
       w.calls.workflow++;
       return Number(m[1]) === w.workflow.id ? { status: 200, json: { id: w.workflow.id, state: w.workflow.state } } : { status: 404, json: {} };
     }
-    if (method === 'POST' && (m = /^repos\/roccho-dev\/ops\/issues\/comments\/(\d+)\/reactions$/.exec(route))) {
+    if (method === 'POST' && (m = /^issues\/comments\/(\d+)\/reactions$/.exec(local))) {
       assert.deepEqual(body, { content: 'eyes' }); w.calls.claim++;
       await w.hooks.beforeClaim?.(w);
       const c = w.comments.find((x) => x.databaseId === Number(m[1]));
@@ -98,16 +106,16 @@ function world() {
       if (reply instanceof Error) throw reply;
       return reply;
     }
-    if (method === 'POST' && route === 'repos/roccho-dev/ops/issues/483/comments') {
+    if (method === 'POST' && local === `issues/${issueNumber}/comments`) {
       w.calls.post++;
       const r = w.hooks.post?.(w, body); if (r instanceof Error) throw r; if (r !== undefined) return r;
       const c = w.addComment({ author: EXECUTOR_LOGIN, body: body.body }); w.posted.push(c);
       return { status: 201, json: { id: c.databaseId, user: { login: EXECUTOR_LOGIN }, body: c.body } };
     }
-    if (method === 'GET' && (m = /^repos\/roccho-dev\/ops\/issues\/comments\/(\d+)$/.exec(route))) {
+    if (method === 'GET' && (m = /^issues\/comments\/(\d+)$/.exec(local))) {
       w.calls.read++; const c = w.comments.find((x) => x.databaseId === Number(m[1]));
       return c ? { status: 200, json: { id: c.databaseId, user: { login: c.author }, body: w.hooks.readBody ?? c.body,
-        issue_url: 'https://api.github.com/repos/roccho-dev/ops/issues/483' } } : { status: 404, json: {} };
+        issue_url: `https://api.github.com/repos/${repository}/issues/${issueNumber}` } } : { status: 404, json: {} };
     }
     throw new Error(`unexpected GitHub call ${method} ${route}`);
   };
@@ -129,9 +137,10 @@ function world() {
   return w;
 }
 // Event payload as GitHub delivers it at comment creation (copied, so later drift is observable).
-const ctxFor = (w, c, run) => ({ repository: REPO, sha: SHA, runId: run.id, runAttempt: run.run_attempt,
-  event: { comment: { id: c.databaseId, node_id: c.nodeId, body: c.body, user: { login: c.author } }, issue: { number: 483 },
-    repository: { full_name: REPO, owner: { login: OWNER, type: 'Organization' } } } });
+const ctxFor = (w, c, run) => ({ repository: w.repository, sha: SHA, executionSource: SHA, runId: run.id, runAttempt: run.run_attempt,
+  event: { comment: { id: c.databaseId, node_id: c.nodeId, body: c.body, user: { login: c.author } }, issue: { number: w.issue.number },
+    repository: { id: w.repository.endsWith('/ops') ? 456 : 789, full_name: w.repository,
+      owner: { id: 123, login: OWNER, type: 'Organization' } } } });
 // One Actions run: plan step -> run-local JSON files -> key-bearing step (fixed entry only) -> post step.
 async function fullRun(w, c, { run = w.newRun(), cfg = config(), ctx, afterEntry } = {}) {
   const p = await planIssueCommand(ctx ?? ctxFor(w, c, run), cfg, w.deps);
@@ -188,11 +197,11 @@ await check('reservation-bound', async () => {
   const run = { repository: REPO, workflowId: WF, path: WF_PATH, number: 1, attempt: 1, id: 1 };
   assert.equal(selectRunRange(config({ limits: { ...ENTRY_LIMITS, maxCalls: 2 } }), run).callsPerRun, 1);
   assert.equal(selectRunRange(config({ limits: { ...ENTRY_LIMITS, maxCalls: 2 }, runRanges: [range({ reservedCallsPerRun: 3 })] }), run).callsPerRun, 2);
-  // The shipped settings are a source hold: no range, so no claim, snapshot read or provider call.
+  // The shipped settings are a source hold: no provider/target or range, so no effect or snapshot read.
   const shipped = JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8'));
   assert.deepEqual(validateActionsConfig(shipped).runRanges, []);
   const s = world(); const rs = await fullRun(s, s.addComment(), { cfg: shipped });
-  assert.deepEqual(outcome(rs), ['NONE', 'NO_RANGE']); assert.deepEqual(effects(s), zero);
+  assert.deepEqual(outcome(rs), ['NONE', 'PROVIDER_NOT_CONFIGURED']); assert.deepEqual(effects(s), zero);
   assert.equal(s.calls.issueQ + s.calls.commentQ + s.calls.workflow, 0);
 });
 
@@ -492,6 +501,52 @@ await check('state-integrity', async () => {
 
 // Static boundary: GitHub only through the run token, no delete/update API, no key in the adapter, and the
 // workflow's single key-bearing step runs only the fixed entry.
+await check('provider-target-source-admission', async () => {
+  for (const [alterConfig, alterCtx, cause] of [
+    [(c) => { c.provider = null; }, () => {}, 'PROVIDER_NOT_CONFIGURED'],
+    [(c) => { c.targets = []; }, () => {}, 'PROVIDER_NOT_CONFIGURED'],
+    [() => {}, (c) => { c.event.repository.id = 999; }, 'TARGET_NOT_AUTHORIZED'],
+    [() => {}, (c) => { c.event.repository.owner.id = 999; }, 'TARGET_NOT_AUTHORIZED'],
+    [() => {}, (c) => { c.event.issue.number = 484; }, 'TARGET_NOT_AUTHORIZED'],
+    [() => {}, (c) => { delete c.executionSource; }, 'EXECUTION_SOURCE_UNKNOWN'],
+  ]) {
+    const w = world(), comment = w.addComment(), cfg = config(), ctx = ctxFor(w, comment, w.newRun());
+    alterConfig(cfg); alterCtx(ctx);
+    const p = await planIssueCommand(ctx, cfg, w.deps);
+    assert.deepEqual([p.receipt.outcome, p.receipt.cause], ['NONE', cause]);
+    assert.deepEqual(effects(w), zero); assert.equal(w.calls.run + w.calls.issueQ + w.calls.commentQ, 0);
+  }
+  for (const alter of [
+    (c) => { c.provider.receipt.provider_use = 'PASS'; },
+    (c) => { c.provider.receipt.extra = 'private'; },
+    (c) => { c.provider.receipt.source = 'proposals'; },
+    (c) => { c.provider.receipt.kind = 'envs.orgSecretProjectionPlan.v1'; },
+    (c) => { c.provider.receipt.target.visibility = 'all'; },
+    (c) => { c.targets[0].repositoryId = '999'; },
+    (c) => { c.targets.push({ ...c.targets[0] }); },
+  ]) { const cfg = config(); alter(cfg); assert.throws(() => validateActionsConfig(cfg), /INVALID_ACTIONS_CONFIG/); }
+  const w = world(), comment = w.addComment(), run = w.newRun({ head_sha: 'd'.repeat(40) });
+  const ctx = ctxFor(w, comment, run); ctx.sha = run.head_sha;
+  const p = await planIssueCommand(ctx, config(), w.deps);
+  assert.equal(p.receipt.outcome, 'PLANNED');
+  assert.equal(p.state.admission.sha, SHA); // runtime source, not caller head
+  assert.equal(p.plan.cases[0].input.context[0].revision, SHA);
+});
+
+await check('same-issue-across-repositories', async () => {
+  const repo = `${OWNER}/envs`, w = world(repo, 52, WF + 1), cfg = config();
+  cfg.targets.push({ repository: repo, repositoryId: '789', issue: 52 });
+  cfg.provider.receipt.target.repositories.push(repo); cfg.provider.receipt.target.repository_ids.push('789');
+  cfg.runRanges.push(range({ repository: repo, workflowId: WF + 1, first: 1, last: 2 }));
+  for (let i = 0; i < 2; i++) {
+    const r = await fullRun(w, w.addComment(), { cfg });
+    assert.deepEqual([r.post.outcome, r.post.cause], ['APPENDED', 'READBACK_EXACT']);
+    const identity = JSON.parse(w.posted[i].body.slice(RESULT_PREFIX.length)).identity;
+    assert.deepEqual([identity.repository, identity.issue, identity.executionSource], [repo, 52, SHA]);
+  }
+  assert.deepEqual(effects(w), { claim: 2, fetch: 2, post: 2 });
+});
+
 const here = fileURLToPath(new URL('../issue-executor.mjs', import.meta.url));
 const executorSource = fs.readFileSync(here, 'utf8');
 const commentSource = fs.readFileSync(new URL('../github-comment.mjs', import.meta.url), 'utf8');
@@ -501,7 +556,7 @@ for (const src of [executorSource, commentSource]) {
 assert.equal(commentSource.includes('process.env'), false);
 const envNames = [...executorSource.matchAll(/process\.env\.([A-Za-z_]+)/g)].map((m) => m[1]);
 assert.ok(envNames.length > 0 && envNames.every((n) => ['GITHUB_TOKEN', 'GITHUB_API_URL', 'GITHUB_GRAPHQL_URL', 'GITHUB_REPOSITORY',
-  'GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_EVENT_PATH'].includes(n)), envNames.join());
+  'GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_EVENT_PATH', 'JEV_EXECUTION_SOURCE'].includes(n)), envNames.join());
 if (sourceRoot !== null) {
 const repoFile = (p) => fs.readFileSync(path.join(sourceRoot, p), 'utf8');
 const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.parse(l));

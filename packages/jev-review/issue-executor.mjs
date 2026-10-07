@@ -96,6 +96,12 @@ export async function planIssueCommand(ctx, configValue, deps) {
     || !positive(e.issue?.number) || e.repository?.full_name !== ctx.repository || typeof e.repository?.owner?.login !== 'string') return end('NONE', 'EVENT_UNKNOWN');
   if (e.issue.pull_request !== undefined && e.issue.pull_request !== null) return end('NONE', 'NOT_AN_ISSUE');
   if (e.repository.owner.type !== 'Organization') return end('NONE', 'ORG_REQUIRED');
+  if (config.provider === null || config.targets.length === 0) return end('NONE', 'PROVIDER_NOT_CONFIGURED');
+  const target = config.targets.find((t) => t.repository === ctx.repository && t.issue === e.issue.number);
+  if (!target || String(e.repository.id) !== target.repositoryId
+    || e.repository.owner.login !== config.provider.receipt.target.organization
+    || String(e.repository.owner.id) !== config.provider.receipt.target.organization_id) return end('NONE', 'TARGET_NOT_AUTHORIZED');
+  if (typeof ctx.executionSource !== 'string' || !/^[0-9a-f]{40}$/.test(ctx.executionSource)) return end('NONE', 'EXECUTION_SOURCE_UNKNOWN');
   receipt.commentId = e.comment.id;
 
   const rr = await call(deps, 'GET', `repos/${ctx.repository}/actions/runs/${ctx.runId}`);
@@ -113,7 +119,7 @@ export async function planIssueCommand(ctx, configValue, deps) {
   let context;
   try { context = config.context.map((c) => ({ role: c.role, path: c.path, content: deps.readFile(c.path) })); }
   catch { return end('NONE', 'CONTEXT_UNKNOWN'); }
-  const admission = { repository: ctx.repository, owner: e.repository.owner.login, sha: ctx.sha, eventBody: e.comment.body,
+  const admission = { repository: ctx.repository, owner: e.repository.owner.login, sha: ctx.executionSource, eventBody: e.comment.body,
     run: { id: run.id, number: run.number, attempt: run.attempt, workflowId: run.workflowId, path: run.path },
     issue: seen.issue, command: seen.command, context };
   const request = await admitIssueCommand(admission, config);
@@ -223,7 +229,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       graphqlUrl: process.env.GITHUB_GRAPHQL_URL, root: process.cwd() });
     const file = (name) => path.join(dir, name);
     if (mode === 'plan') {
-      const ctx = { repository: process.env.GITHUB_REPOSITORY, sha: process.env.GITHUB_SHA,
+      const ctx = { repository: process.env.GITHUB_REPOSITORY, sha: process.env.GITHUB_SHA, executionSource: process.env.JEV_EXECUTION_SOURCE,
         runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT),
         event: json(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')) };
       const result = await planIssueCommand(ctx, config, deps);
