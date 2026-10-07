@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { JEV_MODEL } from '../core.mjs';
@@ -8,6 +9,12 @@ import { ENTRY_LIMITS, preparePlan, executeOwnerPlan } from '../semlint-entry.mj
 import { RESULT_PREFIX, validateActionsConfig, selectRunRange, subjectRevision } from '../github-comment.mjs';
 import { EXECUTOR_LOGIN, CLAIM, ISSUE_QUERY, COMMENT_QUERY, PRE_PROVIDER_CAUSES, planIssueCommand, postIssueCommand,
   classifyOwnerOutput, decodeFullDatabaseId } from '../issue-executor.mjs';
+
+// Repository policy is an explicit producer input, never an ambient checkout fallback in a provided runtime.
+const sourceArgs = process.argv.slice(2);
+assert.ok(sourceArgs.length === 0 || (sourceArgs.length === 2 && sourceArgs[0] === '--source-contract'
+  && path.isAbsolute(sourceArgs[1])), 'INVALID_SOURCE_CONTRACT_ARGS');
+const sourceRoot = sourceArgs.length ? sourceArgs[1] : null;
 
 // Secret-free fixtures only: an in-memory GitHub (REST + GraphQL) and the real fixed entry functions in process
 // with a counting fetch stand in for one Actions run. Nothing here is real-provider, reaction, posting or
@@ -489,7 +496,8 @@ assert.equal(commentSource.includes('process.env'), false);
 const envNames = [...executorSource.matchAll(/process\.env\.([A-Za-z_]+)/g)].map((m) => m[1]);
 assert.ok(envNames.length > 0 && envNames.every((n) => ['GITHUB_TOKEN', 'GITHUB_API_URL', 'GITHUB_GRAPHQL_URL', 'GITHUB_REPOSITORY',
   'GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_EVENT_PATH'].includes(n)), envNames.join());
-const repoFile = (p) => fs.readFileSync(new URL(`../../../${p}`, import.meta.url), 'utf8');
+if (sourceRoot !== null) {
+const repoFile = (p) => fs.readFileSync(path.join(sourceRoot, p), 'utf8');
 const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const workflow = repoFile(WF_PATH);
 const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
@@ -512,7 +520,9 @@ assert.ok(keyed[0].includes('JEV_API_KEY: ${{ secrets.JEV_API_KEY }}'));
 assert.deepEqual(keyed[0].match(/"\$JEV_NODE" "\$JEV_SRC\/[^"]+"/g), ['"$JEV_NODE" "$JEV_SRC/semlint-entry.mjs"']);
 for (const banned of ['issue-executor', 'GITHUB_TOKEN', 'github.token', 'curl', ' gh ']) assert.equal(keyed[0].includes(banned), false, banned);
 assert.equal(steps.filter((s) => s.includes('${{ github.token }}')).length, 2);
+}
 const cli = spawnSync(process.execPath, [here, 'plan', 'relative-dir'], { encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
 assert.equal(cli.status, 2); assert.equal(JSON.parse(cli.stdout).cause, 'INVALID_EXECUTOR_ARGS');
-console.log(JSON.stringify({ status: 'PASS', check: 'jev-issue-executor', scenarios, realProviderCalls: 0, githubEffects: 0,
+console.log(JSON.stringify({ status: 'PASS', check: 'jev-issue-executor', scenarios,
+  sourceContract: sourceRoot === null ? 'NOT_REQUESTED' : 'PASS', realProviderCalls: 0, githubEffects: 0,
   claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_OR_PROVIDER_EVIDENCE' }));

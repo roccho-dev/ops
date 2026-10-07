@@ -43,6 +43,11 @@ English-auxiliary owner boundary.
   schedule, queue, retry loop or ledger.
 - `tests/issue-executor.mjs`: secret-free fixtures through the same adapter code with an in-memory
   GitHub and the real entry functions (`jev-issue-executor` check).
+  The producer also requires `--source-contract <exact checkout>` to validate the actual workflow,
+  intent and secret boundary before export. The fresh consumer runs the same functional cases
+  without a checkout; its `sourceContract: NOT_REQUESTED` is not a repository-policy PASS.
+  Runtime provenance v2 additionally binds the supplied shared-provider sibling and verifies
+  both source trees and the complete native closure before executing the provided tests.
 
 The Environment/secret binding, actual Actions runs, live provider behavior and real 201/200
 semantics are **NOT_CONFIGURED / UNVERIFIED by this source**. Fixtures do not prove live
