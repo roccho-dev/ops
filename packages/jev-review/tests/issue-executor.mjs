@@ -22,7 +22,7 @@ const sourceRoot = sourceArgs.length ? sourceArgs[1] : null;
 // claim and 200, fullDatabaseId decode, forged results, foreign/unattributable reactions, drift before/after the
 // paid call, UNKNOWN never retried, exact entry classification and the static key boundary.
 const hash = (x) => createHash('sha256').update(x).digest('hex');
-const REPO = 'roccho-dev/ops', OWNER = 'roccho-dev', SHA = 'c'.repeat(40), WF = 900001;
+const REPO = 'roccho-dev/ops', OWNER = 'roccho-dev', TRUSTED = 'fixture-member', SHA = 'c'.repeat(40), WF = 900001;
 const WF_PATH = '.github/workflows/jev-issue-comment.yml';
 const CHECKS = ['aligned.authority-grant', 'closed.feedback-completion', 'unique.canonical-responsibility',
   'minimal.necessary-layer', 'measurable.attempt-accounting', 'improving.comparable-evidence'];
@@ -31,7 +31,7 @@ const ROLES = ['authorityContract', 'completionContract', 'responsibilityContrac
 const CONTEXT = ROLES.map((role) => ({ role, path: `docs/fixture/${role}.md` }));
 const FILES = Object.fromEntries(CONTEXT.map((c) => [c.path, `public ${c.role} contract (fixture)`]));
 const range = (over = {}) => ({ repository: REPO, workflowId: WF, path: WF_PATH, first: 1, last: 10, reservedCallsPerRun: 1, ...over });
-const config = (over = {}) => ({ allowedChecks: [...CHECKS], context: CONTEXT.map((c) => ({ ...c })),
+const config = (over = {}) => ({ trustedCallers: [TRUSTED], allowedChecks: [...CHECKS], context: CONTEXT.map((c) => ({ ...c })),
   subjectScope: 'entire Issue body (fixture)', limits: { ...ENTRY_LIMITS, maxCases: 1, maxCalls: 1 }, runRanges: [range()], ...over });
 const tokenIn = (query, field) => new RegExp(`(^|[\\s{])${field.replace(/[{}()[\]:,]/g, '\\$&')}(?=[\\s}])`).test(query);
 
@@ -41,7 +41,7 @@ function world() {
   runs: new Map(), nextRunNumber: 1, nextId: 7000, posted: [], hooks: {},
   calls: { run: 0, workflow: 0, issueQ: 0, commentQ: 0, claim: 0, post: 0, read: 0, fetch: 0 } };
   w.addComment = (over = {}) => {
-    const c = { databaseId: w.nextId++, author: OWNER, body: '/jev-evaluate', lastEditedAt: null, includesCreatedEdit: false,
+    const c = { databaseId: w.nextId++, author: TRUSTED, body: '/jev-evaluate', lastEditedAt: null, includesCreatedEdit: false,
       edits: 0, reactions: [], ...over };
     c.nodeId ??= `IC_${c.databaseId}`;
     w.comments.push(c); return c;
@@ -131,7 +131,7 @@ function world() {
 // Event payload as GitHub delivers it at comment creation (copied, so later drift is observable).
 const ctxFor = (w, c, run) => ({ repository: REPO, sha: SHA, runId: run.id, runAttempt: run.run_attempt,
   event: { comment: { id: c.databaseId, node_id: c.nodeId, body: c.body, user: { login: c.author } }, issue: { number: 483 },
-    repository: { full_name: REPO, owner: { login: OWNER } } } });
+    repository: { full_name: REPO, owner: { login: OWNER, type: 'Organization' } } } });
 // One Actions run: plan step -> run-local JSON files -> key-bearing step (fixed entry only) -> post step.
 async function fullRun(w, c, { run = w.newRun(), cfg = config(), ctx, afterEntry } = {}) {
   const p = await planIssueCommand(ctx ?? ctxFor(w, c, run), cfg, w.deps);
@@ -161,8 +161,8 @@ await check('normal-first-and-later', async () => {
   assert.equal(posted.body.includes('synthetic-fixture-key'), false);
   const { identity } = JSON.parse(posted.body.slice(RESULT_PREFIX.length));
   assert.deepEqual(identity.run, { id: r1.run.id, number: 1, attempt: 1, workflowId: WF });
-  assert.equal(identity.commentId, c1.databaseId); assert.equal(identity.executionSource, SHA); assert.equal(identity.author, OWNER);
-  assert.equal(identity.observation, 'ACTIONS_OWNER_LITERAL_COMMAND'); assert.equal('action' in identity, false);
+  assert.equal(identity.commentId, c1.databaseId); assert.equal(identity.executionSource, SHA); assert.equal(identity.author, TRUSTED);
+  assert.equal(identity.observation, 'ACTIONS_TRUSTED_LITERAL_COMMAND'); assert.equal('action' in identity, false);
   assert.equal(identity.subjectRevision, subjectRevision({ number: 483, nodeId: 'I_483', body: w.issue.body, lastEditedAt: null,
     includesCreatedEdit: false, userContentEditsTotal: 0 }));
   w.addComment({ author: 'someone', body: 'unrelated discussion' }); // unrelated activity is not a subject revision
@@ -225,7 +225,8 @@ await check('settings-refusals', async () => {
     config({ runRanges: [range({ reservedCallsPerRun: 0 })] }), config({ runRanges: [range({ reservedCallsPerRun: 25 })] }),
     config({ runRanges: [range({ path: 'workflows/x.yml' })] }), config({ runRanges: [range({ workflowId: 0 })] }),
     config({ runRanges: [range({ argv: ['--x'] })] }), config({ limits: { ...ENTRY_LIMITS, maxCalls: 25 } }),
-    config({ subjectScope: ' ' }),
+    config({ subjectScope: ' ' }), config({ trustedCallers: [TRUSTED, TRUSTED] }),
+    config({ trustedCallers: ['*'] }), config({ trustedCallers: 'everyone' }),
   ]) {
     assert.throws(() => validateActionsConfig(bad), /INVALID_ACTIONS_CONFIG/);
     const w = world(); const r = await fullRun(w, w.addComment(), { cfg: bad });
@@ -238,10 +239,13 @@ await check('settings-refusals', async () => {
   assert.deepEqual(outcome(r), ['NONE', 'INVALID_REQUEST_OR_ADMISSION']); assert.deepEqual(effects(w), zero);
 });
 
-// The observed command must still be the owner's unedited literal from the event; context must be readable.
+// The observed command must still be an explicitly trusted caller's unedited literal; context is required.
 await check('command-admission', async () => {
   for (const [setup, mutate, cause] of [
     [(w) => w.addComment({ author: 'someone' }), null, 'COMMAND_NOT_AUTHORIZED'],
+    [(w) => w.addComment({ author: OWNER }), null, 'COMMAND_NOT_AUTHORIZED'],
+    [(w) => w.addComment(), (w, c, ctx) => { ctx.event.repository.owner.type = 'User'; }, 'ORG_REQUIRED'],
+    [(w) => w.addComment(), (w, c, ctx) => { delete ctx.event.repository.owner.type; }, 'ORG_REQUIRED'],
     [(w) => w.addComment(), (w, c) => { c.body = '/jev-evaluate later'; }, 'COMMAND_DRIFT'],
     [(w) => w.addComment({ edits: 1, lastEditedAt: '2026-10-06T00:00:00Z' }), null, 'EDITED'],
     [(w) => w.addComment({ includesCreatedEdit: true }), null, 'EDITED'],
@@ -255,6 +259,8 @@ await check('command-admission', async () => {
   }
   const w = world(); const r = await fullRun(w, w.addComment(), { cfg: config({ context: [{ role: 'authorityContract', path: 'docs/missing.md' }] }) });
   assert.deepEqual(outcome(r), ['NONE', 'CONTEXT_UNKNOWN']); assert.deepEqual(effects(w), zero);
+  const closed = world(); const denied = await fullRun(closed, closed.addComment(), { cfg: config({ trustedCallers: [] }) });
+  assert.deepEqual(outcome(denied), ['NONE', 'COMMAND_NOT_AUTHORIZED']); assert.deepEqual(effects(closed), zero);
 });
 
 // Incomplete, erroneous or mismatched provider observations: hold with no claim.
@@ -505,10 +511,11 @@ const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) =
 assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment']);
 assert.equal(boundary.length, 1); assert.equal(boundary[0].classification, 'secret_bearing_effect');
 assert.deepEqual(boundary[0].allowedEvents, ['issue_comment']); assert.ok(boundary[0].binding.startsWith('NOT_CONFIGURED'));
-assert.ok(workflow.includes(`\n      name: ${boundary[0].environment}\n`));
+assert.equal(boundary[0].secretScope, 'organization'); assert.equal(Object.hasOwn(boundary[0], 'environment'), false);
+assert.equal(/^\s*environment:/m.test(workflow), false);
 assert.match(workflow, /\non:\n  issue_comment:\n    types: \[created\]\n\n/);
 assert.equal(/^\s*(?:workflow_dispatch|schedule|pull_request|pull_request_target|workflow_run|repository_dispatch|concurrency):/m.test(workflow), false);
-for (const part of ['github.event.issue.number == 483', 'github.event.comment.user.login == github.repository_owner',
+for (const part of ['github.event.issue.number == 483', "github.event.repository.owner.type == 'Organization'",
   "github.event.comment.body == '/jev-evaluate'", 'github.event.issue.pull_request == null']) assert.ok(workflow.includes(part), part);
 const uses = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 assert.ok(uses.length === 2 && uses.every((u) => /^[A-Za-z0-9_.\/-]+@[0-9a-f]{40}$/.test(u)), uses.join());
@@ -517,6 +524,12 @@ const steps = workflow.split('\n      - ').slice(1);
 const keyed = steps.filter((s) => s.includes('secrets.'));
 assert.equal(keyed.length, 1); assert.equal(workflow.match(/secrets\./g).length, 1);
 assert.ok(keyed[0].includes('JEV_API_KEY: ${{ secrets.JEV_API_KEY }}'));
+assert.ok(keyed[0].includes("if: steps.plan.outputs.planned == 'true'"));
+const planning = steps.filter((s) => s.includes('id: plan'));
+assert.equal(planning.length, 1); assert.equal(planning[0].includes('secrets.'), false);
+assert.ok(planning[0].includes('"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"'));
+assert.ok(planning[0].includes('if [ -f "$JEV_RUN_DIR/plan.json" ]; then'));
+assert.ok(planning[0].includes("echo 'planned=true' >> \"$GITHUB_OUTPUT\""));
 assert.deepEqual(keyed[0].match(/"\$JEV_NODE" "\$JEV_SRC\/[^"]+"/g), ['"$JEV_NODE" "$JEV_SRC/semlint-entry.mjs"']);
 for (const banned of ['issue-executor', 'GITHUB_TOKEN', 'github.token', 'curl', ' gh ']) assert.equal(keyed[0].includes(banned), false, banned);
 assert.equal(steps.filter((s) => s.includes('${{ github.token }}')).length, 2);

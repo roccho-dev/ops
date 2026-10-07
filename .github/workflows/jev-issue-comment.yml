@@ -1,8 +1,8 @@
 name: Jev Issue comment evaluation
 
-# Owner literal command on one approved Issue -> fixed semlint entry -> new result comment on the same Issue.
-# Source hold: the Environment binding is NOT_CONFIGURED and packages/jev-review/issue-actions.json has no
-# runRanges, so no provider call can be planned. Not adopted until an existing compatible binding is verified.
+# Trusted literal command on one approved Issue -> fixed semlint entry -> same-Issue result.
+# Org Secret only: no Repository/Environment copy. Org target/projection is NOT_CONFIGURED;
+# trustedCallers and runRanges stay empty until independently authorized adoption.
 on:
   issue_comment:
     types: [created]
@@ -16,13 +16,11 @@ jobs:
   evaluate:
     if: >-
       github.event.issue.number == 483 &&
-      github.event.comment.user.login == github.repository_owner &&
+      github.event.repository.owner.type == 'Organization' &&
       github.event.comment.body == '/jev-evaluate' &&
       github.event.issue.pull_request == null
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment:
-      name: jev-issue-comment
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -49,12 +47,19 @@ jobs:
           echo "JEV_RUN_DIR=$RUNNER_TEMP/jev-issue" >> "$GITHUB_ENV"
 
       - name: Plan (no Jev key)
+        id: plan
         env:
           GITHUB_TOKEN: ${{ github.token }}
         shell: bash
-        run: '"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"'
+        run: |
+          set -euo pipefail
+          "$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"
+          if [ -f "$JEV_RUN_DIR/plan.json" ]; then
+            echo 'planned=true' >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Evaluate with the fixed entry (only key-bearing step)
+        if: steps.plan.outputs.planned == 'true'
         env:
           JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
         shell: bash

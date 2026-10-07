@@ -110,9 +110,9 @@ function finishRequest(prepared, identityOf) {
   return request;
 }
 
-// Trusted Actions settings (reviewed source). Target Issue, requester and literal command live only in the
-// workflow guard; Environment/secret binding is outside source. No path to an executable, argv or program.
-export const ACTIONS_CONFIG_KEYS = ['allowedChecks', 'context', 'subjectScope', 'limits', 'runRanges'];
+// Trusted Actions settings (reviewed source). Requester allowlist is never read from Issue data.
+// Org Secret projection/target is outside this source; no executable, argv or program selector.
+export const ACTIONS_CONFIG_KEYS = ['trustedCallers', 'allowedChecks', 'context', 'subjectScope', 'limits', 'runRanges'];
 const RANGE_KEYS = ['repository', 'workflowId', 'path', 'first', 'last', 'reservedCallsPerRun'];
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const REPO_PATH = /^(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
@@ -123,6 +123,8 @@ export function validateActionsConfig(value) {
   try { config = snapshotJson(value); entryLimits(config.limits); } catch { throw new Error('INVALID_ACTIONS_CONFIG'); }
   const ranges = config.runRanges;
   if (!exact(config, ACTIONS_CONFIG_KEYS) || !text(config.subjectScope)
+    || !Array.isArray(config.trustedCallers) || !config.trustedCallers.every((x) => typeof x === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(x))
+    || new Set(config.trustedCallers).size !== config.trustedCallers.length
     || !Array.isArray(config.allowedChecks) || !config.allowedChecks.length || !config.allowedChecks.every(text)
     || new Set(config.allowedChecks).size !== config.allowedChecks.length
     || !Array.isArray(config.context) || !config.context.every((c) => exact(c, ['role', 'path']) && text(c.role) && REPO_PATH.test(c.path))
@@ -163,10 +165,10 @@ export function subjectRevision(issue) {
     String(issue.userContentEditsTotal), String(issue.includesCreatedEdit)].join('|');
 }
 
-// Owner literal-command admission. The guard already matched owner/body/Issue at the event; this re-checks the
+// Trusted literal-command admission. The guard matched Org/body/Issue at the event; this re-checks the
 // observed command against the event, builds the existing semlint input (log-entry subject = exact full Issue
 // body; context = declared repository files at the run's source SHA) and plans with the run's call ceiling.
-export const COMMAND_OBSERVATION = 'ACTIONS_OWNER_LITERAL_COMMAND';
+export const COMMAND_OBSERVATION = 'ACTIONS_TRUSTED_LITERAL_COMMAND';
 export async function admitIssueCommand(inputValue, configValue) {
   let config, input;
   try { config = validateActionsConfig(configValue); } catch (error) { return reject(error.message); }
@@ -183,7 +185,7 @@ export async function admitIssueCommand(inputValue, configValue) {
         && c.path === config.context[i].path && typeof c.content === 'string')) return reject('INPUT_UNKNOWN');
   } catch { return reject('INPUT_UNKNOWN'); }
   const { issue, command } = input;
-  if (command.author !== input.owner) return reject('COMMAND_NOT_AUTHORIZED');
+  if (!config.trustedCallers.includes(command.author)) return reject('COMMAND_NOT_AUTHORIZED');
   if (command.body !== input.eventBody) return reject('COMMAND_DRIFT');
   if (command.lastEditedAt !== null || command.includesCreatedEdit || command.userContentEditsTotal !== 0) return reject('EDITED');
   const selected = selectRunRange(config, { ...input.run, repository: input.repository });

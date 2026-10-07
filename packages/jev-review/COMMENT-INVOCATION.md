@@ -35,9 +35,9 @@ English-auxiliary owner boundary.
   produce a closed refusal. Machine-only imports, fixtures and gold are isolated inside
   the no-argument function and are not loaded/executed by the real mode.
 
-- `.github/workflows/jev-issue-comment.yml`: GitHub-hosted Actions entry for one owner literal
+- `.github/workflows/jev-issue-comment.yml`: GitHub-hosted Actions entry for one trusted literal
   command on one approved Issue; see "Actions issue command" below.
-- `issue-actions.json`: reviewed trusted settings (`allowedChecks`, `context`, `subjectScope`,
+- `issue-actions.json`: reviewed trusted settings (`trustedCallers`, `allowedChecks`, `context`, `subjectScope`,
   `limits`, `runRanges`).
 - `issue-executor.mjs`: the Actions adapter (`plan` / `post`, no Jev key). No daemon, dispatch,
   schedule, queue, retry loop or ledger.
@@ -49,27 +49,30 @@ English-auxiliary owner boundary.
   Runtime provenance v2 additionally binds the supplied shared-provider sibling and verifies
   both source trees and the complete native closure before executing the provided tests.
 
-The Environment/secret binding, actual Actions runs, live provider behavior and real 201/200
+The Org Secret binding, actual Actions runs, live provider behavior and real 201/200
 semantics are **NOT_CONFIGURED / UNVERIFIED by this source**. Fixtures do not prove live
 at-most-effect, paid-call accounting or Issue completion.
 
 ## Actions issue command
 
-The workflow job runs only when the guard matches exactly: Issue `483`, author
-`github.repository_owner`, body exactly `/jev-evaluate`, not a pull request. Target, requester and
-command live only in that guard (no second copy in settings). Wider Issues, requesters or comment
-formats are not covered; they would be a separately reviewed boundary expansion.
+The workflow job requires Issue `483`, an Organization-owned repository, body exactly
+`/jev-evaluate`, and no pull request. The observed command author must be in reviewed
+`trustedCallers`; Organization names are never compared with a person's login. The allowlist
+is not inferred from a public comment. Wider Issues and repository connections remain unimplemented.
 
-Source hold: the job's static Environment `jev-issue-comment` is declared but its binding is
-NOT_CONFIGURED (an existing compatible Environment and `JEV_API_KEY` are unverified) and the shipped
-`runRanges` is empty, so every run stops with `NO_RANGE` before any read, claim or provider call.
-GitHub creates a referenced Environment on a job's first run; `issue_comment` workflows run only from
-the default branch, so no run happens before adoption, and adoption/merge waits until an existing
-compatible binding (no manual per-run review) is verified. No resource is created by this source.
+The only adopted placement direction is envs SOPS SSOT -> Org Secret -> selected Org-owned
+repositories -> fixed provider step. No key is registered in Ops Repository/Environment Secrets,
+and the workflow references no Environment. Rotation updates the same Org slot; it is not a
+one-time-ever projection. Org identity, projection principal, selected repositories and exact
+handoff remain NOT_CONFIGURED; this source does not prove them. Shipped `trustedCallers` and
+`runRanges` are empty. Personal ownership stops with `ORG_REQUIRED`; an empty range stops with
+`NO_RANGE` before any snapshot, claim or provider call. No Org, repository transfer or secret
+change is performed by this source. See ADRS #547 update comment 6031490611 and envs #52.
 
 Steps (one job): fixed `actions/checkout` at `github.sha` without persisted credentials -> Nix
 toolchain -> resolve the `jev-review` package's own Node and store path from its wrapper before any
-credential use -> `plan` (no Jev key, run `GITHUB_TOKEN`) -> the only key-bearing step runs
+credential use -> `plan` (no Jev key, run `GITHUB_TOKEN`) -> only an admitted `plan.json` sets
+the step output `planned=true` -> the only key-bearing step runs
 `semlint-entry.mjs` on `plan.json` and keeps its exit status and stdout -> `post` (no Jev key). Files
 between steps live only in the run's temporary directory.
 
@@ -91,7 +94,7 @@ reviewed range, not a per-comment grant. Reruns (`run_attempt > 1`) never spend.
   plus its `eyes` reactions. Comment identity is `fullDatabaseId` (BigInt wire string, exact safe
   integer round trip, equal to the event's REST id); Int32 `databaseId` and generic `updatedAt` are not
   requested. Errors, missing or extra fields, or identity mismatch hold with `SNAPSHOT_UNKNOWN`.
-- `admitIssueCommand` (`github-comment.mjs`): the command must still be the owner's unedited event
+- `admitIssueCommand` (`github-comment.mjs`): the command must still be a trusted caller's unedited event
   body; the subject is the existing `log-entry` record with the exact full Issue body, ref
   `https://github.com/<repo>/issues/<n>` and revision = node id, body SHA-256 and the body-edit signals
   (no generic `updatedAt`, so unrelated activity is not a revision; not a proof of complete edit

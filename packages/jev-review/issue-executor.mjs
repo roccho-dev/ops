@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { validateActionsConfig, admitIssueCommand, selectRunRange, deriveIssuePrior, nextIssueEffect,
   composeResultComment, verifyResultReadback } from './github-comment.mjs';
 
-// GitHub-hosted Actions adapter for one owner literal command (ops#483). `plan` and `post` run without the Jev
+// GitHub-hosted Actions adapter for one trusted literal command (ops#483). `plan` and `post` run without the Jev
 // key; between them the workflow's single key-bearing step runs only the fixed semlint-entry.mjs on plan.json.
 // GitHub is reached only with the run's own GITHUB_TOKEN. No host executable, dispatch, retry loop or ledger.
 export const EXECUTOR_LOGIN = 'github-actions[bot]';
@@ -95,6 +95,7 @@ export async function planIssueCommand(ctx, configValue, deps) {
   if (!e?.comment || !positive(e.comment.id) || typeof e.comment.node_id !== 'string' || typeof e.comment.body !== 'string'
     || !positive(e.issue?.number) || e.repository?.full_name !== ctx.repository || typeof e.repository?.owner?.login !== 'string') return end('NONE', 'EVENT_UNKNOWN');
   if (e.issue.pull_request !== undefined && e.issue.pull_request !== null) return end('NONE', 'NOT_AN_ISSUE');
+  if (e.repository.owner.type !== 'Organization') return end('NONE', 'ORG_REQUIRED');
   receipt.commentId = e.comment.id;
 
   const rr = await call(deps, 'GET', `repos/${ctx.repository}/actions/runs/${ctx.runId}`);

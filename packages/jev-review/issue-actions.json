@@ -1,4 +1,5 @@
 {
+  "trustedCallers": [],
   "allowedChecks": [
     "aligned.authority-grant",
     "closed.feedback-completion",
