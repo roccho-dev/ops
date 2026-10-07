@@ -24,6 +24,30 @@ on:
       canonical:
         type: boolean
         default: false
+      worker_effect:
+        description: "Run the guarded existing-Worker DEPLOY/readback bridge"
+        type: boolean
+        default: false
+      source_sha:
+        description: "Exact canonical host source SHA; must equal github.sha"
+        type: string
+        required: false
+      approved_request_b64:
+        description: "Base64 of the exact non-secret ops.voiceUiTargetRuntimeRequest.v2"
+        type: string
+        required: false
+      approved_request_sha256:
+        description: "SHA-256 of approved_request_b64 decoded bytes"
+        type: string
+        required: false
+      projection_receipt_b64:
+        description: "Base64 of the exact non-secret envs projection receipt"
+        type: string
+        required: false
+      isolation_verdict_b64:
+        description: "Base64 of the exact bce3 source-isolation operand"
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -344,3 +368,224 @@ jobs:
             cmp "$f" "$readback/$name"
           done
           test "$(jq -r .deploy.locator release/provenance.json)" = "$base/voice-ui-target-runtime.nix-export"
+
+
+  # The missing #436/#435 bridge only: one manual exact-source host for the already-published bce3 DEPLOY.
+  # This does not build or relabel DEPLOY, does not run application acceptance, and does not prove the
+  # GitHub Environment's physical reviewer/ref settings. All source/data acquisition finishes before
+  # the single step that receives the Cloudflare effect capability.
+  worker-effect:
+    if: \${{ github.event_name == 'workflow_dispatch' && inputs.worker_effect }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: cloudflare-production
+    permissions:
+      contents: read
+    env:
+      SOURCE_SHA: \${{ inputs.source_sha }}
+      PUBLISH_INPUT: \${{ inputs.publish }}
+      CANONICAL_INPUT: \${{ inputs.canonical }}
+      APPROVED_REQUEST_B64: \${{ inputs.approved_request_b64 }}
+      APPROVED_REQUEST_SHA256: \${{ inputs.approved_request_sha256 }}
+      PROJECTION_RECEIPT_B64: \${{ inputs.projection_receipt_b64 }}
+      ISOLATION_VERDICT_B64: \${{ inputs.isolation_verdict_b64 }}
+      DEPLOY_SHA: bce3daab76c9a4565902205cc59bb443f6e68009
+      DEPLOY_TREE: 9030f5945c65b997feb7857e9d9ddafe58737186
+      DEPLOY_EXPORT_SHA256: 590c1b1a6d21f16f42a4402887e167f3950980d3acd7d7fd6c95c3b7506b4e13
+      DEPLOY_PROVENANCE_SHA256: d33158be86e8d0b746e6c97f33e04e3a123bac67edfeede5d16ef062a514cf55
+      DEPLOY_PROOF_SHA256: 5318925e9a9ed4063ec4deafd90eed21c1d5582bc5a730a22c65c32988b15686
+      ISOLATION_SHA256: 480d32a0e9e0e00ac4675c544e59c2aff325a64c6ae2bc30916e98e4ac1817c7
+    steps:
+      - name: Checkout exact effect-host source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: \${{ github.sha }}
+          persist-credentials: false
+      - name: Install fixed Nix importer
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+      - name: Validate manual exact-source host and approved non-secret inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "roccho-dev/ops"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/proposals
+          test "$PUBLISH_INPUT" != true
+          test "$CANONICAL_INPUT" != true
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "$APPROVED_REQUEST_B64"
+          test -n "$PROJECTION_RECEIPT_B64"
+          test -n "$ISOLATION_VERDICT_B64"
+          [[ "$APPROVED_REQUEST_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          root="$RUNNER_TEMP/voice-ui-worker-effect"
+          rm -rf "$root"
+          mkdir -p "$root/product"
+          printf '%s' "$APPROVED_REQUEST_B64" | base64 -d > "$root/approved.json"
+          printf '%s' "$PROJECTION_RECEIPT_B64" | base64 -d > "$root/projection.json"
+          printf '%s' "$ISOLATION_VERDICT_B64" | base64 -d > "$root/isolation.json"
+          test "$(sha256sum "$root/approved.json" | cut -d' ' -f1)" = "$APPROVED_REQUEST_SHA256"
+          test "$(sha256sum "$root/isolation.json" | cut -d' ' -f1)" = "$ISOLATION_SHA256"
+          jq -e --arg deploy "$DEPLOY_SHA" --arg iso "sha256:$ISOLATION_SHA256" '
+            .kind == "ops.voiceUiTargetRuntimeRequest.v2"
+            and .expected.opsSha == $deploy
+            and (.expected.envsSha | test("^[0-9a-f]{40}$"))
+            and .expected.isolationVerdictSha256 == $iso
+            and .inputs == {product:"product",projectionReceipt:"projection.json",isolationVerdict:"isolation.json"}
+            and .output == "effect-output"
+          ' "$root/approved.json" >/dev/null
+          test "$(jq -r .expected.projectionReceiptSha256 "$root/approved.json" | sed 's/^sha256://')" \
+            = "$(sha256sum "$root/projection.json" | cut -d' ' -f1)"
+          jq -e --slurpfile q "$root/approved.json" '
+            .kind == "envs.projectionReceipt.v1"
+            and .status == "PASS"
+            and .environment == "dev"
+            and .capability == "jev-api"
+            and .target.provider == "cloudflare-workers"
+            and .target.secret_name == "JEV_API_KEY"
+            and .envs_sha == $q[0].expected.envsSha
+            and .target.account_id == $q[0].expected.target.accountId
+            and .target.worker_name == $q[0].expected.target.workerName
+          ' "$root/projection.json" >/dev/null
+          jq -e --arg deploy "$DEPLOY_SHA" '
+            .kind == "ops.secretEffectBoundary.check.v1"
+            and .status == "PASS"
+            and .opsSha == $deploy
+            and .unclassified == 0
+          ' "$root/isolation.json" >/dev/null
+          printf '%s' "$root" > "$RUNNER_TEMP/worker-effect-root"
+      - name: Fetch and verify the formal bce3 DEPLOY and pinned PRODUCT before secret use
+        env:
+          GH_TOKEN: \${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/worker-effect-root")"
+          tag="voice-ui-target-runtime-$DEPLOY_SHA"
+          api="repos/$GITHUB_REPOSITORY"
+          test "$(gh api "$api/git/ref/tags/$tag" --jq '.object.type + " " + .object.sha')" = "commit $DEPLOY_SHA"
+          test "$(gh api "$api/git/commits/$DEPLOY_SHA" --jq .tree.sha)" = "$DEPLOY_TREE"
+          gh api "$api/releases/tags/$tag" > "$root/release.json"
+          jq -e --arg e "$DEPLOY_EXPORT_SHA256" --arg p "$DEPLOY_PROVENANCE_SHA256" --arg q "$DEPLOY_PROOF_SHA256" '
+            ([.assets[].name] | sort) == ["merged-pr-proof.json","provenance.json","voice-ui-target-runtime.nix-export","voice-ui-target-runtime.nix-export.sha256"]
+            and (.assets[] | select(.name=="voice-ui-target-runtime.nix-export") | .size) == 788694992
+            and (.assets[] | select(.name=="voice-ui-target-runtime.nix-export") | .digest) == ("sha256:"+$e)
+            and (.assets[] | select(.name=="provenance.json") | .digest) == ("sha256:"+$p)
+            and (.assets[] | select(.name=="merged-pr-proof.json") | .digest) == ("sha256:"+$q)
+          ' "$root/release.json" >/dev/null
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          fetch() { env -i PATH="$PATH" HOME="$(mktemp -d)" curl -fsSL --proto '=https' --retry 5 --retry-all-errors -o "$2" "$1"; }
+          mkdir -p "$root/deploy"
+          for name in voice-ui-target-runtime.nix-export voice-ui-target-runtime.nix-export.sha256 provenance.json merged-pr-proof.json; do
+            fetch "$base/$name" "$root/deploy/$name"
+          done
+          test "$(sha256sum "$root/deploy/voice-ui-target-runtime.nix-export" | cut -d' ' -f1)" = "$DEPLOY_EXPORT_SHA256"
+          test "$(sha256sum "$root/deploy/provenance.json" | cut -d' ' -f1)" = "$DEPLOY_PROVENANCE_SHA256"
+          test "$(sha256sum "$root/deploy/merged-pr-proof.json" | cut -d' ' -f1)" = "$DEPLOY_PROOF_SHA256"
+          test "$(cat "$root/deploy/voice-ui-target-runtime.nix-export.sha256")" \
+            = "$(cd "$root/deploy" && sha256sum voice-ui-target-runtime.nix-export)"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$DEPLOY_SHA" --arg tree "$DEPLOY_TREE" --arg locator "$base/voice-ui-target-runtime.nix-export" \
+            --slurpfile q "$root/deploy/merged-pr-proof.json" '
+            .schema == "roccho.voice-ui-target-runtime.release-provenance/1"
+            and .source == {repository:$repo,commit:$sha,tree:$tree}
+            and .producer.repository == $repo
+            and .producer.workflow_ref == "\($repo)/.github/workflows/voice-ui-target-runtime.yml@refs/heads/proposals"
+            and .deploy.name == "voice-ui-target-runtime.nix-export"
+            and .deploy.bytes == 788694992
+            and .deploy.sha256 == "'"$DEPLOY_EXPORT_SHA256"'"
+            and .deploy.locator == $locator
+            and $q[0].merge_sha == $sha
+            and $q[0].merge_tree == $tree
+            and $q[0].reviewed_tree == $tree
+          ' "$root/deploy/provenance.json" >/dev/null
+          sudo "$(command -v nix-store)" --import < "$root/deploy/voice-ui-target-runtime.nix-export" > /dev/null
+          runtime="$(jq -r .deploy.root "$root/deploy/provenance.json")"
+          test -x "$runtime/bin/voice-ui-target-runtime"
+          canon='map({path,narHash,narSize})|sort_by(.path)'
+          native='(if type=="array" then . else to_entries|map(.value+{path:.key}) end)'
+          diff <(nix path-info --json --recursive "$runtime" | jq -cS "$native|$canon") \
+            <(jq -cS ".deploy.closure|$canon" "$root/deploy/provenance.json")
+          p="$root/deploy/provenance.json"
+          product_base="$(jq -r .apps_pin.base "$p")"
+          fetch "$product_base/voice-ui-dist.zip" "$root/product/voice-ui-dist.zip"
+          fetch "$product_base/merged-pr-proof.json" "$root/product/merged-pr-proof.json"
+          fetch "$product_base/provenance.json" "$root/product/provenance.json"
+          test "$(stat -c %s "$root/product/voice-ui-dist.zip")" = "$(jq -r .apps_pin.zip.bytes "$p")"
+          test "$(sha256sum "$root/product/voice-ui-dist.zip" | cut -d' ' -f1)" = "$(jq -r .apps_pin.zip.sha256 "$p")"
+          test "$(sha256sum "$root/product/merged-pr-proof.json" | cut -d' ' -f1)" = "$(jq -r .apps_pin.proofSha256 "$p")"
+          test "$(sha256sum "$root/product/provenance.json" | cut -d' ' -f1)" = "$(jq -r .apps_pin.provenanceSha256 "$p")"
+          printf '%s' "$runtime" > "$RUNNER_TEMP/worker-effect-runtime"
+      - name: Prove the exact request reaches only the credential guard before secret use
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/worker-effect-root")"
+          runtime="$(cat "$RUNNER_TEMP/worker-effect-runtime")"
+          rm -rf "$root/effect-output"
+          set +e
+          (
+            cd "$root"
+            env -i HOME="$(mktemp -d)" TMPDIR="$(mktemp -d)" \
+              "$runtime/bin/voice-ui-target-runtime" --request approved.json \
+              > "$RUNNER_TEMP/preflight.stdout" 2> "$RUNNER_TEMP/preflight.stderr"
+          )
+          rc=$?
+          set -e
+          test "$rc" -ne 0
+          grep -q '^effect capability is missing$' "$RUNNER_TEMP/preflight.stderr"
+          test ! -e "$root/effect-output"
+      - name: Run one approved Worker deploy/readback
+        env:
+          CLOUDFLARE_ACCOUNT_ID: \${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/worker-effect-root")"
+          runtime="$(cat "$RUNNER_TEMP/worker-effect-runtime")"
+          cd "$root"
+          "$runtime/bin/voice-ui-target-runtime" --request approved.json > "$RUNNER_TEMP/effect-summary.json"
+      - name: Validate non-secret effect receipts and host identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$(cat "$RUNNER_TEMP/worker-effect-root")"
+          test "$(cd "$root/effect-output" && find . -maxdepth 1 -type f -printf '%f\n' | sort | paste -sd ' ')" = "deploy.json readback.json receipt.json"
+          jq -e --arg deploy "$DEPLOY_SHA" '
+            .kind == "ops.voiceUiTargetRuntimeReceipt.v1"
+            and .status == "PASS"
+            and .claim == "DEPLOY_READBACK_PASS"
+            and .sources.opsSha == $deploy
+            and .stages == {isolation:"PASS",projection:"PASS",deploy:"PASS",readback:"PASS"}
+          ' "$root/effect-output/receipt.json" >/dev/null
+          node - "$root/effect-output" <<'JS'
+          const fs=require("fs"),path=require("path");
+          const forbidden=new Set(["secret","secret_value","secret_hash","plaintext","private_key","api_key","token"]);
+          const walk=(v)=>{
+            if(Array.isArray(v)){for(const x of v)walk(x);return;}
+            if(v&&typeof v==="object"){for(const [k,x] of Object.entries(v)){if(forbidden.has(k.toLowerCase()))throw new Error("forbidden receipt field: "+k);walk(x);}}
+          };
+          for(const name of ["deploy.json","readback.json","receipt.json"]) walk(JSON.parse(fs.readFileSync(path.join(process.argv[2],name),"utf8")));
+          JS
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg hostSource "$GITHUB_SHA" --arg deploySource "$DEPLOY_SHA" \
+            --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" --arg environment "cloudflare-production" \
+            --arg requestSha "$APPROVED_REQUEST_SHA256" --arg isolationSha "sha256:$ISOLATION_SHA256" '{
+              kind:"ops.voiceUiWorkerEffectHostReceipt.v1",status:"PASS",authority:false,
+              repository:$repository,hostSourceSha:$hostSource,deploySourceSha:$deploySource,
+              runId:($run|tonumber),runAttempt:($attempt|tonumber),environment:$environment,
+              environmentPhysicalApproval:"NOT_PROVEN_BY_SOURCE",
+              approvedRequestSha256:("sha256:"+$requestSha),isolationVerdictSha256:$isolationSha,
+              providerEffectReceipt:"effect-output/receipt.json"
+            }' > "$root/host.json"
+      - name: Upload non-secret Worker effect receipts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: voice-ui-worker-effect-receipt
+          path: |
+            \${{ runner.temp }}/voice-ui-worker-effect/effect-output/
+            \${{ runner.temp }}/voice-ui-worker-effect/host.json
+          if-no-files-found: error

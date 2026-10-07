@@ -6,6 +6,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const EXACT = "${{ github.sha }}";
+const WORKER_EFFECT_WORKFLOW = ".github/workflows/voice-ui-target-runtime.yml";
+const WORKER_EFFECT_DEPLOY_SHA = "bce3daab76c9a4565902205cc59bb443f6e68009";
+const WORKER_EFFECT_ISOLATION_SHA = "480d32a0e9e0e00ac4675c544e59c2aff325a64c6ae2bc30916e98e4ac1817c7";
 const hasSecret = value => /\bsecrets(?:\s*[.\[]|")/.test(JSON.stringify(value));
 const list = value => value === undefined ? [] : Array.isArray(value) ? value : [value];
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
@@ -54,6 +57,62 @@ function guarded(job, events, allowed) {
     }
     return true;
   });
+}
+
+export function assertVoiceUiWorkerEffectBridge(workflow) {
+  const inputs = workflow?.on?.workflow_dispatch?.inputs;
+  need(inputs && inputs.worker_effect?.type === "boolean" && inputs.worker_effect.default === false,
+    "voice-ui worker effect input must default false");
+  for (const name of ["source_sha","approved_request_b64","approved_request_sha256","projection_receipt_b64","isolation_verdict_b64"])
+    need(inputs[name]?.type === "string", "voice-ui worker effect input missing: " + name);
+
+  const job = workflow?.jobs?.["worker-effect"];
+  need(job && !job.needs, "voice-ui worker effect must be one independent job");
+  const guard = typeof job.if === "string" ? job.if.trim().replace(/^\$\{\{\s*|\s*\}\}$/g, "") : "";
+  need(guard === "github.event_name == 'workflow_dispatch' && inputs.worker_effect",
+    "voice-ui worker effect guard differs");
+  need((typeof job.environment === "string" ? job.environment : job.environment?.name) === "cloudflare-production",
+    "voice-ui worker effect Environment differs");
+  need(job.permissions?.contents === "read" && Object.keys(job.permissions).length === 1,
+    "voice-ui worker effect permissions differ");
+
+  const steps = job.steps ?? [];
+  const secretIndexes = steps.map((step,index)=>hasSecret(step)?index:-1).filter(index=>index>=0);
+  need(secretIndexes.length === 1, "voice-ui worker effect must have exactly one secret-bearing step");
+  const effectIndex = secretIndexes[0], effect = steps[effectIndex];
+  need(effect.name === "Run one approved Worker deploy/readback", "voice-ui worker effect step identity differs");
+  need(typeof effect.run === "string" && effect.run.includes('voice-ui-target-runtime" --request approved.json'),
+    "voice-ui worker effect does not invoke installed approved request");
+  need(!/\b(?:curl|gh|git|nix|nix-store|npm|npx|pip)\b/.test(effect.run),
+    "voice-ui worker effect step acquires/builds source after secret exposure");
+  need(steps.slice(0,effectIndex).every(step=>!hasSecret(step)),
+    "voice-ui worker effect exposes secret before source/request preflight");
+  for (const step of steps.slice(effectIndex+1)) {
+    need(!hasSecret(step), "voice-ui worker post-effect step receives secret");
+    if (step.run) need(!/\b(?:curl|gh|git\s+(?:clone|fetch|checkout|switch)|nix\s+(?:build|shell|develop)|nix-build|npm\s+(?:install|ci)|npx|pip\s+install)\b/.test(step.run),
+      "voice-ui worker post-effect step acquires/builds source");
+  }
+
+  const text = JSON.stringify(job);
+  for (const required of [
+    WORKER_EFFECT_DEPLOY_SHA,
+    WORKER_EFFECT_ISOLATION_SHA,
+    'test "$GITHUB_REPOSITORY" = "roccho-dev/ops"',
+    'test "$GITHUB_REF" = refs/heads/proposals',
+    'test "$SOURCE_SHA" = "$GITHUB_SHA"',
+    'test "$(git rev-parse HEAD)" = "$GITHUB_SHA"',
+    'test "$PUBLISH_INPUT" != true',
+    'test "$CANONICAL_INPUT" != true',
+    "effect capability is missing",
+    "environmentPhysicalApproval",
+    "NOT_PROVEN_BY_SOURCE",
+  ]) need(text.includes(required), "voice-ui worker effect invariant missing: " + required);
+  need(text.includes("actions/checkout@11d5960a326750d5838078e36cf38b85af677262"),
+    "voice-ui worker effect checkout pin differs");
+  need(text.includes('"ref":"\${{ github.sha }}"'),
+    "voice-ui worker effect checkout is not exact github.sha");
+  need(workflow.jobs["build-test"] && workflow.jobs["voice-ui-cf-consumer-cleanstart"] && workflow.jobs.publish,
+    "voice-ui existing build/canonical/publish modes missing");
 }
 
 export function analyzeEffectWorkflow(workflow, boundary) {
@@ -177,7 +236,40 @@ export function selftest() {
   assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
   parity.jobs.materialize.steps.at(-1).env={TOKEN:"${{ secrets.TOKEN }}"};
   assert.ok(analyzeEffectWorkflow(parity,policy).issues.length);
-  return {positive:2,negative:cases.length+2,publisherIsolation:{positive:2,negative:20}};
+  const bridge = {on:{pull_request:{},workflow_dispatch:{inputs:{
+    publish:{type:"boolean",default:false},canonical:{type:"boolean",default:false},
+    worker_effect:{type:"boolean",default:false},source_sha:{type:"string"},
+    approved_request_b64:{type:"string"},approved_request_sha256:{type:"string"},
+    projection_receipt_b64:{type:"string"},isolation_verdict_b64:{type:"string"},
+  }}},jobs:{
+    "build-test":{steps:[{run:"echo build"}]},
+    "voice-ui-cf-consumer-cleanstart":{steps:[{run:"echo canonical"}]},
+    publish:{steps:[{run:"echo publish"}]},
+    "worker-effect":{
+      if:"github.event_name == 'workflow_dispatch' && inputs.worker_effect",
+      environment:"cloudflare-production",permissions:{contents:"read"},
+      env:{DEPLOY_SHA:WORKER_EFFECT_DEPLOY_SHA,ISOLATION_SHA256:WORKER_EFFECT_ISOLATION_SHA},
+      steps:[
+        {uses:"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",with:{ref:EXACT}},
+        {name:"source preflight",run:'test "$GITHUB_REPOSITORY" = "roccho-dev/ops"; test "$GITHUB_REF" = refs/heads/proposals; test "$SOURCE_SHA" = "$GITHUB_SHA"; test "$(git rev-parse HEAD)" = "$GITHUB_SHA"; test "$PUBLISH_INPUT" != true; test "$CANONICAL_INPUT" != true; echo effect capability is missing; echo environmentPhysicalApproval NOT_PROVEN_BY_SOURCE'},
+        {name:"Run one approved Worker deploy/readback",env:{CLOUDFLARE_API_TOKEN:"\${{ secrets.CLOUDFLARE_API_TOKEN }}"},run:'"$runtime/bin/voice-ui-target-runtime" --request approved.json'},
+        {name:"receipt",run:"node validate-receipt.mjs"},
+      ],
+    },
+  }};
+  assertVoiceUiWorkerEffectBridge(bridge);
+  const bridgeCases = [
+    w=>{w.on.workflow_dispatch.inputs.worker_effect.default=true;},
+    w=>{w.jobs["worker-effect"].if="github.event_name == 'pull_request'";},
+    w=>{w.jobs["worker-effect"].environment="\${{ inputs.environment }}";},
+    w=>{w.jobs["worker-effect"].env.DEPLOY_SHA="a".repeat(40);},
+    w=>{w.jobs["worker-effect"].steps[1].env={TOKEN:"\${{ secrets.TOKEN }}"};},
+    w=>{w.jobs["worker-effect"].steps[2].run+='; curl https://example.invalid/source';},
+    w=>{w.jobs["worker-effect"].steps[1].run=w.jobs["worker-effect"].steps[1].run.replace('test "$SOURCE_SHA" = "$GITHUB_SHA"; ','');},
+    w=>{w.jobs["worker-effect"].steps[3].run="git fetch origin proposals";},
+  ];
+  for (const mutate of bridgeCases) {const w=structuredClone(bridge);mutate(w);assert.throws(()=>assertVoiceUiWorkerEffectBridge(w));}
+  return {positive:3,negative:cases.length+2+bridgeCases.length,publisherIsolation:{positive:2,negative:20},workerEffectBridge:{positive:1,negative:bridgeCases.length}};
 }
 
 export function check(root) {
@@ -195,6 +287,10 @@ export function check(root) {
     need(parsed.status===0,`${p}: YAML parser failed; yq-go must be provided by the pinned check closure`);
     const w=JSON.parse(parsed.stdout),intent=intents.find(x=>x.path===p),boundary=byPath.get(p);
     assertIsolatedPublisherPaths(w,p);
+    if(p===WORKER_EFFECT_WORKFLOW) {
+      try { assertVoiceUiWorkerEffectBridge(w); }
+      catch(error) { failures.push(p + ": " + error.message); }
+    }
     need(intent,`${p}: no CI intent`);
     const events=typeof w.on==="string"?[w.on]:Array.isArray(w.on)?w.on:Object.keys(w.on??{});
     for(const event of intent.dispatch??[]) need(events.includes(event),`${p}: intent trigger ${event} absent`);
