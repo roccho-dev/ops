@@ -109,7 +109,7 @@ export function assertVoiceUiWorkerEffectBridge(workflow) {
   ]) need(text.includes(required), "voice-ui worker effect invariant missing: " + required);
   need(text.includes("actions/checkout@11d5960a326750d5838078e36cf38b85af677262"),
     "voice-ui worker effect checkout pin differs");
-  need(text.includes('"ref":"\${{ github.sha }}"'),
+  need(text.includes('"ref":"${{ github.sha }}"'),
     "voice-ui worker effect checkout is not exact github.sha");
   need(workflow.jobs["build-test"] && workflow.jobs["voice-ui-cf-consumer-cleanstart"] && workflow.jobs.publish,
     "voice-ui existing build/canonical/publish modes missing");
@@ -252,7 +252,7 @@ export function selftest() {
       steps:[
         {uses:"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",with:{ref:EXACT}},
         {name:"source preflight",run:'test "$GITHUB_REPOSITORY" = "roccho-dev/ops"; test "$GITHUB_REF" = refs/heads/proposals; test "$SOURCE_SHA" = "$GITHUB_SHA"; test "$(git rev-parse HEAD)" = "$GITHUB_SHA"; test "$PUBLISH_INPUT" != true; test "$CANONICAL_INPUT" != true; echo effect capability is missing; echo environmentPhysicalApproval NOT_PROVEN_BY_SOURCE'},
-        {name:"Run one approved Worker deploy/readback",env:{CLOUDFLARE_API_TOKEN:"\${{ secrets.CLOUDFLARE_API_TOKEN }}"},run:'"$runtime/bin/voice-ui-target-runtime" --request approved.json'},
+        {name:"Run one approved Worker deploy/readback",env:{CLOUDFLARE_API_TOKEN:"${{ secrets.CLOUDFLARE_API_TOKEN }}"},run:'"$runtime/bin/voice-ui-target-runtime" --request approved.json'},
         {name:"receipt",run:"node validate-receipt.mjs"},
       ],
     },
@@ -261,9 +261,9 @@ export function selftest() {
   const bridgeCases = [
     w=>{w.on.workflow_dispatch.inputs.worker_effect.default=true;},
     w=>{w.jobs["worker-effect"].if="github.event_name == 'pull_request'";},
-    w=>{w.jobs["worker-effect"].environment="\${{ inputs.environment }}";},
+    w=>{w.jobs["worker-effect"].environment="${{ inputs.environment }}";},
     w=>{w.jobs["worker-effect"].env.DEPLOY_SHA="a".repeat(40);},
-    w=>{w.jobs["worker-effect"].steps[1].env={TOKEN:"\${{ secrets.TOKEN }}"};},
+    w=>{w.jobs["worker-effect"].steps[1].env={TOKEN:"${{ secrets.TOKEN }}"};},
     w=>{w.jobs["worker-effect"].steps[2].run+='; curl https://example.invalid/source';},
     w=>{w.jobs["worker-effect"].steps[1].run=w.jobs["worker-effect"].steps[1].run.replace('test "$SOURCE_SHA" = "$GITHUB_SHA"; ','');},
     w=>{w.jobs["worker-effect"].steps[3].run="git fetch origin proposals";},
