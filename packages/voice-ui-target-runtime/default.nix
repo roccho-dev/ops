@@ -1,25 +1,25 @@
 { pkgs, opsSha }:
 let
-  # The canonical apps PRODUCT (apps PR 75), pinned as reviewed DATA. The runtime holds no product bytes: a consumer
+  # The canonical apps PRODUCT (apps PR 76), pinned as reviewed DATA. The runtime holds no product bytes: a consumer
   # passes the release's zip, merged-PR proof and provenance as one operand directory, which
   # modules/input-contracts.mjs admits once against this pin. The full ACCEPTANCE closure metadata is in that
   # provenance; only its identity is pinned here. Bytes are not claimed to be reproducible across hosts.
   product = rec {
-    tag = "voice-ui-dist-5e1314918f155593cc5e2156d7ca8d0813f8b4a6";
+    tag = "voice-ui-dist-f33a95cfc603ebb6f44f9da91b0d7481991719ea";
     base = "https://github.com/roccho-dev/apps/releases/download/${tag}";
-    zip = { sha256 = "b577cf0170efa08e6d0ec2ee39ebc90b55b55a2ae2b0c6386bf5b5a73b29da8b"; bytes = 62573813; };
-    proofSha256 = "394e956f7703af712d0501506affa13926b58229d745c2ab19423ec3fe9eb079";
-    provenanceSha256 = "cdec97e62b9136d5c49afd8ee1418fff3f252d24179c379099708f719ea42c21";
-    manifestSha256 = "209e630f1aa12bd20233653e557d2b20155b10a4d010cf08c9e774f46d1ef4db";
-    workerSha256 = "c04d81281dafeb02a56002060d1ff709c80a33916fbfe988eb404bfb32493887";
+    zip = { sha256 = "fa59a1fc3f1b5e52efa839d257e9bb87c4ce1259dda7b314a38b6af042b75582"; bytes = 62574070; };
+    proofSha256 = "2f942ef817563b72ee9ec1aad7e2842c296e99a07f1536bb00f426b3ea37aa26";
+    provenanceSha256 = "80f8d73905f68e5689976d02f705fc0bb95b3d90971517c4306da63523aded23";
+    manifestSha256 = "513051105c5e7aa6ff9c1e2df34b7baf67aab1e542ecfebd98bc55cd5d8b9719";
+    workerSha256 = "32872a183426533ada8276b7b064d45c0959110f9d7c69f18217e12abddf7730";
     proof = {
-      pr_number = 75;
+      pr_number = 76;
       base = "proposals";
-      reviewed_head = "5f0e001851f2716348eef918e771a6de611943b2";
-      r_exact_head_verdict_ref = "https://github.com/roccho-dev/apps/pull/75#pullrequestreview-5445942179";
-      merge_sha = "5e1314918f155593cc5e2156d7ca8d0813f8b4a6";
-      reviewed_tree = "029479fddba87c86dea6463c22111e5dd97c4996";
-      merge_tree = "029479fddba87c86dea6463c22111e5dd97c4996";
+      reviewed_head = "9976a729ad3e515bc54ff629361e9c1afb5647e9";
+      r_exact_head_verdict_ref = "https://github.com/roccho-dev/apps/pull/76#pullrequestreview-5447557821";
+      merge_sha = "f33a95cfc603ebb6f44f9da91b0d7481991719ea";
+      reviewed_tree = "e8523ebf65ef6e88dfdb8632252c36e04bdb3e0a";
+      merge_tree = "e8523ebf65ef6e88dfdb8632252c36e04bdb3e0a";
     };
     acceptance = {
       sha256 = "3f7c6fdc7639078aacd9bee8e76acacddbb02a10d05602f9629192223e1c0d08";
