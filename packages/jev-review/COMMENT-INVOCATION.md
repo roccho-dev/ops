@@ -79,9 +79,11 @@ and the workflow references no Environment. Rotation updates the same Org slot; 
 one-time-ever projection. Org319185687 selects Ops1275606595/envs1391871347;
 the native projector/current controller and separate metadata readback are recorded in
 the exact envs handoff. This executor performs no secret management.
-The first bounded proof reserves only native run numbers1 and3 for each actual workflow
-Ops377399991/envs377400122: at most four attempted calls total. A result-comment event
-can consume skipped run2. Empty/exhausted ranges stop with `NO_RANGE`; missed slots
+The first bounded proof reserves only native run numbers1 and2 for each actual workflow
+Ops377399991/envs377400122: at most four attempted calls total. Native GITHUB_TOKEN
+result-comment events do not create another workflow run, per
+[GitHub's token contract](https://docs.github.com/en/actions/concepts/security/github_token).
+Other people's comments can still consume skipped runs. Empty/exhausted ranges stop with `NO_RANGE`; missed slots
 are not replenished automatically. Later reviewed reservations append without resetting
 history. Personal ownership stops with `ORG_REQUIRED`.
 See ADRS #547 update6031490611 and envs #52; rotation/revoke remains separate unfinished work.
