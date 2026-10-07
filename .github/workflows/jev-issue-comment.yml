@@ -2,7 +2,7 @@ name: Jev Issue comment evaluation
 
 # Trusted literal command on Org Ops483/envs52 -> fixed semlint -> same-Issue result.
 # One projected Org slot; no Repository/Environment copy.
-# Reviewed native slots bound total attempted calls to four; no rerun spending.
+# Initial four-call history plus 200 authorized additions; no rerun spending.
 on:
   issue_comment:
     types: [created]
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: roccho-org/ops
-          ref: ee5e92f96ce41504a6240818c2bd2901c353346c
+          ref: 2d592b1cdcdb2abed7b00dfd98baab7105914521
           persist-credentials: false
 
       - name: Install fixed toolchain provisioner
@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_source=ee5e92f96ce41504a6240818c2bd2901c353346c
+          runtime_source=2d592b1cdcdb2abed7b00dfd98baab7105914521
           test "$(git rev-parse HEAD)" = "$runtime_source"
           out="$(nix build --no-link --print-out-paths .#jev-review)"
           line="$(grep '^exec ' "$out/bin/jev-review")"

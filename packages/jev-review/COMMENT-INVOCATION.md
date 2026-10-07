@@ -80,7 +80,13 @@ one-time-ever projection. Org319185687 selects Ops1275606595/envs1391871347;
 the native projector/current controller and separate metadata readback are recorded in
 the exact envs handoff. This executor performs no secret management.
 The first bounded proof reserves only native run numbers1 and2 for each actual workflow
-Ops377399991/envs377400122: at most four attempted calls total. Native GITHUB_TOKEN
+Ops377399991/envs377400122: at most four attempted calls total, all four observed.
+User subsequently permits 200 additional calls total: appended Ops run numbers4..103
+and envs3..102 reserve 100 each. The earlier four rows stay byte-for-byte unchanged;
+total lifetime reservation is204, not a reset. Ops run3 stays unreserved.
+Per-run limits, target/requester/context guards and no-rerun/replay protections are unchanged.
+The cap counts attempted calls, not guaranteed successful calls or a monetary ceiling.
+Native GITHUB_TOKEN
 result-comment events do not create another workflow run, per
 [GitHub's token contract](https://docs.github.com/en/actions/concepts/security/github_token).
 Other people's comments can still consume skipped runs. Empty/exhausted ranges stop with `NO_RANGE`; missed slots
