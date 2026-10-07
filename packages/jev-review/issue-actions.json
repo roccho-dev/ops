@@ -88,6 +88,22 @@
       "first": 2,
       "last": 2,
       "reservedCallsPerRun": 1
+    },
+    {
+      "repository": "roccho-org/ops",
+      "workflowId": 377399991,
+      "path": ".github/workflows/jev-issue-comment.yml",
+      "first": 4,
+      "last": 103,
+      "reservedCallsPerRun": 1
+    },
+    {
+      "repository": "roccho-org/envs",
+      "workflowId": 377400122,
+      "path": ".github/workflows/jev-issue-comment.yml",
+      "first": 3,
+      "last": 102,
+      "reservedCallsPerRun": 1
     }
   ],
   "targets": [

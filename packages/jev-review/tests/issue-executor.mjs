@@ -206,6 +206,35 @@ await check('reservation-bound', async () => {
   assert.equal(s.calls.issueQ + s.calls.commentQ + s.calls.workflow, 0);
 });
 
+// Public adopted history is retained; this grant adds 200 slots, never resets the first four.
+await check('reviewed-budget-addition', async () => {
+  const raw = JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8'));
+  const shipped = validateActionsConfig(raw);
+  const old = [
+    { repository: 'roccho-org/ops', workflowId: 377399991, path: WF_PATH, first: 1, last: 1, reservedCallsPerRun: 1 },
+    { repository: 'roccho-org/ops', workflowId: 377399991, path: WF_PATH, first: 2, last: 2, reservedCallsPerRun: 1 },
+    { repository: 'roccho-org/envs', workflowId: 377400122, path: WF_PATH, first: 1, last: 1, reservedCallsPerRun: 1 },
+    { repository: 'roccho-org/envs', workflowId: 377400122, path: WF_PATH, first: 2, last: 2, reservedCallsPerRun: 1 },
+  ];
+  assert.deepEqual(raw.runRanges.slice(0, 4), old);
+  const added = shipped.runRanges.slice(4);
+  assert.equal(added.length, 2);
+  assert.equal(added.reduce((n, r) => n + (r.last - r.first + 1) * r.reservedCallsPerRun, 0), 200);
+  assert.equal(shipped.runRanges.reduce((n, r) => n + (r.last - r.first + 1) * r.reservedCallsPerRun, 0), 204);
+  assert.equal(shipped.limits.maxCalls, 1);
+  for (const r of added) {
+    assert.equal(r.last - r.first + 1, 100);
+    const run = (number, attempt = 1) => ({ repository: r.repository, workflowId: r.workflowId,
+      path: r.path, number, attempt, id: 1 });
+    for (const number of [r.first, r.last]) assert.equal(selectRunRange(shipped, run(number)).callsPerRun, 1);
+    assert.equal(selectRunRange(shipped, run(r.last + 1)).cause, 'NO_RANGE');
+    assert.equal(selectRunRange(shipped, run(r.first, 2)).cause, 'RERUN_NOT_PAID');
+    assert.equal(selectRunRange(shipped, { ...run(r.first), workflowId: r.workflowId + 1 }).cause, 'NO_RANGE');
+  }
+  assert.equal(selectRunRange(shipped, { repository: 'roccho-org/ops', workflowId: 377399991,
+    path: WF_PATH, number: 3, attempt: 1, id: 1 }).cause, 'NO_RANGE');
+});
+
 // Native run identity is bound before any read or effect; reruns never spend.
 await check('run-identity', async () => {
   for (const [runOver, ctxOver, cause] of [
