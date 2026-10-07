@@ -117,10 +117,15 @@ jobs:
           root="$(nix build --no-link --print-out-paths .#packages.x86_64-linux.jev-review)"
           mapfile -t exec_lines < <(grep '^exec ' "$root/bin/jev-review")
           test "${#exec_lines[@]}" -eq 1
-          pattern='^exec (/nix/store/[a-z0-9]{32}-nodejs-[^/ ]+/bin/node) (/nix/store/[a-z0-9]{32}-jev-review)/bin/jev-review[.]mjs "[$]@"$'
+          pattern='^exec (/nix/store/[a-z0-9]{32}-nodejs-[^/ ]+/bin/node) (/nix/store/[a-z0-9]{32}-jev-review-sources/jev-review)/bin/jev-review[.]mjs "[$]@"$'
           [[ ${exec_lines[0]} =~ $pattern ]]
           node="${BASH_REMATCH[1]}" source="${BASH_REMATCH[2]}"
           diff -r "$source" packages/jev-review # provided source is exactly the checked package directory
+          assembly="${source%/jev-review}" sibling="$assembly/jev"
+          test "$(find "$assembly" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | paste -sd ' ')" = "jev jev-review"
+          diff -r "$sibling" packages/jev # the shared provider is supplied, not an ambient import
+          "$node" "$source/tests/issue-executor.mjs" --source-contract "$GITHUB_WORKSPACE" > "$RUNNER_TEMP/jev-source-contract.json"
+          jq -e '.status == "PASS" and .sourceContract == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' "$RUNNER_TEMP/jev-source-contract.json"
           files_json() { (cd "$1" && find . -type f -print0 | xargs -0 sha256sum) | jq -Rn '[inputs | capture("^(?<h>[0-9a-f]{64})  [.]/(?<p>.+)$") | {(.p): .h}] | add'; }
           mapfile -t closure < <(nix-store --query --requisites "$root")
           mkdir -p jev-review-runtime
@@ -132,14 +137,16 @@ jobs:
           diff <(printf '%s\n' "${closure[@]}" | sort) \
             <(jq -r 'if type == "array" then .[].path else keys[] end' "$RUNNER_TEMP/jev-path-info.json" | sort)
           files_json "$source" > "$RUNNER_TEMP/jev-files.json"
+          files_json "$sibling" > "$RUNNER_TEMP/jev-sibling-files.json"
           jq -n --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXPECTED_SHA" --arg tree "$(git rev-parse 'HEAD^{tree}')" \
             --arg ref "$GITHUB_WORKFLOW_REF" --arg run "$GITHUB_RUN_ID" --arg attempt "$GITHUB_RUN_ATTEMPT" \
-            --arg root "$root" --arg node "$node" --arg source "$source" --argjson bytes "$bytes" --arg digest "$digest" \
-            --slurpfile info "$RUNNER_TEMP/jev-path-info.json" --slurpfile files "$RUNNER_TEMP/jev-files.json" '{
-              schema: "ops.jev-review.runtime-provenance/1",
+            --arg root "$root" --arg node "$node" --arg source "$source" --arg assembly "$assembly" --arg sibling "$sibling" --argjson bytes "$bytes" --arg digest "$digest" \
+            --slurpfile info "$RUNNER_TEMP/jev-path-info.json" --slurpfile files "$RUNNER_TEMP/jev-files.json" --slurpfile sibling_files "$RUNNER_TEMP/jev-sibling-files.json" '{
+              schema: "ops.jev-review.runtime-provenance/2",
               producer: { repository: $repo, workflow_ref: $ref, run_id: $run, run_attempt: $attempt },
               source: { repository: $repo, commit: $sha, tree: $tree },
               runtime: { root: $root, entry: "\($root)/bin/jev-review", node: $node, source: $source, files: $files[0],
+                assembly: $assembly, siblings: { jev: { path: $sibling, files: $sibling_files[0] } },
                 export: { name: "jev-review-runtime.nix-export", format: "nix-store --export", bytes: $bytes, sha256: $digest },
                 closure: ($info[0] | (if type == "array" then . else to_entries | map(.value + { path: .key }) end)
                   | map({ path, narHash, narSize }) | sort_by(.path)) },
@@ -197,12 +204,16 @@ jobs:
           test "$(sha256sum "$f" | cut -d' ' -f1)" = "$EXPORT_SHA256" # digest from the producer job output, not the artifact
           jq -e --arg repo "$GITHUB_REPOSITORY" --arg sha "$EXACT_SHA" --arg root "$ROOT" --arg digest "$EXPORT_SHA256" \
             --argjson bytes "$(stat -c %s "$f")" '
-            .schema == "ops.jev-review.runtime-provenance/1" and .source.repository == $repo and .source.commit == $sha
+            .schema == "ops.jev-review.runtime-provenance/2" and .source.repository == $repo and .source.commit == $sha
             and .runtime.root == $root and .runtime.entry == "\($root)/bin/jev-review"
             and .runtime.export.sha256 == $digest and .runtime.export.bytes == $bytes
-            and ($root | test("^/nix/store/[0-9a-z]{32}-jev-review$")) and (.runtime.source | test("^/nix/store/[0-9a-z]{32}-jev-review$"))
+            and ($root | test("^/nix/store/[0-9a-z]{32}-jev-review$"))
+            and (.runtime.assembly | test("^/nix/store/[0-9a-z]{32}-jev-review-sources$"))
+            and (.runtime.assembly as $a | .runtime.source == "\($a)/jev-review"
+              and (.runtime.siblings | keys) == ["jev"] and .runtime.siblings.jev.path == "\($a)/jev"
+              and (.runtime.siblings.jev.files | has("src/core.mjs")))
             and (.runtime.node | test("^/nix/store/[0-9a-z]{32}-nodejs-[^/ ]+/bin/node$"))
-            and (.runtime.source as $s | any(.runtime.closure[]; .path == $root) and any(.runtime.closure[]; .path == $s))
+            and (.runtime.assembly as $s | any(.runtime.closure[]; .path == $root) and any(.runtime.closure[]; .path == $s))
             and (.runtime.files | has("semlint.mjs") and has("semlint-entry.mjs") and has("github-comment.mjs") and has("issue-executor.mjs")
               and has("tests/run.mjs") and has("tests/github-comment.mjs") and has("tests/issue-executor.mjs") and (has("semlint-domain.mjs") | not))' "$p" >/dev/null
           source="$(jq -r .runtime.source "$p")" node="$(jq -r .runtime.node "$p")"
@@ -221,6 +232,9 @@ jobs:
           test "${exec_lines[0]}" = "exec $node $source/bin/jev-review.mjs \"\$@\""
           files_json() { (cd "$1" && find . -type f -print0 | xargs -0 sha256sum) | jq -Rn '[inputs | capture("^(?<h>[0-9a-f]{64})  [.]/(?<p>.+)$") | {(.p): .h}] | add'; }
           diff <(files_json "$source" | jq -S .) <(jq -S .runtime.files "$p")
+          assembly="$(jq -r .runtime.assembly "$p")"
+          test "$(find "$assembly" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | paste -sd ' ')" = "jev jev-review"
+          diff <(files_json "$assembly/jev" | jq -S .) <(jq -S .runtime.siblings.jev.files "$p")
           printf '%s\n%s\n' "$node" "$source" > "$RUNNER_TEMP/jev-runtime"
       - name: Run provided unpaid tests from the imported bytes
         run: |
@@ -234,7 +248,7 @@ jobs:
           run github-comment.mjs > comment.json
           jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' comment.json
           run issue-executor.mjs > executor.json
-          jq -e '.status == "PASS" and .realProviderCalls == 0 and .githubEffects == 0' executor.json
+          jq -e '.status == "PASS" and .sourceContract == "NOT_REQUESTED" and .realProviderCalls == 0 and .githubEffects == 0' executor.json
           {
             echo "### Provided jev-review fresh consumer"
             echo "- exact ops SHA: $EXACT_SHA; export sha256: $EXPORT_SHA256; provenance sha256: $PROVENANCE_SHA256"

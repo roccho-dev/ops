@@ -1,0 +1,90 @@
+name: Jev Issue comment evaluation
+
+# Trusted literal command on one approved Issue -> fixed semlint entry -> same-Issue result.
+# Org Secret only: no Repository/Environment copy. Org target/projection is NOT_CONFIGURED;
+# trustedCallers and runRanges stay empty until independently authorized adoption.
+on:
+  issue_comment:
+    types: [created]
+  workflow_call:
+    secrets:
+      JEV_API_KEY:
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  evaluate:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.repository.owner.type == 'Organization' &&
+      github.event.comment.body == '/jev-evaluate' &&
+      github.event.issue.pull_request == null &&
+      ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) ||
+      (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: roccho-org/ops
+          ref: 08ab4d7325225031766afa8da395e486f2272b1d
+          persist-credentials: false
+
+      - name: Install fixed toolchain provisioner
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+        with:
+          extra_nix_config: |
+            extra-experimental-features = nix-command flakes
+
+      - name: Resolve fixed jev-review runtime before any credential use
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_source=08ab4d7325225031766afa8da395e486f2272b1d
+          test "$(git rev-parse HEAD)" = "$runtime_source"
+          out="$(nix build --no-link --print-out-paths .#jev-review)"
+          line="$(grep '^exec ' "$out/bin/jev-review")"
+          pattern='^exec (/nix/store/[a-z0-9]{32}-nodejs-[^/ ]+/bin/node) (/nix/store/[a-z0-9]{32}-jev-review-sources/jev-review)/bin/jev-review[.]mjs "[$]@"$'
+          [[ $line =~ $pattern ]]
+          echo "JEV_NODE=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          echo "JEV_SRC=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+          echo "JEV_EXECUTION_SOURCE=$runtime_source" >> "$GITHUB_ENV"
+          echo "JEV_RUN_DIR=$RUNNER_TEMP/jev-issue" >> "$GITHUB_ENV"
+
+      - name: Plan (no Jev key)
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"
+          if [ -f "$JEV_RUN_DIR/plan.json" ]; then
+            echo 'planned=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate with the fixed entry (only key-bearing step)
+        if: steps.plan.outputs.planned == 'true'
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          if [ -f "$JEV_RUN_DIR/plan.json" ]; then
+            if "$JEV_NODE" "$JEV_SRC/semlint-entry.mjs" < "$JEV_RUN_DIR/plan.json" > "$JEV_RUN_DIR/entry.out"; then
+              echo 0 > "$JEV_RUN_DIR/entry.status"
+            else
+              echo $? > "$JEV_RUN_DIR/entry.status"
+            fi
+          fi
+
+      - name: Post result and read back (no Jev key)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: '"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" post "$JEV_RUN_DIR"'

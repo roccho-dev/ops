@@ -6,6 +6,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const EXACT = "${{ github.sha }}";
+const JEV_ORG_WORKFLOW = ".github/workflows/jev-issue-comment.yml";
+const JEV_MULTI_GUARD = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && github.event.comment.body == '/jev-evaluate' && github.event.issue.pull_request == null && ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))";
+const JEV_PLAN_RUN = [
+  'set -euo pipefail',
+  '"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"',
+  'if [ -f "$JEV_RUN_DIR/plan.json" ]; then',
+  "  echo 'planned=true' >> \"$GITHUB_OUTPUT\"",
+  'fi',
+].join("\n");
 const WORKER_EFFECT_WORKFLOW = ".github/workflows/voice-ui-target-runtime.yml";
 const WORKER_EFFECT_DEPLOY_SHA = "bce3daab76c9a4565902205cc59bb443f6e68009";
 const WORKER_EFFECT_ISOLATION_SHA = "480d32a0e9e0e00ac4675c544e59c2aff325a64c6ae2bc30916e98e4ac1817c7";
@@ -43,15 +52,22 @@ export function assertIsolatedPublisherPaths(workflow, filename) {
 
 // Deliberately bounded admission, not a general GitHub expression interpreter.
 // Unknown expression forms fail closed instead of being guessed safe.
-function guarded(job, events, allowed) {
+function guarded(job, events, allowed, boundary) {
   const guard = typeof job.if === "string" ? job.if.trim().replace(/^\$\{\{\s*|\s*\}\}$/g, "") : "";
+  if (boundary?.path === JEV_ORG_WORKFLOW && boundary.secretScope === "organization"
+    && guard.replace(/\s+/g, " ") === JEV_MULTI_GUARD
+    && same(events, ["issue_comment", "workflow_call"]) && same(allowed, events)) return true;
   if (/[|!()?:]/.test(guard)) return false;
   const parts = guard.split(/\s*&&\s*/);
   return allowed.some(event => {
     const eventOnly = events.length === 1 && events[0] === event;
     if (!eventOnly && !parts.includes(`github.event_name == '${event}'`)) return false;
     if (event === "issue_comment") {
-      return parts.includes("github.event.comment.user.login == github.repository_owner")
+      const callerGate = boundary?.secretScope === "organization"
+        ? boundary.path === JEV_ORG_WORKFLOW && parts.includes("github.event.repository.owner.type == 'Organization'")
+          && parts.includes("github.event.issue.pull_request == null")
+        : parts.includes("github.event.comment.user.login == github.repository_owner");
+      return callerGate
         && parts.some(p => /^github\.event\.comment\.body == '[^']+'$/.test(p))
         && parts.some(p => /^github\.event\.issue\.number == [0-9]+$/.test(p));
     }
@@ -130,7 +146,9 @@ export function analyzeEffectWorkflow(workflow, boundary) {
     need(effectNames.length > 0, "declared effect workflow has no visible secret job");
     const allowed = boundary.allowedEvents;
     need(Array.isArray(allowed) && allowed.length > 0
-      && allowed.every(event => ["workflow_dispatch", "issue_comment"].includes(event)), "invalid effect event contract");
+      && allowed.every(event => ["workflow_dispatch", "issue_comment"].includes(event)
+        || (event === "workflow_call" && boundary.path === JEV_ORG_WORKFLOW && boundary.secretScope === "organization")),
+      "invalid effect event contract");
     const contributing = new Set(), visiting = new Set();
     function visit(name) {
       need(typeof name === "string" && jobs[name], `missing upstream job: ${name}`);
@@ -142,9 +160,38 @@ export function analyzeEffectWorkflow(workflow, boundary) {
     }
     for (const name of effectNames) {
       const job = jobs[name];
-      need(guarded(job, events, allowed), `${name}: automatic or unsupported event guard`);
-      need((typeof job.environment === "string" ? job.environment : job.environment?.name) === boundary.environment,
-        `${name}: static Environment differs`);
+      need(guarded(job, events, allowed, boundary), `${name}: automatic or unsupported event guard`);
+      if (boundary.secretScope === "organization") {
+        const reused = same(events, ["issue_comment", "workflow_call"]) && same(allowed, events);
+        need((same(events, ["issue_comment"]) && same(allowed, ["issue_comment"])) || reused,
+          `${name}: Org effect is bounded issue-comment/reusable only`);
+        if (reused) {
+          need(JSON.stringify(workflow.on.workflow_call) === JSON.stringify({secrets:{JEV_API_KEY:{required:true}}}),
+            `${name}: reusable contract must pass only the provider slot`);
+          const checkout = (job.steps ?? []).filter(step => step.uses?.startsWith("actions/checkout@"));
+          need(checkout.length === 1 && checkout[0].with?.repository === "roccho-org/ops"
+            && /^[0-9a-f]{40}$/.test(checkout[0].with?.ref ?? "") && checkout[0].with["persist-credentials"] === false,
+            `${name}: reusable runtime source must be the fixed Ops commit`);
+          const provision = (job.steps ?? []).find(step => step.name === "Resolve fixed jev-review runtime before any credential use");
+          need(provision?.run?.includes(`runtime_source=${checkout[0].with.ref}`)
+            && provision.run.includes('test "$(git rev-parse HEAD)" = "$runtime_source"')
+            && provision.run.includes('echo "JEV_EXECUTION_SOURCE=$runtime_source" >> "$GITHUB_ENV"'),
+            `${name}: runtime source must be checked before credential use`);
+        }
+        need(boundary.path === JEV_ORG_WORKFLOW && boundary.secretName === "JEV_API_KEY"
+          && !Object.hasOwn(boundary, "environment") && !Object.hasOwn(job, "environment"), `${name}: Org Secret must not use an Environment`);
+        const steps = job.steps ?? [], keyed = steps.filter(hasSecret), plans = steps.filter(step => step.id === "plan");
+        need(keyed.length === 1 && plans.length === 1 && steps.indexOf(plans[0]) < steps.indexOf(keyed[0]), `${name}: Org admission must precede the only secret step`);
+        need(!hasSecret(plans[0]) && !plans[0].uses && plans[0].shell === "bash"
+          && JSON.stringify(plans[0].env) === JSON.stringify({GITHUB_TOKEN:"${{ github.token }}"})
+          && plans[0].run?.trim() === JEV_PLAN_RUN, `${name}: Org admission must use the fixed keyless plan`);
+        need(keyed[0].if === "steps.plan.outputs.planned == 'true'"
+          && JSON.stringify(keyed[0].env) === JSON.stringify({JEV_API_KEY:"${{ secrets.JEV_API_KEY }}"}), `${name}: Org Secret requires an admitted plan`);
+      } else {
+        need(boundary.secretScope === undefined && typeof boundary.environment === "string" && boundary.environment.length > 0
+          && (typeof job.environment === "string" ? job.environment : job.environment?.name) === boundary.environment,
+          `${name}: static Environment differs`);
+      }
       need(!hasSecret(job.env), `${name}: job-scoped secret forbidden`);
       need(!job.secrets, `${name}: inherited/reusable secrets forbidden`);
       visit(name);
@@ -165,8 +212,13 @@ export function analyzeEffectWorkflow(workflow, boundary) {
           const action = step.uses.match(/^([A-Za-z0-9_.\/-]+)@([0-9a-f]{40})$/);
           need(action && !action[1].startsWith("./"), `${name}: all contributing Actions must use full SHA; local/reusable actions need expansion`);
           if (action[1] === "actions/checkout") {
-            need((step.with?.ref ?? EXACT) === EXACT, `${name}: source must equal exact workflow revision, not a variable name or branch`);
-            need(!step.with?.repository || step.with.repository === "${{ github.repository }}", `${name}: external checkout requires separate artifact admission`);
+            const fixedJev = boundary.path === JEV_ORG_WORKFLOW && boundary.secretScope === "organization"
+              && same(events, ["issue_comment", "workflow_call"]) && step.with?.repository === "roccho-org/ops"
+              && /^[0-9a-f]{40}$/.test(step.with?.ref ?? "") && step.with["persist-credentials"] === false;
+            if (!fixedJev) {
+              need((step.with?.ref ?? EXACT) === EXACT, `${name}: source must equal exact workflow revision, not a variable name or branch`);
+              need(!step.with?.repository || step.with.repository === "${{ github.repository }}", `${name}: external checkout requires separate artifact admission`);
+            }
           }
         }
         if (step.run) {
@@ -232,6 +284,51 @@ export function selftest() {
   commentWorkflow.on={issue_comment:{}};commentWorkflow.jobs.effect.if="github.event_name == 'issue_comment'";
   assert.ok(analyzeEffectWorkflow(commentWorkflow,{...policy,allowedEvents:["issue_comment"]}).issues.length);
   for (const mutate of cases) {const w=structuredClone(safe);mutate(w);assert.ok(analyzeEffectWorkflow(w,policy).issues.length);}
+  const orgPolicy = {path:JEV_ORG_WORKFLOW,allowedEvents:["issue_comment"],secretScope:"organization",secretName:"JEV_API_KEY"};
+  const org = {on:{issue_comment:{types:["created"]}},jobs:{evaluate:{
+    if:"github.event.issue.number == 483 && github.event.repository.owner.type == 'Organization' && github.event.comment.body == '/jev-evaluate' && github.event.issue.pull_request == null",
+    steps:[
+      {id:"plan",shell:"bash",env:{GITHUB_TOKEN:"${{ github.token }}"},run:JEV_PLAN_RUN},
+      {if:"steps.plan.outputs.planned == 'true'",env:{JEV_API_KEY:"${{ secrets.JEV_API_KEY }}"},run:'node fixed-entry.mjs'},
+    ],
+  }}};
+  assert.deepEqual(analyzeEffectWorkflow(org,orgPolicy).issues,[]);
+  const orgCases = [
+    w=>{w.jobs.evaluate.environment="jev-issue-comment";},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("Organization","User");},
+    w=>{delete w.jobs.evaluate.steps[1].if;},
+    w=>{w.jobs.evaluate.steps[1].if="true";},
+    w=>{w.jobs.evaluate.steps[0].env.JEV_API_KEY="${{ secrets.JEV_API_KEY }}";},
+    w=>{w.jobs.evaluate.steps[0].run="echo planned=true >> $GITHUB_OUTPUT";},
+    w=>{w.jobs.evaluate.steps.reverse();},
+    w=>{w.jobs.evaluate.steps[1].env.EXTRA="${{ secrets.EXTRA }}";},
+    w=>{w.on={workflow_dispatch:{}};w.jobs.evaluate.if="github.event_name == 'workflow_dispatch'";},
+  ];
+  for (const mutate of orgCases) {const w=structuredClone(org);mutate(w);assert.ok(analyzeEffectWorkflow(w,orgPolicy).issues.length);}
+  assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,path:".github/workflows/other.yml"}).issues.length);
+  assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,secretName:"OTHER"}).issues.length);
+  assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,environment:"jev-issue-comment"}).issues.length);
+  assert.ok(analyzeEffectWorkflow(org,{...orgPolicy,allowedEvents:["workflow_dispatch"]}).issues.length);
+  const reusablePolicy = {...orgPolicy,allowedEvents:["issue_comment","workflow_call"]};
+  const reusable = structuredClone(org);
+  reusable.on.workflow_call = {secrets:{JEV_API_KEY:{required:true}}};
+  reusable.jobs.evaluate.if = JEV_MULTI_GUARD;
+  const runtime = "a".repeat(40);
+  reusable.jobs.evaluate.steps.unshift(
+    {uses:"actions/checkout@11d5960a326750d5838078e36cf38b85af677262",with:{repository:"roccho-org/ops",ref:runtime,"persist-credentials":false}},
+    {name:"Resolve fixed jev-review runtime before any credential use",run:`runtime_source=${runtime}\ntest "$(git rev-parse HEAD)" = "$runtime_source"\necho "JEV_EXECUTION_SOURCE=$runtime_source" >> "$GITHUB_ENV"`});
+  assert.deepEqual(analyzeEffectWorkflow(reusable,reusablePolicy).issues,[]);
+  const reusableCases = [
+    w=>{w.on.workflow_call.inputs={program:{type:"string"}};},
+    w=>{w.on.workflow_call.secrets.EXTRA={required:true};},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 52","== 53");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("roccho-org/envs","other/envs");},
+    w=>{w.jobs.evaluate.steps[0].with.ref="proposals";},
+    w=>{w.jobs.evaluate.steps[0].with.repository="other/ops";},
+    w=>{w.jobs.evaluate.steps[0].with["persist-credentials"]=true;},
+    w=>{w.jobs.evaluate.steps[1].run="echo ready";},
+  ];
+  for (const mutate of reusableCases) {const w=structuredClone(reusable);mutate(w);assert.ok(analyzeEffectWorkflow(w,reusablePolicy).issues.length);}
   const parity=structuredClone(safe);
   parity.jobs.materialize.steps.push({if:"github.event_name == 'pull_request'",run:"git clone public-fixture"});
   assert.deepEqual(analyzeEffectWorkflow(parity,policy).issues,[]);
@@ -270,7 +367,7 @@ export function selftest() {
     w=>{w.jobs["worker-effect"].steps[3].run="git fetch origin proposals";},
   ];
   for (const mutate of bridgeCases) {const w=structuredClone(bridge);mutate(w);assert.throws(()=>assertVoiceUiWorkerEffectBridge(w));}
-  return {positive:3,negative:cases.length+2+bridgeCases.length,publisherIsolation:{positive:2,negative:20},workerEffectBridge:{positive:1,negative:bridgeCases.length}};
+  return {positive:3,negative:cases.length+2+bridgeCases.length,publisherIsolation:{positive:2,negative:20},workerEffectBridge:{positive:1,negative:bridgeCases.length},jevOrgAdmission:{positive:1,negative:orgCases.length+4},jevReusableAdmission:{positive:1,negative:reusableCases.length}};
 }
 
 export function check(root) {

@@ -1,108 +1,130 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { JEV_MODEL } from '../core.mjs';
-import { semlint } from '../semlint.mjs';
 import { ENTRY_LIMITS, preparePlan, executeOwnerPlan } from '../semlint-entry.mjs';
-import { REQUEST_PREFIX, RESULT_PREFIX, admitIssueSnapshot, validateExecutorConfig } from '../github-comment.mjs';
-import { GH, OPS_JEV, CLAIM, LIST_QUERY, NODE_QUERY, PRE_PROVIDER_CAUSES, runIssueScan, parseHttp, classifyOwnerOutput, decodeFullDatabaseId } from '../issue-executor.mjs';
+import { RESULT_PREFIX, validateActionsConfig, selectRunRange, subjectRevision } from '../github-comment.mjs';
+import { EXECUTOR_LOGIN, CLAIM, ISSUE_QUERY, COMMENT_QUERY, PRE_PROVIDER_CAUSES, planIssueCommand, postIssueCommand,
+  classifyOwnerOutput, decodeFullDatabaseId } from '../issue-executor.mjs';
 
-// Secret-free fixtures only: an in-memory GitHub and an in-process owner running the real fixed entry functions
-// with a counting fetch. Nothing here is real-provider, reaction or posting evidence.
+// Repository policy is an explicit producer input, never an ambient checkout fallback in a provided runtime.
+const sourceArgs = process.argv.slice(2);
+assert.ok(sourceArgs.length === 0 || (sourceArgs.length === 2 && sourceArgs[0] === '--source-contract'
+  && path.isAbsolute(sourceArgs[1])), 'INVALID_SOURCE_CONTRACT_ARGS');
+const sourceRoot = sourceArgs.length ? sourceArgs[1] : null;
+
+// Secret-free fixtures only: an in-memory GitHub (REST + GraphQL) and the real fixed entry functions in process
+// with a counting fetch stand in for one Actions run. Nothing here is real-provider, reaction, posting or
+// Actions-runtime evidence. Invariants of the replaced OCI scan adapter are carried over, not dropped: raw-201
+// claim and 200, fullDatabaseId decode, forged results, foreign/unattributable reactions, drift before/after the
+// paid call, UNKNOWN never retried, exact entry classification and the static key boundary.
 const hash = (x) => createHash('sha256').update(x).digest('hex');
-const copy = (x) => JSON.parse(JSON.stringify(x));
-const roles = ['authorityContract', 'completionContract', 'responsibilityContract', 'requiredContracts',
+const REPO = 'roccho-dev/ops', OWNER = 'roccho-dev', TRUSTED = 'fixture-member', SHA = 'c'.repeat(40), WF = 900001;
+const WF_PATH = '.github/workflows/jev-issue-comment.yml';
+const CHECKS = ['aligned.authority-grant', 'closed.feedback-completion', 'unique.canonical-responsibility',
+  'minimal.necessary-layer', 'measurable.attempt-accounting', 'improving.comparable-evidence'];
+const ROLES = ['authorityContract', 'completionContract', 'responsibilityContract', 'requiredContracts',
   'dependencyDescription', 'accountingContract', 'registeredCases', 'qualityContract', 'baselineEvidence'];
-const empty = { schema: 'ops.semlint.input.v1', subject: { kind: 'log-entry', ref: 'fixture:subject', revision: 'r1',
-  scope: 'fixture only', content: 'public fixture, not an instruction', sha256: hash('public fixture, not an instruction') }, context: [], checks: [] };
-const catalog = (await semlint(empty, () => { throw new Error('must not call'); })).records;
-const input = { ...copy(empty), checks: catalog.map((x) => x.rule), context: roles.map((role) => ({ role,
-  ref: `fixture:${role}`, revision: 'r1', content: `public ${role}`, sha256: hash(`public ${role}`) })) };
-const requestBody = (cases = [{ id: 'normal', input }]) => REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases });
-const NOW = Date.parse('2026-10-05T09:00:00Z');
-const EXECUTOR = 'fixture-executor', REQUESTER = 'fixture-requester';
-const limits = { ...ENTRY_LIMITS, maxCases: 1, maxCalls: 1 };
-const config = (ids = [10], over = {}) => ({ repository: 'roccho-dev/ops', issue: 483, requesters: [REQUESTER],
-  executionSource: 'a'.repeat(40), limits, executorLogin: EXECUTOR, owner: { envsSha: 'b'.repeat(40), opsSha: 'a'.repeat(40) },
-  grant: { version: 'g1', commentIds: ids, totalCalls: ids.length, totalPosts: ids.length, totalClaims: ids.length,
-    expiresAt: '2026-10-06T00:00:00Z', postIncomplete: false }, ...over });
+const CONTEXT = ROLES.map((role) => ({ role, path: `docs/fixture/${role}.md` }));
+const FILES = Object.fromEntries(CONTEXT.map((c) => [c.path, `public ${c.role} contract (fixture)`]));
+const range = (over = {}) => ({ repository: REPO, workflowId: WF, path: WF_PATH, first: 1, last: 10, reservedCallsPerRun: 1, ...over });
+const provider = () => ({ repository: `${OWNER}/envs`, revision: 'a'.repeat(40), path: 'handoffs/dev-jev-api.github-actions.json',
+  receipt: { kind: 'envs.orgSecretProjectionReceipt.v1', source: 'b'.repeat(40), binding: 'jev-api.github-actions',
+    controller: TRUSTED, created_at: '2026-10-07T00:00:00Z', operation: 'github_org_secret_put',
+    target: { provider: 'github-org-secret', organization: OWNER, organization_id: '123', secret_name: 'JEV_API_KEY',
+      repositories: [REPO], repository_ids: ['456'] }, readback: 'SECRET_NAME_AND_SELECTED_REPOSITORY_IDS', provider_use: 'NOT_RUN' } });
+const config = (over = {}) => ({ trustedCallers: [TRUSTED], allowedChecks: [...CHECKS], context: CONTEXT.map((c) => ({ ...c })),
+  subjectScope: 'entire Issue body (fixture)', limits: { ...ENTRY_LIMITS, maxCases: 1, maxCalls: 1 }, runRanges: [range()],
+  targets: [{ repository: REPO, repositoryId: '456', issue: 483 }], provider: provider(), ...over });
+const tokenIn = (query, field) => new RegExp(`(^|[\\s{])${field.replace(/[{}()[\]:,]/g, '\\$&')}(?=[\\s}])`).test(query);
 
-function world(comments, { page = 2 } = {}) {
-  const w = { principal: EXECUTOR, comments: comments.map((c) => ({ author: REQUESTER, createdAt: '2026-10-05T08:00:00Z',
-    updatedAt: '2026-10-05T08:00:00Z', lastEditedAt: null, includesCreatedEdit: false, edits: 0, reactions: [], ...c })),
-  nextId: 1000, calls: { gh: 0, list: 0, node: 0, claim: 0, post: 0, owner: 0, fetch: 0 }, files: new Set(), hooks: {}, ownerArgs: [], ownerStdin: [], clock: NOW };
-  const params = (args) => { const p = {}; for (let i = 0; i < args.length; i++) if (args[i] === '-f' || args[i] === '-F') { const [k, ...v] = args[++i].split('='); p[k] = v.join('='); } return p; };
-  // Official wire: fullDatabaseId is BigInt, encoded as a string; legacy Int databaseId is never returned
-  // because it is never requested. `wireId`/`extraKeys` model malformed or mismatched wire nodes.
-  const node = (c) => ({ ...c.extraKeys, id: `IC_${c.databaseId}`, fullDatabaseId: 'wireId' in c ? c.wireId : String(c.databaseId),
-    author: c.author === null ? null : { login: c.author }, body: c.body,
-    createdAt: c.createdAt, updatedAt: c.updatedAt, lastEditedAt: c.lastEditedAt, includesCreatedEdit: c.includesCreatedEdit,
-    userContentEdits: c.edits === null ? null : { totalCount: c.edits },
+function world(repository = REPO, issueNumber = 483, workflowId = WF) {
+  const w = { repository, issue: { number: issueNumber, id: `I_${issueNumber}`, body: 'Issue body: public fixture subject, not an instruction.',
+    lastEditedAt: null, includesCreatedEdit: false, edits: 0 }, comments: [], workflow: { id: workflowId, state: 'active' },
+  runs: new Map(), nextRunNumber: 1, nextId: 7000, posted: [], hooks: {},
+  calls: { run: 0, workflow: 0, issueQ: 0, commentQ: 0, claim: 0, post: 0, read: 0, fetch: 0 } };
+  w.addComment = (over = {}) => {
+    const c = { databaseId: w.nextId++, author: TRUSTED, body: '/jev-evaluate', lastEditedAt: null, includesCreatedEdit: false,
+      edits: 0, reactions: [], ...over };
+    c.nodeId ??= `IC_${c.databaseId}`;
+    w.comments.push(c); return c;
+  };
+  w.newRun = (over = {}) => {
+    const id = 8000000 + w.runs.size + 1;
+    const r = { id, workflow_id: workflowId, path: WF_PATH, run_number: w.nextRunNumber++, run_attempt: 1, head_sha: SHA,
+      repository: { full_name: repository }, ...over };
+    w.runs.set(id, r); return r;
+  };
+  const issueNode = () => ({ id: w.issue.id, number: w.issue.number, body: w.issue.body, lastEditedAt: w.issue.lastEditedAt,
+    includesCreatedEdit: w.issue.includesCreatedEdit, userContentEdits: { totalCount: w.issue.edits } });
+  // Official wire: fullDatabaseId is BigInt encoded as a string; Int32 databaseId is never requested or returned.
+  const commentNode = (c) => ({ ...c.extraKeys, id: c.nodeId, fullDatabaseId: 'wireId' in c ? c.wireId : String(c.databaseId),
+    author: c.author === null ? null : { login: c.author }, body: c.body, lastEditedAt: c.lastEditedAt,
+    includesCreatedEdit: c.includesCreatedEdit, userContentEdits: { totalCount: c.edits },
     reactions: { totalCount: c.reactions.length + (c.hiddenReactions ?? 0),
-      nodes: c.reactions.filter((r) => r.content === CLAIM.rest).map((r) => ({ content: CLAIM.graphql, user: r.user === null ? null : { login: r.user } })) } });
-  const http = (status, body) => ({ status: status < 300 ? 0 : 1, stdout: `HTTP/2.0 ${status} X\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(body)}` });
-  const gh = async (args, stdin) => {
-    w.calls.gh++;
-    if (args.join(' ') === 'api user') return { status: 0, stdout: JSON.stringify({ login: w.principal }) };
-    if (args[1] === 'graphql') {
-      const p = params(args);
-      // Independent of the exported constants: the production query text must select exactly these
-      // comment fields and must not request the Int32 databaseId.
-      for (const field of ['id', 'fullDatabaseId', 'author{login}', 'body', 'createdAt', 'updatedAt', 'lastEditedAt',
-        'includesCreatedEdit', 'userContentEdits{totalCount}', 'reactions(content:EYES,first:100){totalCount nodes{content user{login}}}']) {
-        assert.ok(new RegExp(`(^|[\\s{])${field.replace(/[{}()[\]:,]/g, '\\$&')}(?=[\\s}])`).test(p.query), field);
-      }
-      assert.equal(/\bdatabaseId\b/.test(p.query), false);
-      if (p.query === NODE_QUERY) {
-        w.calls.node++;
-        if (w.hooks.reread) return w.hooks.reread(w);
-        const c = w.comments.find((x) => `IC_${x.databaseId}` === p.id);
-        return { status: 0, stdout: JSON.stringify({ data: { node: c ? node(c) : null } }) };
-      }
-      assert.equal(p.query, LIST_QUERY); assert.equal(`${p.owner}/${p.name}`, 'roccho-dev/ops'); assert.equal(p.number, '483');
-      w.calls.list++;
-      if (w.hooks.list) { const r = await w.hooks.list(w, p); if (r) return r; }
-      const start = p.after ? Number(p.after) : 0, slice = w.comments.slice(start, start + page);
-      return { status: 0, stdout: JSON.stringify({ data: { repository: { issue: { comments: { totalCount: w.totalOverride ?? w.comments.length,
-        pageInfo: { hasNextPage: start + page < w.comments.length, endCursor: String(start + page) }, nodes: slice.map(node) } } } } }) };
+      nodes: c.reactions.map((r) => ({ content: CLAIM.graphql, user: r.user === null ? null : { login: r.user } })) } });
+  const graphql = async (query, vars) => {
+    // Independent of the exported constants: no Int32 databaseId and no generic updatedAt are ever requested.
+    assert.equal(/\bdatabaseId\b/.test(query), false); assert.equal(/\bupdatedAt\b/.test(query), false);
+    if (query === ISSUE_QUERY) {
+      for (const f of ['id', 'number', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits{totalCount}']) assert.ok(tokenIn(query, f), f);
+      assert.deepEqual(vars, { owner: repository.split('/')[0], name: repository.split('/')[1], number: issueNumber });
+      w.calls.issueQ++;
+      const r = w.hooks.issueQuery?.(w, issueNode()); if (r !== undefined) return r;
+      return { data: { repository: { issue: issueNode() } } };
     }
-    const claimPath = /^repos\/roccho-dev\/ops\/issues\/comments\/(\d+)\/reactions$/.exec(args[4] ?? '');
-    if (args[1] === '-i' && args[3] === 'POST' && claimPath) {
-      assert.deepEqual(args.slice(5), ['-f', 'content=eyes']);
-      w.calls.claim++;
-      if (w.hooks.beforeClaim) await w.hooks.beforeClaim(w);
-      const c = w.comments.find((x) => x.databaseId === Number(claimPath[1]));
-      const existing = c.reactions.find((r) => r.user === w.principal && r.content === CLAIM.rest);
-      const reply = existing ? http(200, { id: 1, user: { login: w.principal }, content: CLAIM.rest }) : (c.reactions.push({ user: w.principal, content: CLAIM.rest }),
-        http(201, { id: 2, user: { login: w.hooks.claimUser ?? w.principal }, content: CLAIM.rest }));
-      if (w.hooks.afterClaim) return w.hooks.afterClaim(w, c, reply);
+    assert.equal(query, COMMENT_QUERY);
+    for (const f of ['id', 'fullDatabaseId', 'author{login}', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits{totalCount}',
+      'reactions(content:EYES,first:100){totalCount nodes{content user{login}}}']) assert.ok(tokenIn(query, f), f);
+    w.calls.commentQ++;
+    const c = w.comments.find((x) => x.nodeId === vars.id);
+    const r = w.hooks.commentQuery?.(w, c ? commentNode(c) : null); if (r !== undefined) return r;
+    return { data: { node: c ? commentNode(c) : null } };
+  };
+  const github = async (method, route, body) => {
+    let m;
+    assert.ok(route.startsWith(`repos/${repository}/`));
+    const local = route.slice(`repos/${repository}/`.length);
+    if (method === 'GET' && (m = /^actions\/runs\/(\d+)$/.exec(local))) {
+      w.calls.run++; const r = w.runs.get(Number(m[1]));
+      return r ? { status: 200, json: r } : { status: 404, json: {} };
+    }
+    if (method === 'GET' && (m = /^actions\/workflows\/(\d+)$/.exec(local))) {
+      w.calls.workflow++;
+      return Number(m[1]) === w.workflow.id ? { status: 200, json: { id: w.workflow.id, state: w.workflow.state } } : { status: 404, json: {} };
+    }
+    if (method === 'POST' && (m = /^issues\/comments\/(\d+)\/reactions$/.exec(local))) {
+      assert.deepEqual(body, { content: 'eyes' }); w.calls.claim++;
+      await w.hooks.beforeClaim?.(w);
+      const c = w.comments.find((x) => x.databaseId === Number(m[1]));
+      let reply = c.reactions.some((r) => r.user === EXECUTOR_LOGIN) ? { status: 200, json: { user: { login: EXECUTOR_LOGIN }, content: 'eyes' } }
+        : (c.reactions.push({ user: EXECUTOR_LOGIN }), { status: 201, json: { user: { login: w.hooks.claimUser ?? EXECUTOR_LOGIN }, content: 'eyes' } });
+      if (w.hooks.afterClaim) reply = w.hooks.afterClaim(w, c, reply);
+      if (reply instanceof Error) throw reply;
       return reply;
     }
-    if (args[1] === '-i' && args[3] === 'POST' && args[4] === 'repos/roccho-dev/ops/issues/483/comments') {
-      assert.deepEqual(args.slice(5), ['--input', '-']);
+    if (method === 'POST' && local === `issues/${issueNumber}/comments`) {
       w.calls.post++;
-      if (w.hooks.beforePost) await w.hooks.beforePost(w);
-      const id = w.nextId++, body = JSON.parse(stdin).body;
-      w.comments.push({ databaseId: id, author: w.principal, body, createdAt: '2026-10-05T09:00:01Z', updatedAt: '2026-10-05T09:00:01Z',
-        lastEditedAt: null, includesCreatedEdit: false, edits: 0, reactions: [] });
-      const reply = http(201, { id, user: { login: w.principal }, body });
-      return w.hooks.afterPost ? w.hooks.afterPost(w, reply) : reply;
+      const r = w.hooks.post?.(w, body); if (r instanceof Error) throw r; if (r !== undefined) return r;
+      const c = w.addComment({ author: EXECUTOR_LOGIN, body: body.body }); w.posted.push(c);
+      return { status: 201, json: { id: c.databaseId, user: { login: EXECUTOR_LOGIN }, body: c.body } };
     }
-    const read = /^repos\/roccho-dev\/ops\/issues\/comments\/(\d+)$/.exec(args[1] ?? '');
-    if (args[0] === 'api' && args.length === 2 && read) {
-      const c = w.comments.find((x) => x.databaseId === Number(read[1]));
-      return { status: 0, stdout: JSON.stringify({ id: c.databaseId, user: { login: c.author }, body: w.hooks.readBody ?? c.body,
-        issue_url: 'https://api.github.com/repos/roccho-dev/ops/issues/483' }) };
+    if (method === 'GET' && (m = /^issues\/comments\/(\d+)$/.exec(local))) {
+      w.calls.read++; const c = w.comments.find((x) => x.databaseId === Number(m[1]));
+      return c ? { status: 200, json: { id: c.databaseId, user: { login: c.author }, body: w.hooks.readBody ?? c.body,
+        issue_url: `https://api.github.com/repos/${repository}/issues/${issueNumber}` } } : { status: 404, json: {} };
     }
-    throw new Error('unexpected gh call ' + args.join(' '));
+    throw new Error(`unexpected GitHub call ${method} ${route}`);
   };
-  const owner = async (args, stdin) => {
-    w.calls.owner++; w.ownerArgs.push(args); w.ownerStdin.push(stdin);
-    if (w.hooks.owner) { const r = await w.hooks.owner(w, stdin); if (r) return r; }
+  w.deps = { github, graphql, readFile: (p) => { if (!Object.hasOwn(FILES, p)) throw new Error('missing'); return FILES[p]; } };
+  // The workflow's single key-bearing step: only the fixed entry runs on plan.json; exit status and stdout kept.
+  w.entry = async (plan) => {
+    const hooked = await w.hooks.entry?.(w, plan); if (hooked) return hooked;
     let prepared;
-    try { prepared = await preparePlan(JSON.parse(stdin)); }
+    try { prepared = await preparePlan(plan); }
     catch (error) { return { status: 1, stdout: JSON.stringify({ schema: 'ops.semlint.entry-error.v1', status: 'REJECTED', cause: error.message, authority: false }) + '\n' }; }
     const result = await executeOwnerPlan(prepared, 'synthetic-fixture-key', async (url, init) => {
       w.calls.fetch++;
@@ -112,349 +134,279 @@ function world(comments, { page = 2 } = {}) {
     });
     return { status: 0, stdout: JSON.stringify(result) + '\n' };
   };
-  w.deps = { now: () => w.clock, run: async (file, args, stdin) => {
-    w.files.add(file);
-    if (file === GH) return gh(args, stdin);
-    if (file === OPS_JEV) { const out = await owner(args, stdin); if (w.hooks.afterOwner) w.hooks.afterOwner(w); return out; }
-    throw new Error('unexpected executable ' + file);
-  } };
   return w;
 }
-const ownerArgs = ['--semlint-real', '--envs-sha', 'b'.repeat(40), '--ops-sha', 'a'.repeat(40)];
-const effects = (w) => ({ claim: w.calls.claim, owner: w.calls.owner, fetch: w.calls.fetch, post: w.calls.post });
-const zero = { claim: 0, owner: 0, fetch: 0, post: 0 };
-const req = (id = 10, extra = {}) => ({ databaseId: id, body: requestBody(), ...extra });
+// Event payload as GitHub delivers it at comment creation (copied, so later drift is observable).
+const ctxFor = (w, c, run) => ({ repository: w.repository, sha: SHA, executionSource: SHA, runId: run.id, runAttempt: run.run_attempt,
+  event: { comment: { id: c.databaseId, node_id: c.nodeId, body: c.body, user: { login: c.author } }, issue: { number: w.issue.number },
+    repository: { id: w.repository.endsWith('/ops') ? 456 : 789, full_name: w.repository,
+      owner: { id: 123, login: OWNER, type: 'Organization' } } } });
+// One Actions run: plan step -> run-local JSON files -> key-bearing step (fixed entry only) -> post step.
+async function fullRun(w, c, { run = w.newRun(), cfg = config(), ctx, afterEntry } = {}) {
+  const p = await planIssueCommand(ctx ?? ctxFor(w, c, run), cfg, w.deps);
+  const state = JSON.parse(JSON.stringify(p.state));
+  let out = null;
+  if (p.plan) { out = await w.entry(JSON.parse(JSON.stringify(p.plan))); await afterEntry?.(w); }
+  const q = await postIssueCommand(state, out, cfg, w.deps);
+  return { plan: p.receipt, post: q.receipt, run, planBody: p.plan };
+}
+const effects = (w) => ({ claim: w.calls.claim, fetch: w.calls.fetch, post: w.calls.post });
+const zero = { claim: 0, fetch: 0, post: 0 };
+const outcome = (r) => [r.post.outcome, r.post.cause];
 let scenarios = 0;
 const check = async (name, fn) => { await fn(); scenarios++; };
 
-// Normal path, then idempotent rescan.
-await check('normal', async () => {
-  const w = world([req(10), { databaseId: 11, author: 'someone', body: 'unrelated' }, { databaseId: 12, body: requestBody() }]);
-  const r = await runIssueScan(config(), w.deps);
-  assert.equal(r.stopped, null);
-  assert.equal(r.decisions.length, 1);
-  assert.equal(r.decisions[0].effect, 'APPENDED'); assert.equal(r.decisions[0].cause, 'READBACK_EXACT'); assert.equal(r.decisions[0].claimStatus, 201);
-  assert.deepEqual(r.decisions[0].accounting, { providerHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0 });
-  assert.deepEqual(effects(w), { claim: 1, owner: 1, fetch: 1, post: 1 });
-  assert.deepEqual(w.ownerArgs, [ownerArgs]); assert.deepEqual([...w.files].sort(), [GH, OPS_JEV].sort());
-  assert.equal(w.comments.find((c) => c.databaseId === 12).reactions.length, 0); // outside the exact grant: untouched
-  const posted = w.comments.at(-1);
-  assert.ok(posted.body.startsWith(RESULT_PREFIX)); assert.equal(posted.author, EXECUTOR);
-  assert.equal(JSON.parse(posted.body.slice(RESULT_PREFIX.length)).identity.observation, 'API_SNAPSHOT_NO_EDIT_SIGNAL');
+// Normal path: a first command and a later eligible command, with no operator action in between.
+await check('normal-first-and-later', async () => {
+  const w = world();
+  const c1 = w.addComment();
+  const r1 = await fullRun(w, c1);
+  assert.equal(r1.plan.outcome, 'PLANNED'); assert.equal(r1.plan.callsPerRun, 1); assert.deepEqual(outcome(r1), ['APPENDED', 'READBACK_EXACT']);
+  assert.equal(r1.post.complete, true);
+  assert.deepEqual(r1.post.accounting, { providerHttpCalls: 1, completedHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0 });
+  assert.deepEqual(r1.planBody.limits, { ...ENTRY_LIMITS, maxCases: 1, maxCalls: 1 });
+  const posted = w.posted[0];
+  assert.equal(posted.author, EXECUTOR_LOGIN); assert.ok(posted.body.startsWith(RESULT_PREFIX));
   assert.equal(posted.body.includes('synthetic-fixture-key'), false);
-  // Owner stdin is byte-identical to the admitted plan (cases plus effective caller caps).
-  const c10 = w.comments.find((c) => c.databaseId === 10);
-  const admittedHere = await admitIssueSnapshot({ repository: 'roccho-dev/ops', issue: 483, comment: { id: 'IC_10', databaseId: 10, author: c10.author,
-    body: c10.body, createdAt: c10.createdAt, updatedAt: c10.updatedAt, lastEditedAt: null, includesCreatedEdit: false, userContentEditsTotal: 0 } }, config(), NOW);
-  assert.deepEqual(w.ownerStdin, [JSON.stringify(admittedHere.prepared.plan)]);
-  assert.deepEqual(JSON.parse(w.ownerStdin[0]).limits, limits);
-  const again = await runIssueScan(config(), w.deps);
-  assert.equal(again.stopped, null); assert.equal(again.decisions[0].cause, 'READBACK_ONLY');
-  assert.deepEqual(effects(w), { claim: 1, owner: 1, fetch: 1, post: 1 });
+  const { identity } = JSON.parse(posted.body.slice(RESULT_PREFIX.length));
+  assert.deepEqual(identity.run, { id: r1.run.id, number: 1, attempt: 1, workflowId: WF });
+  assert.equal(identity.commentId, c1.databaseId); assert.equal(identity.executionSource, SHA); assert.equal(identity.author, TRUSTED);
+  assert.equal(identity.observation, 'ACTIONS_TRUSTED_LITERAL_COMMAND'); assert.equal('action' in identity, false);
+  assert.equal(identity.subjectRevision, subjectRevision({ number: 483, nodeId: 'I_483', body: w.issue.body, lastEditedAt: null,
+    includesCreatedEdit: false, userContentEditsTotal: 0 }));
+  w.addComment({ author: 'someone', body: 'unrelated discussion' }); // unrelated activity is not a subject revision
+  const c2 = w.addComment();
+  const r2 = await fullRun(w, c2);
+  assert.deepEqual(outcome(r2), ['APPENDED', 'READBACK_EXACT']); assert.equal(r2.run.run_number, 2);
+  assert.deepEqual(effects(w), { claim: 2, fetch: 2, post: 2 });
 });
 
-// Parallel same ID: both read before either claims; only the raw-201 winner pays and posts.
-await check('parallel-same-id', async () => {
-  const w = world([req(10)]);
+// Hard reservation: attempted provider calls <= sum(width x reserved), independent of comment history.
+await check('reservation-bound', async () => {
+  const w = world();
+  const cfg = config({ runRanges: [range({ first: 2, last: 4 })] });
+  w.newRun(); // run 1: a skipped or non-trigger run still consumes a native run number (slot waste)
+  const cmds = [], results = [];
+  for (let i = 0; i < 5; i++) { cmds.push(w.addComment()); results.push(await fullRun(w, cmds[i], { cfg })); }
+  assert.deepEqual(results.map((r) => r.post.cause), ['READBACK_EXACT', 'READBACK_EXACT', 'READBACK_EXACT', 'NO_RANGE', 'NO_RANGE']);
+  assert.ok(w.calls.fetch <= 3 * 1); assert.deepEqual(effects(w), { claim: 3, fetch: 3, post: 3 });
+  // A settings change does not reset a claimed command: its re-delivery (run 7) is not re-evaluated.
+  const cfg2 = config({ subjectScope: 'changed scope', runRanges: [range({ first: 2, last: 4 }), range({ first: 7, last: 9 })] });
+  assert.deepEqual(outcome(await fullRun(w, cmds[0], { cfg: cfg2 })), ['NONE', 'STARTED']); assert.equal(w.calls.fetch, 3);
+  // Effective per-run ceiling is min(reserved, caller cap); the cap only reduces it.
+  const run = { repository: REPO, workflowId: WF, path: WF_PATH, number: 1, attempt: 1, id: 1 };
+  assert.equal(selectRunRange(config({ limits: { ...ENTRY_LIMITS, maxCalls: 2 } }), run).callsPerRun, 1);
+  assert.equal(selectRunRange(config({ limits: { ...ENTRY_LIMITS, maxCalls: 2 }, runRanges: [range({ reservedCallsPerRun: 3 })] }), run).callsPerRun, 2);
+  // The shipped settings are a source hold: no provider/target or range, so no effect or snapshot read.
+  const shipped = JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8'));
+  assert.deepEqual(validateActionsConfig(shipped).runRanges, []);
+  const s = world(); const rs = await fullRun(s, s.addComment(), { cfg: shipped });
+  assert.deepEqual(outcome(rs), ['NONE', 'PROVIDER_NOT_CONFIGURED']); assert.deepEqual(effects(s), zero);
+  assert.equal(s.calls.issueQ + s.calls.commentQ + s.calls.workflow, 0);
+});
+
+// Native run identity is bound before any read or effect; reruns never spend.
+await check('run-identity', async () => {
+  for (const [runOver, ctxOver, cause] of [
+    [{ run_attempt: 2 }, {}, 'RERUN_NOT_PAID'],
+    [{ workflow_id: WF + 1 }, {}, 'NO_RANGE'],
+    [{ path: '.github/workflows/other.yml' }, {}, 'NO_RANGE'],
+    [{ head_sha: 'd'.repeat(40) }, {}, 'RUN_IDENTITY_MISMATCH'],
+    [{ repository: { full_name: 'other/ops' } }, {}, 'RUN_IDENTITY_MISMATCH'],
+    [{}, { runAttempt: 2 }, 'RUN_IDENTITY_MISMATCH'],
+    [{}, { runId: 1 }, 'RUN_UNKNOWN'],
+  ]) {
+    const w = world(); const c = w.addComment(); const run = w.newRun(runOver);
+    const r = await fullRun(w, c, { run, ctx: { ...ctxFor(w, c, run), ...ctxOver } });
+    assert.deepEqual(outcome(r), ['NONE', cause]); assert.deepEqual(effects(w), zero);
+    assert.equal(w.calls.issueQ + w.calls.commentQ, 0);
+  }
+});
+
+// Trusted settings: closed shape, catalog subset, safe repository-relative context, non-overlapping reservations.
+await check('settings-refusals', async () => {
+  for (const bad of [
+    { ...config(), extra: 1 }, config({ allowedChecks: [] }), config({ allowedChecks: [CHECKS[0], CHECKS[0]] }),
+    config({ context: [{ role: 'authorityContract', path: '/etc/passwd' }] }), config({ context: [{ role: 'authorityContract', path: '../x.md' }] }),
+    config({ context: [{ role: 'authorityContract', path: 'a/../b.md' }] }), config({ context: [CONTEXT[0], CONTEXT[0]] }),
+    config({ context: [{ ...CONTEXT[0], program: '/bin/sh' }] }),
+    config({ runRanges: [range(), range({ first: 10, last: 12 })] }), config({ runRanges: [range({ first: 5, last: 4 })] }),
+    config({ runRanges: [range({ reservedCallsPerRun: 0 })] }), config({ runRanges: [range({ reservedCallsPerRun: 25 })] }),
+    config({ runRanges: [range({ path: 'workflows/x.yml' })] }), config({ runRanges: [range({ workflowId: 0 })] }),
+    config({ runRanges: [range({ argv: ['--x'] })] }), config({ limits: { ...ENTRY_LIMITS, maxCalls: 25 } }),
+    config({ subjectScope: ' ' }), config({ trustedCallers: [TRUSTED, TRUSTED] }),
+    config({ trustedCallers: ['*'] }), config({ trustedCallers: 'everyone' }),
+  ]) {
+    assert.throws(() => validateActionsConfig(bad), /INVALID_ACTIONS_CONFIG/);
+    const w = world(); const r = await fullRun(w, w.addComment(), { cfg: bad });
+    assert.deepEqual(outcome(r), ['NONE', 'INVALID_ACTIONS_CONFIG']); assert.deepEqual(effects(w), zero); assert.equal(w.calls.run, 0);
+  }
+  // The same numbers under another native workflow id are a different reservation, not an overlap.
+  assert.equal(validateActionsConfig(config({ runRanges: [range(), range({ workflowId: WF + 1 })] })).runRanges.length, 2);
+  // A check outside the existing catalog is refused at admission, before any claim.
+  const w = world(); const r = await fullRun(w, w.addComment(), { cfg: config({ allowedChecks: ['unknown.check'] }) });
+  assert.deepEqual(outcome(r), ['NONE', 'INVALID_REQUEST_OR_ADMISSION']); assert.deepEqual(effects(w), zero);
+});
+
+// The observed command must still be an explicitly trusted caller's unedited literal; context is required.
+await check('command-admission', async () => {
+  for (const [setup, mutate, cause] of [
+    [(w) => w.addComment({ author: 'someone' }), null, 'COMMAND_NOT_AUTHORIZED'],
+    [(w) => w.addComment({ author: OWNER }), null, 'COMMAND_NOT_AUTHORIZED'],
+    [(w) => w.addComment(), (w, c, ctx) => { ctx.event.repository.owner.type = 'User'; }, 'ORG_REQUIRED'],
+    [(w) => w.addComment(), (w, c, ctx) => { delete ctx.event.repository.owner.type; }, 'ORG_REQUIRED'],
+    [(w) => w.addComment(), (w, c) => { c.body = '/jev-evaluate later'; }, 'COMMAND_DRIFT'],
+    [(w) => w.addComment({ edits: 1, lastEditedAt: '2026-10-06T00:00:00Z' }), null, 'EDITED'],
+    [(w) => w.addComment({ includesCreatedEdit: true }), null, 'EDITED'],
+    [(w) => w.addComment(), (w, c, ctx) => { ctx.event.issue.pull_request = { url: 'x' }; }, 'NOT_AN_ISSUE'],
+    [(w) => w.addComment(), (w, c, ctx) => { ctx.event.repository.full_name = 'other/ops'; }, 'EVENT_UNKNOWN'],
+  ]) {
+    const w = world(); const c = setup(w); const run = w.newRun(); const ctx = ctxFor(w, c, run);
+    mutate?.(w, c, ctx);
+    const r = await fullRun(w, c, { run, ctx });
+    assert.deepEqual(outcome(r), ['NONE', cause]); assert.deepEqual(effects(w), zero);
+  }
+  const w = world(); const r = await fullRun(w, w.addComment(), { cfg: config({ context: [{ role: 'authorityContract', path: 'docs/missing.md' }] }) });
+  assert.deepEqual(outcome(r), ['NONE', 'CONTEXT_UNKNOWN']); assert.deepEqual(effects(w), zero);
+  const closed = world(); const denied = await fullRun(closed, closed.addComment(), { cfg: config({ trustedCallers: [] }) });
+  assert.deepEqual(outcome(denied), ['NONE', 'COMMAND_NOT_AUTHORIZED']); assert.deepEqual(effects(closed), zero);
+});
+
+// Incomplete, erroneous or mismatched provider observations: hold with no claim.
+await check('snapshot-unknown', async () => {
+  for (const mutate of [
+    (w) => { w.hooks.issueQuery = () => ({ data: null, errors: [{ message: 'x' }] }); },
+    (w) => { w.hooks.issueQuery = (_, node) => ({ data: { repository: { issue: { ...node, updatedAt: '2026-10-06T00:00:00Z' } } } }); },
+    (w) => { w.hooks.issueQuery = () => ({ data: { repository: { issue: null } } }); },
+    (w) => { w.hooks.issueQuery = () => { throw new Error('network'); }; },
+    (w) => { w.hooks.commentQuery = (_, node) => ({ data: { node: { ...node, fullDatabaseId: '1' } } }); },
+    (w) => { w.hooks.commentQuery = (_, node) => ({ data: { node: { ...node, fullDatabaseId: Number(node.fullDatabaseId) } } }); },
+    (w) => { w.hooks.commentQuery = (_, node) => ({ data: { node: { ...node, databaseId: 1 } } }); },
+    (w) => { w.hooks.commentQuery = () => ({ data: { node: null } }); },
+  ]) {
+    const w = world(); mutate(w);
+    assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['NONE', 'SNAPSHOT_UNKNOWN']); assert.deepEqual(effects(w), zero);
+  }
+  const w = world();
+  assert.deepEqual(outcome(await fullRun(w, w.addComment({ hiddenReactions: 1 }))), ['NONE', 'CLAIMS_INCOMPLETE']);
+  assert.deepEqual(effects(w), zero);
+});
+
+// Claims: only EXECUTOR_LOGIN's raw 201 pays; 200, prior claims, UNKNOWN and not-ours never pay or recall.
+await check('claims', async () => {
+  let w = world(); let c = w.addComment({ reactions: [{ user: EXECUTOR_LOGIN }] });
+  assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'STARTED']); assert.deepEqual(effects(w), zero);
+  // Unattributable reaction is held; a known other login's reaction is not a claim (no principal migration).
+  w = world(); c = w.addComment({ reactions: [{ user: null }] });
+  assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'UNRECOGNIZED']); assert.deepEqual(effects(w), zero);
+  w = world(); c = w.addComment({ reactions: [{ user: 'a-human' }] });
+  assert.deepEqual(outcome(await fullRun(w, c)), ['APPENDED', 'READBACK_EXACT']);
+  // Duplicate delivery of one command: both runs pass admission, only the raw-201 winner pays and posts.
+  w = world(); c = w.addComment();
   let arrived = 0, release; const gate = new Promise((r) => { release = r; });
   w.hooks.beforeClaim = async () => { if (++arrived === 2) release(); await gate; };
-  const [a, b] = await Promise.all([runIssueScan(config(), w.deps), runIssueScan(config(), w.deps)]);
-  assert.deepEqual([a, b].map((x) => x.decisions[0].cause).sort(), ['ALREADY_CLAIMED', 'READBACK_EXACT']);
-  assert.deepEqual(effects(w), { claim: 2, owner: 1, fetch: 1, post: 1 });
-});
-
-// Parallel distinct IDs within one statically bounded grant: each ID at most once in total.
-await check('parallel-distinct-ids', async () => {
-  const w = world([req(10), req(11)]);
-  const ids = [10, 11];
-  const [a, b] = await Promise.all([runIssueScan(config(ids), w.deps), runIssueScan(config(ids), w.deps)]);
-  assert.equal(a.stopped, null); assert.equal(b.stopped, null);
-  assert.equal(w.calls.owner, 2); assert.equal(w.calls.fetch, 2); assert.equal(w.calls.post, 2);
-  assert.ok(w.calls.fetch <= ids.length * limits.maxCalls);
-});
-
-// Static grant bounds and config refusals: whole run has no gh/owner call at all.
-await check('config-refusals', async () => {
-  const w = world([req(10), req(11)]);
-  for (const [bad, cause] of [
-    [config([10, 11], { grant: { ...config([10, 11]).grant, totalCalls: 1 } }), 'GRANT_BOUNDS_EXCEEDED'],
-    [config([10, 11], { grant: { ...config([10, 11]).grant, totalPosts: 1 } }), 'GRANT_BOUNDS_EXCEEDED'],
-    [config([10, 11], { grant: { ...config([10, 11]).grant, totalClaims: 1 } }), 'GRANT_BOUNDS_EXCEEDED'],
-    [config([10], { grant: { ...config().grant, expiresAt: '2026-10-05T08:59:59Z' } }), 'GRANT_EXPIRED'],
-    [config([10, 10]), 'INVALID_EXECUTOR_CONFIG'], [config([]), 'INVALID_EXECUTOR_CONFIG'], [config([0]), 'INVALID_EXECUTOR_CONFIG'],
-    [{ ...config(), extra: 1 }, 'INVALID_EXECUTOR_CONFIG'], [{ ...config(), program: '/bin/sh' }, 'INVALID_EXECUTOR_CONFIG'],
-    [config([10], { owner: { envsSha: 'b'.repeat(40), opsSha: 'a'.repeat(40), argv: ['--x'] } }), 'INVALID_EXECUTOR_CONFIG'],
-    [config([10], { owner: { envsSha: 'b'.repeat(40), opsSha: 'c'.repeat(40) } }), 'INVALID_EXECUTOR_CONFIG'],
-    [config([10], { grant: { ...config().grant, gh: '/tmp/gh' } }), 'INVALID_EXECUTOR_CONFIG'],
-    [config([10], { limits: { ...ENTRY_LIMITS, maxCalls: 25 } }), 'INVALID_EXECUTOR_CONFIG'],
-  ]) {
-    const r = await runIssueScan(bad, w.deps);
-    assert.deepEqual(r.stopped, { stage: 'config', cause });
+  const [a, b] = await Promise.all([fullRun(w, c), fullRun(w, c)]);
+  assert.deepEqual([a, b].map((x) => x.post.cause).sort(), ['ALREADY_CLAIMED', 'READBACK_EXACT']);
+  assert.deepEqual(effects(w), { claim: 2, fetch: 1, post: 1 });
+  // Claim UNKNOWN, not ours or refused: no paid call; the post step does nothing.
+  for (const hook of [() => new Error('network'), () => ({ status: 201, json: { user: { login: 'impostor' }, content: 'eyes' } }),
+    (cc) => { cc.reactions.pop(); return { status: 403, json: {} }; }]) {
+    w = world(); c = w.addComment(); w.hooks.afterClaim = (ww, cc) => hook(cc);
+    const r = await fullRun(w, c);
+    assert.equal(r.plan.outcome, 'UNKNOWN'); assert.equal(r.plan.claimed, 'UNKNOWN'); assert.equal(r.post.outcome, 'UNKNOWN');
+    assert.deepEqual(effects(w), { claim: 1, fetch: 0, post: 0 });
   }
-  assert.equal(w.calls.gh, 0); assert.deepEqual(effects(w), zero);
+  // A claim created but whose response was lost is still a claim: a later delivery never recalls.
+  w = world(); c = w.addComment(); w.hooks.afterClaim = () => new Error('lost response');
+  await fullRun(w, c); delete w.hooks.afterClaim;
+  assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'STARTED']); assert.equal(w.calls.fetch, 0);
 });
 
-// Principal mismatch / unknown: stops before snapshot or any effect.
-await check('principal', async () => {
-  const w = world([req(10)]); w.principal = 'someone-else';
-  assert.deepEqual((await runIssueScan(config(), w.deps)).stopped, { stage: 'principal', cause: 'PRINCIPAL_MISMATCH' });
-  assert.equal(w.calls.list, 0); assert.deepEqual(effects(w), zero);
-  const u = world([req(10)]); const run = u.deps.run;
-  u.deps.run = async (file, args, stdin) => (args.join(' ') === 'api user' ? { status: null, stdout: '' } : run(file, args, stdin));
-  assert.deepEqual((await runIssueScan(config(), u.deps)).stopped, { stage: 'principal', cause: 'UNKNOWN' });
-  assert.deepEqual(effects(u), zero);
-  const p = world([req(10)]); const prun = p.deps.run;
-  p.deps.run = async (file, args, stdin) => (args.join(' ') === 'api user' ? { status: 0, stdout: 'not json' } : prun(file, args, stdin));
-  assert.deepEqual((await runIssueScan(config(), p.deps)).stopped, { stage: 'principal', cause: 'UNKNOWN' });
-  assert.equal(p.calls.list, 0); assert.deepEqual(effects(p), zero);
-});
-
-// Incomplete or erroneous provider observations: no claim.
-await check('snapshot-incomplete', async () => {
-  for (const mutate of [
-    (w) => { w.hooks.list = () => ({ status: 0, stdout: JSON.stringify({ data: null, errors: [{ message: 'x' }] }) }); },
-    (w) => { w.totalOverride = 5; },
-    (w) => { w.hooks.list = () => ({ status: 1, stdout: '' }); },
-    (w) => { w.hooks.list = (_, p) => (p.after ? { status: 0, stdout: JSON.stringify({ data: { repository: { issue: { comments: { totalCount: 3,
-      pageInfo: { hasNextPage: true, endCursor: p.after }, nodes: [] } } } } }) } : null); },
-  ]) {
-    const w = world([req(10), req(11, { body: 'x' }), req(12, { body: 'y' })]); mutate(w);
-    assert.deepEqual((await runIssueScan(config(), w.deps)).stopped, { stage: 'snapshot', cause: 'SNAPSHOT_UNKNOWN' });
-    assert.deepEqual(effects(w), zero);
+// Checkpoints: drift or stop before the paid call -> HTTP 0; after it -> post withheld with real accounting.
+await check('drift-and-stop', async () => {
+  const late = '2026-10-06T01:00:00Z';
+  for (const change of [(w) => { w.issue.body += ' edited'; w.issue.lastEditedAt = late; w.issue.edits = 1; }, (w) => { w.issue.lastEditedAt = late; }]) {
+    const w = world(); const c = w.addComment(); w.hooks.afterClaim = (ww, cc, reply) => { change(ww); return reply; };
+    const r = await fullRun(w, c);
+    assert.deepEqual(outcome(r), ['NONE', 'DRIFT_BEFORE_CALL']); assert.equal(r.plan.claimed, true);
+    assert.deepEqual(effects(w), { claim: 1, fetch: 0, post: 0 });
+    assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'STARTED']); assert.equal(w.calls.fetch, 0);
   }
-  // Incomplete reactions hold only that comment: on a non-grant comment they no longer stop the scan.
-  const other = world([req(10), { databaseId: 11, body: 'unrelated', hiddenReactions: 1 }]);
-  const ro = await runIssueScan(config(), other.deps);
-  assert.equal(ro.stopped, null); assert.equal(ro.decisions[0].cause, 'READBACK_EXACT');
-  const own = world([req(10, { hiddenReactions: 1 })]);
-  assert.deepEqual((await runIssueScan(config(), own.deps)).decisions, [{ commentId: 10, effect: 'NONE', cause: 'CLAIMS_INCOMPLETE' }]);
-  assert.deepEqual(effects(own), zero);
-});
-
-// Per-comment refusals: no claim, owner call or post.
-await check('admission-refusals', async () => {
-  for (const [extra, cause, opts] of [
-    [{ lastEditedAt: '2026-10-05T08:10:00Z' }, 'EDITED'], [{ includesCreatedEdit: true }, 'EDITED'], [{ edits: 1 }, 'EDITED'],
-    [{ edits: null }, 'SNAPSHOT_UNKNOWN'], [{ author: null }, 'SNAPSHOT_UNKNOWN'], [{ author: 'not-a-requester' }, 'REQUESTER_NOT_AUTHORIZED'],
-    [{ body: 'no prefix' }, 'NOT_A_REQUEST'], [{ body: RESULT_PREFIX + '{}' }, 'NOT_A_REQUEST'],
-    [{ body: requestBody([{ id: 'a', input }, { id: 'b', input }]) }, 'INVALID_REQUEST_OR_ADMISSION'],
-    [{ body: REQUEST_PREFIX + JSON.stringify({ schema: 'ops.jev.issue-request.v1', cases: [{ id: 'n', input }], limits: ENTRY_LIMITS }) }, 'INVALID_REQUEST'],
-    [{ body: REQUEST_PREFIX + '{bad' }, 'INVALID_REQUEST_OR_ADMISSION'],
-    [{ reactions: [{ user: null, content: 'eyes' }] }, 'UNRECOGNIZED'],
-    [{ reactions: [{ user: EXECUTOR, content: 'eyes' }] }, 'STARTED'],
-  ]) {
-    const w = world([req(10, extra)]);
-    const r = await runIssueScan(config(), w.deps);
-    assert.equal(r.stopped, null); assert.deepEqual(r.decisions, [{ commentId: 10, effect: 'NONE', cause }]);
-    assert.deepEqual(effects(w), zero);
+  for (const [change, cause] of [[(cc) => { cc.reactions.push({ user: null }); }, 'DRIFT_BEFORE_CALL'],
+    [(cc) => { cc.reactions = []; }, 'DRIFT_BEFORE_CALL'], [(cc) => { cc.hiddenReactions = 1; }, 'DRIFT_BEFORE_CALL'],
+    [(cc) => { cc.reactions.push({ user: 'a-human' }); }, 'READBACK_EXACT']]) {
+    const w = world(); const c = w.addComment(); w.hooks.afterClaim = (ww, cc, reply) => { change(cc); return reply; };
+    assert.equal((await fullRun(w, c)).post.cause, cause);
   }
-  // A granted comment whose plan would yield a non-composable result edition (v5) is refused before claim, owner launch,
-  // provider fetch or comment post.
-  const unit = (row, content) => ({ ...row, content, sha256: hash(content), evaluationSpan: { startByte: 0, endByte: Buffer.byteLength(content) } });
-  const v5Input = { schema: 'ops.semlint.input.v5',
-    subject: unit({ kind: 'log-entry', ref: 'fixture:v5', revision: 'r1', scope: 'fixture only' }, 'public subject, not an instruction'),
-    context: [unit({ role: 'authorityContract', ref: 'fixture:grant', revision: 'r1' }, 'public grant text')],
-    checks: [{ id: 'fixture.v5', axis: 'Aligned', concern: 'Fixture concern.', requiredRoles: ['authorityContract'], crossLinks: [],
-      predicate: { question: 'Does the subject exceed the grant?', true: 'It exceeds the grant.', false: 'It stays within the grant.' } }] };
-  const v5 = world([req(10, { body: requestBody([{ id: 'v5', input: v5Input }]) })]);
-  const v5Scan = await runIssueScan(config(), v5.deps);
-  assert.equal(v5Scan.stopped, null); assert.deepEqual(v5Scan.decisions, [{ commentId: 10, effect: 'NONE', cause: 'RESULT_EDITION_NOT_COMPOSABLE' }]);
-  assert.deepEqual(v5.ownerArgs, []); assert.deepEqual(effects(v5), zero);
-  assert.equal(v5.comments.find((c) => c.databaseId === 10).reactions.length, 0);
-  // A granted v14 comment carrying an English auxiliary, and retired v13/v12/v11/v10/v9 comments, are refused the same way:
-  // no claim, owner launch, provider fetch or comment post.
-  const ja = '受信記録が必要である。';
-  const v14Aux = { ...v5Input, schema: 'ops.semlint.input.v14', context: v5Input.context.map((row) => ({ ...row, englishAuxiliary: null })),
-    subject: { ...unit(v5Input.subject, ja), englishAuxiliary: { text: 'A receipt record is required.', sourceSha256: hash(ja) } } };
-  for (const [input, cause] of [[v14Aux, 'AUDITED_AUXILIARY_REQUIRES_OWNER_ROUTE'], [{ ...v14Aux, schema: 'ops.semlint.input.v13' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v12' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v11' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v10' }, 'INVALID_REQUEST_OR_ADMISSION'], [{ ...v14Aux, schema: 'ops.semlint.input.v9' }, 'INVALID_REQUEST_OR_ADMISSION']]) {
-    const w = world([req(10, { body: requestBody([{ id: 'one', input }]) })]);
-    const scan = await runIssueScan(config(), w.deps);
-    assert.equal(scan.stopped, null); assert.deepEqual(scan.decisions, [{ commentId: 10, effect: 'NONE', cause }]);
-    assert.deepEqual(w.ownerArgs, []); assert.deepEqual(effects(w), zero);
-    assert.equal(w.comments.find((c) => c.databaseId === 10).reactions.length, 0);
+  {
+    const w = world(); const c = w.addComment();
+    w.hooks.afterClaim = (ww, cc, reply) => { ww.hooks.issueQuery = () => ({ errors: [{ message: 'x' }] }); return reply; };
+    assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'REREAD_UNKNOWN']); assert.equal(w.calls.fetch, 0);
   }
-  // A known other login's same-kind reaction is not a claim: the request proceeds normally.
-  const human = world([req(10, { reactions: [{ user: 'a-human', content: 'eyes' }] })]);
-  assert.equal((await runIssueScan(config(), human.deps)).decisions[0].cause, 'READBACK_EXACT');
-  assert.deepEqual(effects(human), { claim: 1, owner: 1, fetch: 1, post: 1 });
-  const missing = world([req(11)]);
-  assert.deepEqual((await runIssueScan(config(), missing.deps)).decisions, [{ commentId: 10, effect: 'NONE', cause: 'NOT_FOUND' }]);
-  // Direct snapshot admission: target and grant membership, and no fabricated action.
-  const snap = { repository: 'roccho-dev/ops', issue: 483, comment: { id: 'IC_10', databaseId: 10, author: REQUESTER, body: requestBody(),
-    createdAt: '2026-10-05T08:00:00Z', updatedAt: '2026-10-05T08:00:00Z', lastEditedAt: null, includesCreatedEdit: false, userContentEditsTotal: 0 } };
-  const admitted = await admitIssueSnapshot(snap, config(), NOW);
-  assert.equal(admitted.status, 'ADMITTED'); assert.equal('action' in admitted.identity, false);
-  assert.equal(admitted.identity.revision, snap.comment.updatedAt); assert.equal(admitted.identity.nodeId, 'IC_10');
-  assert.equal((await admitIssueSnapshot({ ...snap, issue: 484 }, config(), NOW)).cause, 'TARGET_NOT_AUTHORIZED');
-  assert.equal((await admitIssueSnapshot({ ...snap, comment: { ...snap.comment, databaseId: 99 } }, config(), NOW)).cause, 'NOT_IN_GRANT');
-  assert.equal((await admitIssueSnapshot({ ...snap, action: 'created' }, config(), NOW)).cause, 'SNAPSHOT_UNKNOWN');
-  assert.equal((await admitIssueSnapshot(snap, config(), Date.parse('2026-10-07T00:00:00Z'))).cause, 'GRANT_EXPIRED');
-  const g2 = await admitIssueSnapshot(snap, config([10], { grant: { ...config().grant, version: 'g2' } }), NOW);
-  assert.notEqual(g2.requestDigest, admitted.requestDigest);
-});
-
-// Claim outcomes: unknown or not-ours never pays; an unknown-but-created claim stops later scans too.
-await check('claim-unknown', async () => {
-  const w = world([req(10)]);
-  w.hooks.afterClaim = () => ({ status: null, stdout: '' });
-  assert.deepEqual((await runIssueScan(config(), w.deps)).stopped, { stage: 'claim', cause: 'UNKNOWN', commentId: 10 });
-  assert.deepEqual(effects(w), { claim: 1, owner: 0, fetch: 0, post: 0 });
-  delete w.hooks.afterClaim;
-  assert.equal((await runIssueScan(config(), w.deps)).decisions[0].cause, 'STARTED');
-  assert.equal(w.calls.owner, 0);
-  const other = world([req(10)]); other.hooks.claimUser = 'impostor';
-  assert.equal((await runIssueScan(config(), other.deps)).stopped.cause, 'CLAIM_NOT_OURS'); assert.equal(other.calls.owner, 0);
-  const denied = world([req(10)]); denied.hooks.afterClaim = (_, c) => { c.reactions.pop(); return { status: 1, stdout: 'HTTP/2.0 403 Forbidden\r\n\r\n{}' }; };
-  assert.equal((await runIssueScan(config(), denied.deps)).stopped.claimStatus, 403); assert.equal(denied.calls.owner, 0);
-  assert.equal(parseHttp('HTTP/1.1 201 Created\n\n{"a":1}').status, 201); assert.equal(parseHttp('201'), null);
-});
-
-// TOCTOU after claim: any observed drift stops before the paid call.
-await check('reread-drift', async () => {
-  for (const change of [
-    (c) => { c.body = requestBody([{ id: 'changed', input }]); c.updatedAt = '2026-10-05T09:00:00Z'; c.lastEditedAt = '2026-10-05T09:00:00Z'; },
-    (c) => { c.updatedAt = '2026-10-05T09:00:00Z'; },
-    (c) => { c.reactions.push({ user: null, content: 'eyes' }); },
-    (c) => { c.reactions = c.reactions.filter((r) => r.user !== EXECUTOR); },
-    (c) => { c.hiddenReactions = 1; },
-  ]) {
-    const w = world([req(10)]);
-    w.hooks.afterClaim = (_, c, reply) => { change(c); return reply; };
-    const r = await runIssueScan(config(), w.deps);
-    assert.equal(r.stopped, null); assert.equal(r.decisions[0].cause, 'DRIFT_AFTER_CLAIM');
-    assert.deepEqual(effects(w), { claim: 1, owner: 0, fetch: 0, post: 0 });
+  {
+    const w = world(); w.workflow.state = 'disabled_manually';
+    assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['NONE', 'WORKFLOW_NOT_ACTIVE']); assert.deepEqual(effects(w), zero);
   }
-  const benign = world([req(10)]);
-  benign.hooks.afterClaim = (_, c, reply) => { c.reactions.push({ user: 'a-human', content: 'eyes' }); return reply; };
-  assert.equal((await runIssueScan(config(), benign.deps)).decisions[0].cause, 'READBACK_EXACT');
-  const u = world([req(10)]); u.hooks.reread = () => { throw new Error('crash before launch'); };
-  assert.equal((await runIssueScan(config(), u.deps)).stopped.stage, 'reread'); assert.equal(u.calls.owner, 0);
-  delete u.hooks.reread;
-  assert.equal((await runIssueScan(config(), u.deps)).decisions[0].cause, 'STARTED'); assert.equal(u.calls.owner, 0);
+  {
+    const w = world(); w.hooks.afterClaim = (ww, cc, reply) => { ww.workflow.state = 'disabled_manually'; return reply; };
+    assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['NONE', 'WORKFLOW_NOT_ACTIVE']);
+    assert.deepEqual(effects(w), { claim: 1, fetch: 0, post: 0 });
+  }
+  for (const [afterEntry, cause] of [[(w) => { w.workflow.state = 'disabled_manually'; }, 'WORKFLOW_NOT_ACTIVE'],
+    [(w) => { w.issue.body += ' edited after the call'; }, 'DRIFT_AFTER_CALL'], [(w) => { w.issue.edits = 2; }, 'DRIFT_AFTER_CALL'],
+    [(w) => { w.hooks.commentQuery = () => ({ errors: [{ message: 'x' }] }); }, 'REREAD_UNKNOWN']]) {
+    const w = world();
+    const r = await fullRun(w, w.addComment(), { afterEntry });
+    assert.deepEqual(outcome(r), ['WITHHELD', cause]); assert.equal(r.post.providerCalls, 1);
+    assert.deepEqual(r.post.accounting, { providerHttpCalls: 1, completedHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0 });
+    assert.deepEqual(effects(w), { claim: 1, fetch: 1, post: 0 });
+  }
 });
 
-// Launch classification: known pre-provider refusal, unknown output, and the paid-before-append crash window.
-await check('launch', async () => {
-  const refused = world([req(10)]);
-  refused.hooks.owner = () => ({ status: 1, stdout: JSON.stringify({ schema: 'ops.semlint.entry-error.v1', status: 'REJECTED', cause: 'INVALID_ENTRY_LIMITS', authority: false }) + '\n' });
-  const rr = await runIssueScan(config(), refused.deps);
-  assert.equal(rr.stopped, null); assert.equal(rr.decisions[0].cause, 'REFUSED_BEFORE_PROVIDER'); assert.equal(refused.calls.post, 0);
+// Entry output: only an exact closed pre-provider refusal is a refusal; everything else not composable is UNKNOWN.
+await check('entry-classification', async () => {
   const err = (extra) => ({ status: 1, stdout: JSON.stringify({ schema: 'ops.semlint.entry-error.v1', status: 'REJECTED', cause: 'INVALID_ENTRY_PLAN', authority: false, ...extra }) + '\n' });
-  for (const out of [{ status: 1, stdout: '' }, { status: 1, stdout: JSON.stringify({ schema: 'ops.semlint.entry-error.v1', status: 'REJECTED', cause: 'ENTRY_FAILED', authority: false }) + '\n' },
-    err({ authority: true }), err({ extra: 1 }), err({ status: 'ACCEPTED' }), { ...err({}), status: 0 }, { status: 1, stdout: err({}).stdout + err({}).stdout },
-    { status: 0, stdout: '{}\n' }, { status: 0, stdout: 'not json\n' }, { status: null, stdout: '' }]) {
-    const w = world([req(10)]); w.hooks.owner = () => out;
-    assert.deepEqual((await runIssueScan(config(), w.deps)).stopped, { stage: 'launch', cause: 'UNKNOWN', commentId: 10 });
-    assert.equal(w.calls.post, 0);
+  {
+    const w = world(); w.hooks.entry = () => err({ cause: 'INVALID_ENTRY_LIMITS' });
+    const r = await fullRun(w, w.addComment());
+    assert.deepEqual(outcome(r), ['NONE', 'REFUSED_BEFORE_PROVIDER']); assert.equal(r.post.providerCalls, 0); assert.equal(w.calls.post, 0);
   }
-  const crash = world([req(10)]); crash.hooks.beforePost = () => { throw new Error('crash after paid call'); };
-  assert.equal((await runIssueScan(config(), crash.deps)).stopped.stage, 'append');
-  assert.deepEqual(effects(crash), { claim: 1, owner: 1, fetch: 1, post: 1 });
-  assert.equal(crash.comments.length, 1);
-  delete crash.hooks.beforePost;
-  assert.equal((await runIssueScan(config(), crash.deps)).decisions[0].cause, 'STARTED');
-  assert.equal(crash.calls.owner, 1); assert.equal(crash.calls.fetch, 1); // no recharge
-});
-
-// Unsuccessful results are withheld unless the finite grant allows posting them.
-await check('withheld', async () => {
-  const fail503 = () => new Response('{}', { status: 503 });
-  const w = world([req(10)]); w.hooks.fetch = fail503;
-  const r = await runIssueScan(config(), w.deps);
-  assert.equal(r.decisions[0].cause, 'RESULT_WITHHELD'); assert.equal(w.calls.post, 0);
-  assert.deepEqual(r.decisions[0].accounting, { providerHttpCalls: 1, validatedResponses: 0, unknownHttpCalls: 0 });
-  assert.equal((await runIssueScan(config(), w.deps)).decisions[0].cause, 'STARTED'); assert.equal(w.calls.fetch, 1);
-  const allowed = world([req(10)]); allowed.hooks.fetch = fail503;
-  const ok = await runIssueScan(config([10], { grant: { ...config().grant, postIncomplete: true } }), allowed.deps);
-  assert.equal(ok.decisions[0].cause, 'READBACK_EXACT'); assert.ok(allowed.comments.at(-1).body.includes('HTTP_5XX'));
-});
-
-// Unknown append is reconciled from Issue comments, never reposted; readback mismatch stays a mismatch.
-await check('append-unknown', async () => {
-  const w = world([req(10)]); w.hooks.afterPost = () => ({ status: null, stdout: '' });
-  assert.equal((await runIssueScan(config(), w.deps)).stopped.stage, 'append');
-  delete w.hooks.afterPost;
-  const again = await runIssueScan(config(), w.deps);
-  assert.equal(again.decisions[0].cause, 'READBACK_ONLY'); assert.equal(w.calls.post, 1); assert.equal(w.calls.owner, 1);
-  const m = world([req(10)]); m.hooks.readBody = 'edited';
-  assert.equal((await runIssueScan(config(), m.deps)).stopped.cause, 'READBACK_MISMATCH');
-  const tampered = world([req(10)]);
-  await runIssueScan(config(), tampered.deps);
-  tampered.comments.at(-1).body += 'x';
-  assert.equal((await runIssueScan(config(), tampered.deps)).decisions[0].cause, 'STARTED'); // no matching digest: stop, no recall
-  const dup = world([req(10)]);
-  await runIssueScan(config(), dup.deps);
-  dup.comments.push({ ...dup.comments.at(-1), databaseId: 2000 });
-  assert.equal((await runIssueScan(config(), dup.deps)).decisions[0].cause, 'UNRECOGNIZED'); assert.equal(dup.calls.owner, 1);
-});
-
-// A new grant version that re-lists a used ID cannot clear the source-constant claim marker.
-await check('grant-version-change', async () => {
-  const w = world([req(10), req(11)]);
-  await runIssueScan(config([10]), w.deps);
-  const g2 = config([10, 11], { grant: { ...config([10, 11]).grant, version: 'g2' } });
-  const r = await runIssueScan(g2, w.deps);
-  assert.deepEqual(r.decisions.map((x) => x.cause), ['STARTED', 'READBACK_EXACT']);
-  assert.equal(w.calls.fetch, 2); assert.equal(w.calls.post, 2);
-});
-
-// Pagination across pages; config is validated as a pure function independent of the scan.
-await check('pagination-and-pure-config', async () => {
-  const w = world([{ databaseId: 1, body: 'a' }, { databaseId: 2, body: 'b' }, { databaseId: 3, body: 'c' }, req(10)], { page: 1 });
-  assert.equal((await runIssueScan(config(), w.deps)).decisions[0].cause, 'READBACK_EXACT'); assert.ok(w.calls.list >= 4);
-  assert.throws(() => validateExecutorConfig(config(), NaN), /GRANT_EXPIRED/);
-});
-
-// F1: expiry is re-observed before each new effect; nothing (not even a paid result) is posted after expiry.
-await check('expiry-mid-run', async () => {
-  const late = Date.parse('2026-10-06T00:00:00Z');
-  const a = world([req(10)]); a.hooks.list = (w) => { w.clock = late; return null; };
-  assert.deepEqual((await runIssueScan(config(), a.deps)).stopped, { stage: 'claim', cause: 'GRANT_EXPIRED', commentId: 10 });
-  assert.deepEqual(effects(a), zero);
-  const b = world([req(10)]); b.hooks.afterClaim = (w, _, reply) => { w.clock = late; return reply; };
-  assert.deepEqual((await runIssueScan(config(), b.deps)).stopped, { stage: 'launch', cause: 'GRANT_EXPIRED', commentId: 10 });
-  assert.deepEqual(effects(b), { claim: 1, owner: 0, fetch: 0, post: 0 });
-  const c = world([req(10)]); c.hooks.afterOwner = (w) => { w.clock = late; };
-  const rc = await runIssueScan(config(), c.deps);
-  assert.deepEqual(rc.stopped, { stage: 'append', cause: 'GRANT_EXPIRED', commentId: 10 });
-  assert.equal(rc.decisions[0].cause, 'GRANT_EXPIRED_BEFORE_APPEND');
-  assert.deepEqual(rc.decisions[0].accounting, { providerHttpCalls: 1, validatedResponses: 1, unknownHttpCalls: 0 });
-  assert.deepEqual(effects(c), { claim: 1, owner: 1, fetch: 1, post: 0 });
-  c.clock = NOW; // even back inside a valid window, the claimed ID stays STARTED: no recharge, no late post
-  assert.equal((await runIssueScan(config(), c.deps)).decisions[0].cause, 'STARTED'); assert.equal(c.calls.fetch, 1); assert.equal(c.calls.post, 0);
-});
-
-// F2: results by any author other than executorLogin are ignored, so copies cannot block or fake delivery.
-await check('forged-results', async () => {
-  const a = world([req(10)]);
-  await runIssueScan(config(), a.deps);
-  const real = a.comments.at(-1);
-  a.comments.push({ ...real, databaseId: 3000, author: 'a-human' });
-  const ra = await runIssueScan(config(), a.deps);
-  assert.equal(ra.decisions[0].cause, 'READBACK_ONLY'); assert.equal(ra.ignoredResults, 1);
-  assert.deepEqual(effects(a), { claim: 1, owner: 1, fetch: 1, post: 1 });
-  const b = world([req(10), { ...real, databaseId: 3000, author: 'a-human' }]);
-  const rb = await runIssueScan(config(), b.deps);
-  assert.equal(rb.decisions[0].cause, 'READBACK_EXACT'); assert.equal(rb.ignoredResults, 1);
-  assert.deepEqual(effects(b), { claim: 1, owner: 1, fetch: 1, post: 1 });
-});
-
-// Classification against the real fixed entry's actual refusals (no key, no network, pre-provider only).
-await check('real-entry-classification', async () => {
+  for (const out of [{ status: 1, stdout: '' }, err({ cause: 'ENTRY_FAILED' }), err({ authority: true }), err({ extra: 1 }),
+    err({ status: 'ACCEPTED' }), { ...err({}), status: 0 }, { status: 1, stdout: err({}).stdout + err({}).stdout },
+    { status: 0, stdout: '{}\n' }, { status: 0, stdout: 'not json\n' }, { status: null, stdout: '' }]) {
+    const w = world(); w.hooks.entry = () => out;
+    assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['UNKNOWN', 'LAUNCH_UNKNOWN']); assert.equal(w.calls.post, 0);
+  }
+  {
+    // A real v2 result for another plan does not compose for this request: paid, but never posted as trusted.
+    const w = world(); w.hooks.entry = async (ww, plan) => { ww.hooks.entry = undefined; return ww.entry({ ...plan, cases: [{ ...plan.cases[0], id: 'other' }] }); };
+    assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['UNKNOWN', 'RESULT_UNVERIFIED']);
+    assert.deepEqual(effects(w), { claim: 1, fetch: 1, post: 0 });
+  }
+  {
+    // The key step never wrote a status: UNKNOWN, nothing posted, and a later delivery never recalls.
+    const w = world(); const c = w.addComment();
+    const p = await planIssueCommand(ctxFor(w, c, w.newRun()), config(), w.deps);
+    const q = await postIssueCommand(JSON.parse(JSON.stringify(p.state)), null, config(), w.deps);
+    assert.deepEqual([q.receipt.outcome, q.receipt.cause], ['UNKNOWN', 'LAUNCH_UNKNOWN']); assert.equal(w.calls.post, 0);
+    assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'STARTED']);
+  }
+  // Against the real fixed entry: its actual pre-provider refusals classify exactly; ENTRY_FAILED cannot be proven
+  // pre-provider (lone surrogate) and stays UNKNOWN. The executor's cause set equals the entry's closed allowed set.
   const entry = fileURLToPath(new URL('../semlint-entry.mjs', import.meta.url));
   const child = (stdin) => { const r = spawnSync(process.execPath, [entry], { input: stdin, encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
     return { status: r.status, stdout: r.stdout }; };
+  const input = { schema: 'ops.semlint.input.v1', subject: { kind: 'log-entry', ref: 'fixture:subject', revision: 'r1', scope: 'fixture only',
+    content: 'x', sha256: hash('x') }, context: [{ role: 'authorityContract', ref: 'fixture:a', revision: 'r1', content: 'c', sha256: hash('c') }],
+  checks: [CHECKS[0]] };
   const plan = { schema: 'ops.semlint.real-input.v1', cases: [{ id: 'a', input }] };
   for (const [stdin, cause] of [
     ['not json', 'INVALID_ENTRY_JSON'], [JSON.stringify({ ...plan, cases: [] }), 'INVALID_ENTRY_PLAN'],
     [JSON.stringify({ ...plan, limits: { maxCalls: 1 } }), 'INVALID_ENTRY_LIMITS'],
     [JSON.stringify({ ...plan, cases: [{ id: 'a', input }, { id: 'b', input }], limits: { ...ENTRY_LIMITS, maxCalls: 1 } }), 'ENTRY_CALL_BUDGET_EXCEEDED'],
   ]) assert.deepEqual(classifyOwnerOutput(child(stdin)), { kind: 'REFUSED', cause });
-  // The executor's copy must equal the entry's closed allowed set (semlint-entry.mjs is outside this file set).
-  const entrySource = fs.readFileSync(entry, 'utf8');
-  const allowed = JSON.parse(entrySource.match(/const allowed = (\[[^\]]*\])/)[1].replaceAll("'", '"').replace(/\s+/g, ''));
+  const allowed = JSON.parse(fs.readFileSync(entry, 'utf8').match(/const allowed = (\[[^\]]*\])/)[1].replaceAll("'", '"').replace(/\s+/g, ''));
   assert.deepEqual([...PRE_PROVIDER_CAUSES].sort(), [...allowed].sort());
-  // A lone surrogate is refused by the entry as ENTRY_FAILED, which cannot be proven pre-provider: UNKNOWN.
   const surrogate = child('{"schema":"ops.semlint.real-input.v1","cases":[{"id":"a","input":"\\ud800"}]}');
   assert.equal(JSON.parse(surrogate.stdout).cause, 'ENTRY_FAILED');
   assert.deepEqual(classifyOwnerOutput(surrogate), { kind: 'UNKNOWN' });
@@ -467,46 +419,179 @@ await check('real-entry-classification', async () => {
   }
 });
 
-// Real-scale IDs (above Int32, e.g. the observed REST id 5969636905) through grant, claim, re-read, append,
-// readback and replay; malformed or mismatched wire IDs hold only that comment with zero effect.
-await check('real-scale-ids', async () => {
-  const BIG = 5969636905;
-  const w = world([req(BIG)]); w.nextId = 5969700001;
-  const r = await runIssueScan(config([BIG]), w.deps);
-  assert.equal(r.stopped, null); assert.equal(r.decisions[0].commentId, BIG); assert.equal(r.decisions[0].cause, 'READBACK_EXACT');
-  assert.equal(r.decisions[0].resultId, 5969700001); assert.equal(w.calls.node, 1);
-  assert.deepEqual(w.comments[0].reactions, [{ user: EXECUTOR, content: 'eyes' }]);
-  const identity = JSON.parse(w.comments.at(-1).body.slice(RESULT_PREFIX.length)).identity;
-  assert.equal(identity.commentId, BIG); assert.equal(identity.nodeId, `IC_${BIG}`);
-  assert.equal((await runIssueScan(config([BIG]), w.deps)).decisions[0].cause, 'READBACK_ONLY');
-  assert.deepEqual(effects(w), { claim: 1, owner: 1, fetch: 1, post: 1 });
-  for (const [wire, extra] of [[BIG], ['0'], ['-1'], ['05969636905'], ['1e10'], [' 1'], ['9007199254740993'], [null],
-    [String(BIG), { databaseId: null }], [String(BIG), { databaseId: 1674670121 }]]) {
-    const bad = { ...req(BIG), wireId: wire, ...(extra ? { extraKeys: extra } : {}) };
-    // The malformed granted node is unidentifiable: it can only be NOT_FOUND, and an unrelated valid
-    // granted request in the same scan is still processed (no global stop).
-    const m = world([bad, req(10)]);
-    const rm = await runIssueScan(config([BIG, 10], { grant: { ...config([BIG, 10]).grant } }), m.deps);
-    assert.equal(rm.stopped, null); assert.equal(rm.unidentifiedComments, 1);
-    assert.deepEqual(rm.decisions.map((x) => [x.commentId, x.cause]), [[10, 'READBACK_EXACT'], [BIG, 'NOT_FOUND']]);
-    assert.deepEqual(m.comments[0].reactions, []); assert.equal(m.calls.owner, 1); assert.equal(m.calls.post, 1);
+// Honest closed records: failed, not-selected and incomplete items are appended but never counted complete.
+await check('honest-incomplete', async () => {
+  {
+    const w = world(); w.hooks.fetch = () => new Response('{}', { status: 503 });
+    const r = await fullRun(w, w.addComment());
+    assert.deepEqual(outcome(r), ['APPENDED', 'READBACK_EXACT']); assert.equal(r.post.complete, false);
+    assert.ok(w.posted[0].body.includes('HTTP_5XX')); assert.ok(w.posted[0].body.includes('EXECUTION_ERROR'));
   }
-  // Re-read returning an unidentifiable node stops before the paid call.
-  const rr = world([req(BIG)]);
-  rr.hooks.afterClaim = (_, c, reply) => { c.wireId = BIG; return reply; };
-  assert.equal((await runIssueScan(config([BIG]), rr.deps)).stopped.stage, 'reread'); assert.equal(rr.calls.owner, 0);
+  {
+    const w = world(); const r = await fullRun(w, w.addComment(), { cfg: config({ context: [CONTEXT[0]] }) });
+    assert.deepEqual(outcome(r), ['APPENDED', 'READBACK_EXACT']); assert.equal(r.post.complete, false);
+    assert.ok(w.posted[0].body.includes('INCOMPLETE')); assert.equal(w.calls.fetch, 1);
+  }
+  {
+    const w = world(); const r = await fullRun(w, w.addComment(), { cfg: config({ context: [] }) });
+    assert.deepEqual(outcome(r), ['APPENDED', 'READBACK_EXACT']); assert.equal(r.post.complete, false); assert.equal(w.calls.fetch, 0);
+  }
+});
+
+// Append is create-only: an unknown post is never reposted or re-evaluated; readback mismatch stays a mismatch.
+await check('append-and-readback', async () => {
+  for (const hook of [() => new Error('lost'), () => ({ status: 500, json: {} }), () => ({ status: 201, json: {} })]) {
+    const w = world(); const c = w.addComment(); w.hooks.post = hook;
+    assert.deepEqual(outcome(await fullRun(w, c)), ['UNKNOWN', 'APPEND_UNKNOWN']);
+    delete w.hooks.post;
+    // Reconciliation belongs to the owner: the same command is never re-evaluated or reposted automatically.
+    assert.deepEqual(outcome(await fullRun(w, c)), ['NONE', 'STARTED']); assert.equal(w.calls.fetch, 1); assert.equal(w.calls.post, 1);
+  }
+  { const w = world(); w.hooks.readBody = 'edited'; assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['MISMATCH', 'READBACK_MISMATCH']); }
+  {
+    const w = world();
+    w.hooks.post = (ww, body) => { const cc = ww.addComment({ author: 'someone', body: body.body }); return { status: 201, json: { id: cc.databaseId } }; };
+    assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['MISMATCH', 'READBACK_MISMATCH']);
+  }
+  { const w = world(); w.hooks.post = () => ({ status: 201, json: { id: 999999 } }); assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['UNKNOWN', 'READBACK_UNKNOWN']); }
+});
+
+// Result comments by anyone else (copies, forgeries) neither fake delivery nor block a new command.
+await check('forged-results', async () => {
+  const w = world(); await fullRun(w, w.addComment());
+  w.addComment({ author: 'a-human', body: w.posted[0].body });
+  assert.deepEqual(outcome(await fullRun(w, w.addComment())), ['APPENDED', 'READBACK_EXACT']); assert.equal(w.posted.length, 2);
+});
+
+// Real-scale IDs above Int32 (the observed REST id 5969636905) through claim, re-read, append and readback.
+await check('real-scale-id', async () => {
+  const BIG = 5969636905;
+  const w = world(); w.nextId = BIG; const c = w.addComment(); w.nextId = 5969700001;
+  const r = await fullRun(w, c);
+  assert.deepEqual(outcome(r), ['APPENDED', 'READBACK_EXACT']); assert.equal(r.post.commentId, BIG); assert.equal(r.post.resultId, 5969700001);
+  assert.deepEqual(c.reactions, [{ user: EXECUTOR_LOGIN }]);
+  assert.equal(JSON.parse(w.posted[0].body.slice(RESULT_PREFIX.length)).identity.commentId, BIG);
+  for (const [wire, extra] of [[BIG], ['0'], ['05969636905'], ['1e10'], [' 1'], ['9007199254740993'], [null], [String(BIG), { databaseId: 1674670121 }]]) {
+    const m = world(); m.nextId = BIG; const bad = m.addComment({ wireId: wire, ...(extra ? { extraKeys: extra } : {}) });
+    assert.deepEqual(outcome(await fullRun(m, bad)), ['NONE', 'SNAPSHOT_UNKNOWN']); assert.deepEqual(effects(m), zero);
+  }
   assert.equal(decodeFullDatabaseId(String(BIG)), BIG); assert.equal(decodeFullDatabaseId(BIG), null);
   assert.equal(decodeFullDatabaseId('9007199254740991'), 9007199254740991); assert.equal(decodeFullDatabaseId('9007199254740992'), null);
 });
 
-// Static boundary: no delete/update provider API, no key access, fixed executables only.
+// Run-local state is re-admitted (pure) and must match exactly; tampered or missing state never posts.
+await check('state-integrity', async () => {
+  const w = world(); const c = w.addComment();
+  const p = await planIssueCommand(ctxFor(w, c, w.newRun()), config(), w.deps);
+  assert.equal(p.receipt.outcome, 'PLANNED');
+  const out = await w.entry(p.plan);
+  for (const tamper of [(s) => { s.requestDigest = 'f'.repeat(64); }, (s) => { s.admission.issue.body += ' x'; }, (s) => { s.admission.run.number = 99; }]) {
+    const s = JSON.parse(JSON.stringify(p.state)); tamper(s);
+    const q = await postIssueCommand(s, out, config(), w.deps);
+    assert.deepEqual([q.receipt.outcome, q.receipt.cause], ['UNKNOWN', 'STATE_MISMATCH']);
+  }
+  for (const s of [null, {}, 'x']) {
+    const q = await postIssueCommand(s, out, config(), w.deps);
+    assert.deepEqual([q.receipt.outcome, q.receipt.cause], ['UNKNOWN', 'STATE_UNKNOWN']);
+  }
+  assert.equal(w.calls.post, 0);
+  const q = await postIssueCommand(JSON.parse(JSON.stringify(p.state)), out, config(), w.deps);
+  assert.deepEqual([q.receipt.outcome, q.receipt.cause], ['APPENDED', 'READBACK_EXACT']);
+});
+
+// Static boundary: GitHub only through the run token, no delete/update API, no key in the adapter, and the
+// workflow's single key-bearing step runs only the fixed entry.
+await check('provider-target-source-admission', async () => {
+  for (const [alterConfig, alterCtx, cause] of [
+    [(c) => { c.provider = null; }, () => {}, 'PROVIDER_NOT_CONFIGURED'],
+    [(c) => { c.targets = []; }, () => {}, 'PROVIDER_NOT_CONFIGURED'],
+    [() => {}, (c) => { c.event.repository.id = 999; }, 'TARGET_NOT_AUTHORIZED'],
+    [() => {}, (c) => { c.event.repository.owner.id = 999; }, 'TARGET_NOT_AUTHORIZED'],
+    [() => {}, (c) => { c.event.issue.number = 484; }, 'TARGET_NOT_AUTHORIZED'],
+    [() => {}, (c) => { delete c.executionSource; }, 'EXECUTION_SOURCE_UNKNOWN'],
+  ]) {
+    const w = world(), comment = w.addComment(), cfg = config(), ctx = ctxFor(w, comment, w.newRun());
+    alterConfig(cfg); alterCtx(ctx);
+    const p = await planIssueCommand(ctx, cfg, w.deps);
+    assert.deepEqual([p.receipt.outcome, p.receipt.cause], ['NONE', cause]);
+    assert.deepEqual(effects(w), zero); assert.equal(w.calls.run + w.calls.issueQ + w.calls.commentQ, 0);
+  }
+  for (const alter of [
+    (c) => { c.provider.receipt.provider_use = 'PASS'; },
+    (c) => { c.provider.receipt.extra = 'private'; },
+    (c) => { c.provider.receipt.source = 'proposals'; },
+    (c) => { c.provider.receipt.kind = 'envs.orgSecretProjectionPlan.v1'; },
+    (c) => { c.provider.receipt.target.visibility = 'all'; },
+    (c) => { c.targets[0].repositoryId = '999'; },
+    (c) => { c.targets.push({ ...c.targets[0] }); },
+  ]) { const cfg = config(); alter(cfg); assert.throws(() => validateActionsConfig(cfg), /INVALID_ACTIONS_CONFIG/); }
+  const w = world(), comment = w.addComment(), run = w.newRun({ head_sha: 'd'.repeat(40) });
+  const ctx = ctxFor(w, comment, run); ctx.sha = run.head_sha;
+  const p = await planIssueCommand(ctx, config(), w.deps);
+  assert.equal(p.receipt.outcome, 'PLANNED');
+  assert.equal(p.state.admission.sha, SHA); // runtime source, not caller head
+  assert.equal(p.plan.cases[0].input.context[0].revision, SHA);
+});
+
+await check('same-issue-across-repositories', async () => {
+  const repo = `${OWNER}/envs`, w = world(repo, 52, WF + 1), cfg = config();
+  cfg.targets.push({ repository: repo, repositoryId: '789', issue: 52 });
+  cfg.provider.receipt.target.repositories.push(repo); cfg.provider.receipt.target.repository_ids.push('789');
+  cfg.runRanges.push(range({ repository: repo, workflowId: WF + 1, first: 1, last: 2 }));
+  for (let i = 0; i < 2; i++) {
+    const r = await fullRun(w, w.addComment(), { cfg });
+    assert.deepEqual([r.post.outcome, r.post.cause], ['APPENDED', 'READBACK_EXACT']);
+    const identity = JSON.parse(w.posted[i].body.slice(RESULT_PREFIX.length)).identity;
+    assert.deepEqual([identity.repository, identity.issue, identity.executionSource], [repo, 52, SHA]);
+  }
+  assert.deepEqual(effects(w), { claim: 2, fetch: 2, post: 2 });
+});
+
 const here = fileURLToPath(new URL('../issue-executor.mjs', import.meta.url));
-for (const file of [here, fileURLToPath(new URL('../github-comment.mjs', import.meta.url))]) {
-  const src = fs.readFileSync(file, 'utf8');
-  for (const banned of ["'DELETE'", "'PATCH'", "'PUT'", 'JEV_API_KEY', 'process.env', 'shell: true']) assert.equal(src.includes(banned), false, banned);
+const executorSource = fs.readFileSync(here, 'utf8');
+const commentSource = fs.readFileSync(new URL('../github-comment.mjs', import.meta.url), 'utf8');
+for (const src of [executorSource, commentSource]) {
+  for (const banned of ["'DELETE'", "'PATCH'", "'PUT'", 'JEV_API_KEY', 'child_process', 'shell: true', 'process.env[']) assert.equal(src.includes(banned), false, banned);
 }
-assert.equal(GH, '/nix/var/nix/profiles/windows-dev/bin/gh'); assert.equal(OPS_JEV, '/nix/var/nix/profiles/windows-dev/bin/ops-jev');
-const cli = spawnSync(process.execPath, [here, '--config', 'relative.json'], { encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
-assert.equal(cli.status, 2); assert.equal(JSON.parse(cli.stdout).stopped.cause, 'INVALID_EXECUTOR_ARGS');
-console.log(JSON.stringify({ status: 'PASS', check: 'jev-issue-executor', scenarios, realProviderCalls: 0, githubEffects: 0,
+assert.equal(commentSource.includes('process.env'), false);
+const envNames = [...executorSource.matchAll(/process\.env\.([A-Za-z_]+)/g)].map((m) => m[1]);
+assert.ok(envNames.length > 0 && envNames.every((n) => ['GITHUB_TOKEN', 'GITHUB_API_URL', 'GITHUB_GRAPHQL_URL', 'GITHUB_REPOSITORY',
+  'GITHUB_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_EVENT_PATH', 'JEV_EXECUTION_SOURCE'].includes(n)), envNames.join());
+if (sourceRoot !== null) {
+const repoFile = (p) => fs.readFileSync(path.join(sourceRoot, p), 'utf8');
+const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const workflow = repoFile(WF_PATH);
+const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
+const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) => x.path === WF_PATH);
+assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment', 'workflow_call']);
+assert.equal(boundary.length, 1); assert.equal(boundary[0].classification, 'secret_bearing_effect');
+assert.deepEqual(boundary[0].allowedEvents, ['issue_comment', 'workflow_call']); assert.ok(boundary[0].binding.startsWith('NOT_CONFIGURED'));
+assert.equal(boundary[0].secretScope, 'organization'); assert.equal(Object.hasOwn(boundary[0], 'environment'), false);
+assert.equal(/^\s*environment:/m.test(workflow), false);
+assert.match(workflow, /\non:\n  issue_comment:\n    types: \[created\]\n  workflow_call:\n/);
+assert.equal(/^\s*(?:workflow_dispatch|schedule|pull_request|pull_request_target|workflow_run|repository_dispatch|concurrency):/m.test(workflow), false);
+for (const part of ['github.event.issue.number == 483', 'github.event.issue.number == 52', "github.event_name == 'issue_comment'", "github.event.repository.owner.type == 'Organization'",
+  "github.event.comment.body == '/jev-evaluate'", 'github.event.issue.pull_request == null']) assert.ok(workflow.includes(part), part);
+const uses = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
+assert.ok(uses.length === 2 && uses.every((u) => /^[A-Za-z0-9_.\/-]+@[0-9a-f]{40}$/.test(u)), uses.join());
+assert.ok(workflow.includes('repository: roccho-org/ops') && /ref: [0-9a-f]{40}/.test(workflow) && workflow.includes('persist-credentials: false'));
+assert.ok(workflow.includes('test "$(git rev-parse HEAD)" = "$runtime_source"'));
+const steps = workflow.split('\n      - ').slice(1);
+const keyed = steps.filter((s) => s.includes('secrets.'));
+assert.equal(keyed.length, 1); assert.equal(workflow.match(/secrets\./g).length, 1);
+assert.ok(keyed[0].includes('JEV_API_KEY: ${{ secrets.JEV_API_KEY }}'));
+assert.ok(keyed[0].includes("if: steps.plan.outputs.planned == 'true'"));
+const planning = steps.filter((s) => s.includes('id: plan'));
+assert.equal(planning.length, 1); assert.equal(planning[0].includes('secrets.'), false);
+assert.ok(planning[0].includes('"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"'));
+assert.ok(planning[0].includes('if [ -f "$JEV_RUN_DIR/plan.json" ]; then'));
+assert.ok(planning[0].includes("echo 'planned=true' >> \"$GITHUB_OUTPUT\""));
+assert.deepEqual(keyed[0].match(/"\$JEV_NODE" "\$JEV_SRC\/[^"]+"/g), ['"$JEV_NODE" "$JEV_SRC/semlint-entry.mjs"']);
+for (const banned of ['issue-executor', 'GITHUB_TOKEN', 'github.token', 'curl', ' gh ']) assert.equal(keyed[0].includes(banned), false, banned);
+assert.equal(steps.filter((s) => s.includes('${{ github.token }}')).length, 2);
+}
+const cli = spawnSync(process.execPath, [here, 'plan', 'relative-dir'], { encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
+assert.equal(cli.status, 2); assert.equal(JSON.parse(cli.stdout).cause, 'INVALID_EXECUTOR_ARGS');
+console.log(JSON.stringify({ status: 'PASS', check: 'jev-issue-executor', scenarios,
+  sourceContract: sourceRoot === null ? 'NOT_REQUESTED' : 'PASS', realProviderCalls: 0, githubEffects: 0,
   claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_OR_PROVIDER_EVIDENCE' }));

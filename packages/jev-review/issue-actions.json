@@ -1,0 +1,23 @@
+{
+  "trustedCallers": [],
+  "allowedChecks": [
+    "aligned.authority-grant",
+    "closed.feedback-completion",
+    "unique.canonical-responsibility",
+    "minimal.necessary-layer",
+    "measurable.attempt-accounting",
+    "improving.comparable-evidence"
+  ],
+  "context": [],
+  "subjectScope": "entire body of the approved Issue at the observed revision",
+  "limits": {
+    "maxCases": 1,
+    "maxCalls": 1,
+    "maxInputBytes": 1048576,
+    "timeoutMs": 15000,
+    "deadlineMs": 60000
+  },
+  "runRanges": [],
+  "targets": [],
+  "provider": null
+}
