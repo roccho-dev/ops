@@ -94,6 +94,7 @@ export function assertVoiceUiWorkerEffectBridge(workflow) {
   }
 
   const text = JSON.stringify(job);
+  const runText = steps.map(step => step.run ?? "").join("\n");
   for (const required of [
     WORKER_EFFECT_DEPLOY_SHA,
     WORKER_EFFECT_ISOLATION_SHA,
@@ -106,7 +107,7 @@ export function assertVoiceUiWorkerEffectBridge(workflow) {
     "effect capability is missing",
     "environmentPhysicalApproval",
     "NOT_PROVEN_BY_SOURCE",
-  ]) need(text.includes(required), "voice-ui worker effect invariant missing: " + required);
+  ]) need(runText.includes(required) || text.includes(JSON.stringify(required).slice(1,-1)), "voice-ui worker effect invariant missing: " + required);
   need(text.includes("actions/checkout@11d5960a326750d5838078e36cf38b85af677262"),
     "voice-ui worker effect checkout pin differs");
   need(text.includes('"ref":"${{ github.sha }}"'),
