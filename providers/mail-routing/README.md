@@ -46,13 +46,23 @@ The exact source root must be copied to an approved **private directory** (`$PRI
     "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" validate
     "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" plan -input=false -lock=true -out="$PRIVATE_ENCRYPTED_PLAN"
 
+After the Owner independently reviews the saved encrypted plan, confirms the exact source/state/credential scope has not changed, and grants the **stage-specific APPLY GO**, execute the **reviewed saved plan** using the same pinned tool. This is a human-operated effect, not a CI command or automatic next step:
+
+    "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" apply -input=false -lock=true "$PRIVATE_ENCRYPTED_PLAN"
+
+Read back the exact affected Cloudflare Account/Zone resources and the selected state. When all required stages (including Gmail verification) are complete, confirm no further changes. `-detailed-exitcode` returns 0 only for a no-op, 2 for a remaining delta and 1 for error; do not turn either 1 or 2 into success:
+
+    "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" plan -input=false -lock=true -detailed-exitcode
+
+If an earlier stage newly created a destination/DNS managed by this state, retain its `manage_destination`/`manage_dns` flag while planning later stages. For a changed stage, regenerate a new reviewed saved plan and get the applicable Owner GO; never replay a prior saved plan after a partial/UNKNOWN effect.
+
 These are **operator examples, not commands to execute without authorization**. Even `tofu plan` can access/lock private state and contact Cloudflare; separate state owner and provider access approval must precede it. Do not print a private plan/state. A change in source/target/GO after preflight requires readback and re-approval of the affected scope. Reconciliation of UNKNOWN/partial effect is **read-only first**, never blind replay.
 
 If adopting an **existing API-owned object** into the single approved state, first independently identify the exact resource and get an explicit Owner import/lock GO. The count resources have index `[0]`:
 
-    tofu import 'cloudflare_email_routing_dns.zone[0]' '<zone_id>'
-    tofu import 'cloudflare_email_routing_address.gmail[0]' '<account_id>/<address_id>'
-    tofu import 'cloudflare_email_routing_rule.literal[0]' '<zone_id>/<rule_id>'
+    "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" import 'cloudflare_email_routing_dns.zone[0]' '<zone_id>'
+    "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" import 'cloudflare_email_routing_address.gmail[0]' '<account_id>/<address_id>'
+    "$TOOL" -chdir="$PRIVATE_MAIL_ROOT" import 'cloudflare_email_routing_rule.literal[0]' '<zone_id>/<rule_id>'
 
 Each import uses the same authenticated native executable, private backend/encryption and reviewed source. Shared account Gmail address is normally **referenced** via `data.cloudflare_email_routing_address.checked`, not imported/owned or deleted.
 
