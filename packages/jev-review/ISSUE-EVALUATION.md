@@ -22,10 +22,14 @@ Root has published and verified the meaningful change PR Ops511 in `roccho-org/o
 repository ID `1275606595`, author `roccho-dev`, branch `codex/jev-pr-body-target-v1`,
 base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`. S2 settings and the source workflow
 guard retain both Issues and configure only PR511's full body as untrusted evaluation
-data. Both runtime pins remain `2d592b1cdcdb2abed7b00dfd98baab7105914521`, whose
-settings do not admit511: configured source is not deployed activation. Root must
-review/publish S2 and verify its actual immutable remote identity before separate S3
-correction GO can pin that already published trusted runtime. No unpublished self-pin,
+data. Root independently accepted and published S2
+`f053c18b4b3b24bac3622821eeaf14b58ad56f65`; both S3 caller runtime pins now name
+that immutable trusted implementation, whose settings admit511. S3 is configured
+and fixed-runtime wired, not deployed default activation or live acceptance.
+Caller workflow source is S3; runtime code/settings/context are S2; PR511 body is
+untrusted data. S2 context's earlier staging description and old caller pin do not
+describe the actual S3 caller or prove activation. Root review/publication of S3,
+merge/default activation and separate live acceptance remain pending. No S3 self-pin,
 S1 runtime substitution or dynamic evaluated PR HEAD is allowed.
 The PR is never a runtime or authority source. Root separately
 authorizes activation after source acceptance, verified PR identity, a previously

@@ -86,13 +86,17 @@ The settings retain Ops483 and envs52 and add only
 The source workflow guard admits exactly this PR alongside the existing Issue guards.
 No other PR or swapped Issue/PR type is admitted.
 
-This is staged S2 source, not deployed activation. Both checkout `ref` and
-`runtime_source` remain `2d592b1cdcdb2abed7b00dfd98baab7105914521`; that previously
-published runtime does not admit PR511. This commit alone cannot execute its new PR
-admission. Root must independently review and publish S2, verify its exact immutable
-remote commit, then give separate same-scope S3 correction GO to pin that already
-published trusted S2 runtime. Never self-pin an unpublished candidate, use the S1
-runtime without the PR grant, or dynamically select the evaluated PR HEAD.
+This is staged S3 source: admission is configured and fixed-runtime wired, not
+deployed default activation or live acceptance. Root independently accepted and
+published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`. Both checkout `ref` and
+`runtime_source` pin that immutable trusted S2 implementation, which admits PR511.
+The caller workflow source is S3; runtime code, settings and context are S2;
+PR511's body is untrusted evaluation data, never runtime/context code from PR HEAD.
+S2's context describes its earlier staging boundary and old caller pin; that
+historical description is not the actual S3 caller pin or current activation proof.
+Root must independently review/publish S3; merge/default activation and separate
+live acceptance remain pending. Never self-pin this S3 candidate, substitute the
+S1 runtime without the PR grant, or dynamically select the evaluated PR HEAD.
 Source configuration, public publication, merge authority and separate live activation
 remain distinct; this source slice grants none of the latter operations.
 
