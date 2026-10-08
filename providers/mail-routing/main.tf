@@ -154,6 +154,31 @@ resource "cloudflare_email_routing_address" "gmail" {
   }
 }
 
+// Separate live stages: a forwarding rule reads the actual account destination
+// and zone settings. It cannot treat a newly created, unverified destination as
+// verified, or assume DNS became ready during the same apply.
+variable "verified_destination_id" {
+  type        = string
+  default     = null
+  nullable    = true
+  description = "Owner-read account destination identifier (verified before rule stage)."
+  validation {
+    condition     = var.verified_destination_id == null || can(regex("^[0-9a-f]{32}$", var.verified_destination_id))
+    error_message = "verified_destination_id must be the exact Cloudflare destination ID."
+  }
+}
+
+data "cloudflare_email_routing_address" "checked" {
+  count                          = var.manage_rule ? 1 : 0
+  account_id                     = var.account_id
+  destination_address_identifier = var.verified_destination_id
+}
+
+data "cloudflare_email_routing_settings" "checked" {
+  count   = var.manage_rule ? 1 : 0
+  zone_id = var.zone_id
+}
+
 // Provider 5.21.1 does not accept a configurable source field here; a Terraform
 // rule is API-owned. Never import/take over source=wrangler or an earlier
 // matcher of different ownership. Enabled alone does not prove effective route.
@@ -172,14 +197,30 @@ resource "cloudflare_email_routing_rule" "literal" {
 
   actions = [{
     type  = "forward"
-    value = [var.destination_address]
+    value = [data.cloudflare_email_routing_address.checked[0].email]
   }]
 
   lifecycle {
     prevent_destroy = true
     precondition {
-      condition     = var.preflight_approved
-      error_message = "Existing rule order/owners and verified destination must be observed before a change."
+      condition     = var.preflight_approved && var.verified_destination_id != null
+      error_message = "An Owner-approved destination ID and independent preflight are required."
+    }
+
+    precondition {
+      condition = (
+        data.cloudflare_email_routing_address.checked[0].verified != null
+        && lower(data.cloudflare_email_routing_address.checked[0].email) == lower(var.destination_address)
+      )
+      error_message = "Account destination is unverified or differs from approved Gmail. STOP."
+    }
+
+    precondition {
+      condition = (
+        data.cloudflare_email_routing_settings.checked[0].enabled == true
+        && data.cloudflare_email_routing_settings.checked[0].status == "ready"
+      )
+      error_message = "Email Routing DNS must already be enabled and ready before creating a rule."
     }
   }
 }
