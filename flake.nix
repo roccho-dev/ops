@@ -149,6 +149,36 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           provider-effect-runtime = packages.${system}.provider-effect-runtime.check;
+          mail-routing-native =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+              // Reuse the exact envs Cloudflare provider source (v5.21.1).
+              // Its nixpkgs identity is fixed by envs' existing flake.lock;
+              // do not silently accept ops' older v5.19.1 provider.
+              envsPkgs = import (builtins.fetchTree {
+                type = "github";
+                owner = "NixOS";
+                repo = "nixpkgs";
+                rev = "f9948418dc8628ac02b6d6337e191ade9429d59d";
+                narHash = "sha256-q1a/1H/Z5DJ9PRIueWDtoQbfhO2zAwni9wPsKCa1mc0=";
+              }) { inherit system; };
+              tofu = envsPkgs.opentofu.withPlugins (p: [ p.cloudflare_cloudflare ]);
+            in
+            pkgs.runCommand "mail-routing-m0-native-source-check"
+              { nativeBuildInputs = [ tofu ]; }
+              ''
+                set -eu
+                export HOME="$TMPDIR/mail-home" XDG_CACHE_HOME="$TMPDIR/mail-cache"
+                mkdir -p "$HOME" "$XDG_CACHE_HOME" root
+                cp ${./providers/mail-routing/main.tf} root/main.tf
+                cp ${./providers/mail-routing/.terraform.lock.hcl} root/.terraform.lock.hcl
+                cd root
+                tofu fmt -check -diff main.tf
+                tofu init -backend=false -lockfile=readonly -input=false -no-color
+                tofu validate -no-color
+                mkdir -p "$out"
+                printf "M0 provider schema validated, no API/effect\n" > "$out/proof"
+              '';
           voice-ui-target-runtime = packages.${system}.voice-ui-target-runtime.boundaryCheck;
           jev =
             let
