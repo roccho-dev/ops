@@ -170,28 +170,15 @@
               set -eu
               export HOME="$TMPDIR/mail-home" XDG_CACHE_HOME="$TMPDIR/mail-cache"
               export HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9
-              mkdir -p "$HOME" "$XDG_CACHE_HOME" root bootstrap
+              mkdir -p "$HOME" "$XDG_CACHE_HOME" root
               cp ${./providers/mail-routing/main.tf} root/main.tf
               cp ${./providers/mail-routing/.terraform.lock.hcl} root/.terraform.lock.hcl
               cp ${./providers/mail-routing/safety.tftest.hcl} root/safety.tftest.hcl
-              cp root/main.tf bootstrap/main.tf
-              # Nix-installed exact provider identity from a temporary
-              # unlocked sandbox. The actual check keeps readonly lock.
-              cd bootstrap
-              tofu init -backend=false -input=false -no-color >/dev/null
-              observed="$(grep -o 'h1:[A-Za-z0-9+/=]*' .terraform.lock.hcl | head -n 1)"
-              test -n "$observed"
-              cd ../root
+              cd root
               tofu fmt -check -diff main.tf
               tofu fmt -check -diff safety.tftest.hcl
-              if ! tofu init -backend=false -lockfile=readonly -input=false -no-color; then
-                echo "NIX_PINNED_PROVIDER_H1=$observed" >&2
-                exit 1
-              fi
-              if ! tofu validate -no-color; then
-                echo "NIX_PINNED_PROVIDER_H1=$observed" >&2
-                exit 1
-              fi
+              tofu init -backend=false -lockfile=readonly -input=false -no-color
+              tofu validate -no-color
               export TF_ENCRYPTION="$(printf '%s\n' \
                 'key_provider "pbkdf2" "fixture" { passphrase = "0000000000000000000000000000000000000000000000000000000000000000" }' \
                 'method "aes_gcm" "fixture" { keys = key_provider.pbkdf2.fixture }' \

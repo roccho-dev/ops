@@ -6,7 +6,7 @@ The goal is **one specified literal alias** on an already owned Cloudflare zone 
 
 ## Native toolchain (source-only, no credential or provider effect)
 
-Use the published ops flake package: `nix build --no-link --print-out-paths .#packages.x86_64-linux.mail-routing-tofu`. Use its `bin/tofu`, not an ambient Terraform or downloaded binary. `nix build --no-link .#checks.x86_64-linux.mail-routing-native` tests `fmt`, `init -backend=false -lockfile=readonly`, `validate`, and a native `tofu test` with a mocked Cloudflare provider. The pinned v5.21.1 provider comes from the exact existing envs Nixpkgs revision, with real provider checksum evidence. None of these commands touches a real domain.
+Use the published ops flake package: `nix build --no-link --print-out-paths .#packages.x86_64-linux.mail-routing-tofu`. Use its `bin/tofu`, not an ambient Terraform or downloaded binary. `nix build --no-link .#checks.x86_64-linux.mail-routing-native` tests `fmt`, `init -backend=false -lockfile=readonly`, `validate`, and a native `tofu test` with a mocked Cloudflare provider. The pinned v5.21.1 provider comes from the exact existing envs Nixpkgs revision, with Nix plugin `h1:HiX8Q7db7YrAYCuOBOMsvcmyX1RmvFqALtgJDvtYRhc=` computed from actual pinned provider bytes in [CI run 37765167569](https://github.com/roccho-org/ops/actions/runs/37765167569), in addition to official upstream ZIP hashes; neither proves real Cloudflare use. None of these commands touches a real domain.
 
 ## Inputs: type, custody, and purpose
 

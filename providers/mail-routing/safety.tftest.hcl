@@ -1,8 +1,6 @@
 // Credential-free native OpenTofu 1.12 mocked provider tests.
 // Synthetic .invalid values; command=plan for every case; no backend/API/effect.
-mock_provider "cloudflare" {
-  override_during = plan
-}
+mock_provider "cloudflare" {}
 
 variables {
   account_id              = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

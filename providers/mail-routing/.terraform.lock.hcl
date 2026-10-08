@@ -1,12 +1,15 @@
 # Checksums are the official SHA-256 ZIP asset digests from Cloudflare's
 # terraform-provider-cloudflare v5.21.1 GitHub release, not generated test values.
 # Source: https://api.github.com/repos/cloudflare/terraform-provider-cloudflare/releases/tags/v5.21.1
-# No invented h1 checksum; zh hashes cover the official release ZIPs.
+# Real h1 for the Nix-installed Cloudflare 5.21.1 provider observed on
+# https://github.com/roccho-org/ops/actions/runs/37765167569 (exact W source 9970c580).
+# Official zh ZIP checksums below are separate from this Nix unpacked-package h1.
 # OpenTofu's default registry host matches the Nix withPlugins directory.
 provider "registry.opentofu.org/cloudflare/cloudflare" {
   version     = "5.21.1"
   constraints = "5.21.1"
   hashes = [
+    "h1:HiX8Q7db7YrAYCuOBOMsvcmyX1RmvFqALtgJDvtYRhc=",
     "zh:049719425b8be43d9d4f0c208217aca0baa22374f061d7ff92f02563490f649c",
     "zh:0a8a3c1b26680b437fe9e7910ca81e532d36f8efacfb14f45690b6a779856993",
     "zh:32b61f80892243f7ab8e453fa038c1f3e2aac733ccb98307c2cfe798b2793b32",
