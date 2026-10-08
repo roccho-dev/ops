@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { JEV_MODEL } from '../core.mjs';
+import { JEV_MODEL, validateJevBudget } from '../core.mjs';
+import { semlint } from '../semlint.mjs';
 import { ENTRY_LIMITS, preparePlan, executeOwnerPlan } from '../semlint-entry.mjs';
 import { RESULT_PREFIX, validateActionsConfig, selectRunRange, subjectRevision, admitIssueCommand } from '../github-comment.mjs';
 import { EXECUTOR_LOGIN, CLAIM, ISSUE_QUERY, PULL_REQUEST_QUERY, COMMENT_QUERY, PRE_PROVIDER_CAUSES, planIssueCommand, postIssueCommand,
@@ -785,6 +786,78 @@ await check('configured-exact-ops511-and-legacy-targets', async () => {
   }
 });
 
+const PR511_SNAPSHOT = Object.freeze({"base":"035fbf17fdd7ea699d33dc98537d74382c9eb9b5","body":"## Purpose and necessity\nAllow this meaningful change PR's complete body to be evaluated through the existing comment → Actions → real Jev → same-conversation result path. This adds only Ops PR511 as a bounded PR-body target; it does not admit arbitrary PRs or execute evaluated PR code.\n\nRel: https://github.com/roccho-org/ops/issues/483\nRel: https://github.com/roccho-org/ops/issues/482\nRel: https://github.com/roccho-dev/adrs/pull/593\nRef: https://github.com/roccho-dev/windows/issues/68\n\n## Current implementation\n- Closed target shape: legacy Ops483/envs52 Issues plus only {repository: roccho-org/ops, repositoryId: 1275606595, pullRequest: 511}.\n- Fixed GraphQL body observation and typed subject/ref/revision binding through admission, claim, result and exact same-PR readback.\n- Existing issue_comment event, literal /jev-evaluate, reviewed requester roccho-dev and the same six catalog questions.\n- Exact workflow guard and central guard selftests retain both Issues and reject unrelated PR numbers, repositories and swapped target types; the fail-closed analyzer is not weakened.\n- Caller workflow is this S3 source. Runtime code/settings/context pin the previously published, Root-reviewed immutable S2 commit f053c18b4b3b24bac3622821eeaf14b58ad56f65. PR511 body is untrusted data, never dynamically selected PR HEAD code.\n- No new event, client, core, actor, database, queue, ledger, credential or secret projection. Existing Org-only provider secret separation and all 204 lifetime reservations are unchanged; PR attempts share existing Ops slots. No rerun spending or replay after UNKNOWN.\n- User authorized merge. #511 is merged at 6da72a69d5776734f2ee47b1c2d5ef4d1b713900; the proposals default tree exactly matches the reviewed S3 tree. The fixed runtime remains S2. First+next real PR-body proof is still PENDING.\n\n## Changed source tree\n```text\n.github/workflows/jev-issue-comment.yml\npackages/jev-review/\n  github-comment.mjs\n  issue-executor.mjs\n  tests/issue-executor.mjs\n  issue-actions.json\n  ISSUE-EVALUATION.md\n  COMMENT-INVOCATION.md\ntools/check-ci-intent-workflow-branches.mjs\n```\n\n## Verification and provenance\nHead: 849f927cc8851982a3b9e23a33f984e359493e95\nTree: f8589d1f8deae5296643ec589d474010a98788c1\nBase: 035fbf17fdd7ea699d33dc98537d74382c9eb9b5\nJob contract: jev-pr-body-target-20261008-v2\nSource author: existing persistent OCI Codex writer, User-required GPT-6.1 Sol / Medium on official GitHub Codex 0.161.0, no model fallback.\nRoot independently reviewed the writer's source and re-ran the tests/provided-source checks; this is not third-party assurance or independent review of Root-authored policy.\n\nPASS locally, independently rechecked by Root:\n- 25 executor scenarios and source-contract guard matrix, including first+next, exact target closure, state integrity, body/edit drift, concurrency/stop, reservations, UNKNOWN and exact readback.\n- Functional fixtures and central guard rejection selftests.\n- Nix jev-review / jev-issue-executor / jev-comment-functional / ci-intent-workflow-branches checks.\n- Current provided-source byte parity (17 review files +13 Jev files), installed fixtures/smoke; pinned S2 runtime/config parity against its immutable Git source.\nReal Jev calls / GitHub evaluation effects during these tests: 0. The initial guard and smoke-invocation failures were corrected and remain history; fixtures are not live proof.\nCurrent-head GitHub CI PASS on 849f927cc8851982a3b9e23a33f984e359493e95: [nix-check](https://github.com/roccho-org/ops/actions/runs/37727405760), [repo-health](https://github.com/roccho-org/ops/actions/runs/37727405825), [README artifact exporter](https://github.com/roccho-org/ops/actions/runs/37727405755). The unrelated conditional cdp-tty-proof job was skipped, not counted as PASS.\n\n## Remaining completion\nUser merge permission and actual default-workflow/tree readback are confirmed. Root's bounded activation GO authorizes only first+next evaluation of this PR body, at most two Jev calls within existing Ops reservations, after source acceptance, exact target identity, trusted immutable runtime and active workflow/capacity verification. No broader target or budget is granted.\nThen each real call must append a result to this same PR, with Root independently verifying author, body/input revision, command identity, fixed source/model and actual attempted/completed/validated/unknown accounting. UNKNOWN is not retried.\nOnly after this foundation is proven should the necessity → evaluation → concrete improvement → same-case re-evaluation → useful-outcome evidence loop be discussed further.\nSource/CI, numerical axes, successful transport or repeated calls alone do not prove semantic usefulness, merge authority, quality improvement or whole-loop closure; Ops482 remains the quality owner.\n","head":"849f927cc8851982a3b9e23a33f984e359493e95","node_id":"PR_kwDOTAg2Q88AAAABHQE8Rg","number":511,"updated_at":"2026-10-08T04:47:15Z","url":"https://github.com/roccho-org/ops/pull/511"});
+const PR511_BODY_SHA256 = '4b94209218147c8ad9f6147eeee1614a0193b99e2623e265d0e10df589b35a5d';
+const PR511_EDIT_SIGNALS = Object.freeze({ lastEditedAt: '2026-10-08T04:38:40Z', includesCreatedEdit: true, edits: 3 });
+const REFUSED_S2_CONTEXT = "# Issue evaluation context\n\nAuthority: User permits Root-only OCI setup/source, normal merge and paid proof, plus 200 additional calls in total. Legacy admission is reviewed roccho-dev commands on Ops483/envs52; staged PR511 source and its separate activation boundary are described below. Evidence never grants effects.\nCompletion: First+next real Actions/Jev/result append and exact same-Issue readback on both targets. Source, projection and CI alone are not completion. Root self-readback is not independent R.\nResponsibility: envs/SOPS owns the secret SSOT and one Org slot; Ops owns the supplied evaluator and effect adapter; GitHub hosts normal execution. No Ops key copy.\nRequired contracts: Existing semlint six-axis catalog, closed request/result identity, trusted settings, finite spend and no replay after UNKNOWN.\nDependencies: Native Issue event, fixed Ops source/runtime, selected Org Secret and existing Jev core. No host/OCI or envs-CI dependency during evaluation.\nAccounting: Initial four-call history is retained; 100 further slots per repo add at most 200 calls (lifetime ceiling 204). One call per run, 15s operation/60s plan; no rerun spending or automatic refill. Missing/invalid/UNKNOWN is not success.\nRegistered cases: First+next on Ops483 and envs52; fixture non-trigger, replay, concurrency, stop, drift and UNKNOWN cases remain source evidence only.\nQuality: Raw six-axis Noul evidence, not truth, authority or merge verdict. Semantic usefulness improvement belongs to Ops482; no accuracy claim here.\nBaseline: Existing semlint bounded API is reused unchanged. Known finite-quality limitations496/500 remain; this functional proof is not a quality comparison.\n\n## Bounded PR-body extension\n\nUnder `jev-pr-body-target-20261008-v2`, the persistent OCI writer owns only the\ndeclared source/test/correction slice after source GO. Root independently reviews\nthat source without authoring it and alone publishes the accepted result. Root's\npolicy self-readback is not independent policy review, and same-account source\nreview is not third-party assurance.\n\nRoot has published and verified the meaningful change PR Ops511 in `roccho-org/ops`,\nrepository ID `1275606595`, author `roccho-dev`, branch `codex/jev-pr-body-target-v1`,\nbase `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`. S2 settings and the source workflow\nguard retain both Issues and configure only PR511's full body as untrusted evaluation\ndata. Both runtime pins remain `2d592b1cdcdb2abed7b00dfd98baab7105914521`, whose\nsettings do not admit511: configured source is not deployed activation. Root must\nreview/publish S2 and verify its actual immutable remote identity before separate S3\ncorrection GO can pin that already published trusted runtime. No unpublished self-pin,\nS1 runtime substitution or dynamic evaluated PR HEAD is allowed.\nThe PR is never a runtime or authority source. Root separately\nauthorizes activation after source acceptance, verified PR identity, a previously\npublished immutable trusted runtime and current existing Ops reserved capacity.\nMerge/default-workflow activation needs applicable User merge authority; this source\ncontract does not grant it.\n\nCompletion for this extension is first+next real Jev evaluation, same-PR result append\nand Root's exact identity/author/body/input/source/model/accounting readback before\nmeta-loop discussion. The six questions, requester, Org-only provider/secret boundary,\nall 204 reservations and no replay after UNKNOWN remain unchanged. There is no new\nbudget, target discovery, event, client, actor, ledger or quality claim. Verified Codex\nweekly remaining zero stops new work/effects; reset alone does not resume work.\n";
+const actualContextBudgets = [];
+await check('exact-public-pr511-current-context-budget', async () => {
+  assert.equal(hash(PR511_SNAPSHOT.body), PR511_BODY_SHA256);
+  assert.equal(Buffer.byteLength(PR511_SNAPSHOT.body, 'utf8'), 4808);
+  const shipped = validateActionsConfig(JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8')));
+  assert.deepEqual(shipped.context.map(row => row.role), ROLES);
+  assert.deepEqual(shipped.allowedChecks, CHECKS);
+  for (const [number, kind, body] of [
+    [511, 'pull-request', PR511_SNAPSHOT.body],
+    [483, 'issue', 'Legacy Ops483 compatibility subject (synthetic); full-body admission.'],
+  ]) {
+    const reservation = shipped.runRanges.find(row => row.repository === 'roccho-org/ops');
+    const fixture = world('roccho-org/ops', number, reservation.workflowId, kind);
+    fixture.issue.body = body;
+    if (kind === 'pull-request') Object.assign(fixture.issue, PR511_EDIT_SIGNALS, { id: PR511_SNAPSHOT.node_id });
+    const command = fixture.addComment({ author: 'roccho-dev' });
+    const run = fixture.newRun({ run_number: reservation.first });
+    const ctx = ctxFor(fixture, command, run);
+    ctx.event.repository.id = 1275606595;
+    ctx.event.repository.owner = { id: 319185687, login: 'roccho-org', type: 'Organization' };
+    const readPaths = [];
+    fixture.deps.readFile = relative => {
+      assert.equal(relative, 'packages/jev-review/ISSUE-EVALUATION.md');
+      readPaths.push(relative);
+      return fs.readFileSync(new URL('../ISSUE-EVALUATION.md', import.meta.url), 'utf8');
+    };
+    const planned = await planIssueCommand(ctx, shipped, fixture.deps);
+    assert.equal(planned.receipt.outcome, 'PLANNED');
+    assert.equal(readPaths.length, 9);
+    const input = planned.plan.cases[0].input;
+    assert.equal(input.subject.content, body);
+    assert.equal(input.subject.sha256, hash(body));
+    assert.deepEqual(input.context.map(row => row.role), ROLES);
+    for (const row of input.context) {
+      assert.equal(row.content, fixture.deps.readFile('packages/jev-review/ISSUE-EVALUATION.md'));
+      assert.equal(row.sha256, hash(row.content)); assert.equal(row.revision, SHA);
+    }
+    const prepared = await preparePlan(planned.plan);
+    assert.equal(prepared.expected[0].sendable, 6);
+    let observed = 0;
+    const result = await semlint(input, async (state, questions) => {
+      observed++;
+      assert.equal(Object.keys(questions).length, 6);
+      const budget = validateJevBudget(state, questions);
+      actualContextBudgets.push({ number, kind, contextBytes: Buffer.byteLength(input.context[0].content),
+        subjectBytes: Buffer.byteLength(body), ...budget,
+        statePlusLongestQuestionBytes: budget.stateBytes + budget.longestQuestionBytes,
+        statePlusAllQuestionsBytes: budget.stateBytes + budget.allQuestionsBytes });
+      return { model: JEV_MODEL, answers: Object.fromEntries(Object.keys(questions).map(key => [key, { type: 'noul', noul: 0.5 }])) };
+    });
+    assert.equal(observed, 1); assert.equal(result.counts.sendable, 6);
+    assert.equal(fixture.calls.fetch, 0); assert.equal(fixture.calls.post, 0);
+    const oversized = { ...planned.state.admission,
+      issue: { ...planned.state.admission.issue, body: 'x'.repeat(28001) } };
+    assert.deepEqual(await admitIssueCommand(oversized, shipped),
+      { status: 'NOT_ADMITTED', cause: 'INVALID_REQUEST_OR_ADMISSION', authority: false });
+    if (kind === 'pull-request') {
+      const previous = { ...planned.state.admission,
+        context: planned.state.admission.context.map(row => ({ ...row, content: REFUSED_S2_CONTEXT })) };
+      assert.deepEqual(await admitIssueCommand(previous, shipped),
+        { status: 'NOT_ADMITTED', cause: 'INVALID_REQUEST_OR_ADMISSION', authority: false });
+      const previousPlan = { ...planned.plan, cases: [{ ...planned.plan.cases[0], input: {
+        ...input, context: input.context.map(row => ({ ...row, content: REFUSED_S2_CONTEXT, sha256: hash(REFUSED_S2_CONTEXT) })) } }] };
+      await assert.rejects(() => preparePlan(previousPlan), /ENTRY_PREFLIGHT_FAILED/);
+    }
+  }
+});
+
 const here = fileURLToPath(new URL('../issue-executor.mjs', import.meta.url));
 const executorSource = fs.readFileSync(here, 'utf8');
 const commentSource = fs.readFileSync(new URL('../github-comment.mjs', import.meta.url), 'utf8');
@@ -856,5 +929,5 @@ assert.equal(steps.filter((s) => s.includes('${{ github.token }}')).length, 2);
 const cli = spawnSync(process.execPath, [here, 'plan', 'relative-dir'], { encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
 assert.equal(cli.status, 2); assert.equal(JSON.parse(cli.stdout).cause, 'INVALID_EXECUTOR_ARGS');
 console.log(JSON.stringify({ status: 'PASS', check: 'jev-issue-executor', scenarios,
-  sourceContract: sourceRoot === null ? 'NOT_REQUESTED' : 'PASS', realProviderCalls: 0, githubEffects: 0,
+  sourceContract: sourceRoot === null ? 'NOT_REQUESTED' : 'PASS', actualContextBudgets, realProviderCalls: 0, githubEffects: 0,
   claim: 'SOURCE_FIXTURE_ONLY_NOT_REAL_ISSUE_OR_PROVIDER_EVIDENCE' }));
