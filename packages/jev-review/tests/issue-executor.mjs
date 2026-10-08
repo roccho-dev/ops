@@ -427,8 +427,14 @@ await check('entry-classification', async () => {
   // Against the real fixed entry: its actual pre-provider refusals classify exactly; ENTRY_FAILED cannot be proven
   // pre-provider (lone surrogate) and stays UNKNOWN. The executor's cause set equals the entry's closed allowed set.
   const entry = fileURLToPath(new URL('../semlint-entry.mjs', import.meta.url));
-  const child = (stdin) => { const r = spawnSync(process.execPath, [entry], { input: stdin, encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
-    return { status: r.status, stdout: r.stdout }; };
+  const child = (stdin) => {
+    const started = performance.now();
+    const result = spawnSync(process.execPath, [entry], { input: stdin, encoding: 'utf8', env: { LANG: 'C.UTF-8' }, timeout: 10000 });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr, signal: result.signal,
+      error: result.error ? { name: result.error.name, code: result.error.code, errno: result.error.errno,
+        syscall: result.error.syscall, message: result.error.message } : null,
+      elapsedMs: performance.now() - started, node: process.execPath, entry, entrySha256: hash(fs.readFileSync(entry)) };
+  };
   const input = { schema: 'ops.semlint.input.v1', subject: { kind: 'log-entry', ref: 'fixture:subject', revision: 'r1', scope: 'fixture only',
     content: 'x', sha256: hash('x') }, context: [{ role: 'authorityContract', ref: 'fixture:a', revision: 'r1', content: 'c', sha256: hash('c') }],
   checks: [CHECKS[0]] };
@@ -437,7 +443,10 @@ await check('entry-classification', async () => {
     ['not json', 'INVALID_ENTRY_JSON'], [JSON.stringify({ ...plan, cases: [] }), 'INVALID_ENTRY_PLAN'],
     [JSON.stringify({ ...plan, limits: { maxCalls: 1 } }), 'INVALID_ENTRY_LIMITS'],
     [JSON.stringify({ ...plan, cases: [{ id: 'a', input }, { id: 'b', input }], limits: { ...ENTRY_LIMITS, maxCalls: 1 } }), 'ENTRY_CALL_BUDGET_EXCEEDED'],
-  ]) assert.deepEqual(classifyOwnerOutput(child(stdin)), { kind: 'REFUSED', cause });
+  ]) {
+    const observed = child(stdin);
+    assert.deepEqual(classifyOwnerOutput(observed), { kind: 'REFUSED', cause }, JSON.stringify({ cause, child: observed }));
+  }
   const allowed = JSON.parse(fs.readFileSync(entry, 'utf8').match(/const allowed = (\[[^\]]*\])/)[1].replaceAll("'", '"').replace(/\s+/g, ''));
   assert.deepEqual([...PRE_PROVIDER_CAUSES].sort(), [...allowed].sort());
   const surrogate = child('{"schema":"ops.semlint.real-input.v1","cases":[{"id":"a","input":"\\ud800"}]}');
