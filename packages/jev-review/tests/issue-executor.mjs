@@ -636,6 +636,7 @@ await check('pull-request-closed-targets', async () => {
   assert.deepEqual(shipped.targets.map(target => ({ ...target })), [
     { repository: 'roccho-org/ops', repositoryId: '1275606595', issue: 483 },
     { repository: 'roccho-org/envs', repositoryId: '1391871347', issue: 52 },
+    { repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511 },
   ]);
 });
 
@@ -753,6 +754,37 @@ await check('pull-request-native-unknown-and-exact-readback', async () => {
   }
 });
 
+await check('configured-exact-ops511-and-legacy-targets', async () => {
+  const shipped = validateActionsConfig(JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8')));
+  for (const [repository, number, targetKind, admitted] of [
+    ['roccho-org/ops', 511, 'pull-request', true], ['roccho-org/ops', 483, 'issue', true],
+    ['roccho-org/envs', 52, 'issue', true], ['roccho-org/ops', 511, 'issue', false],
+    ['roccho-org/ops', 483, 'pull-request', false], ['roccho-org/envs', 52, 'pull-request', false],
+    ['roccho-org/envs', 511, 'pull-request', false], ['roccho-org/ops', 512, 'pull-request', false],
+    ['roccho-org/other', 511, 'pull-request', false],
+  ]) {
+    const reservation = shipped.runRanges.find(range => range.repository === repository);
+    const fixture = world(repository, number, reservation?.workflowId ?? WF, targetKind);
+    const command = fixture.addComment({ author: 'roccho-dev' });
+    const run = fixture.newRun({ run_number: reservation?.first ?? 1 });
+    const ctx = ctxFor(fixture, command, run);
+    ctx.event.repository.id = repository === 'roccho-org/envs' ? 1391871347 : 1275606595;
+    ctx.event.repository.owner = { id: 319185687, login: 'roccho-org', type: 'Organization' };
+    fixture.deps.readFile = relative => {
+      assert.equal(relative, 'packages/jev-review/ISSUE-EVALUATION.md');
+      return 'public synthetic evaluation contract';
+    };
+    const result = await fullRun(fixture, command, { cfg: shipped, run, ctx });
+    assert.deepEqual(outcome(result), admitted ? ['APPENDED', 'READBACK_EXACT'] : ['NONE', 'TARGET_NOT_AUTHORIZED']);
+    assert.deepEqual(effects(fixture), admitted ? { claim: 1, fetch: 1, post: 1 } : zero);
+    if (admitted) {
+      const identity = JSON.parse(fixture.posted[0].body.slice(RESULT_PREFIX.length)).identity;
+      assert.equal(identity.repository, repository); assert.equal(identity.issue, number);
+      assert.equal(identity.targetKind, targetKind === 'pull-request' ? targetKind : undefined);
+    }
+  }
+});
+
 const here = fileURLToPath(new URL('../issue-executor.mjs', import.meta.url));
 const executorSource = fs.readFileSync(here, 'utf8');
 const commentSource = fs.readFileSync(new URL('../github-comment.mjs', import.meta.url), 'utf8');
@@ -767,6 +799,30 @@ if (sourceRoot !== null) {
 const repoFile = (p) => fs.readFileSync(path.join(sourceRoot, p), 'utf8');
 const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const workflow = repoFile(WF_PATH);
+const guardText = workflow.match(/\n    if: >-\n([\s\S]*?)\n    runs-on:/)?.[1].trim();
+assert.ok(guardText);
+assert.match(guardText, /^[A-Za-z0-9_.' /()&|!=\s-]+$/);
+const guard = new Function('github', `return (${guardText});`);
+for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other', 'roccho-dev/ops']) {
+  for (const number of [483, 52, 511, 512]) {
+    for (const pullRequest of [null, { url: 'untrusted:never-used' }]) {
+      const allowed = repository === 'roccho-org/ops' && number === (pullRequest ? 511 : 483)
+        || repository === 'roccho-org/envs' && number === 52 && pullRequest === null;
+      const github = { repository, event_name: 'issue_comment', event: {
+        repository: { owner: { type: 'Organization' } }, comment: { body: '/jev-evaluate' },
+        issue: { number, pull_request: pullRequest },
+      } };
+      assert.equal(guard(github), allowed);
+      for (const denied of [
+        { ...github, event_name: 'workflow_call' }, { ...github, event_name: 'pull_request' },
+        { ...github, event: { ...github.event, repository: { owner: { type: 'User' } } } },
+        { ...github, event: { ...github.event, comment: { body: '/jev-evaluate later' } } },
+      ]) assert.equal(guard(denied), false);
+    }
+  }
+}
+assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '2d592b1cdcdb2abed7b00dfd98baab7105914521');
+assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '2d592b1cdcdb2abed7b00dfd98baab7105914521');
 const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
 const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) => x.path === WF_PATH);
 assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment', 'workflow_call']);
@@ -777,7 +833,8 @@ assert.equal(/^\s*environment:/m.test(workflow), false);
 assert.match(workflow, /\non:\n  issue_comment:\n    types: \[created\]\n  workflow_call:\n/);
 assert.equal(/^\s*(?:workflow_dispatch|schedule|pull_request|pull_request_target|workflow_run|repository_dispatch|concurrency):/m.test(workflow), false);
 for (const part of ['github.event.issue.number == 483', 'github.event.issue.number == 52', "github.event_name == 'issue_comment'", "github.event.repository.owner.type == 'Organization'",
-  "github.event.comment.body == '/jev-evaluate'", 'github.event.issue.pull_request == null']) assert.ok(workflow.includes(part), part);
+  "github.event.comment.body == '/jev-evaluate'", 'github.event.issue.pull_request == null',
+  'github.event.issue.pull_request != null', 'github.event.issue.number == 511']) assert.ok(workflow.includes(part), part);
 const uses = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 assert.ok(uses.length === 2 && uses.every((u) => /^[A-Za-z0-9_.\/-]+@[0-9a-f]{40}$/.test(u)), uses.join());
 assert.ok(workflow.includes('repository: roccho-org/ops') && /ref: [0-9a-f]{40}/.test(workflow) && workflow.includes('persist-credentials: false'));

@@ -1,7 +1,7 @@
 # Issue invocation contract
 
 Org admission is explicit in the reviewed `issue-actions.json`: `targets` binds
-the actual repository ID and Issue number, and `provider` carries an exact envs
+the actual repository ID and typed Issue or PR number, and `provider` carries an exact envs
 Org projection receipt/reference. A plan or `provider_use: PASS` assertion is
 not a projection receipt. Null provider or empty targets remains NOT_CONFIGURED;
 no claim, key-bearing plan or provider call is admitted.
@@ -68,7 +68,7 @@ UNVERIFIED until actual runs; fixtures do not prove paid-call or Issue completio
 
 ## Actions issue command
 
-### PR-body support and inactive admission
+### PR-body configured source and staged activation
 
 The adapter also supports one exact pull-request-body target in a repository already
 admitted for an Issue. Its closed trusted target shape is
@@ -77,13 +77,24 @@ admitted for an Issue. Its closed trusted target shape is
 multiple PR targets, conflicting repository IDs and PR-only repositories are refused.
 This is not arbitrary repository, Issue or PR discovery or admission.
 
-The shipped settings still contain only Ops483 and envs52, and the workflow still
-rejects all PR comments. PR support is therefore inactive. No PR number is reserved
-or guessed. Root must first publish a meaningful change PR, verify its actual identity,
-and supply that identity for a correction on the same branch. A later accepted correction
-may bind only that PR and update the event guard and immutable trusted runtime pin.
-Source support, public publication, merge authority and separate live activation are
-distinct; this source slice grants none of the latter operations.
+Root published and verified the meaningful change PR
+[Ops511](https://github.com/roccho-org/ops/pull/511), authored by `roccho-dev`, on
+`codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
+The source/correction boundary is `jev-pr-body-target-20261008-v2`.
+The settings retain Ops483 and envs52 and add only
+`{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
+The source workflow guard admits exactly this PR alongside the existing Issue guards.
+No other PR or swapped Issue/PR type is admitted.
+
+This is staged S2 source, not deployed activation. Both checkout `ref` and
+`runtime_source` remain `2d592b1cdcdb2abed7b00dfd98baab7105914521`; that previously
+published runtime does not admit PR511. This commit alone cannot execute its new PR
+admission. Root must independently review and publish S2, verify its exact immutable
+remote commit, then give separate same-scope S3 correction GO to pin that already
+published trusted S2 runtime. Never self-pin an unpublished candidate, use the S1
+runtime without the PR grant, or dynamically select the evaluated PR HEAD.
+Source configuration, public publication, merge authority and separate live activation
+remain distinct; this source slice grants none of the latter operations.
 
 For a configured PR, the existing `issue_comment` event's PR marker selects a fixed
 GraphQL `pullRequest(number:...)` body query, never an event-supplied URL or ref.
@@ -109,8 +120,9 @@ on the actual admitted PR, same-PR result creation, and Root's independent exact
 identity/author/body/input/runtime/model/accounting readback. Source/CI acceptance
 does not prove activation, semantic usefulness, merge acceptance or whole-loop closure.
 
-The workflow job requires Org Ops Issue483 or envs Issue52, body exactly
-`/jev-evaluate`, and no pull request. The observed command author must be reviewed
+The source workflow job requires Org Ops Issue483 or envs Issue52 with no PR marker,
+or Org Ops PR511 with a PR marker, and body exactly `/jev-evaluate`.
+The observed command author must be reviewed
 `roccho-dev`; Organization names are never compared with a person's login.
 Other Issues/repositories stop. The allowlist is not inferred from a public comment.
 
@@ -153,7 +165,7 @@ range is reviewed, which is new authority, not a reset. Every `issue_comment` ru
 or failed ones, consumes a run number, so ranges can be wasted and exhausted; exhaustion needs a new
 reviewed range, not a per-comment grant. Reruns (`run_attempt > 1`) never spend.
 
-`plan`: settings -> event (Issue, not PR) -> run identity and range -> workflow `state` is `active`
+`plan`: settings -> exact typed Issue/PR event -> run identity and range -> workflow `state` is `active`
 (`GET actions/workflows/{id}`) -> exact snapshot -> admission -> prior -> claim -> re-read -> active.
 - Snapshot: GraphQL Issue `id number body lastEditedAt includesCreatedEdit userContentEdits` and the
   command comment `id fullDatabaseId author body lastEditedAt includesCreatedEdit userContentEdits`
