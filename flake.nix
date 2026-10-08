@@ -73,13 +73,14 @@
           semcmp = nixpkgs.legacyPackages.${system}.callPackage ./packages/semcmp/default.nix { };
           mail-routing-tofu =
             let
-              envsPkgs = import (builtins.fetchTree {
+              envsSource = builtins.fetchTree {
                 type = "github";
                 owner = "NixOS";
                 repo = "nixpkgs";
                 rev = "f9948418dc8628ac02b6d6337e191ade9429d59d";
                 narHash = "sha256-q1a/1H/Z5DJ9PRIueWDtoQbfhO2zAwni9wPsKCa1mc0=";
-              }) { inherit system; };
+              };
+              envsPkgs = import envsSource { inherit system; };
             in
             envsPkgs.opentofu.withPlugins (p: [ p.cloudflare_cloudflare ]);
           jev-worker-esm = packages.${system}.jev.workerESM;
@@ -193,10 +194,11 @@
                   echo "NIX_PINNED_PROVIDER_H1=$observed" >&2
                   exit 1
                 fi
-                export TF_ENCRYPTION='key_provider "pbkdf2" "fixture" { passphrase = "0000000000000000000000000000000000000000000000000000000000000000" }
-method "aes_gcm" "fixture" { keys = key_provider.pbkdf2.fixture }
-state { method = method.aes_gcm.fixture }
-plan { method = method.aes_gcm.fixture }'
+                export TF_ENCRYPTION="$(printf '%s\n' \
+                  'key_provider "pbkdf2" "fixture" { passphrase = "0000000000000000000000000000000000000000000000000000000000000000" }' \
+                  'method "aes_gcm" "fixture" { keys = key_provider.pbkdf2.fixture }' \
+                  'state { method = method.aes_gcm.fixture }' \
+                  'plan { method = method.aes_gcm.fixture }')"
                 tofu test -no-color
                 mkdir -p "$out"
                 printf "M0 readonly lock/schema/native mocked tests PASS, no provider effect\n" > "$out/proof"
