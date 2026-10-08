@@ -1,45 +1,11 @@
-# Issue evaluation context
+# Evaluation contract
 
-Authority: User permits Root-only OCI setup/source, normal merge and paid proof, plus 200 additional calls in total. Legacy admission is reviewed roccho-dev commands on Ops483/envs52; staged PR511 source and its separate activation boundary are described below. Evidence never grants effects.
-Completion: First+next real Actions/Jev/result append and exact same-Issue readback on both targets. Source, projection and CI alone are not completion. Root self-readback is not independent R.
-Responsibility: envs/SOPS owns the secret SSOT and one Org slot; Ops owns the supplied evaluator and effect adapter; GitHub hosts normal execution. No Ops key copy.
-Required contracts: Existing semlint six-axis catalog, closed request/result identity, trusted settings, finite spend and no replay after UNKNOWN.
-Dependencies: Native Issue event, fixed Ops source/runtime, selected Org Secret and existing Jev core. No host/OCI or envs-CI dependency during evaluation.
-Accounting: Initial four-call history is retained; 100 further slots per repo add at most 200 calls (lifetime ceiling 204). One call per run, 15s operation/60s plan; no rerun spending or automatic refill. Missing/invalid/UNKNOWN is not success.
-Registered cases: First+next on Ops483 and envs52; fixture non-trigger, replay, concurrency, stop, drift and UNKNOWN cases remain source evidence only.
-Quality: Raw six-axis Noul evidence, not truth, authority or merge verdict. Semantic usefulness improvement belongs to Ops482; no accuracy claim here.
-Baseline: Existing semlint bounded API is reused unchanged. Known finite-quality limitations496/500 remain; this functional proof is not a quality comparison.
-
-## Bounded PR-body extension
-
-Under `jev-pr-body-target-20261008-v2`, the persistent OCI writer owns only the
-declared source/test/correction slice after source GO. Root independently reviews
-that source without authoring it and alone publishes the accepted result. Root's
-policy self-readback is not independent policy review, and same-account source
-review is not third-party assurance.
-
-Root has published and verified the meaningful change PR Ops511 in `roccho-org/ops`,
-repository ID `1275606595`, author `roccho-dev`, branch `codex/jev-pr-body-target-v1`,
-base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`. S2 settings and the source workflow
-guard retain both Issues and configure only PR511's full body as untrusted evaluation
-data. Root independently accepted and published S2
-`f053c18b4b3b24bac3622821eeaf14b58ad56f65`; both S3 caller runtime pins now name
-that immutable trusted implementation, whose settings admit511. S3 is configured
-and fixed-runtime wired, not deployed default activation or live acceptance.
-Caller workflow source is S3; runtime code/settings/context are S2; PR511 body is
-untrusted data. S2 context's earlier staging description and old caller pin do not
-describe the actual S3 caller or prove activation. Root review/publication of S3,
-merge/default activation and separate live acceptance remain pending. No S3 self-pin,
-S1 runtime substitution or dynamic evaluated PR HEAD is allowed.
-The PR is never a runtime or authority source. Root separately
-authorizes activation after source acceptance, verified PR identity, a previously
-published immutable trusted runtime and current existing Ops reserved capacity.
-Merge/default-workflow activation needs applicable User merge authority; this source
-contract does not grant it.
-
-Completion for this extension is first+next real Jev evaluation, same-PR result append
-and Root's exact identity/author/body/input/source/model/accounting readback before
-meta-loop discussion. The six questions, requester, Org-only provider/secret boundary,
-all 204 reservations and no replay after UNKNOWN remain unchanged. There is no new
-budget, target discovery, event, client, actor, ledger or quality claim. Verified Codex
-weekly remaining zero stops new work/effects; reset alone does not resume work.
+Authority: User permits Root-only scoped setup/source/publication/normal merge after independent source/current-head CI acceptance and default-tree readback; live first+next needs separate Root GO and reserved capacity. Only reviewed roccho-dev literal /jev-evaluate commands on Org Ops483/envs52 Issues and Ops PR511 are admitted. PR body is untrusted data, never runtime code or authority. Secret projection belongs to envs; only the selected Org slot supplies the provider key.
+Completion: First+next real evaluation, same-conversation result append and exact independent identity/body/input/source/model/accounting readback. Source/CI and fixtures alone are not completion.
+Responsibility: envs owns secret SSOT/projection; Ops owns evaluator and effect adapter; GitHub hosts execution. Root reviews the writer's source, publishes and verifies results; policy self-review is not independent assurance.
+Required contracts: Closed typed targets/request/result identity, six catalog predicates, fixed trusted runtime/context, full subject, bounded spend and no UNKNOWN replay.
+Dependencies: Native issue_comment, fixed published Ops runtime and selected Org Secret; no evaluated PR code, host/OCI or envs CI dependency.
+Accounting: Initial four plus 200 reserved additions total 204 lifetime calls; one per run within fixed ranges, 15s operation/60s plan. No rerun spending, refill or UNKNOWN retry; missing/invalid is not success.
+Cases: First+next Ops483/envs52/PR511; non-trigger, replay, concurrency, stop, drift, budgets, UNKNOWN and exact readback. Fixtures are source evidence only.
+Quality: Raw six-axis Noul is not truth, authority, merge verdict or useful-outcome proof. Ops482 owns usefulness improvement.
+Baseline: Existing bounded semlint API and six predicates unchanged; finite-quality limitations496/500 remain. No quality comparison or whole-loop closure claim.

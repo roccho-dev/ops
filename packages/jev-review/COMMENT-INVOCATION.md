@@ -1,5 +1,77 @@
 # Issue invocation contract
 
+## Context-budget repair and retained history
+
+The nine configured roles still read the same compact `ISSUE-EVALUATION.md` from
+the fixed trusted runtime; no roles/settings, subject or Core limits change.
+All six checks must preflight with the full exact PR511 body and actual file
+producer. Core ceilings remain 28000 bytes state, 31000 state+longest question,
+60000 state+all questions. Genuinely over-budget inputs must still refuse.
+The source fixture embeds the immutable public body observed at
+`2026-10-08T04:47:15Z`, SHA256
+`4b94209218147c8ad9f6147eeee1614a0193b99e2623e265d0e10df589b35a5d`.
+That snapshot is evaluation data only, not a live read or executable PR source.
+Run `37728532777`, command `6052376731`, refusal
+[6052473726](https://github.com/roccho-org/ops/pull/511#issuecomment-6052473726)
+remain zero-claim/zero-call history with the key step skipped, not success.
+Root's independent refusal reproduction measured 41252 state bytes with the
+3672-byte published S2 context repeated for nine roles. This historical failure
+is retained; the candidate's compact file is not yet the deployed runtime context.
+Source correction/CI, published runtime pin, normal merge/default-tree acceptance
+and separate live first+next proof (at most two calls in existing capacity) are
+distinct. UNKNOWN is never replayed. Verified weekly0 stops effects; reset alone
+does not resume. No semantic-quality or whole-loop acceptance is claimed.
+
+### Pre-repair context snapshot (historical, not current authority)
+
+# Issue evaluation context
+
+Authority: User permits Root-only OCI setup/source, normal merge and paid proof, plus 200 additional calls in total. Legacy admission is reviewed roccho-dev commands on Ops483/envs52; staged PR511 source and its separate activation boundary are described below. Evidence never grants effects.
+Completion: First+next real Actions/Jev/result append and exact same-Issue readback on both targets. Source, projection and CI alone are not completion. Root self-readback is not independent R.
+Responsibility: envs/SOPS owns the secret SSOT and one Org slot; Ops owns the supplied evaluator and effect adapter; GitHub hosts normal execution. No Ops key copy.
+Required contracts: Existing semlint six-axis catalog, closed request/result identity, trusted settings, finite spend and no replay after UNKNOWN.
+Dependencies: Native Issue event, fixed Ops source/runtime, selected Org Secret and existing Jev core. No host/OCI or envs-CI dependency during evaluation.
+Accounting: Initial four-call history is retained; 100 further slots per repo add at most 200 calls (lifetime ceiling 204). One call per run, 15s operation/60s plan; no rerun spending or automatic refill. Missing/invalid/UNKNOWN is not success.
+Registered cases: First+next on Ops483 and envs52; fixture non-trigger, replay, concurrency, stop, drift and UNKNOWN cases remain source evidence only.
+Quality: Raw six-axis Noul evidence, not truth, authority or merge verdict. Semantic usefulness improvement belongs to Ops482; no accuracy claim here.
+Baseline: Existing semlint bounded API is reused unchanged. Known finite-quality limitations496/500 remain; this functional proof is not a quality comparison.
+
+## Bounded PR-body extension
+
+Under `jev-pr-body-target-20261008-v2`, the persistent OCI writer owns only the
+declared source/test/correction slice after source GO. Root independently reviews
+that source without authoring it and alone publishes the accepted result. Root's
+policy self-readback is not independent policy review, and same-account source
+review is not third-party assurance.
+
+Root has published and verified the meaningful change PR Ops511 in `roccho-org/ops`,
+repository ID `1275606595`, author `roccho-dev`, branch `codex/jev-pr-body-target-v1`,
+base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`. S2 settings and the source workflow
+guard retain both Issues and configure only PR511's full body as untrusted evaluation
+data. Root independently accepted and published S2
+`f053c18b4b3b24bac3622821eeaf14b58ad56f65`; both S3 caller runtime pins now name
+that immutable trusted implementation, whose settings admit511. S3 is configured
+and fixed-runtime wired, not deployed default activation or live acceptance.
+Caller workflow source is S3; runtime code/settings/context are S2; PR511 body is
+untrusted data. S2 context's earlier staging description and old caller pin do not
+describe the actual S3 caller or prove activation. Root review/publication of S3,
+merge/default activation and separate live acceptance remain pending. No S3 self-pin,
+S1 runtime substitution or dynamic evaluated PR HEAD is allowed.
+The PR is never a runtime or authority source. Root separately
+authorizes activation after source acceptance, verified PR identity, a previously
+published immutable trusted runtime and current existing Ops reserved capacity.
+Merge/default-workflow activation needs applicable User merge authority; this source
+contract does not grant it.
+
+Completion for this extension is first+next real Jev evaluation, same-PR result append
+and Root's exact identity/author/body/input/source/model/accounting readback before
+meta-loop discussion. The six questions, requester, Org-only provider/secret boundary,
+all 204 reservations and no replay after UNKNOWN remain unchanged. There is no new
+budget, target discovery, event, client, actor, ledger or quality claim. Verified Codex
+weekly remaining zero stops new work/effects; reset alone does not resume work.
+
+## Current invocation contract
+
 Org admission is explicit in the reviewed `issue-actions.json`: `targets` binds
 the actual repository ID and typed Issue or PR number, and `provider` carries an exact envs
 Org projection receipt/reference. A plan or `provider_use: PASS` assertion is
@@ -80,25 +152,40 @@ This is not arbitrary repository, Issue or PR discovery or admission.
 Root published and verified the meaningful change PR
 [Ops511](https://github.com/roccho-org/ops/pull/511), authored by `roccho-dev`, on
 `codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
-The source/correction boundary is `jev-pr-body-target-20261008-v2`.
+The current context-budget correction boundary is `jev-pr-body-target-20261008-v3`.
 The settings retain Ops483 and envs52 and add only
 `{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
 The source workflow guard admits exactly this PR alongside the existing Issue guards.
 No other PR or swapped Issue/PR type is admitted.
 
-This is staged S3 source: admission is configured and fixed-runtime wired, not
-deployed default activation or live acceptance. Root independently accepted and
-published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`. Both checkout `ref` and
-`runtime_source` pin that immutable trusted S2 implementation, which admits PR511.
-The caller workflow source is S3; runtime code, settings and context are S2;
-PR511's body is untrusted evaluation data, never runtime/context code from PR HEAD.
-S2's context describes its earlier staging boundary and old caller pin; that
-historical description is not the actual S3 caller pin or current activation proof.
-Root must independently review/publish S3; merge/default activation and separate
-live acceptance remain pending. Never self-pin this S3 candidate, substitute the
+S3 was merged at `6da72a69d5776734f2ee47b1c2d5ef4d1b713900`; default-tree
+readback was confirmed by Root, but live acceptance remains unproved.
+Root independently accepted and
+published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`, the earlier runtime.
+Root now independently accepts the published corrected runtime
+`46a20f607d1a29caac377401277c2b47d5119802` on repair PR513. Both caller checkout
+`ref` and `runtime_source` pin only that immutable implementation, with its
+1903-byte context, unchanged settings and exact PR511 admission. The caller is
+this later pin correction; runtime code/settings/context come from published46a20f,
+not this unpublished candidate or either PR HEAD. PR513 is not an evaluation target.
+PR511's full body remains untrusted data; historical snapshot descriptions are
+not the current caller pin or default/live acceptance evidence.
+The first PR511 attempt refused before claim/provider use because the full body
+plus nine copies of S2 context exceeded Core's state ceiling. This v3 source
+compacts evaluation-relevant context while retaining operational detail here.
+This source is configured and fixed-runtime wired, not merged/default deployed
+or live accepted. Published46a20f context's earlier S2 staging description is
+historical, not a substitute for the actual caller pin. Root must independently
+review/publish this pin correction, require current-head CI before normal merge,
+and verify the actual default tree/runtime afterward. Separate live GO and
+first+next exact readback remain pending.
+Root alone publishes/merges necessary scoped corrections after independent
+current-head CI acceptance and default-tree readback; live GO remains separate.
+Never self-pin an unpublished correction candidate, substitute the
 S1 runtime without the PR grant, or dynamically select the evaluated PR HEAD.
 Source configuration, public publication, merge authority and separate live activation
-remain distinct; this source slice grants none of the latter operations.
+remain distinct. W has no publication, merge or live authority; Root's scoped
+publication/normal-merge permission does not grant live effects without separate GO.
 
 For a configured PR, the existing `issue_comment` event's PR marker selects a fixed
 GraphQL `pullRequest(number:...)` body query, never an event-supplied URL or ref.
