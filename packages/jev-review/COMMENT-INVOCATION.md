@@ -1,6 +1,37 @@
 # Issue invocation contract
 
-## Claim-response diagnostics (v4 fixed-wired source, activation pending)
+## Controlled PR-token differential (v5 source, not deployed or live accepted)
+
+`jev-pr-body-target-20261008-v5` adds only `pull-requests: write` to the existing
+workflow job-token declarations, alongside unchanged Actionsread/Contentsread/Issueswrite.
+The token grant is repository-wide, not PR511-limited, and the YAML persists until
+deliberately changed. The unchanged exact command/target guard and closed trusted
+runtime are the execution boundary; there is no Contentswrite, global-default,
+review-approval-setting, authentication, credential, Org Secret or budget change.
+Both caller pins remain the published diagnostic runtime5dbf20 below. This source
+does not deploy the grant or authorize a request. Root independently accepts and
+publishes source, requires current-head CI, normally merges and verifies default
+tree/runtime before separate GO/capacity for a NEW distinct controlled request.
+
+Run `37746952720` number10/attempt1, command `6055471759`, returned HTTP403 with
+request ID `6C30:31E870:3D8D6:CA126:6AC74DA0`, accepted `issues=write` and
+`RESOURCE_NOT_ACCESSIBLE_BY_INTEGRATION`, despite effective Issueswrite.
+ProviderCalls0 and the key-bearing step was skipped. A hidden PR permission
+requirement is a hypothesis, not proved necessity; headers are evidence, not authority.
+This command/run and original command6054135720/run8 remain UNKNOWN without any
+rerun, replay, deletion or cleanup. Run8's actual response remains unknown.
+
+If the controlled differential still returns403, remove only the added YAML grant
+through independently accepted source/CI/default readback and stop rights escalation.
+If functional proof succeeds, retain it only for this bounded PR evaluation purpose
+and record configuration-specific evidence, not universal permission semantics.
+Any other UNKNOWN returns to Root for assessment, never inferred success, retention
+or retry. A successful claim may reach paid evaluation immediately: separate live GO
+and existing capacity remain mandatory, at most first+next2 actual Jev calls within
+the unchanged 204 reservations. Source/synthetic checks are not claim, paid, quality
+or whole-loop proof. Verified weekly0 stops effects; reset alone does not resume.
+
+## Claim-response diagnostics (v4 deployed source, no paid acceptance)
 
 Under `jev-pr-body-target-20261008-v4`, the existing keyless claim request adds
 `claimResponse` to its plan receipt, also retained by post for an unplanned run. It records only
@@ -18,9 +49,10 @@ Both caller pins now name that immutable trusted runtime. The caller workflow is
 this later pin correction; runtime code/settings/context are published5dbf20;
 PR511's full body remains untrusted evaluation data, never code or authority.
 Published5dbf20's earlier caller pins and staging description are historical,
-not the actual caller's pins or evidence of activation. Current-head acceptance/CI,
-Root publication, normal merge/default and runtime readback remain pending before
-any separately authorized new distinct live request.
+not the actual caller's pins or evidence of activation. Root merged PR515 at
+`5f64c367bd98223d231905d15370344efa503d01` and verified default pins/runtime.
+The v5 permission source above still requires its own acceptance/CI/publication,
+normal merge/default/runtime verification and separate new-request live GO.
 No unpublished self-pin, PR HEAD execution or additional evaluation target is allowed.
 
 Command `6054135720`, run `37739337803` attempt1 remain UNKNOWN/CLAIM_NOT_OURS,
@@ -183,8 +215,8 @@ This is not arbitrary repository, Issue or PR discovery or admission.
 Root published and verified the meaningful change PR
 [Ops511](https://github.com/roccho-org/ops/pull/511), authored by `roccho-dev`, on
 `codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
-The context-budget repair used `jev-pr-body-target-20261008-v3`; the current
-diagnostic correction boundary is v4 as described above.
+The context-budget repair used `jev-pr-body-target-20261008-v3` and diagnostics
+used v4; the current controlled token differential boundary is v5 as described above.
 The settings retain Ops483 and envs52 and add only
 `{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
 The source workflow guard admits exactly this PR alongside the existing Issue guards.
@@ -206,8 +238,8 @@ The first PR511 attempt refused before claim/provider use because the full body
 plus nine copies of S2 context exceeded Core's state ceiling. This v3 source
 compacts evaluation-relevant context while retaining operational detail here.
 The context-budget repair is merged/default verified, not live accepted; run8
-then stopped at claim UNKNOWN with zero provider calls. This v4 diagnostic source
-is fixed-runtime wired, not merged/default deployed or live accepted.
+then stopped at claim UNKNOWN with zero provider calls. The v4 diagnostic source
+is merged/default verified; the v5 differential source is not deployed or live accepted.
 Runtime context's earlier staging description is historical, not a substitute
 for the actual caller pin. Root must independently review/publish this correction,
 require current-head CI before normal merge,

@@ -1016,7 +1016,31 @@ for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other
 }
 assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
 assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
-assert.equal(workflow.match(/\npermissions:\n([\s\S]*?)\njobs:/)[1], '  actions: read\n  contents: read\n  issues: write\n');
+const permissionBlock = '  actions: read\n  contents: read\n  issues: write\n  pull-requests: write\n';
+const expectedGuard = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && "
+  + "github.event.comment.body == '/jev-evaluate' && ((github.event.issue.pull_request == null && "
+  + "((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || "
+  + "(github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) || "
+  + "(github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && github.event.issue.number == 511))";
+const assertWorkflowBoundary = (text) => {
+  assert.equal(text.match(/\npermissions:\n([\s\S]*?)\njobs:/)?.[1], permissionBlock);
+  assert.equal([...text.matchAll(/^\s*permissions:/gm)].length, 1);
+  assert.equal(text.match(/\n    if: >-\n([\s\S]*?)\n    runs-on:/)?.[1].trim().replace(/\s+/g, ' '), expectedGuard);
+};
+assertWorkflowBoundary(workflow);
+for (const forbidden of [
+  workflow.replace('contents: read', 'contents: write'),
+  workflow.replace('actions: read', 'actions: write'),
+  workflow.replace('pull-requests: write', 'pull-requests: read'),
+  workflow.replace('pull-requests: write', 'pull-requests: write\n  id-token: write'),
+  workflow.replace('pull-requests: write', 'pull-requests: write\n  checks: write'),
+  workflow.replace('permissions:\n' + permissionBlock, 'permissions: write-all\n'),
+  workflow.replace('  evaluate:\n', '  evaluate:\n    permissions: write-all\n'),
+  workflow.replace('github.event.issue.number == 511', 'github.event.issue.number >= 511'),
+  workflow.replace("github.repository == 'roccho-org/ops'", 'true'),
+  workflow.replace("github.event.comment.body == '/jev-evaluate'", 'true'),
+  workflow.replace('github.event.issue.pull_request != null', 'true'),
+]) assert.throws(() => assertWorkflowBoundary(forbidden));
 const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
 const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) => x.path === WF_PATH);
 assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment', 'workflow_call']);
