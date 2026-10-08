@@ -1014,8 +1014,8 @@ for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other
     }
   }
 }
-assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '46a20f607d1a29caac377401277c2b47d5119802');
-assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '46a20f607d1a29caac377401277c2b47d5119802');
+assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
+assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
 assert.equal(workflow.match(/\npermissions:\n([\s\S]*?)\njobs:/)[1], '  actions: read\n  contents: read\n  issues: write\n');
 const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
 const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) => x.path === WF_PATH);

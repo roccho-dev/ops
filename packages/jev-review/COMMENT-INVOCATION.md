@@ -1,6 +1,6 @@
 # Issue invocation contract
 
-## Claim-response diagnostics (v4 source, not deployed diagnostics)
+## Claim-response diagnostics (v4 fixed-wired source, activation pending)
 
 Under `jev-pr-body-target-20261008-v4`, the existing keyless claim request adds
 `claimResponse` to its plan receipt, also retained by post for an unplanned run. It records only
@@ -12,11 +12,15 @@ provider data are never emitted. This is evidence, not an authority or success g
 The raw201 + `github-actions[bot]` + eyes gate and all UNKNOWN semantics are unchanged.
 There is no extra request, retry, permission or authentication change.
 
-The first diagnostic source commit retains both caller pins at the published
-`46a20f607d1a29caac377401277c2b47d5119802`: its runtime does not emit these diagnostics.
-Root independently accepts/publishes the correction before a separate correction
-pins its actual immutable trusted runtime. Current-head CI, normal merge/default
-and runtime readback precede any separately authorized new distinct live request.
+Root independently accepted and published the diagnostic implementation
+`5dbf20b0466f1a13d6a5299fdfd9f94424647a2c` on repair PR515, not an evaluation target.
+Both caller pins now name that immutable trusted runtime. The caller workflow is
+this later pin correction; runtime code/settings/context are published5dbf20;
+PR511's full body remains untrusted evaluation data, never code or authority.
+Published5dbf20's earlier caller pins and staging description are historical,
+not the actual caller's pins or evidence of activation. Current-head acceptance/CI,
+Root publication, normal merge/default and runtime readback remain pending before
+any separately authorized new distinct live request.
 No unpublished self-pin, PR HEAD execution or additional evaluation target is allowed.
 
 Command `6054135720`, run `37739337803` attempt1 remain UNKNOWN/CLAIM_NOT_OURS,
@@ -179,7 +183,8 @@ This is not arbitrary repository, Issue or PR discovery or admission.
 Root published and verified the meaningful change PR
 [Ops511](https://github.com/roccho-org/ops/pull/511), authored by `roccho-dev`, on
 `codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
-The current context-budget correction boundary is `jev-pr-body-target-20261008-v3`.
+The context-budget repair used `jev-pr-body-target-20261008-v3`; the current
+diagnostic correction boundary is v4 as described above.
 The settings retain Ops483 and envs52 and add only
 `{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
 The source workflow guard admits exactly this PR alongside the existing Issue guards.
@@ -189,21 +194,23 @@ S3 was merged at `6da72a69d5776734f2ee47b1c2d5ef4d1b713900`; default-tree
 readback was confirmed by Root, but live acceptance remains unproved.
 Root independently accepted and
 published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`, the earlier runtime.
-Root now independently accepts the published corrected runtime
-`46a20f607d1a29caac377401277c2b47d5119802` on repair PR513. Both caller checkout
-`ref` and `runtime_source` pin only that immutable implementation, with its
-1903-byte context, unchanged settings and exact PR511 admission. The caller is
-this later pin correction; runtime code/settings/context come from published46a20f,
-not this unpublished candidate or either PR HEAD. PR513 is not an evaluation target.
+Root independently accepted the published context-budget runtime
+`46a20f607d1a29caac377401277c2b47d5119802` on repair PR513, merged at
+`f424584ece730d05a74f0c651bae137ab8e2d76d`. Its 1903-byte context, unchanged
+settings and exact PR511 admission remain in the current diagnostic runtime5dbf20.
+Both current caller pins are described above. Neither runtime is selected from
+PR HEAD, and PR513/PR515 are not evaluation targets.
 PR511's full body remains untrusted data; historical snapshot descriptions are
 not the current caller pin or default/live acceptance evidence.
 The first PR511 attempt refused before claim/provider use because the full body
 plus nine copies of S2 context exceeded Core's state ceiling. This v3 source
 compacts evaluation-relevant context while retaining operational detail here.
-This source is configured and fixed-runtime wired, not merged/default deployed
-or live accepted. Published46a20f context's earlier S2 staging description is
-historical, not a substitute for the actual caller pin. Root must independently
-review/publish this pin correction, require current-head CI before normal merge,
+The context-budget repair is merged/default verified, not live accepted; run8
+then stopped at claim UNKNOWN with zero provider calls. This v4 diagnostic source
+is fixed-runtime wired, not merged/default deployed or live accepted.
+Runtime context's earlier staging description is historical, not a substitute
+for the actual caller pin. Root must independently review/publish this correction,
+require current-head CI before normal merge,
 and verify the actual default tree/runtime afterward. Separate live GO and
 first+next exact readback remain pending.
 Root alone publishes/merges necessary scoped corrections after independent
