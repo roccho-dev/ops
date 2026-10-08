@@ -161,17 +161,24 @@ No other PR or swapped Issue/PR type is admitted.
 S3 was merged at `6da72a69d5776734f2ee47b1c2d5ef4d1b713900`; default-tree
 readback was confirmed by Root, but live acceptance remains unproved.
 Root independently accepted and
-published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`. Both checkout `ref` and
-`runtime_source` pin that immutable trusted S2 implementation, which admits PR511.
-The caller workflow source is S3; runtime code, settings and context are S2;
-PR511's body is untrusted evaluation data, never runtime/context code from PR HEAD.
-S2's context describes its earlier staging boundary and old caller pin; that
-historical description is not the actual S3 caller pin or current activation proof.
+published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`, the earlier runtime.
+Root now independently accepts the published corrected runtime
+`46a20f607d1a29caac377401277c2b47d5119802` on repair PR513. Both caller checkout
+`ref` and `runtime_source` pin only that immutable implementation, with its
+1903-byte context, unchanged settings and exact PR511 admission. The caller is
+this later pin correction; runtime code/settings/context come from published46a20f,
+not this unpublished candidate or either PR HEAD. PR513 is not an evaluation target.
+PR511's full body remains untrusted data; historical snapshot descriptions are
+not the current caller pin or default/live acceptance evidence.
 The first PR511 attempt refused before claim/provider use because the full body
 plus nine copies of S2 context exceeded Core's state ceiling. This v3 source
 compacts evaluation-relevant context while retaining operational detail here.
-Both pins deliberately remain S2 until Root accepts/publishes corrected source
-and supplies its actual immutable identity for a separate pin correction.
+This source is configured and fixed-runtime wired, not merged/default deployed
+or live accepted. Published46a20f context's earlier S2 staging description is
+historical, not a substitute for the actual caller pin. Root must independently
+review/publish this pin correction, require current-head CI before normal merge,
+and verify the actual default tree/runtime afterward. Separate live GO and
+first+next exact readback remain pending.
 Root alone publishes/merges necessary scoped corrections after independent
 current-head CI acceptance and default-tree readback; live GO remains separate.
 Never self-pin an unpublished correction candidate, substitute the
