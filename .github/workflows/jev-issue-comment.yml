@@ -1,6 +1,6 @@
 name: Jev Issue comment evaluation
 
-# Trusted literal command on Org Ops483/envs52 -> fixed semlint -> same-Issue result.
+# Guard admits Org Ops483/envs52/PR511; runtime/context use published trusted S2.
 # One projected Org slot; no Repository/Environment copy.
 # Initial four-call history plus 200 authorized additions; no rerun spending.
 on:
@@ -22,16 +22,18 @@ jobs:
       github.event_name == 'issue_comment' &&
       github.event.repository.owner.type == 'Organization' &&
       github.event.comment.body == '/jev-evaluate' &&
-      github.event.issue.pull_request == null &&
+      ((github.event.issue.pull_request == null &&
       ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) ||
-      (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))
+      (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) ||
+      (github.event.issue.pull_request != null &&
+      github.repository == 'roccho-org/ops' && github.event.issue.number == 511))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: roccho-org/ops
-          ref: 2d592b1cdcdb2abed7b00dfd98baab7105914521
+          ref: f053c18b4b3b24bac3622821eeaf14b58ad56f65
           persist-credentials: false
 
       - name: Install fixed toolchain provisioner
@@ -44,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_source=2d592b1cdcdb2abed7b00dfd98baab7105914521
+          runtime_source=f053c18b4b3b24bac3622821eeaf14b58ad56f65
           test "$(git rev-parse HEAD)" = "$runtime_source"
           out="$(nix build --no-link --print-out-paths .#jev-review)"
           line="$(grep '^exec ' "$out/bin/jev-review")"

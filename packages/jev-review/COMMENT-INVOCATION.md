@@ -1,7 +1,7 @@
 # Issue invocation contract
 
 Org admission is explicit in the reviewed `issue-actions.json`: `targets` binds
-the actual repository ID and Issue number, and `provider` carries an exact envs
+the actual repository ID and typed Issue or PR number, and `provider` carries an exact envs
 Org projection receipt/reference. A plan or `provider_use: PASS` assertion is
 not a projection receipt. Null provider or empty targets remains NOT_CONFIGURED;
 no claim, key-bearing plan or provider call is admitted.
@@ -68,8 +68,65 @@ UNVERIFIED until actual runs; fixtures do not prove paid-call or Issue completio
 
 ## Actions issue command
 
-The workflow job requires Org Ops Issue483 or envs Issue52, body exactly
-`/jev-evaluate`, and no pull request. The observed command author must be reviewed
+### PR-body configured source and staged activation
+
+The adapter also supports one exact pull-request-body target in a repository already
+admitted for an Issue. Its closed trusted target shape is
+`{repository, repositoryId, pullRequest}`; the existing Issue target shape remains
+`{repository, repositoryId, issue}`. Mixed shapes, duplicate repository/type entries,
+multiple PR targets, conflicting repository IDs and PR-only repositories are refused.
+This is not arbitrary repository, Issue or PR discovery or admission.
+
+Root published and verified the meaningful change PR
+[Ops511](https://github.com/roccho-org/ops/pull/511), authored by `roccho-dev`, on
+`codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
+The source/correction boundary is `jev-pr-body-target-20261008-v2`.
+The settings retain Ops483 and envs52 and add only
+`{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
+The source workflow guard admits exactly this PR alongside the existing Issue guards.
+No other PR or swapped Issue/PR type is admitted.
+
+This is staged S3 source: admission is configured and fixed-runtime wired, not
+deployed default activation or live acceptance. Root independently accepted and
+published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`. Both checkout `ref` and
+`runtime_source` pin that immutable trusted S2 implementation, which admits PR511.
+The caller workflow source is S3; runtime code, settings and context are S2;
+PR511's body is untrusted evaluation data, never runtime/context code from PR HEAD.
+S2's context describes its earlier staging boundary and old caller pin; that
+historical description is not the actual S3 caller pin or current activation proof.
+Root must independently review/publish S3; merge/default activation and separate
+live acceptance remain pending. Never self-pin this S3 candidate, substitute the
+S1 runtime without the PR grant, or dynamically select the evaluated PR HEAD.
+Source configuration, public publication, merge authority and separate live activation
+remain distinct; this source slice grants none of the latter operations.
+
+For a configured PR, the existing `issue_comment` event's PR marker selects a fixed
+GraphQL `pullRequest(number:...)` body query, never an event-supplied URL or ref.
+Admission and run-local re-admission require the exact trusted target and literal
+unedited command. The subject remains a `log-entry` containing the entire observed
+PR body; its ref is `https://github.com/<repo>/pull/<n>`, and its scope is the entire
+approved PR body at the observed revision. Its revision binds the PR node ID, body
+SHA256 and body-edit signals. No diff, branch, head code or PR attachment is fetched,
+checked out, imported or executed. Context and executable code remain the fixed
+trusted Ops runtime, independent of the evaluated PR.
+
+PR plan cases use `pull-request`; result identity adds `targetKind: 'pull-request'`.
+The existing `issue` and `issueNodeId` identity fields name the PR's conversation number
+and subject node ID for this kind. Legacy Issue inputs and identities retain their
+shape. Claim reactions, result creation and exact readback use the existing GitHub
+Issue-comment transport on that same PR conversation. Body/edit drift checkpoints,
+bot-only raw-201 claims, UNKNOWN holds, result bounds, six catalog questions and all
+204 lifetime reservations remain unchanged. PR attempts share existing Ops slots;
+there is no additional budget or retry route.
+
+Source tests are synthetic only. Completion requires first+next real Jev evaluations
+on the actual admitted PR, same-PR result creation, and Root's independent exact
+identity/author/body/input/runtime/model/accounting readback. Source/CI acceptance
+does not prove activation, semantic usefulness, merge acceptance or whole-loop closure.
+
+The source workflow job requires Org Ops Issue483 or envs Issue52 with no PR marker,
+or Org Ops PR511 with a PR marker, and body exactly `/jev-evaluate`.
+The observed command author must be reviewed
 `roccho-dev`; Organization names are never compared with a person's login.
 Other Issues/repositories stop. The allowlist is not inferred from a public comment.
 
@@ -112,7 +169,7 @@ range is reviewed, which is new authority, not a reset. Every `issue_comment` ru
 or failed ones, consumes a run number, so ranges can be wasted and exhausted; exhaustion needs a new
 reviewed range, not a per-comment grant. Reruns (`run_attempt > 1`) never spend.
 
-`plan`: settings -> event (Issue, not PR) -> run identity and range -> workflow `state` is `active`
+`plan`: settings -> exact typed Issue/PR event -> run identity and range -> workflow `state` is `active`
 (`GET actions/workflows/{id}`) -> exact snapshot -> admission -> prior -> claim -> re-read -> active.
 - Snapshot: GraphQL Issue `id number body lastEditedAt includesCreatedEdit userContentEdits` and the
   command comment `id fullDatabaseId author body lastEditedAt includesCreatedEdit userContentEdits`
@@ -123,7 +180,8 @@ reviewed range, not a per-comment grant. Reruns (`run_attempt > 1`) never spend.
   body; the subject is the existing `log-entry` record with the exact full Issue body, ref
   `https://github.com/<repo>/issues/<n>` and revision = node id, body SHA-256 and the body-edit signals
   (no generic `updatedAt`, so unrelated activity is not a revision; not a proof of complete edit
-  history); context records are the declared repository files at the run's `github.sha`; checks are
+  history); context records are the declared repository files at the fixed `JEV_EXECUTION_SOURCE`,
+  not the originating run's `github.sha`; checks are
   `allowedChecks`. The existing `preparePlan` validates catalog IDs and caps. The identity binds Issue,
   subject revision, command comment, author, source SHA, settings digest, run and plan digest.
 - Prior/claim: only `github-actions[bot]`'s `eyes` is a claim (known other logins ignored,

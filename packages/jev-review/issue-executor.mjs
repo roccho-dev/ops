@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { validateActionsConfig, admitIssueCommand, selectRunRange, deriveIssuePrior, nextIssueEffect,
+import { validateActionsConfig, selectActionsTarget, admitIssueCommand, selectRunRange, deriveIssuePrior, nextIssueEffect,
   composeResultComment, verifyResultReadback } from './github-comment.mjs';
 
 // GitHub-hosted Actions adapter for one trusted literal command (ops#483). `plan` and `post` run without the Jev
@@ -14,6 +14,8 @@ const PRE_PROVIDER_CAUSES = ['INVALID_ENTRY_ARGS', 'ENTRY_INPUT_TOO_LARGE', 'INV
 // Subject: body plus body-edit signals only (no generic updatedAt).
 export const ISSUE_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)'
   + '{issue(number:$number){id number body lastEditedAt includesCreatedEdit userContentEdits{totalCount}}}}';
+export const PULL_REQUEST_QUERY = 'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)'
+  + '{pullRequest(number:$number){id number body lastEditedAt includesCreatedEdit userContentEdits{totalCount}}}}';
 // IssueComment.databaseId is Int (signed 32-bit) and cannot represent real REST comment IDs; fullDatabaseId is
 // BigInt, whose wire encoding is a string. Only fullDatabaseId is requested.
 export const COMMENT_QUERY = 'query($id:ID!){node(id:$id){... on IssueComment{id fullDatabaseId author{login} body '
@@ -37,14 +39,14 @@ const editsTotal = (x) => (keysAre(x.userContentEdits, ['totalCount']) ? x.userC
 
 // Observe the exact Issue subject and the command comment (with its claim reactions). Any error, missing or
 // unrequested field, or an identity that differs from the event is undefined: the caller holds, no guessing.
-async function observe(deps, repository, issueNumber, commentNodeId, commentId) {
+async function observe(deps, repository, issueNumber, commentNodeId, commentId, targetKind = 'issue') {
   const [owner, name] = repository.split('/');
   let iv, cv;
   try {
-    iv = await deps.graphql(ISSUE_QUERY, { owner, name, number: issueNumber });
+    iv = await deps.graphql(targetKind === 'pull-request' ? PULL_REQUEST_QUERY : ISSUE_QUERY, { owner, name, number: issueNumber });
     cv = await deps.graphql(COMMENT_QUERY, { id: commentNodeId });
   } catch { return undefined; }
-  const i = iv?.data?.repository?.issue, c = cv?.data?.node;
+  const i = iv?.data?.repository?.[targetKind === 'pull-request' ? 'pullRequest' : 'issue'], c = cv?.data?.node;
   if (!iv || iv.errors !== undefined || !cv || cv.errors !== undefined
     || !keysAre(i, ['id', 'number', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits'])
     || !keysAre(c, ['id', 'fullDatabaseId', 'author', 'body', 'lastEditedAt', 'includesCreatedEdit', 'userContentEdits', 'reactions'])
@@ -94,10 +96,10 @@ export async function planIssueCommand(ctx, configValue, deps) {
   const e = ctx?.event;
   if (!e?.comment || !positive(e.comment.id) || typeof e.comment.node_id !== 'string' || typeof e.comment.body !== 'string'
     || !positive(e.issue?.number) || e.repository?.full_name !== ctx.repository || typeof e.repository?.owner?.login !== 'string') return end('NONE', 'EVENT_UNKNOWN');
-  if (e.issue.pull_request !== undefined && e.issue.pull_request !== null) return end('NONE', 'NOT_AN_ISSUE');
+  const targetKind = e.issue.pull_request !== undefined && e.issue.pull_request !== null ? 'pull-request' : 'issue';
   if (e.repository.owner.type !== 'Organization') return end('NONE', 'ORG_REQUIRED');
   if (config.provider === null || config.targets.length === 0) return end('NONE', 'PROVIDER_NOT_CONFIGURED');
-  const target = config.targets.find((t) => t.repository === ctx.repository && t.issue === e.issue.number);
+  const target = selectActionsTarget(config, ctx.repository, e.issue.number, targetKind);
   if (!target || String(e.repository.id) !== target.repositoryId
     || e.repository.owner.login !== config.provider.receipt.target.organization
     || String(e.repository.owner.id) !== config.provider.receipt.target.organization_id) return end('NONE', 'TARGET_NOT_AUTHORIZED');
@@ -114,14 +116,14 @@ export async function planIssueCommand(ctx, configValue, deps) {
   if (!selected.range) return end('NONE', selected.cause);
   if (await workflowState(deps, ctx.repository, run.workflowId) !== 'active') return end('NONE', 'WORKFLOW_NOT_ACTIVE');
 
-  const seen = await observe(deps, ctx.repository, e.issue.number, e.comment.node_id, e.comment.id);
+  const seen = await observe(deps, ctx.repository, e.issue.number, e.comment.node_id, e.comment.id, targetKind);
   if (!seen) return end('NONE', 'SNAPSHOT_UNKNOWN');
   let context;
   try { context = config.context.map((c) => ({ role: c.role, path: c.path, content: deps.readFile(c.path) })); }
   catch { return end('NONE', 'CONTEXT_UNKNOWN'); }
   const admission = { repository: ctx.repository, owner: e.repository.owner.login, sha: ctx.executionSource, eventBody: e.comment.body,
     run: { id: run.id, number: run.number, attempt: run.attempt, workflowId: run.workflowId, path: run.path },
-    issue: seen.issue, command: seen.command, context };
+    issue: seen.issue, command: seen.command, context, ...(targetKind === 'pull-request' ? { targetKind } : {}) };
   const request = await admitIssueCommand(admission, config);
   if (request.status !== 'ADMITTED') return end('NONE', request.cause);
   if (seen.claims === null) return end('NONE', 'CLAIMS_INCOMPLETE');
@@ -138,7 +140,7 @@ export async function planIssueCommand(ctx, configValue, deps) {
   }
   receipt.claimed = true;
   // Checkpoint before any paid call: same subject, same command, exactly our claim, workflow still active.
-  const again = await observe(deps, ctx.repository, e.issue.number, e.comment.node_id, e.comment.id);
+  const again = await observe(deps, ctx.repository, e.issue.number, e.comment.node_id, e.comment.id, targetKind);
   if (!again) return end('NONE', 'REREAD_UNKNOWN');
   if (!same(again.issue, seen.issue) || !same(again.command, seen.command) || again.claims === null || again.claims.includes(null)
     || again.claims.filter((x) => x === EXECUTOR_LOGIN).length !== 1) return end('NONE', 'DRIFT_BEFORE_CALL');
@@ -174,7 +176,7 @@ export async function postIssueCommand(stateValue, entryOut, configValue, deps) 
     && owner.value.cases.every((x) => x.result.records.every((r) => ['OBSERVED', 'NOT_SELECTED'].includes(r.status)));
 
   if (await workflowState(deps, adm.repository, adm.run.workflowId) !== 'active') return end('WITHHELD', 'WORKFLOW_NOT_ACTIVE');
-  const now = await observe(deps, adm.repository, adm.issue.number, adm.command.nodeId, adm.command.databaseId);
+  const now = await observe(deps, adm.repository, adm.issue.number, adm.command.nodeId, adm.command.databaseId, adm.targetKind);
   if (!now) return end('WITHHELD', 'REREAD_UNKNOWN');
   if (!same(now.issue, adm.issue) || !same(now.command, adm.command)) return end('WITHHELD', 'DRIFT_AFTER_CALL');
   const post = await call(deps, 'POST', `repos/${adm.repository}/issues/${adm.issue.number}/comments`, { body });
