@@ -68,6 +68,47 @@ UNVERIFIED until actual runs; fixtures do not prove paid-call or Issue completio
 
 ## Actions issue command
 
+### PR-body support and inactive admission
+
+The adapter also supports one exact pull-request-body target in a repository already
+admitted for an Issue. Its closed trusted target shape is
+`{repository, repositoryId, pullRequest}`; the existing Issue target shape remains
+`{repository, repositoryId, issue}`. Mixed shapes, duplicate repository/type entries,
+multiple PR targets, conflicting repository IDs and PR-only repositories are refused.
+This is not arbitrary repository, Issue or PR discovery or admission.
+
+The shipped settings still contain only Ops483 and envs52, and the workflow still
+rejects all PR comments. PR support is therefore inactive. No PR number is reserved
+or guessed. Root must first publish a meaningful change PR, verify its actual identity,
+and supply that identity for a correction on the same branch. A later accepted correction
+may bind only that PR and update the event guard and immutable trusted runtime pin.
+Source support, public publication, merge authority and separate live activation are
+distinct; this source slice grants none of the latter operations.
+
+For a configured PR, the existing `issue_comment` event's PR marker selects a fixed
+GraphQL `pullRequest(number:...)` body query, never an event-supplied URL or ref.
+Admission and run-local re-admission require the exact trusted target and literal
+unedited command. The subject remains a `log-entry` containing the entire observed
+PR body; its ref is `https://github.com/<repo>/pull/<n>`, and its scope is the entire
+approved PR body at the observed revision. Its revision binds the PR node ID, body
+SHA256 and body-edit signals. No diff, branch, head code or PR attachment is fetched,
+checked out, imported or executed. Context and executable code remain the fixed
+trusted Ops runtime, independent of the evaluated PR.
+
+PR plan cases use `pull-request`; result identity adds `targetKind: 'pull-request'`.
+The existing `issue` and `issueNodeId` identity fields name the PR's conversation number
+and subject node ID for this kind. Legacy Issue inputs and identities retain their
+shape. Claim reactions, result creation and exact readback use the existing GitHub
+Issue-comment transport on that same PR conversation. Body/edit drift checkpoints,
+bot-only raw-201 claims, UNKNOWN holds, result bounds, six catalog questions and all
+204 lifetime reservations remain unchanged. PR attempts share existing Ops slots;
+there is no additional budget or retry route.
+
+Source tests are synthetic only. Completion requires first+next real Jev evaluations
+on the actual admitted PR, same-PR result creation, and Root's independent exact
+identity/author/body/input/runtime/model/accounting readback. Source/CI acceptance
+does not prove activation, semantic usefulness, merge acceptance or whole-loop closure.
+
 The workflow job requires Org Ops Issue483 or envs Issue52, body exactly
 `/jev-evaluate`, and no pull request. The observed command author must be reviewed
 `roccho-dev`; Organization names are never compared with a person's login.
@@ -123,7 +164,8 @@ reviewed range, not a per-comment grant. Reruns (`run_attempt > 1`) never spend.
   body; the subject is the existing `log-entry` record with the exact full Issue body, ref
   `https://github.com/<repo>/issues/<n>` and revision = node id, body SHA-256 and the body-edit signals
   (no generic `updatedAt`, so unrelated activity is not a revision; not a proof of complete edit
-  history); context records are the declared repository files at the run's `github.sha`; checks are
+  history); context records are the declared repository files at the fixed `JEV_EXECUTION_SOURCE`,
+  not the originating run's `github.sha`; checks are
   `allowedChecks`. The existing `preparePlan` validates catalog IDs and caps. The identity binds Issue,
   subject revision, command comment, author, source SHA, settings digest, run and plan digest.
 - Prior/claim: only `github-actions[bot]`'s `eyes` is a claim (known other logins ignored,

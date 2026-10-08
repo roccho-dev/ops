@@ -151,13 +151,22 @@ export function validateActionsConfig(value) {
     || !Array.isArray(config.context) || !config.context.every((c) => exact(c, ['role', 'path']) && text(c.role) && REPO_PATH.test(c.path))
     || new Set(config.context.map((c) => JSON.stringify([c.role, c.path]))).size !== config.context.length
     || !providerValid(config.provider)
-    || !Array.isArray(config.targets) || !config.targets.every((t) => exact(t, ['repository', 'repositoryId', 'issue'])
-      && REPOSITORY.test(t.repository) && databaseId(t.repositoryId) && positive(t.issue))
-    || new Set(config.targets.map((t) => t.repository)).size !== config.targets.length
-    || new Set(config.targets.map((t) => t.repositoryId)).size !== config.targets.length
+    || !Array.isArray(config.targets) || !config.targets.every((target) =>
+      (exact(target, ['repository', 'repositoryId', 'issue']) && positive(target.issue)
+        || exact(target, ['repository', 'repositoryId', 'pullRequest']) && positive(target.pullRequest))
+      && REPOSITORY.test(target.repository) && databaseId(target.repositoryId))
+    || new Set(config.targets.map((target) => JSON.stringify([target.repository, Object.hasOwn(target, 'pullRequest')]))).size !== config.targets.length
+    || config.targets.filter((target) => Object.hasOwn(target, 'pullRequest')).length > 1
     || !Array.isArray(ranges) || !ranges.every((r) => exact(r, RANGE_KEYS) && REPOSITORY.test(r.repository) && positive(r.workflowId)
       && WORKFLOW_PATH.test(r.path) && positive(r.first) && positive(r.last) && r.first <= r.last
       && positive(r.reservedCallsPerRun) && r.reservedCallsPerRun <= ENTRY_LIMITS.maxCalls)) throw new Error('INVALID_ACTIONS_CONFIG');
+  for (const target of config.targets) {
+    if (Object.hasOwn(target, 'pullRequest') && !config.targets.some((candidate) => candidate.repository === target.repository
+      && candidate.repositoryId === target.repositoryId && Object.hasOwn(candidate, 'issue'))) throw new Error('INVALID_ACTIONS_CONFIG');
+    if (config.targets.some((candidate) => (candidate.repository === target.repository) !== (candidate.repositoryId === target.repositoryId))) {
+      throw new Error('INVALID_ACTIONS_CONFIG');
+    }
+  }
   // Reservations never overlap for one native workflow identity, so a run number is admitted by at most one.
   for (const a of ranges) for (const b of ranges) {
     if (a !== b && a.repository === b.repository && a.workflowId === b.workflowId && a.first <= b.last && b.first <= a.last) throw new Error('INVALID_ACTIONS_CONFIG');
@@ -168,6 +177,12 @@ export function validateActionsConfig(value) {
     return i < 0 || target.repository_ids[i] !== t.repositoryId;
   })) throw new Error('INVALID_ACTIONS_CONFIG');
   return freezeDeep(config);
+}
+
+export function selectActionsTarget(config, repository, number, targetKind = 'issue') {
+  if (!['issue', 'pull-request'].includes(targetKind)) return undefined;
+  const field = targetKind === 'pull-request' ? 'pullRequest' : 'issue';
+  return config.targets.find((target) => target.repository === repository && target[field] === number);
 }
 
 // Hard aggregate bound on attempted consumer provider calls: a provider call is planned only for a
@@ -205,7 +220,9 @@ export async function admitIssueCommand(inputValue, configValue) {
   try { config = validateActionsConfig(configValue); } catch (error) { return reject(error.message); }
   try {
     input = snapshotJson(inputValue);
-    if (!exact(input, ['repository', 'owner', 'sha', 'eventBody', 'run', 'issue', 'command', 'context'])
+    if (!exact(input, ['repository', 'owner', 'sha', 'eventBody', 'run', 'issue', 'command', 'context',
+      ...(Object.hasOwn(input, 'targetKind') ? ['targetKind'] : [])])
+      || (Object.hasOwn(input, 'targetKind') && input.targetKind !== 'pull-request')
       || !REPOSITORY.test(input.repository) || !text(input.owner) || !sha(input.sha) || !text(input.eventBody)
       || !exact(input.issue, ISSUE_KEYS) || !positive(input.issue.number) || !text(input.issue.nodeId)
       || typeof input.issue.body !== 'string' || !editSignals(input.issue)
@@ -216,24 +233,30 @@ export async function admitIssueCommand(inputValue, configValue) {
         && c.path === config.context[i].path && typeof c.content === 'string')) return reject('INPUT_UNKNOWN');
   } catch { return reject('INPUT_UNKNOWN'); }
   const { issue, command } = input;
+  const targetKind = input.targetKind ?? 'issue';
+  const pullRequest = targetKind === 'pull-request';
+  if (!selectActionsTarget(config, input.repository, issue.number, targetKind)) return reject('TARGET_NOT_AUTHORIZED');
   if (!config.trustedCallers.includes(command.author)) return reject('COMMAND_NOT_AUTHORIZED');
+  if (input.eventBody !== '/jev-evaluate') return reject('NOT_A_REQUEST');
   if (command.body !== input.eventBody) return reject('COMMAND_DRIFT');
   if (command.lastEditedAt !== null || command.includesCreatedEdit || command.userContentEditsTotal !== 0) return reject('EDITED');
   const selected = selectRunRange(config, { ...input.run, repository: input.repository });
   if (!selected.range) return reject(selected.cause);
   const revision = subjectRevision(issue);
   const semlintInput = { schema: 'ops.semlint.input.v1',
-    subject: { kind: 'log-entry', ref: `https://github.com/${input.repository}/issues/${issue.number}`, revision,
-      scope: config.subjectScope, content: issue.body, sha256: sha256(issue.body) },
+    subject: { kind: 'log-entry', ref: `https://github.com/${input.repository}/${pullRequest ? 'pull' : 'issues'}/${issue.number}`, revision,
+      scope: pullRequest ? 'entire body of the approved pull request at the observed revision' : config.subjectScope,
+      content: issue.body, sha256: sha256(issue.body) },
     context: input.context.map((c) => ({ role: c.role, ref: `${c.path}@${input.sha}`, revision: input.sha, content: c.content, sha256: sha256(c.content) })),
     checks: [...config.allowedChecks] };
   let prepared;
   try {
-    prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: [{ id: 'issue', input: semlintInput }] },
+    prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: [{ id: targetKind, input: semlintInput }] },
       { ...config.limits, maxCalls: selected.callsPerRun });
   } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
   return finishRequest(prepared, (planDigest) => ({
     repository: input.repository, issue: issue.number, issueNodeId: issue.nodeId, subjectRevision: revision,
+    ...(pullRequest ? { targetKind } : {}),
     commentId: command.databaseId, nodeId: command.nodeId, author: command.author, bodyDigest: digest(command.body),
     observation: COMMAND_OBSERVATION, executionSource: input.sha, configDigest: digest(config),
     run: { id: input.run.id, number: input.run.number, attempt: input.run.attempt, workflowId: input.run.workflowId },
