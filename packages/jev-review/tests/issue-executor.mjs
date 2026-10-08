@@ -9,7 +9,7 @@ import { semlint } from '../semlint.mjs';
 import { ENTRY_LIMITS, preparePlan, executeOwnerPlan } from '../semlint-entry.mjs';
 import { RESULT_PREFIX, validateActionsConfig, selectRunRange, subjectRevision, admitIssueCommand } from '../github-comment.mjs';
 import { EXECUTOR_LOGIN, CLAIM, ISSUE_QUERY, PULL_REQUEST_QUERY, COMMENT_QUERY, PRE_PROVIDER_CAUSES, planIssueCommand, postIssueCommand,
-  classifyOwnerOutput, decodeFullDatabaseId } from '../issue-executor.mjs';
+  classifyOwnerOutput, decodeFullDatabaseId, claimResponseDiagnostics, githubDeps } from '../issue-executor.mjs';
 
 // Repository policy is an explicit producer input, never an ambient checkout fallback in a provided runtime.
 const sourceArgs = process.argv.slice(2);
@@ -158,6 +158,117 @@ const zero = { claim: 0, fetch: 0, post: 0 };
 const outcome = (r) => [r.post.outcome, r.post.cause];
 let scenarios = 0;
 const check = async (name, fn) => { await fn(); scenarios++; };
+
+await check('claim-response-allowlist', async () => {
+  const empty = { httpStatus: null, requestId: null, acceptedPermissions: null, errorCode: null,
+    reactionId: null, reactionLogin: null, reactionContent: null };
+  assert.deepEqual(claimResponseDiagnostics(null), empty);
+  const secret = 'SYNTHETIC_PRIVATE_SENTINEL_DO_NOT_EMIT';
+  for (const malformed of [secret, 'x'.repeat(1000), '\n', {}, [], 42, null]) {
+    const evidence = claimResponseDiagnostics({ status: malformed, metadata: { requestId: malformed,
+      acceptedPermissions: malformed, authorization: secret }, json: { message: malformed, body: secret,
+      token: secret, id: malformed, user: { login: malformed }, content: malformed } });
+    assert.deepEqual(evidence, { ...empty,
+      reactionId: malformed === 42 ? 42 : null });
+    assert.equal(JSON.stringify(evidence).includes(secret), false);
+  }
+  for (const invalid of ['issues=admin', 'contents=write', 'issues=write; authorization=write',
+    'issues=write\n', 'issues=write;pull_requests=write;'.repeat(10)]) {
+    assert.equal(claimResponseDiagnostics({ metadata: { acceptedPermissions: invalid } }).acceptedPermissions, null);
+  }
+  for (const invalid of ['ABCD:1:2', 'ABCD:1:2:3\n', 'abcd:1:2:3', 'ABCD:' + 'F'.repeat(97)]) {
+    assert.equal(claimResponseDiagnostics({ metadata: { requestId: invalid } }).requestId, null);
+  }
+  assert.equal(claimResponseDiagnostics({ json: { message: '__proto__' } }).errorCode, null);
+  assert.equal(claimResponseDiagnostics({ json: { message: 'Not Found: ' + secret } }).errorCode, null);
+  for (const invalid of ['github-actions[bot]\n', 'owner/token', 'a'.repeat(45), secret]) {
+    assert.equal(claimResponseDiagnostics({ json: { user: { login: invalid } } }).reactionLogin, null);
+  }
+  for (const invalid of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '99']) {
+    assert.equal(claimResponseDiagnostics({ json: { id: invalid } }).reactionId, null);
+  }
+  assert.deepEqual(claimResponseDiagnostics({ status: 403, metadata: { requestId: 'ABCD:1:2345:6789:ABCD',
+    acceptedPermissions: 'issues=write;pull_requests=write' }, json: { message: 'Resource not accessible by integration' } }),
+  { ...empty, httpStatus: 403, requestId: 'ABCD:1:2345:6789:ABCD', acceptedPermissions: 'issues=write;pull_requests=write',
+    errorCode: 'RESOURCE_NOT_ACCESSIBLE_BY_INTEGRATION' });
+});
+
+await check('claim-response-receipts-preserve-effects', async () => {
+  for (const [reply, expected] of [
+    [{ status: 403, json: { message: 'Resource not accessible by integration' } }, ['UNKNOWN', 'CLAIM_NOT_OURS']],
+    [{ status: 404, json: { message: 'Not Found' } }, ['UNKNOWN', 'CLAIM_NOT_OURS']],
+    [{ status: 422, json: { message: 'Validation Failed' } }, ['UNKNOWN', 'CLAIM_NOT_OURS']],
+    [{ status: 201, json: { id: 99, user: { login: 'another-bot[bot]' }, content: 'eyes' } }, ['UNKNOWN', 'CLAIM_NOT_OURS']],
+    [{ status: 201, json: { id: 99, user: { login: EXECUTOR_LOGIN }, content: 'heart' } }, ['UNKNOWN', 'CLAIM_NOT_OURS']],
+    [{ status: 201, json: null }, ['UNKNOWN', 'CLAIM_NOT_OURS']],
+    [{ status: 200, json: { user: { login: EXECUTOR_LOGIN }, content: 'eyes' } }, ['NONE', 'ALREADY_CLAIMED']],
+    [new Error('SYNTHETIC_PRIVATE_SENTINEL_DO_NOT_EMIT'), ['UNKNOWN', 'CLAIM_UNKNOWN']],
+  ]) {
+    const fixture = world();
+    fixture.hooks.afterClaim = () => reply;
+    const result = await fullRun(fixture, fixture.addComment());
+    assert.deepEqual(outcome(result), expected);
+    assert.deepEqual(effects(fixture), { claim: 1, fetch: 0, post: 0 });
+    assert.equal(result.planBody, undefined);
+    assert.deepEqual(result.plan.claimResponse, claimResponseDiagnostics(reply instanceof Error ? null : reply));
+    assert.deepEqual(result.post.claimResponse, result.plan.claimResponse);
+    assert.equal(JSON.stringify(result).includes('SYNTHETIC_PRIVATE_SENTINEL_DO_NOT_EMIT'), false);
+  }
+  const fixture = world();
+  fixture.hooks.afterClaim = (_fixture, _comment, reply) => ({ ...reply, json: { ...reply.json, id: 99 },
+    metadata: { requestId: 'ABCD:1:2345:6789:ABCD', acceptedPermissions: 'issues=write' } });
+  const result = await fullRun(fixture, fixture.addComment());
+  assert.deepEqual(outcome(result), ['APPENDED', 'READBACK_EXACT']);
+  assert.deepEqual(effects(fixture), { claim: 1, fetch: 1, post: 1 });
+  assert.equal(result.plan.claimResponse.reactionId, 99);
+  assert.equal(result.plan.claimResponse.reactionLogin, EXECUTOR_LOGIN);
+  assert.equal(result.plan.claimResponse.reactionContent, 'eyes');
+  assert.equal(JSON.stringify(result.planBody).includes('claimResponse'), false);
+});
+
+await check('native-claim-response-metadata-without-extra-request', async () => {
+  const originalFetch = globalThis.fetch;
+  const secret = 'SYNTHETIC_PRIVATE_SENTINEL_DO_NOT_EMIT';
+  let requests = 0;
+  const deps = githubDeps({ token: secret, apiUrl: 'https://fixture.invalid', graphqlUrl: 'https://fixture.invalid/graphql', root: '/' });
+  try {
+    for (const [status, body, headers] of [
+      [403, JSON.stringify({ message: 'Resource not accessible by integration', secret }),
+        { 'x-github-request-id': 'ABCD:1:2345:6789:ABCD', 'x-accepted-github-permissions': 'issues=write, pull_requests=write', authorization: secret }],
+      [201, JSON.stringify({ id: 99, user: { login: EXECUTOR_LOGIN }, content: 'eyes', secret }), {}],
+      [422, 'not json ' + secret, { 'x-github-request-id': secret, 'x-accepted-github-permissions': secret }],
+    ]) {
+      globalThis.fetch = async (url, init) => {
+        requests++;
+        assert.equal(url, 'https://fixture.invalid/repos/fixture/repo/issues/comments/1/reactions');
+        assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'error');
+        assert.equal(init.headers.authorization, 'Bearer ' + secret);
+        assert.deepEqual(JSON.parse(init.body), { content: 'eyes' });
+        return new Response(body, { status, headers });
+      };
+      const response = await deps.github('POST', 'repos/fixture/repo/issues/comments/1/reactions', { content: 'eyes' });
+      const evidence = claimResponseDiagnostics(response);
+      assert.equal(evidence.httpStatus, status);
+      assert.equal(JSON.stringify(evidence).includes(secret), false);
+      assert.deepEqual(Object.keys(response.metadata).sort(), ['acceptedPermissions', 'requestId']);
+      if (status === 403) {
+        assert.equal(evidence.errorCode, 'RESOURCE_NOT_ACCESSIBLE_BY_INTEGRATION');
+        assert.equal(evidence.acceptedPermissions, 'issues=write, pull_requests=write');
+      }
+      if (status === 201) assert.equal(evidence.reactionLogin, EXECUTOR_LOGIN);
+      if (status === 422) assert.deepEqual(response.metadata, { requestId: null, acceptedPermissions: null });
+    }
+    assert.equal(requests, 3);
+    globalThis.fetch = async () => { requests++; return new Response('{}', { status: 200,
+      headers: { 'x-github-request-id': 'ABCD:1:2345:6789:ABCD' } }); };
+    const response = await deps.github('GET', 'repos/fixture/repo/issues/comments/1/reactions');
+    assert.equal(Object.hasOwn(response, 'metadata'), false);
+    assert.equal(requests, 4);
+    globalThis.fetch = async () => { requests++; throw new Error(secret); };
+    await assert.rejects(deps.github('POST', 'repos/fixture/repo/issues/comments/1/reactions', { content: 'eyes' }));
+    assert.equal(requests, 5);
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 // Normal path: a first command and a later eligible command, with no operator action in between.
 await check('normal-first-and-later', async () => {
@@ -903,8 +1014,9 @@ for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other
     }
   }
 }
-assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '46a20f607d1a29caac377401277c2b47d5119802');
-assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '46a20f607d1a29caac377401277c2b47d5119802');
+assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
+assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
+assert.equal(workflow.match(/\npermissions:\n([\s\S]*?)\njobs:/)[1], '  actions: read\n  contents: read\n  issues: write\n');
 const intent = jsonl('ci.intent.v1.jsonl').filter((x) => x.path === WF_PATH);
 const boundary = jsonl('contracts/secret-effect-boundary.v1.jsonl').filter((x) => x.path === WF_PATH);
 assert.equal(intent.length, 1); assert.deepEqual(intent[0].dispatch, ['issue_comment', 'workflow_call']);
