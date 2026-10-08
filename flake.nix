@@ -71,6 +71,18 @@
           hayamimi-web = nixpkgs.legacyPackages.${system}.callPackage ./packages/hayamimi-web { };
           jev = nixpkgs.legacyPackages.${system}.callPackage ./packages/jev/default.nix { };
           semcmp = nixpkgs.legacyPackages.${system}.callPackage ./packages/semcmp/default.nix { };
+          mail-routing-tofu =
+            let
+              envsSource = builtins.fetchTree {
+                type = "github";
+                owner = "NixOS";
+                repo = "nixpkgs";
+                rev = "f9948418dc8628ac02b6d6337e191ade9429d59d";
+                narHash = "sha256-q1a/1H/Z5DJ9PRIueWDtoQbfhO2zAwni9wPsKCa1mc0=";
+              };
+              envsPkgs = import envsSource { inherit system; };
+            in
+            envsPkgs.opentofu.withPlugins (p: [ p.cloudflare_cloudflare ]);
           jev-worker-esm = packages.${system}.jev.workerESM;
           gosh = nixpkgs.legacyPackages.${system}.buildGoModule {
             pname = "gosh";
@@ -149,6 +161,33 @@
           ops-refs-vault = existing.ops-refs-vault;
           ops-cdp-core = existing.ops-cdp-core;
           provider-effect-runtime = packages.${system}.provider-effect-runtime.check;
+          mail-routing-native =
+            let
+              pkgs = nixpkgs.legacyPackages.${system};
+              tofu = packages.${system}.mail-routing-tofu;
+            in
+            pkgs.runCommand "mail-m0-check" { nativeBuildInputs = [ tofu ]; } ''
+              set -eu
+              export HOME="$TMPDIR/mail-home" XDG_CACHE_HOME="$TMPDIR/mail-cache"
+              export HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9
+              mkdir -p "$HOME" "$XDG_CACHE_HOME" root
+              cp ${./providers/mail-routing/main.tf} root/main.tf
+              cp ${./providers/mail-routing/.terraform.lock.hcl} root/.terraform.lock.hcl
+              cp ${./providers/mail-routing/safety.tftest.hcl} root/safety.tftest.hcl
+              cd root
+              tofu fmt -check -diff main.tf
+              tofu fmt -check -diff safety.tftest.hcl
+              tofu init -backend=false -lockfile=readonly -input=false -no-color
+              tofu validate -no-color
+              export TF_ENCRYPTION="$(printf '%s\n' \
+                'key_provider "pbkdf2" "fixture" { passphrase = "0000000000000000000000000000000000000000000000000000000000000000" }' \
+                'method "aes_gcm" "fixture" { keys = key_provider.pbkdf2.fixture }' \
+                'state { method = method.aes_gcm.fixture }' \
+                'plan { method = method.aes_gcm.fixture }')"
+              tofu test -no-color
+              mkdir -p "$out"
+              printf "M0 readonly lock/schema/native mocked tests PASS, no provider effect\n" > "$out/proof"
+            '';
           voice-ui-target-runtime = packages.${system}.voice-ui-target-runtime.boundaryCheck;
           jev =
             let
