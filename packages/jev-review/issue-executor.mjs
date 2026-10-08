@@ -27,6 +27,30 @@ const oneLine = (s) => (typeof s === 'string' && s.endsWith('\n') && s.indexOf('
 const positive = (x) => Number.isSafeInteger(x) && x > 0;
 const call = async (deps, method, route, body) => { try { return await deps.github(method, route, body); } catch { return null; } };
 
+export function claimResponseDiagnostics(response) {
+  const permitted = (value, limit, pattern) => typeof value === 'string' && value.length <= limit
+    && !/[\r\n]/.test(value) && pattern.test(value) ? value : null;
+  const errors = {
+    'Resource not accessible by integration': 'RESOURCE_NOT_ACCESSIBLE_BY_INTEGRATION',
+    'Resource not accessible by personal access token': 'RESOURCE_NOT_ACCESSIBLE_BY_PERSONAL_ACCESS_TOKEN',
+    'Not Found': 'NOT_FOUND',
+    'Bad credentials': 'BAD_CREDENTIALS',
+    'Validation Failed': 'VALIDATION_FAILED',
+  };
+  return {
+    httpStatus: Number.isInteger(response?.status) && response.status >= 100 && response.status <= 599 ? response.status : null,
+    requestId: permitted(response?.metadata?.requestId, 96, /^[0-9A-F]{4}(?::[0-9A-F]{1,16}){3,5}$/),
+    acceptedPermissions: permitted(response?.metadata?.acceptedPermissions, 128,
+      /^(?:issues|pull_requests)=(?:read|write)(?:[;,] ?(?:issues|pull_requests)=(?:read|write))*$/),
+    errorCode: typeof response?.json?.message === 'string' && Object.hasOwn(errors, response.json.message)
+      ? errors[response.json.message] : null,
+    reactionId: positive(response?.json?.id) ? response.json.id : null,
+    reactionLogin: permitted(response?.json?.user?.login, 44, /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?$/),
+    reactionContent: ['+1', '-1', 'laugh', 'confused', 'heart', 'hooray', 'rocket', 'eyes'].includes(response?.json?.content)
+      ? response.json.content : null,
+  };
+}
+
 // BigInt wire string -> exact positive safe integer, or null. No rounding, opaque node-id decoding or fallback.
 export function decodeFullDatabaseId(value) {
   if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) return null;
@@ -134,6 +158,7 @@ export async function planIssueCommand(ctx, configValue, deps) {
 
   // Only a raw 201 for this principal and kind proceeds; 200 means another run already claimed this command.
   const claim = await call(deps, 'POST', `repos/${ctx.repository}/issues/comments/${e.comment.id}/reactions`, { content: CLAIM.rest });
+  receipt.claimResponse = claimResponseDiagnostics(claim);
   if (claim?.status === 200) return end('NONE', 'ALREADY_CLAIMED');
   if (!claim || claim.status !== 201 || claim.json?.user?.login !== EXECUTOR_LOGIN || claim.json?.content !== CLAIM.rest) {
     return end('UNKNOWN', claim ? 'CLAIM_NOT_OURS' : 'CLAIM_UNKNOWN', { claimed: 'UNKNOWN' });
@@ -195,15 +220,24 @@ export async function postIssueCommand(stateValue, entryOut, configValue, deps) 
 export function githubDeps({ token, apiUrl, graphqlUrl, root }) {
   const headers = (body) => ({ authorization: `Bearer ${token}`, accept: 'application/vnd.github+json',
     'x-github-api-version': '2022-11-28', ...(body === undefined ? {} : { 'content-type': 'application/json' }) });
-  const request = async (url, method, body) => {
+  const request = async (url, method, body, captureClaim = false) => {
     const res = await fetch(url, { method, headers: headers(body), redirect: 'error', signal: AbortSignal.timeout(30000),
       body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await res.text();
-    return { status: res.status, json: text ? json(text) : null };
+    const response = { status: res.status, json: text ? json(text) : null };
+    if (captureClaim) {
+      const evidence = claimResponseDiagnostics({ ...response, metadata: {
+        requestId: res.headers.get('x-github-request-id'),
+        acceptedPermissions: res.headers.get('x-accepted-github-permissions'),
+      } });
+      response.metadata = { requestId: evidence.requestId, acceptedPermissions: evidence.acceptedPermissions };
+    }
+    return response;
   };
   const base = path.resolve(root);
   return {
-    github: (method, route, body) => request(`${apiUrl}/${route}`, method, body),
+    github: (method, route, body) => request(`${apiUrl}/${route}`, method, body,
+      method === 'POST' && /^repos\/[^/]+\/[^/]+\/issues\/comments\/[1-9][0-9]*\/reactions$/.test(route)),
     graphql: async (query, variables) => {
       const res = await request(graphqlUrl, 'POST', { query, variables });
       if (res.status !== 200) throw new Error('GRAPHQL_HTTP');

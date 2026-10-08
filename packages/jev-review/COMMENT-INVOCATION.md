@@ -1,5 +1,32 @@
 # Issue invocation contract
 
+## Claim-response diagnostics (v4 source, not deployed diagnostics)
+
+Under `jev-pr-body-target-20261008-v4`, the existing keyless claim request adds
+`claimResponse` to its plan receipt, also retained by post for an unplanned run. It records only
+HTTP status, strictly validated bounded GitHub request ID and Issues/Pull requests
+accepted-permission expression, a fixed error-code mapping, and validated reaction
+ID/login/content. Missing, malformed, oversized or unrecognized metadata is null;
+arbitrary error text, response snippets, other headers, credentials and subject or
+provider data are never emitted. This is evidence, not an authority or success gate.
+The raw201 + `github-actions[bot]` + eyes gate and all UNKNOWN semantics are unchanged.
+There is no extra request, retry, permission or authentication change.
+
+The first diagnostic source commit retains both caller pins at the published
+`46a20f607d1a29caac377401277c2b47d5119802`: its runtime does not emit these diagnostics.
+Root independently accepts/publishes the correction before a separate correction
+pins its actual immutable trusted runtime. Current-head CI, normal merge/default
+and runtime readback precede any separately authorized new distinct live request.
+No unpublished self-pin, PR HEAD execution or additional evaluation target is allowed.
+
+Command `6054135720`, run `37739337803` attempt1 remain UNKNOWN/CLAIM_NOT_OURS,
+providerCalls0, with the key-bearing step skipped. The original response was not
+retained; neither current empty reactions nor future diagnostics establishes its
+HTTP status or actor. It is never rerun, replayed, deleted or cleaned up. No403 or
+missing PRwrite claim is justified. First+next actual Jev/result/exact-readback
+completion remains pending within the existing 204 reservations and at most two
+actual calls; diagnostics and synthetic checks are not live or semantic-quality proof.
+
 ## Context-budget repair and retained history
 
 The nine configured roles still read the same compact `ISSUE-EVALUATION.md` from
