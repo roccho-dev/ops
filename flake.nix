@@ -152,9 +152,9 @@
           mail-routing-native =
             let
               pkgs = nixpkgs.legacyPackages.${system};
-              // Reuse the exact envs Cloudflare provider source (v5.21.1).
-              // Its nixpkgs identity is fixed by envs' existing flake.lock;
-              // do not silently accept ops' older v5.19.1 provider.
+              # Reuse the exact envs Cloudflare provider source (v5.21.1).
+              # Its nixpkgs identity is fixed by envs' existing flake.lock;
+              # Do not silently accept ops' older v5.19.1 provider.
               envsPkgs = import (builtins.fetchTree {
                 type = "github";
                 owner = "NixOS";

@@ -158,10 +158,10 @@ resource "cloudflare_email_routing_address" "gmail" {
 // rule is API-owned. Never import/take over source=wrangler or an earlier
 // matcher of different ownership. Enabled alone does not prove effective route.
 resource "cloudflare_email_routing_rule" "literal" {
-  count   = var.manage_rule ? 1 : 0
-  zone_id = var.zone_id
-  name    = "M0: one literal mailbox to verified Gmail"
-  enabled = true
+  count    = var.manage_rule ? 1 : 0
+  zone_id  = var.zone_id
+  name     = "M0: one literal mailbox to verified Gmail"
+  enabled  = true
   priority = var.rule_priority
 
   matchers = [{
