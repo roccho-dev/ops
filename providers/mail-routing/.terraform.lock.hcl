@@ -5,7 +5,7 @@
 # OpenTofu's default registry host matches the Nix withPlugins directory.
 provider "registry.opentofu.org/cloudflare/cloudflare" {
   version     = "5.21.1"
-  constraints = "= 5.21.1"
+  constraints = "5.21.1"
   hashes = [
     "zh:049719425b8be43d9d4f0c208217aca0baa22374f061d7ff92f02563490f649c",
     "zh:0a8a3c1b26680b437fe9e7910ca81e532d36f8efacfb14f45690b6a779856993",
