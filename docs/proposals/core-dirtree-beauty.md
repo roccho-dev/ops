@@ -1,8 +1,8 @@
 # core-dirtree-beauty — 期待dirtreeの設計美を継続評価するCore用途（方針案）
 
-> **Status: PROPOSAL ONLY / documentation-only.** 本文は期待する能力と評価契約であり、実装・CI起動・実Jev/LLM呼出し・自動修正・強制・mergeの許可ではない。
+> **Status: PROPOSAL ONLY / documentation-only.** 本文は期待する能力と評価契約であり、実装・CI起動・実Sys1モデル/LLM呼出し・自動修正・強制・mergeの許可ではない。
 >
-> **Relation:** [ops#524 — Jev Core / route・xxx・cli adapter](https://github.com/roccho-org/ops/issues/524) の独立した用途候補。[ops#523](https://github.com/roccho-org/ops/issues/523) が評価項目の発見とRoute選択、[adrs#497](https://github.com/roccho-dev/adrs/issues/497) が上位Goalを所有する。
+> **Relation:** [ops#524 — Sys1 Core / route・xxx・model・cli adapter](https://github.com/roccho-org/ops/issues/524) の独立した用途候補。[ops#523](https://github.com/roccho-org/ops/issues/523) が評価項目の発見とRoute選択、[adrs#497](https://github.com/roccho-dev/adrs/issues/497) が上位Goalを所有する。
 >
 > **Issue記載規約との整合：** Issue本文のdirtreeは「欲しい完成状態」であり、現行repoの実体とは限らない。現状・gap・実測値は時点付きコメントへ分離する。設計評価を実装状況の証明にしない。
 
@@ -41,7 +41,7 @@
 | **Measurable** | 完成条件は独立に検証・反証可能か |
 | **Improving** | 変更前後の真の改善と、隠れた退行を別々に説明できるか |
 
-既存の [semlint 6軸](https://github.com/roccho-org/ops/issues/471) と [repo-health/design](https://github.com/roccho-org/ops/blob/proposals/packages/repo-health/design/README.md) の設計検査を再利用候補とする。Composableは拡張時の局所性を問う横断条件。**独自の万能美観スコア、第二のJev Core、第二の規約正本は追加しない。**
+既存の [semlint 6軸](https://github.com/roccho-org/ops/issues/471) と [repo-health/design](https://github.com/roccho-org/ops/blob/proposals/packages/repo-health/design/README.md) の設計検査を再利用候補とする。Composableは拡張時の局所性を問う横断条件。**独自の万能美観スコア、第二のSys1判断核、第二の規約正本は追加しない。** CoreとModelPortを独立に評価し、JevはモデルAdapterの一候補に留める。
 
 「読みやすさ」を名前や字数だけで独立採点しない。目的、責務、接続、根拠を**実装未読でcomposeできるか**に帰着させる。
 
@@ -65,21 +65,32 @@ dirtree_vN+1
 ### 数式付きtreeの評価例
 
 ~~~text
-packages/jev/                          # Goal: 新用途の追加を局所化する
+packages/sys1/                          # Goal: 用途とSys1モデルを独立に追加
 ├── core/
-│   └── judge.mjs                      # J(State, Questions) → Judgments ∪ ERROR
-├── adapters/
+│   ├── contract.mjs                    # ModelPort : State × TypedQuestion → TypedJudgment
+│   │                                   #             ∪ {UNSUPPORTED, UNKNOWN, ERROR}
+│   └── judge.mjs                       # J(s,q,M) = M.judge(s,q)
+├── cores/
 │   ├── route/
-│   │   └── index.mjs                  # R(Goal, Catalog) → Selected ⊆ Catalog
-│   ├── core-xxx/
-│   │   ├── core.json                  # when_i / what_i / version_i
-│   │   └── index.mjs                  # E_i(x)=J(project_i(x),questions_i(x))
+│   │   └── index.mjs                   # R(Goal,Catalog) → Selected ⊆ Catalog
+│   │                                   # 0..N Core選択 ≠ 実行並列化
+│   └── core-xxx/
+│       ├── core.json                   # when_i / what_i / version_i
+│       └── index.mjs                   # E_i(x,M) = J(project_i(x),questions_i(x),M)
+├── adapters/
+│   ├── models/
+│   │   ├── jev.mjs                     # Jev → ModelPort（一例）
+│   │   ├── <sys1-model>.mjs            # 他Sys1 → ModelPort
+│   │   └── conformance/                # Supported(M,Q) ; no silent coercion
 │   └── cli/
-│       └── index.mjs                  # CLIはI/Oのみ
-└── README.md                          # Add(Core_i) ⇒ ΔJudge = ΔRouteLogic = ΔCLI = 0
+│       └── index.mjs                   # CLI = I/O only
+├── compose.mjs                         # Bind(Core_i,Model_j) → RunnableCore_ij
+└── README.md                           # Add(Core_i) ⇒ ΔJudge=ΔModels=ΔRouteLogic=ΔCLI=0
+                                        # Add(Model_j) ⇒ ΔJudge=ΔCores=ΔRoute=ΔCLI=0
+                                        # Swap(M_a,M_b) ⇒ ΔCore_i=0 ; quality re-eval
 ~~~
 
-例：routeが選択だけでなく実行権限と採否権限を持つ変更なら、責務混合をpathと契約に紐づけて指摘。treeにGoalとIN/OUTが全く無ければ、勝手な目的・依存を補わずUNKNOWNを示す。
+例：routeが選択だけでなく実行権限と採否権限を持つ変更なら、責務混合をpathと契約に紐づけて指摘。Coreに特定モデル名を埋め込み、モデル追加のたびに全Coreを書き換えるならComposable違反の候補。非対応primitiveを正常な評価結果へすり替えていればClosed違反の候補。treeにGoalとIN/OUTが全く無ければ、勝手な目的・依存を補わずUNKNOWNを示す。
 
 ### 有限の判定例（実績ではなく期待）
 
@@ -97,6 +108,8 @@ packages/jev/                          # Goal: 新用途の追加を局所化す
 | B10 | 次版で既存の拡張不変条件を壊す | Regressed |
 | B11 | 未実装の完成希望treeを提示 | 設計のみ評価し、実装の成立・gapを断定しない |
 | B12 | 必要なファイルが多くても責務が明瞭 | ファイル数だけで美しさを否定しない |
+| B13 | モデルを1つ追加すると全Coreを編集する設計 | Composable concern（モデル依存の漏洩） |
+| B14 | ModelPort非対応primitiveを正常扱いする | Closed concern（conformanceの破綻） |
 
 ## 受入条件 / non-goals
 
@@ -104,7 +117,7 @@ packages/jev/                          # Goal: 新用途の追加を局所化す
 2. 名前ではなくGoal→責務→接続→検証→将来追加の意味を評価する。判断は対象箇所付き、UNKNOWNも対象箇所付き。
 3. 書き足すたび、新規懸念・解消・継続・退行を区別。未完部分・合法な例外・美しい多層化に偽警報を出さない。
 4. 誤警報/見逃し/useful@K/設計変更負担を、事前固定の独立した正常・破壊・部分tree例で比較できる。
-5. 既存の構造lint・Jev共通評価・Core routeと競合させない。JevHarness等による個別改善は**任意**であり、評価基準の改変を許さない。
+5. 既存の構造lint・共有Sys1判断契約・Core route・モデルAdapterと競合させない。JevHarness等による個別改善は**任意**であり、評価基準の改変を許さない。ModelPortの対応範囲とモデル交換後の品質を混同しない。
 6. 結果は助言であり、Issue本文の期待宣言、実装の現状、採否・削除・mergeに権限を持たない。
 
 **このPRは用途の方針文書のみ。** 実際にdirtreeを評価できる製品が完成した、精度が立証された、CIが実行されたとは主張しない。
