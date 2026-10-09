@@ -761,6 +761,46 @@ await check('pull-request-closed-targets', async () => {
   ]);
 });
 
+await check('two-explicit-pull-request-targets', async () => {
+  const cfg = prConfig();
+  cfg.targets.push({ repository: REPO, repositoryId: '456', pullRequest: PR_NUMBER + 1 });
+  validateActionsConfig(cfg);
+  for (const number of [PR_NUMBER, PR_NUMBER + 1, 483]) {
+    const fixture = world(REPO, number, WF, number === 483 ? 'issue' : 'pull-request');
+    const result = await fullRun(fixture, fixture.addComment(), { cfg });
+    assert.deepEqual(outcome(result), ['APPENDED', 'READBACK_EXACT']);
+    assert.equal(result.planBody.cases[0].input.subject.content, fixture.issue.body);
+  }
+  for (const [number, kind] of [[PR_NUMBER + 2, 'pull-request'], [PR_NUMBER + 1, 'issue'], [483, 'pull-request']]) {
+    const fixture = world(REPO, number, WF, kind);
+    const result = await fullRun(fixture, fixture.addComment(), { cfg });
+    assert.deepEqual(outcome(result), ['NONE', 'TARGET_NOT_AUTHORIZED']);
+    assert.deepEqual(effects(fixture), zero);
+  }
+  for (const alter of [
+    settings => { settings.targets.push({ ...settings.targets[2] }); },
+    settings => { settings.targets.push({ repository: REPO, repositoryId: '456', pullRequest: PR_NUMBER + 2 }); },
+    settings => { settings.targets.push({ repository: REPO, repositoryId: '456', issue: 484 }); },
+    settings => { settings.targets[2].repositoryId = '789'; },
+    settings => { settings.targets[2].issue = PR_NUMBER + 1; },
+    settings => { settings.targets[2].pullRequest = '*'; },
+    settings => { settings.targets[2].pullRequest = 0; },
+    settings => {
+      settings.provider = null;
+      settings.targets.push({ repository: `${OWNER}/envs`, repositoryId: '789', issue: 52 });
+      settings.targets[2] = { repository: `${OWNER}/envs`, repositoryId: '789', pullRequest: PR_NUMBER + 1 };
+    },
+    settings => {
+      settings.provider = null;
+      settings.targets.push({ repository: 'another/ops', repositoryId: '789', issue: 483 });
+      settings.targets[2] = { repository: 'another/ops', repositoryId: '789', pullRequest: PR_NUMBER + 1 };
+    },
+  ]) {
+    const bad = structuredClone(cfg); alter(bad);
+    assert.throws(() => validateActionsConfig(bad), /INVALID_ACTIONS_CONFIG/);
+  }
+});
+
 await check('pull-request-pure-admission-and-state', async () => {
   const fixture = prWorld(), cfg = prConfig(), command = fixture.addComment();
   const planned = await planIssueCommand(ctxFor(fixture, command, fixture.newRun()), cfg, fixture.deps);
@@ -992,6 +1032,15 @@ if (sourceRoot !== null) {
 const repoFile = (p) => fs.readFileSync(path.join(sourceRoot, p), 'utf8');
 const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const workflow = repoFile(WF_PATH);
+const invocation = repoFile('packages/jev-review/COMMENT-INVOCATION.md');
+const currentInvocation = invocation.split('## Controlled PR-token differential (historical v5 staging)')[0];
+for (const required of ['functional path is COMPLETE', '6057281071', '6056525801', '6057022678',
+  'old two-call allowance is exhausted', 'utility remains NOT_PROVEN', 'Jev-unseen comparison',
+  'external gold', 'shipped settings and', 'at most two distinct explicitly configured PRs',
+  'Ordinary scoped technical FAIL', 'UNKNOWN holds without blind retry']) assert.ok(currentInvocation.includes(required), required);
+for (const stale of ['completion remains pending', 'not deployed or live accepted', 'live acceptance remains unproved']) {
+  assert.equal(currentInvocation.includes(stale), false, stale);
+}
 const guardText = workflow.match(/\n    if: >-\n([\s\S]*?)\n    runs-on:/)?.[1].trim();
 assert.ok(guardText);
 assert.match(guardText, /^[A-Za-z0-9_.' /()&|!=\s-]+$/);

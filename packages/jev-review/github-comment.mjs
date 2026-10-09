@@ -155,12 +155,18 @@ export function validateActionsConfig(value) {
       (exact(target, ['repository', 'repositoryId', 'issue']) && positive(target.issue)
         || exact(target, ['repository', 'repositoryId', 'pullRequest']) && positive(target.pullRequest))
       && REPOSITORY.test(target.repository) && databaseId(target.repositoryId))
-    || new Set(config.targets.map((target) => JSON.stringify([target.repository, Object.hasOwn(target, 'pullRequest')]))).size !== config.targets.length
-    || config.targets.filter((target) => Object.hasOwn(target, 'pullRequest')).length > 1
+    || new Set(config.targets.map((target) => JSON.stringify(Object.hasOwn(target, 'pullRequest')
+      ? [target.repository, 'pull-request', target.pullRequest] : [target.repository, 'issue']))).size !== config.targets.length
+    || config.targets.filter((target) => Object.hasOwn(target, 'pullRequest')).length > 2
     || !Array.isArray(ranges) || !ranges.every((r) => exact(r, RANGE_KEYS) && REPOSITORY.test(r.repository) && positive(r.workflowId)
       && WORKFLOW_PATH.test(r.path) && positive(r.first) && positive(r.last) && r.first <= r.last
       && positive(r.reservedCallsPerRun) && r.reservedCallsPerRun <= ENTRY_LIMITS.maxCalls)) throw new Error('INVALID_ACTIONS_CONFIG');
   for (const target of config.targets) {
+    if (Object.hasOwn(target, 'pullRequest') && (target.repository.split('/')[1] !== 'ops'
+      || config.targets.some((candidate) => Object.hasOwn(candidate, 'pullRequest')
+        && (candidate.repository !== target.repository || candidate.repositoryId !== target.repositoryId)))) {
+      throw new Error('INVALID_ACTIONS_CONFIG');
+    }
     if (Object.hasOwn(target, 'pullRequest') && !config.targets.some((candidate) => candidate.repository === target.repository
       && candidate.repositoryId === target.repositoryId && Object.hasOwn(candidate, 'issue'))) throw new Error('INVALID_ACTIONS_CONFIG');
     if (config.targets.some((candidate) => (candidate.repository === target.repository) !== (candidate.repositoryId === target.repositoryId))) {
