@@ -1,6 +1,6 @@
 # Issue invocation contract
 
-## Provided-v14 PR522 binding (v4, caller repin pending)
+## Provided-v14 PR522 binding (v4, fixed-runtime wired source)
 
 Under `jev-issue-comment-utility-20261009-v4`, the native consumer can admit the
 existing `/jev-evaluate\n` plus closed `ops.jev.issue-request.v1` JSON envelope,
@@ -14,9 +14,14 @@ only actual [PR522](https://github.com/roccho-org/ops/pull/522), repository ID
 `1275606595`, author `roccho-dev`, branch `codex/jev-comment-consumer-v14-v1`,
 base `c8c8430aed9c48ff3bf3c654fc15e6d12b793ea7`. It retains Ops483/envs52/PR511,
 replaces only retired520 with522, and guards the JSON-prefix route only on522.
-Both caller pins remain `362e6cde5668456c584e3aee251d92e617777568`, whose runtime
-does not admit522 or provided native requests. Configured source is not deployed
-activation; no future number or fixture number is active.
+Root accepted, published and read back target-bound runtime
+`305b5321ebc4d41d5c143cc002b82af71f140b8e`, tree
+`66dd6d10622c8c626369f92dbc7a5d2d163e59fd`. Both caller pins now reference only
+that immutable commit, not this repin candidate or evaluated PR HEAD. The actual
+caller source is this repin; runtime/settings/2189-byte context are305b5321.
+The runtime's invocation document records its earlier caller-repin-pending stage,
+not this caller's pins. Wired source is not default deployment or live acceptance;
+no future number or fixture number is active.
 
 The workflow uses `fromJSON('"/jev-evaluate\n"')` to decode the LF prefix before
 `startsWith`; malformed JSON may enter planning only on522 and is refused before
@@ -43,8 +48,8 @@ Org-only key/token separation remain; legacy literal v1 behavior is retained.
 Root published bootstrap `0d506978270fb0bd97dcd7ba6074835d7faa1faf` and verified
 PR522's complete initial 4585-byte body, SHA256
 `a4fdbe79a47775363902f5a1c4534b35ced11d3bb848093429812f2c089f90f4`.
-Root must accept/publish this target-bound source before a separate immutable
-caller repin. Until current-head CI and
+The target-bound source is already accepted/published; this separate immutable
+caller repin needs Root independent acceptance/publication. Until current-head CI and
 default/runtime/capacity verification plus separate Root live GO, new paid calls
 remain zero. The new ten-attempt pool is a ceiling, not automatic dispatch or
 reuse of the ended PR520 one-call NOT_PROVEN trial; old raw/FAIL/UNKNOWN history

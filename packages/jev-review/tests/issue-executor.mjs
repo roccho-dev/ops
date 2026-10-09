@@ -1267,7 +1267,8 @@ const invocation = repoFile('packages/jev-review/COMMENT-INVOCATION.md');
 const currentInvocation = invocation.split('## Controlled PR-token differential (historical v5 staging)')[0];
 for (const required of ['jev-issue-comment-utility-20261009-v4', 'providedRequestTargets',
   'only actual [PR522]', 'ten-attempt pool', 'full byte span', 'not fetched evidence',
-  'all nine fixed legacy context roles', 'caller repin pending']) assert.ok(currentInvocation.includes(required), required);
+  'all nine fixed legacy context roles', 'fixed-runtime wired source',
+  'runtime/settings/2189-byte context are305b5321', 'not default deployment or live acceptance']) assert.ok(currentInvocation.includes(required), required);
 assert.deepEqual(JSON.parse(repoFile('packages/jev-review/issue-actions.json')).providedRequestTargets,
   [{ repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 522 }]);
 const targetBudget = actualContextBudgets.find(row => row.number === 522 && row.kind === 'pull-request');
@@ -1312,7 +1313,7 @@ for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other
     }
   }
 }
-const trustedRuntime = '362e6cde5668456c584e3aee251d92e617777568';
+const trustedRuntime = '305b5321ebc4d41d5c143cc002b82af71f140b8e';
 assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], trustedRuntime);
 assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], trustedRuntime);
 assert.ok(currentInvocation.includes(trustedRuntime));

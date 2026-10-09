@@ -1,6 +1,6 @@
 name: Jev Issue comment evaluation
 
-# Guard binds Org Ops483/envs52/PR511/PR522; caller repin remains separate.
+# Guard binds Org Ops483/envs52/PR511/PR522; runtime is published target-bound source.
 # One projected Org slot; no Repository/Environment copy.
 # Initial four-call history plus 200 authorized additions; no rerun spending.
 on:
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: roccho-org/ops
-          ref: 362e6cde5668456c584e3aee251d92e617777568
+          ref: 305b5321ebc4d41d5c143cc002b82af71f140b8e
           persist-credentials: false
 
       - name: Install fixed toolchain provisioner
@@ -51,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_source=362e6cde5668456c584e3aee251d92e617777568
+          runtime_source=305b5321ebc4d41d5c143cc002b82af71f140b8e
           test "$(git rev-parse HEAD)" = "$runtime_source"
           out="$(nix build --no-link --print-out-paths .#jev-review)"
           line="$(grep '^exec ' "$out/bin/jev-review")"
