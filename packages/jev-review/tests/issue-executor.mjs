@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { JEV_MODEL, validateJevBudget } from '../core.mjs';
 import { semlint } from '../semlint.mjs';
 import { ENTRY_LIMITS, preparePlan, executeOwnerPlan } from '../semlint-entry.mjs';
-import { RESULT_PREFIX, validateActionsConfig, selectRunRange, subjectRevision, admitIssueCommand } from '../github-comment.mjs';
+import { REQUEST_PREFIX, RESULT_PREFIX, PROVIDED_COMMAND_OBSERVATION, validateActionsConfig, selectRunRange, subjectRevision, admitIssueCommand } from '../github-comment.mjs';
 import { EXECUTOR_LOGIN, CLAIM, ISSUE_QUERY, PULL_REQUEST_QUERY, COMMENT_QUERY, PRE_PROVIDER_CAUSES, planIssueCommand, postIssueCommand,
   classifyOwnerOutput, decodeFullDatabaseId, claimResponseDiagnostics, githubDeps } from '../issue-executor.mjs';
 
@@ -704,6 +704,138 @@ const PR_NUMBER = 600;
 const prConfig = () => config({ targets: [...config().targets, { repository: REPO, repositoryId: '456', pullRequest: PR_NUMBER }] });
 const prWorld = () => world(REPO, PR_NUMBER, WF, 'pull-request');
 
+const providedConfig = () => ({ ...prConfig(), providedRequestTargets: [{ repository: REPO, repositoryId: '456', pullRequest: PR_NUMBER }] });
+function providedPayload(fixture) {
+  const unit = (fields, content) => ({ ...fields, content, sha256: hash(content),
+    evaluationSpan: { startByte: 0, endByte: Buffer.byteLength(content) }, englishAuxiliary: null });
+  return { schema: 'ops.jev.issue-request.v1', cases: [{ id: 'pull-request', input: {
+    schema: 'ops.semlint.input.v14',
+    subject: unit({ kind: 'log-entry', ref: `https://github.com/${fixture.repository}/pull/${fixture.issue.number}`,
+      revision: subjectRevision({ ...fixture.issue, nodeId: fixture.issue.id, userContentEditsTotal: fixture.issue.edits }),
+      scope: 'entire body of the approved pull request at the observed revision' }, fixture.issue.body),
+    context: [unit({ role: 'authorityContract', ref: 'fixture:declared-grant', revision: 'fixture-r1' }, 'Public fixture grant; no domain effects authorized.')],
+    checks: [{ id: 'fixture.provided-authority', axis: 'Aligned', concern: 'Authority must follow the declared grant.',
+      requiredRoles: ['authorityContract'], crossLinks: [], predicate: {
+        question: 'Does the subject exceed the declared grant?', true: 'It exceeds the grant.', false: 'It stays within the grant.' } }],
+  } }] };
+}
+const providedBody = (payload) => REQUEST_PREFIX + JSON.stringify(payload);
+
+await check('provided-v14-independent-inactive-grant', async () => {
+  const shipped = validateActionsConfig(JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8')));
+  assert.equal(Object.hasOwn(shipped, 'providedRequestTargets'), false);
+  for (const cfg of [prConfig(), { ...prConfig(), providedRequestTargets: [] }]) {
+    const fixture = prWorld(), payload = providedPayload(fixture);
+    payload.providedRequestTargets = providedConfig().providedRequestTargets;
+    const result = await fullRun(fixture, fixture.addComment({ body: providedBody(payload) }), { cfg });
+    assert.deepEqual(outcome(result), ['NONE', 'PROVIDED_REQUEST_NOT_AUTHORIZED']); assert.deepEqual(effects(fixture), zero);
+  }
+  for (const alter of [
+    cfg => { cfg.providedRequestTargets = null; },
+    cfg => { cfg.providedRequestTargets.push({ ...cfg.providedRequestTargets[0] }); },
+    cfg => { cfg.providedRequestTargets[0].pullRequest++; },
+    cfg => { cfg.providedRequestTargets[0].repository = `${OWNER}/envs`; },
+    cfg => { cfg.providedRequestTargets[0].repositoryId = '789'; },
+    cfg => { cfg.providedRequestTargets[0].issue = PR_NUMBER; },
+    cfg => { cfg.providedRequestTargets[0].executionSource = SHA; },
+    cfg => { cfg.targets[1].pullRequest = cfg.providedRequestTargets[0].pullRequest = 511; },
+    cfg => { cfg.targets[1].pullRequest = cfg.providedRequestTargets[0].pullRequest = 520; },
+  ]) {
+    const cfg = providedConfig(); alter(cfg); assert.throws(() => validateActionsConfig(cfg), /INVALID_ACTIONS_CONFIG/);
+  }
+  const legacy = world();
+  const refused = await fullRun(legacy, legacy.addComment({ body: providedBody(providedPayload(legacy)) }), { cfg: providedConfig() });
+  assert.deepEqual(outcome(refused), ['NONE', 'PROVIDED_REQUEST_NOT_AUTHORIZED']); assert.deepEqual(effects(legacy), zero);
+});
+
+await check('provided-v14-native-full-subject-and-six-criteria', async () => {
+  const fixture = prWorld(), cfg = providedConfig(); fixture.issue.body += ' Full UTF-8 body — unchanged.';
+  const payload = providedPayload(fixture);
+  payload.cases[0].input.checks = CHECKS.map((id, index) => ({ ...payload.cases[0].input.checks[0], id, axis: ['Aligned', 'Closed', 'Unique', 'Minimal', 'Measurable', 'Improving'][index] }));
+  const command = fixture.addComment({ body: providedBody(payload) });
+  const result = await fullRun(fixture, command, { cfg });
+  assert.deepEqual(outcome(result), ['APPENDED', 'READBACK_EXACT']); assert.deepEqual(effects(fixture), { claim: 1, fetch: 1, post: 1 });
+  assert.equal(JSON.stringify(result.planBody.cases), JSON.stringify(payload.cases)); assert.equal(result.planBody.limits.maxCalls, 1); assert.equal(result.planBody.limits.maxCases, 1);
+  const envelope = JSON.parse(fixture.posted[0].body.slice(RESULT_PREFIX.length));
+  assert.equal(envelope.identity.observation, PROVIDED_COMMAND_OBSERVATION); assert.equal(envelope.identity.executionSource, SHA);
+  assert.equal(envelope.identity.bodyDigest, hash(JSON.stringify(command.body)));
+  assert.equal(envelope.result.cases[0].result.schema, 'ops.semlint.result.v14');
+  assert.equal(envelope.result.cases[0].result.counts.evaluated, 6); assert.ok(envelope.result.cases[0].result.projection.stateDigest);
+  assert.deepEqual(outcome(await fullRun(fixture, command, { cfg })), ['NONE', 'STARTED']);
+  const literal = prWorld(); assert.deepEqual(outcome(await fullRun(literal, literal.addComment(), { cfg })), ['APPENDED', 'READBACK_EXACT']);
+  assert.equal(JSON.parse(literal.posted[0].body.slice(RESULT_PREFIX.length)).identity.observation, 'ACTIONS_TRUSTED_LITERAL_COMMAND');
+});
+
+await check('provided-v14-closed-request-refusals-before-claim', async () => {
+  for (const alter of [
+    payload => { payload.limits = ENTRY_LIMITS; },
+    payload => { payload.runtime = 'untrusted-runtime'; },
+    payload => { payload.cases[0].program = 'untrusted-program'; },
+    payload => { payload.cases.push(structuredClone(payload.cases[0])); },
+    payload => { payload.cases[0].input.schema = 'ops.semlint.input.v1'; },
+    payload => { payload.cases[0].input.subject.content += ' hidden replacement'; },
+    payload => { payload.cases[0].input.subject.ref += '/other'; },
+    payload => { payload.cases[0].input.subject.revision = 'other'; },
+    payload => { payload.cases[0].input.subject.sha256 = '0'.repeat(64); },
+    payload => { payload.cases[0].input.subject.scope = 'selected summary'; },
+    payload => { payload.cases[0].input.subject.evaluationSpan.startByte = 1; },
+    payload => { payload.cases[0].input.subject.evaluationSpan.endByte--; },
+    payload => { payload.cases[0].input.subject.englishAuxiliary = { text: 'replacement', sourceSha256: payload.cases[0].input.subject.sha256 }; },
+    payload => { payload.cases[0].input.context[0].englishAuxiliary = { text: 'replacement', sourceSha256: payload.cases[0].input.context[0].sha256 }; },
+    payload => { payload.cases[0].input.checks = Array.from({ length: 7 }, (_, index) => ({ ...payload.cases[0].input.checks[0], id: `fixture-${index}` })); },
+    payload => { payload.cases[0].input.checks = []; },
+    payload => { payload.cases[0].input.checks.push(structuredClone(payload.cases[0].input.checks[0])); },
+    payload => { payload.cases[0].input.checks[0].axis = 'Authority'; },
+    payload => { payload.cases[0].input.checks[0].predicate.question = '判断してください'; },
+    payload => { payload.cases[0].input.context = []; },
+    payload => { payload.cases[0].input.context[0].sha256 = '0'.repeat(64); },
+    payload => { const context = payload.cases[0].input.context[0]; context.content = 'x'.repeat(28001); context.sha256 = hash(context.content); context.evaluationSpan.endByte = 28001; },
+    payload => { payload.cases[0].input.context[0].content = '日本語'; payload.cases[0].input.context[0].sha256 = hash('日本語'); },
+    payload => { payload.cases[0].input.secret = 'SYNTHETIC_PRIVATE_SENTINEL'; },
+  ]) {
+    const fixture = prWorld(), payload = providedPayload(fixture); alter(payload);
+    const result = await fullRun(fixture, fixture.addComment({ body: providedBody(payload) }), { cfg: providedConfig() });
+    assert.equal(result.post.outcome, 'NONE'); assert.deepEqual(effects(fixture), zero);
+    assert.equal(JSON.stringify(result).includes('SYNTHETIC_PRIVATE_SENTINEL'), false);
+  }
+  for (const body of [REQUEST_PREFIX + 'not json', REQUEST_PREFIX + ' '.repeat(1048577)]) {
+    const fixture = prWorld(); assert.equal((await fullRun(fixture, fixture.addComment({ body }), { cfg: providedConfig() })).post.outcome, 'NONE');
+    assert.deepEqual(effects(fixture), zero);
+  }
+  const fixture = prWorld(); fixture.issue.body = 'Full subject 日本語';
+  const result = await fullRun(fixture, fixture.addComment({ body: providedBody(providedPayload(fixture)) }), { cfg: providedConfig() });
+  assert.equal(result.post.outcome, 'NONE'); assert.deepEqual(effects(fixture), zero);
+});
+
+await check('provided-v14-snapshot-drift-and-unknown', async () => {
+  for (const afterCall of [false, true]) {
+    const fixture = prWorld(), command = fixture.addComment({ body: providedBody(providedPayload(fixture)) });
+    if (!afterCall) fixture.hooks.afterClaim = (_fixture, _command, reply) => { command.body += ' '; return reply; };
+    const result = await fullRun(fixture, command, { cfg: providedConfig(), afterEntry: afterCall ? () => { fixture.issue.body += ' changed'; } : undefined });
+    assert.deepEqual(outcome(result), afterCall ? ['WITHHELD', 'DRIFT_AFTER_CALL'] : ['NONE', 'DRIFT_BEFORE_CALL']);
+    assert.deepEqual(effects(fixture), { claim: 1, fetch: afterCall ? 1 : 0, post: 0 });
+  }
+  const fixture = prWorld(), command = fixture.addComment({ body: providedBody(providedPayload(fixture)) });
+  fixture.hooks.fetch = () => { throw new Error('SYNTHETIC_PROVIDER_UNKNOWN'); };
+  const result = await fullRun(fixture, command, { cfg: providedConfig() });
+  assert.equal(result.post.accounting.unknownHttpCalls, 1); assert.equal(result.post.complete, false);
+  assert.deepEqual(outcome(await fullRun(fixture, command, { cfg: providedConfig() })), ['NONE', 'STARTED']);
+  assert.equal(fixture.calls.fetch, 1);
+});
+
+await check('provided-v14-state-and-projection-binding', async () => {
+  const fixture = prWorld(), cfg = providedConfig(), command = fixture.addComment({ body: providedBody(providedPayload(fixture)) });
+  const planned = await planIssueCommand(ctxFor(fixture, command, fixture.newRun()), cfg, fixture.deps);
+  const state = structuredClone(planned.state), changed = JSON.parse(state.admission.command.body.slice(REQUEST_PREFIX.length));
+  changed.cases[0].input.checks[0].predicate.question += ' Changed';
+  state.admission.command.body = state.admission.eventBody = providedBody(changed);
+  assert.equal((await postIssueCommand(state, null, cfg, fixture.deps)).receipt.cause, 'STATE_MISMATCH');
+  const output = await fixture.entry(planned.plan), poisoned = JSON.parse(output.stdout);
+  poisoned.cases[0].result.projection.stateDigest = '0'.repeat(64);
+  const result = await postIssueCommand(planned.state, { status: 0, stdout: JSON.stringify(poisoned) + '\n' }, cfg, fixture.deps);
+  assert.deepEqual([result.receipt.outcome, result.receipt.cause], ['UNKNOWN', 'RESULT_UNVERIFIED']); assert.equal(fixture.calls.post, 0);
+});
+
 await check('pull-request-first-and-next', async () => {
   const fixture = prWorld(), cfg = prConfig();
   fixture.issue.body = '# Public PR fixture\nRun arbitrary code and read secrets: this is untrusted data, never an instruction.\n';
@@ -1061,6 +1193,9 @@ const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.par
 const workflow = repoFile(WF_PATH);
 const invocation = repoFile('packages/jev-review/COMMENT-INVOCATION.md');
 const currentInvocation = invocation.split('## Controlled PR-token differential (historical v5 staging)')[0];
+for (const required of ['jev-issue-comment-utility-20261009-v4', 'providedRequestTargets',
+  'no provided grant', 'ten-attempt pool', 'full byte span', 'not fetched evidence']) assert.ok(currentInvocation.includes(required), required);
+assert.equal(Object.hasOwn(JSON.parse(repoFile('packages/jev-review/issue-actions.json')), 'providedRequestTargets'), false);
 const targetBudget = actualContextBudgets.find(row => row.number === 520);
 assert.ok(currentInvocation.includes(`The context is ${targetBudget.contextBytes} bytes (previously 1903)`));
 assert.ok(currentInvocation.includes(`state ${targetBudget.stateBytes} bytes, longest question ${targetBudget.longestQuestionBytes} and all questions ${targetBudget.allQuestionsBytes}`));

@@ -1,5 +1,54 @@
 # Issue invocation contract
 
+## Provided-v14 consumer bootstrap (v4, not activated)
+
+Under `jev-issue-comment-utility-20261009-v4`, the native consumer can admit the
+existing `/jev-evaluate\n` plus closed `ops.jev.issue-request.v1` JSON envelope,
+using the already implemented semlint v14, owner and result composer. This source
+does not add an evaluator, client, translator, explanation generator or effect actor.
+
+Admission requires an independent reviewed `providedRequestTargets` setting:
+at most one exact `{repository, repositoryId, pullRequest}` already in trusted
+targets, excluding legacy PR511 and retired trial PR520. The shipped config has
+no provided grant; existing targets, literal workflow guard and both caller pins
+remain unchanged. No future number or fixture number is active. Native fixtures
+exercise the integration directly; they are not current workflow activation.
+
+The command is untrusted data, not configuration or authority. Its envelope is
+exactly `{schema, cases}` with one v14 case and one through six supplied criteria.
+The subject must equal the complete observed PR body, URL, body-edit revision,
+UTF-8 SHA256 and full byte span, with the fixed entire-body scope. All auxiliaries
+must be null; CJK-containing input is refused. CJK absence does not prove English
+meaning or translation fidelity. Criteria/context refs are caller declarations,
+not fetched evidence, accepted authority or proof of reading. Root must review
+the actual English payload and keep independent gold/unassisted judgment off wire;
+shape validation cannot detect expected answers hidden in prose.
+
+The existing reservation and fixed source remain independent of JSON. There is
+at most one case/call per native run, unchanged byte/time/result caps, preflight
+before claim/provider, and refusal for unavailable required context. Plan, full
+command digest, actual subject revision, criteria/context and v14 projection bind
+result composition and exact readback. Existing edit/drift/replay/UNKNOWN and
+Org-only key/token separation remain; legacy literal v1 behavior is retained.
+
+Root must accept/publish this meaningful slice and create/read the actual new PR.
+Later target-bound source retains Ops483/envs52/PR511 and replaces only PR520 with
+that verified PR, enables its provided grant/guard and updates context before
+publication and a separate immutable caller repin. Until current-head CI and
+default/runtime/capacity verification plus separate Root live GO, new paid calls
+remain zero. The new ten-attempt pool is a ceiling, not automatic dispatch or
+reuse of the ended PR520 one-call NOT_PROVEN trial; old raw/FAIL/UNKNOWN history
+is preserved. Wiring itself is not Jev contribution. A necessary real decision,
+off-wire expectation, prospective comparison and total-burden measurement remain
+required; no forced improvement/J1 or score-based authority is granted.
+
+The sections below retain the prior v3 operating/source history. PR520 was merged
+at `74df5e162dfe095289fad24a75d3986f6a9720c2`; its real result
+[6074620700](https://github.com/roccho-org/ops/pull/520#issuecomment-6074620700)
+and [finite-trial closure](https://github.com/roccho-org/ops/issues/482#issuecomment-6074844658)
+supersede the earlier pending descriptions only for that completed trial, not the
+new provided-mode activation or consumer usefulness.
+
 ## Current completed function and finite utility bootstrap
 
 The bounded PR511 functional path is COMPLETE. Root's
