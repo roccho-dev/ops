@@ -1,6 +1,82 @@
 # Issue invocation contract
 
-## Controlled PR-token differential (v5 source, not deployed or live accepted)
+## Current completed function and finite utility bootstrap
+
+The bounded PR511 functional path is COMPLETE. Root's
+[completion checkpoint](https://github.com/roccho-org/ops/pull/511#issuecomment-6057281071)
+records accepted PR511/513/515/516 source, current-head CI, provided-source and
+default/runtime readback, plus two real same-PR result appends and exact readbacks:
+[first](https://github.com/roccho-org/ops/pull/511#issuecomment-6056525801) and
+[next](https://github.com/roccho-org/ops/pull/511#issuecomment-6057022678).
+Each used jev-1.13.0 with six OBSERVED checks and missing0; total attempted,
+completed and validated requests were 2/2/2, unknown HTTP0, cost unknown and
+authorityfalse. Those results bind the earlier exact body, not later edited PR text.
+The old two-call allowance is exhausted; no historical command is replayed.
+
+Both source caller pins reference published/reviewed target-bound runtime
+`362e6cde5668456c584e3aee251d92e617777568`. This caller repin is local source,
+not merge/default activation or live GO. The prior deployed runtime was
+`5dbf20b0466f1a13d6a5299fdfd9f94424647a2c`. The deployed token differential
+retains Actionsread/Contentsread/Issueswrite/PRwrite: PRwrite is repository-wide,
+not PR511-scoped. The exact guard and trusted settings limit execution. The
+observed 403 without PRwrite and subsequent success support only a bounded
+configuration-specific result, not universal permission necessity or backend cause.
+Org-only secret separation, nine context roles, six checks, Core limits and all
+204 lifetime reservations remain unchanged. Earlier FAIL/UNKNOWN records below
+remain history; source fixtures are not another paid or semantic-quality proof.
+
+Under `jev-issue-comment-utility-20261009-v3`, this source's deterministic admission supports
+at most two distinct explicitly configured PRs in the same already declared Ops
+repository/id, while retaining one Issue per repository. The shipped settings and
+literal workflow guard configure only Ops483/envs52/PR511/PR520. Root published
+bootstrap `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff` and verified actual
+[Ops520](https://github.com/roccho-org/ops/pull/520), repository ID `1275606595`,
+creator `roccho-dev`, base `41049cd7c59801afd6e6b119c34e15f674c41129`.
+Root independently accepted and published target-bound source
+`362e6cde5668456c584e3aee251d92e617777568`, tree
+`beba31684d8847e9660edb2aa8d04ef808bebaf9`, parent `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff`.
+This caller repin is local source awaiting Root acceptance/publication and
+current-head CI/default/runtime readback; a fixture number is never a target grant.
+The fixed runtime admits both PR511 and PR520; its earlier caller pins still
+describe the binding stage, not this caller source. Neither runtime nor context
+is selected from evaluated PR HEAD.
+The compact model context records the reviewed PR520 grant and finite lifecycle
+before J0; the known context/admission correction is not Jev contribution. The
+six predicates, nine role paths and legitimate baselineEvidence are unchanged.
+The context is 2092 bytes (previously 1903). Unpaid actual-producer preflight uses
+the entire 3215-byte PR520 bootstrap body observed at head `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff`,
+SHA256 `44f2a2b1fe364063806c8a1550d9cf4d6a0606b4a8a6c422f43ce47da95aa4c7`:
+state 25127 bytes, longest question 720 and all questions 4079; all six fit the
+unchanged Core ceilings. Admission/run metadata is synthetic, not live proof.
+This retained snapshot is not the eventual X0 freeze;
+Root must recheck the full observed body and exact accepted context before live GO.
+Target-bound source was independently accepted and published before
+both source caller pins moved to its immutable commit. Required current-head checks,
+normal merge/default/runtime/config readback and separate Root live GO precede
+any new request. Evaluated PR HEAD is never selected as executable runtime.
+
+The same retained native W is in windows-own UID1000, GPT-6.1 Sol/Medium, without
+model fallback. Root combines P/D and independent review of W-authored source,
+not independent review of its own policy or third-party assurance. The outer OCI
+and contractual restrictions are not hostile same-user isolation.
+
+Consumer utility remains NOT_PROVEN under [Ops482](https://github.com/roccho-org/ops/issues/482).
+Before J0, Root fixes the necessary decision, Jev-unseen comparison, independent
+expected disposition and all checking/fixing effort, exact subject X0, evaluation
+inputs E, capacity and stop conditions. Comparison contract B and external gold
+stay outside the provider payload; legitimate required baselineEvidence stays in E.
+Known stale-document/admission fixes are not Jev contribution. At most two newly
+authorized attempted requests compare X0/X1 with unchanged E; necessary context
+changes require comparability reassessment. A post-merge claim/body improvement is
+not source-code improvement. No warranted improvement means no forced second call.
+Record correctness/safety separately from total burden, learning/order effects,
+all attempts and unknown costs. Actual burden reduction is required for the strong
+usefulness claim; otherwise preserve partial usefulness, NO_EFFECT, prospective
+HARM or honest NOT_PROVEN/UNKNOWN/BLOCK. Ordinary scoped technical FAIL returns
+to R/W within remaining capacity; UNKNOWN holds without blind retry. A subsequent
+trial requires new prospective conditions and GO, never automatic capacity refill.
+
+## Controlled PR-token differential (historical v5 staging)
 
 `jev-pr-body-target-20261008-v5` adds only `pull-requests: write` to the existing
 workflow job-token declarations, alongside unchanged Actionsread/Contentsread/Issueswrite.
@@ -8,10 +84,10 @@ The token grant is repository-wide, not PR511-limited, and the YAML persists unt
 deliberately changed. The unchanged exact command/target guard and closed trusted
 runtime are the execution boundary; there is no Contentswrite, global-default,
 review-approval-setting, authentication, credential, Org Secret or budget change.
-Both caller pins remain the published diagnostic runtime5dbf20 below. This source
-does not deploy the grant or authorize a request. Root independently accepts and
-publishes source, requires current-head CI, normally merges and verifies default
-tree/runtime before separate GO/capacity for a NEW distinct controlled request.
+Both caller pins remain the published diagnostic runtime5dbf20 below. Root accepted
+and published PR516, normally merged it at
+`6b7c8127408271878f1b4bd32daacea1012a23e6`, and verified default/runtime before the
+separately authorized first+next proof. That consumed allowance grants no new request.
 
 Run `37746952720` number10/attempt1, command `6055471759`, returned HTTP403 with
 request ID `6C30:31E870:3D8D6:CA126:6AC74DA0`, accepted `issues=write` and
@@ -21,17 +97,15 @@ requirement is a hypothesis, not proved necessity; headers are evidence, not aut
 This command/run and original command6054135720/run8 remain UNKNOWN without any
 rerun, replay, deletion or cleanup. Run8's actual response remains unknown.
 
-If the controlled differential still returns403, remove only the added YAML grant
-through independently accepted source/CI/default readback and stop rights escalation.
-If functional proof succeeds, retain it only for this bounded PR evaluation purpose
-and record configuration-specific evidence, not universal permission semantics.
-Any other UNKNOWN returns to Root for assessment, never inferred success, retention
-or retry. A successful claim may reach paid evaluation immediately: separate live GO
-and existing capacity remain mandatory, at most first+next2 actual Jev calls within
-the unchanged 204 reservations. Source/synthetic checks are not claim, paid, quality
-or whole-loop proof. Verified weekly0 stops effects; reset alone does not resume.
+The prospective differential required removal of only the added grant and no rights
+escalation if 403 persisted. Actual functional proof succeeded, so Root retained it
+for the bounded purpose with configuration-specific evidence only. Any UNKNOWN
+remains subject to Root assessment, not inferred success or retry. Separate live GO
+and existing capacity are mandatory; the historical first+next allowance is consumed.
+Source/synthetic checks are not quality or whole-loop proof. Verified weekly0 stops
+effects; reset alone does not resume.
 
-## Claim-response diagnostics (v4 deployed source, no paid acceptance)
+## Claim-response diagnostics and retained v4 history
 
 Under `jev-pr-body-target-20261008-v4`, the existing keyless claim request adds
 `claimResponse` to its plan receipt, also retained by post for an unplanned run. It records only
@@ -51,17 +125,17 @@ PR511's full body remains untrusted evaluation data, never code or authority.
 Published5dbf20's earlier caller pins and staging description are historical,
 not the actual caller's pins or evidence of activation. Root merged PR515 at
 `5f64c367bd98223d231905d15370344efa503d01` and verified default pins/runtime.
-The v5 permission source above still requires its own acceptance/CI/publication,
-normal merge/default/runtime verification and separate new-request live GO.
-No unpublished self-pin, PR HEAD execution or additional evaluation target is allowed.
+The v5 correction and its separately authorized proof are complete as recorded above.
+No unpublished self-pin or PR HEAD execution is allowed; another target requires
+explicit reviewed configuration and a separate invocation grant.
 
 Command `6054135720`, run `37739337803` attempt1 remain UNKNOWN/CLAIM_NOT_OURS,
 providerCalls0, with the key-bearing step skipped. The original response was not
 retained; neither current empty reactions nor future diagnostics establishes its
 HTTP status or actor. It is never rerun, replayed, deleted or cleaned up. No403 or
-missing PRwrite claim is justified. First+next actual Jev/result/exact-readback
-completion remains pending within the existing 204 reservations and at most two
-actual calls; diagnostics and synthetic checks are not live or semantic-quality proof.
+missing PRwrite claim about run8 is justified. Later first+next completion does not
+resolve this historical UNKNOWN. Diagnostics and synthetic checks alone are not
+live or semantic-quality proof.
 
 ## Context-budget repair and retained history
 
@@ -79,10 +153,10 @@ Run `37728532777`, command `6052376731`, refusal
 remain zero-claim/zero-call history with the key step skipped, not success.
 Root's independent refusal reproduction measured 41252 state bytes with the
 3672-byte published S2 context repeated for nine roles. This historical failure
-is retained; the candidate's compact file is not yet the deployed runtime context.
+is retained; the compact context subsequently became the deployed trusted runtime.
 Source correction/CI, published runtime pin, normal merge/default-tree acceptance
-and separate live first+next proof (at most two calls in existing capacity) are
-distinct. UNKNOWN is never replayed. Verified weekly0 stops effects; reset alone
+and separate live first+next proof remain distinct evidence. UNKNOWN is never
+replayed. Verified weekly0 stops effects; reset alone
 does not resume. No semantic-quality or whole-loop acceptance is claimed.
 
 ### Pre-repair context snapshot (historical, not current authority)
@@ -99,7 +173,7 @@ Registered cases: First+next on Ops483 and envs52; fixture non-trigger, replay, 
 Quality: Raw six-axis Noul evidence, not truth, authority or merge verdict. Semantic usefulness improvement belongs to Ops482; no accuracy claim here.
 Baseline: Existing semlint bounded API is reused unchanged. Known finite-quality limitations496/500 remain; this functional proof is not a quality comparison.
 
-## Bounded PR-body extension
+## Bounded PR-body extension (historical v2/S2/S3 staging)
 
 Under `jev-pr-body-target-20261008-v2`, the persistent OCI writer owns only the
 declared source/test/correction slice after source GO. Root independently reviews
@@ -182,8 +256,8 @@ English-auxiliary owner boundary.
   produce a closed refusal. Machine-only imports, fixtures and gold are isolated inside
   the no-argument function and are not loaded/executed by the real mode.
 
-- `.github/workflows/jev-issue-comment.yml`: GitHub-hosted Actions entry for one trusted literal
-  command on one approved Issue; see "Actions issue command" below.
+- `.github/workflows/jev-issue-comment.yml`: GitHub-hosted Actions entry for a trusted literal
+  command on the exact configured Issue/PR targets; see "Actions issue command" below.
 - `issue-actions.json`: reviewed trusted settings (`trustedCallers`, `allowedChecks`, `context`, `subjectScope`,
   `limits`, `runRanges`).
 - `issue-executor.mjs`: the Actions adapter (`plan` / `post`, no Jev key). No daemon, dispatch,
@@ -198,38 +272,40 @@ English-auxiliary owner boundary.
 
 The reviewed settings now bind the actual envs Org projection receipt at
 envs08a3ff165cc6daf81db160d25ca6d365642f24a4. Its metadata readback proves the
-selected slot, not Jev use. Live Actions/provider/201-200 semantics remain
-UNVERIFIED until actual runs; fixtures do not prove paid-call or Issue completion.
+selected slot, not Jev use. The actual PR511 live proof is separate and complete
+as recorded above; fixtures do not prove paid-call or Issue completion.
 
 ## Actions issue command
 
-### PR-body configured source and staged activation
+### PR-body configured source and completed bounded activation
 
-The adapter also supports one exact pull-request-body target in a repository already
+The adapter supports at most two exact pull-request-body targets in the same Ops repository already
 admitted for an Issue. Its closed trusted target shape is
 `{repository, repositoryId, pullRequest}`; the existing Issue target shape remains
-`{repository, repositoryId, issue}`. Mixed shapes, duplicate repository/type entries,
-multiple PR targets, conflicting repository IDs and PR-only repositories are refused.
+`{repository, repositoryId, issue}`. Mixed shapes, duplicate PR numbers, multiple
+Issue targets per repository, third or cross-repository PR targets, conflicting
+repository IDs and PR-only repositories are refused.
 This is not arbitrary repository, Issue or PR discovery or admission.
 
 Root published and verified the meaningful change PR
 [Ops511](https://github.com/roccho-org/ops/pull/511), authored by `roccho-dev`, on
 `codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
 The context-budget repair used `jev-pr-body-target-20261008-v3` and diagnostics
-used v4; the current controlled token differential boundary is v5 as described above.
-The settings retain Ops483 and envs52 and add only
+used v4; the completed controlled token differential used v5 as described above.
+The historical PR511 settings retained Ops483 and envs52 and added only
 `{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
-The source workflow guard admits exactly this PR alongside the existing Issue guards.
-No other PR or swapped Issue/PR type is admitted.
+That historical source guard admitted exactly PR511 alongside the Issue guards.
+Current v3 source additionally binds only reviewed PR520 as described above;
+no unrelated PR or swapped Issue/PR type is admitted.
 
 S3 was merged at `6da72a69d5776734f2ee47b1c2d5ef4d1b713900`; default-tree
-readback was confirmed by Root, but live acceptance remains unproved.
+readback was confirmed by Root; later corrections and first+next proof are complete.
 Root independently accepted and
 published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`, the earlier runtime.
 Root independently accepted the published context-budget runtime
 `46a20f607d1a29caac377401277c2b47d5119802` on repair PR513, merged at
 `f424584ece730d05a74f0c651bae137ab8e2d76d`. Its 1903-byte context, unchanged
-settings and exact PR511 admission remain in the current diagnostic runtime5dbf20.
+settings and exact PR511 admission remained in the earlier diagnostic runtime5dbf20.
 Both current caller pins are described above. Neither runtime is selected from
 PR HEAD, and PR513/PR515 are not evaluation targets.
 PR511's full body remains untrusted data; historical snapshot descriptions are
@@ -237,14 +313,13 @@ not the current caller pin or default/live acceptance evidence.
 The first PR511 attempt refused before claim/provider use because the full body
 plus nine copies of S2 context exceeded Core's state ceiling. This v3 source
 compacts evaluation-relevant context while retaining operational detail here.
-The context-budget repair is merged/default verified, not live accepted; run8
-then stopped at claim UNKNOWN with zero provider calls. The v4 diagnostic source
-is merged/default verified; the v5 differential source is not deployed or live accepted.
+The context-budget repair is merged/default verified; run8 then stopped at claim
+UNKNOWN with zero provider calls. The v4 diagnostic and v5 differential source
+are merged/default verified; later first+next proof does not erase those failures.
 Runtime context's earlier staging description is historical, not a substitute
-for the actual caller pin. Root must independently review/publish this correction,
-require current-head CI before normal merge,
-and verify the actual default tree/runtime afterward. Separate live GO and
-first+next exact readback remain pending.
+for the actual caller pin. Root independently reviewed/published the corrections,
+required current-head CI before normal merge and verified default tree/runtime.
+The separate first+next live proof is complete; a new trial still needs its own GO.
 Root alone publishes/merges necessary scoped corrections after independent
 current-head CI acceptance and default-tree readback; live GO remains separate.
 Never self-pin an unpublished correction candidate, substitute the
@@ -278,7 +353,9 @@ identity/author/body/input/runtime/model/accounting readback. Source/CI acceptan
 does not prove activation, semantic usefulness, merge acceptance or whole-loop closure.
 
 The source workflow job requires Org Ops Issue483 or envs Issue52 with no PR marker,
-or Org Ops PR511 with a PR marker, and body exactly `/jev-evaluate`.
+or Org Ops PR511/PR520 with a PR marker, and body exactly `/jev-evaluate`.
+The fixed target-bound runtime admits these same four typed targets; caller-source
+acceptance and default/runtime readback remain pending as described above.
 The observed command author must be reviewed
 `roccho-dev`; Organization names are never compared with a person's login.
 Other Issues/repositories stop. The allowlist is not inferred from a public comment.
@@ -514,5 +591,6 @@ upstream alignment must reconcile this production delegation rather than silentl
 it with a duplicate live handler. Quality acceptance is not a gate for this functional slice.
 Neither check replaces the real authorized
 Issue request → existing owner execution → real provider → new result comment → independent
-readback proof. ops#483 stays unfinished until that runtime/config/supply/normal-path evidence
-exists, with proportionate non-trigger/failure controls and finite effect admission.
+readback proof. ops#483 is closed and the bounded PR511 function proof is complete
+as referenced above. Neither completion certifies Ops482 utility, every real race,
+arbitrary target admission or a new provider allowance.

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const EXACT = "${{ github.sha }}";
 const JEV_ORG_WORKFLOW = ".github/workflows/jev-issue-comment.yml";
-const JEV_MULTI_GUARD = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && github.event.comment.body == '/jev-evaluate' && ((github.event.issue.pull_request == null && ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) || (github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && github.event.issue.number == 511))";
+const JEV_MULTI_GUARD = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && github.event.comment.body == '/jev-evaluate' && ((github.event.issue.pull_request == null && ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) || (github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && (github.event.issue.number == 511 || github.event.issue.number == 520)))";
 const JEV_PLAN_RUN = [
   'set -euo pipefail',
   '"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"',
@@ -324,6 +324,8 @@ export function selftest() {
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 52","== 53");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("roccho-org/envs","other/envs");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 511","== 512");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 520","== 521");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 520","== 520 || github.event.issue.number == 521");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("pull_request != null","pull_request == null");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("pull_request == null","pull_request != null");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("github.event.issue.pull_request != null && ","");},
@@ -331,7 +333,7 @@ export function selftest() {
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("/jev-evaluate","/other");},
     w=>{w.jobs.evaluate.if+=" || true";},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 511","== 511 || github.event.issue.number == 512");},
-    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("github.repository == 'roccho-org/ops' && github.event.issue.number == 511","github.event.issue.number == 511");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("github.repository == 'roccho-org/ops' && (github.event.issue.number == 511", "(github.event.issue.number == 511");},
     w=>{w.jobs.evaluate.steps[0].with.ref="proposals";},
     w=>{w.jobs.evaluate.steps[0].with.repository="other/ops";},
     w=>{w.jobs.evaluate.steps[0].with["persist-credentials"]=true;},
