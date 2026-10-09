@@ -23,15 +23,28 @@ Org-only secret separation, nine context roles, six checks, Core limits and all
 204 lifetime reservations remain unchanged. Earlier FAIL/UNKNOWN records below
 remain history; source fixtures are not another paid or semantic-quality proof.
 
-Under `jev-issue-comment-utility-20261009-v2`, this source's deterministic admission supports
+Under `jev-issue-comment-utility-20261009-v3`, this source's deterministic admission supports
 at most two distinct explicitly configured PRs in the same already declared Ops
 repository/id, while retaining one Issue per repository. The shipped settings and
-literal workflow guard still admit only Ops483/envs52/PR511. The trial PR is not
-yet identified or active; a fixture number is never an actual target grant.
+literal workflow guard configure only Ops483/envs52/PR511/PR520. Root published
+bootstrap `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff` and verified actual
+[Ops520](https://github.com/roccho-org/ops/pull/520), repository ID `1275606595`,
+creator `roccho-dev`, base `41049cd7c59801afd6e6b119c34e15f674c41129`.
+This binding is local source awaiting Root acceptance/publication; caller repin is pending.
+It is not deployed admission or live GO; a fixture number is never a target grant.
 The still-pinned 5dbf20 runtime permits only one configured PR; local support for
 a second PR is not deployed admission until the publication/pin sequence completes.
-Root must publish and read back the meaningful self-PR before binding only that
-additional PR. Target-bound source is independently accepted and published before
+The compact model context records the reviewed PR520 grant and finite lifecycle
+before J0; the known context/admission correction is not Jev contribution. The
+six predicates, nine role paths and legitimate baselineEvidence are unchanged.
+The context is 2092 bytes (previously 1903). Unpaid actual-producer preflight uses
+the entire 3215-byte PR520 bootstrap body observed at head `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff`,
+SHA256 `44f2a2b1fe364063806c8a1550d9cf4d6a0606b4a8a6c422f43ce47da95aa4c7`:
+state 25127 bytes, longest question 720 and all questions 4079; all six fit the
+unchanged Core ceilings. Admission/run metadata is synthetic, not live proof.
+This retained snapshot is not the eventual X0 freeze;
+Root must recheck the full observed body and exact accepted context before live GO.
+Target-bound source is independently accepted and published before
 both caller pins can move to its immutable commit. Required current-head checks,
 normal merge/default/runtime/config readback and separate Root live GO precede
 any new request. Evaluated PR HEAD is never selected as executable runtime.
@@ -273,10 +286,11 @@ Root published and verified the meaningful change PR
 `codex/jev-pr-body-target-v1` from base `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`.
 The context-budget repair used `jev-pr-body-target-20261008-v3` and diagnostics
 used v4; the completed controlled token differential used v5 as described above.
-The settings retain Ops483 and envs52 and add only
+The historical PR511 settings retained Ops483 and envs52 and added only
 `{repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511}`.
-The source workflow guard admits exactly this PR alongside the existing Issue guards.
-No other PR or swapped Issue/PR type is admitted.
+That historical source guard admitted exactly PR511 alongside the Issue guards.
+Current v3 source additionally binds only reviewed PR520 as described above;
+no unrelated PR or swapped Issue/PR type is admitted.
 
 S3 was merged at `6da72a69d5776734f2ee47b1c2d5ef4d1b713900`; default-tree
 readback was confirmed by Root; later corrections and first+next proof are complete.
@@ -333,7 +347,8 @@ identity/author/body/input/runtime/model/accounting readback. Source/CI acceptan
 does not prove activation, semantic usefulness, merge acceptance or whole-loop closure.
 
 The source workflow job requires Org Ops Issue483 or envs Issue52 with no PR marker,
-or Org Ops PR511 with a PR marker, and body exactly `/jev-evaluate`.
+or Org Ops PR511/PR520 with a PR marker, and body exactly `/jev-evaluate`.
+The still-pinned runtime admits only the old three targets until accepted repin.
 The observed command author must be reviewed
 `roccho-dev`; Organization names are never compared with a person's login.
 Other Issues/repositories stop. The allowlist is not inferred from a public comment.

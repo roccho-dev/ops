@@ -758,6 +758,7 @@ await check('pull-request-closed-targets', async () => {
     { repository: 'roccho-org/ops', repositoryId: '1275606595', issue: 483 },
     { repository: 'roccho-org/envs', repositoryId: '1391871347', issue: 52 },
     { repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 511 },
+    { repository: 'roccho-org/ops', repositoryId: '1275606595', pullRequest: 520 },
   ]);
 });
 
@@ -915,11 +916,24 @@ await check('pull-request-native-unknown-and-exact-readback', async () => {
   }
 });
 
-await check('configured-exact-ops511-and-legacy-targets', async () => {
+await check('configured-exact-ops511-ops520-and-legacy-targets', async () => {
   const shipped = validateActionsConfig(JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8')));
+  for (const alter of [
+    cfg => { cfg.targets.push({ ...cfg.targets[3] }); },
+    cfg => { cfg.targets.push({ ...cfg.targets[3], pullRequest: 521 }); },
+    cfg => { cfg.targets[3].repository = 'roccho-org/envs'; cfg.targets[3].repositoryId = '1391871347'; },
+    cfg => { cfg.targets[3].repositoryId = '1391871347'; },
+    cfg => { cfg.targets[3].issue = 520; },
+  ]) {
+    const invalid = structuredClone(shipped); alter(invalid);
+    assert.throws(() => validateActionsConfig(invalid), /INVALID_ACTIONS_CONFIG/);
+  }
   for (const [repository, number, targetKind, admitted] of [
     ['roccho-org/ops', 511, 'pull-request', true], ['roccho-org/ops', 483, 'issue', true],
     ['roccho-org/envs', 52, 'issue', true], ['roccho-org/ops', 511, 'issue', false],
+    ['roccho-org/ops', 520, 'pull-request', true], ['roccho-org/ops', 520, 'issue', false],
+    ['roccho-org/envs', 520, 'pull-request', false], ['roccho-org/other', 520, 'pull-request', false],
+    ['roccho-org/ops', 521, 'pull-request', false],
     ['roccho-org/ops', 483, 'pull-request', false], ['roccho-org/envs', 52, 'pull-request', false],
     ['roccho-org/envs', 511, 'pull-request', false], ['roccho-org/ops', 512, 'pull-request', false],
     ['roccho-org/other', 511, 'pull-request', false],
@@ -948,23 +962,36 @@ await check('configured-exact-ops511-and-legacy-targets', async () => {
 
 const PR511_SNAPSHOT = Object.freeze({"base":"035fbf17fdd7ea699d33dc98537d74382c9eb9b5","body":"## Purpose and necessity\nAllow this meaningful change PR's complete body to be evaluated through the existing comment → Actions → real Jev → same-conversation result path. This adds only Ops PR511 as a bounded PR-body target; it does not admit arbitrary PRs or execute evaluated PR code.\n\nRel: https://github.com/roccho-org/ops/issues/483\nRel: https://github.com/roccho-org/ops/issues/482\nRel: https://github.com/roccho-dev/adrs/pull/593\nRef: https://github.com/roccho-dev/windows/issues/68\n\n## Current implementation\n- Closed target shape: legacy Ops483/envs52 Issues plus only {repository: roccho-org/ops, repositoryId: 1275606595, pullRequest: 511}.\n- Fixed GraphQL body observation and typed subject/ref/revision binding through admission, claim, result and exact same-PR readback.\n- Existing issue_comment event, literal /jev-evaluate, reviewed requester roccho-dev and the same six catalog questions.\n- Exact workflow guard and central guard selftests retain both Issues and reject unrelated PR numbers, repositories and swapped target types; the fail-closed analyzer is not weakened.\n- Caller workflow is this S3 source. Runtime code/settings/context pin the previously published, Root-reviewed immutable S2 commit f053c18b4b3b24bac3622821eeaf14b58ad56f65. PR511 body is untrusted data, never dynamically selected PR HEAD code.\n- No new event, client, core, actor, database, queue, ledger, credential or secret projection. Existing Org-only provider secret separation and all 204 lifetime reservations are unchanged; PR attempts share existing Ops slots. No rerun spending or replay after UNKNOWN.\n- User authorized merge. #511 is merged at 6da72a69d5776734f2ee47b1c2d5ef4d1b713900; the proposals default tree exactly matches the reviewed S3 tree. The fixed runtime remains S2. First+next real PR-body proof is still PENDING.\n\n## Changed source tree\n```text\n.github/workflows/jev-issue-comment.yml\npackages/jev-review/\n  github-comment.mjs\n  issue-executor.mjs\n  tests/issue-executor.mjs\n  issue-actions.json\n  ISSUE-EVALUATION.md\n  COMMENT-INVOCATION.md\ntools/check-ci-intent-workflow-branches.mjs\n```\n\n## Verification and provenance\nHead: 849f927cc8851982a3b9e23a33f984e359493e95\nTree: f8589d1f8deae5296643ec589d474010a98788c1\nBase: 035fbf17fdd7ea699d33dc98537d74382c9eb9b5\nJob contract: jev-pr-body-target-20261008-v2\nSource author: existing persistent OCI Codex writer, User-required GPT-6.1 Sol / Medium on official GitHub Codex 0.161.0, no model fallback.\nRoot independently reviewed the writer's source and re-ran the tests/provided-source checks; this is not third-party assurance or independent review of Root-authored policy.\n\nPASS locally, independently rechecked by Root:\n- 25 executor scenarios and source-contract guard matrix, including first+next, exact target closure, state integrity, body/edit drift, concurrency/stop, reservations, UNKNOWN and exact readback.\n- Functional fixtures and central guard rejection selftests.\n- Nix jev-review / jev-issue-executor / jev-comment-functional / ci-intent-workflow-branches checks.\n- Current provided-source byte parity (17 review files +13 Jev files), installed fixtures/smoke; pinned S2 runtime/config parity against its immutable Git source.\nReal Jev calls / GitHub evaluation effects during these tests: 0. The initial guard and smoke-invocation failures were corrected and remain history; fixtures are not live proof.\nCurrent-head GitHub CI PASS on 849f927cc8851982a3b9e23a33f984e359493e95: [nix-check](https://github.com/roccho-org/ops/actions/runs/37727405760), [repo-health](https://github.com/roccho-org/ops/actions/runs/37727405825), [README artifact exporter](https://github.com/roccho-org/ops/actions/runs/37727405755). The unrelated conditional cdp-tty-proof job was skipped, not counted as PASS.\n\n## Remaining completion\nUser merge permission and actual default-workflow/tree readback are confirmed. Root's bounded activation GO authorizes only first+next evaluation of this PR body, at most two Jev calls within existing Ops reservations, after source acceptance, exact target identity, trusted immutable runtime and active workflow/capacity verification. No broader target or budget is granted.\nThen each real call must append a result to this same PR, with Root independently verifying author, body/input revision, command identity, fixed source/model and actual attempted/completed/validated/unknown accounting. UNKNOWN is not retried.\nOnly after this foundation is proven should the necessity → evaluation → concrete improvement → same-case re-evaluation → useful-outcome evidence loop be discussed further.\nSource/CI, numerical axes, successful transport or repeated calls alone do not prove semantic usefulness, merge authority, quality improvement or whole-loop closure; Ops482 remains the quality owner.\n","head":"849f927cc8851982a3b9e23a33f984e359493e95","node_id":"PR_kwDOTAg2Q88AAAABHQE8Rg","number":511,"updated_at":"2026-10-08T04:47:15Z","url":"https://github.com/roccho-org/ops/pull/511"});
 const PR511_BODY_SHA256 = '4b94209218147c8ad9f6147eeee1614a0193b99e2623e265d0e10df589b35a5d';
+const PR520_SNAPSHOT = Object.freeze({"base":"41049cd7c59801afd6e6b119c34e15f674c41129","body":"## Purpose\nRefs roccho-org/ops#482. Open the necessary closed self-PR target extension and use the actual PR body for one finite consumer-use comparison. Reuse completed semlint and PR511 function proof; do not rebuild the evaluator or declare meaning quality from numbers.\n\n## Current source bootstrap\nExact head dc681260ae53b1f8c7c68a3dbdaaeeaa515befff / tree175f6bc43f31337f44a6582d2f622987dc3c8fdc; base41049cd7c59801afd6e6b119c34e15f674c41129. Three changed paths: github-comment.mjs, tests/issue-executor.mjs, COMMENT-INVOCATION.md in packages/jev-review.\nThe existing deterministic adapter supports at most two distinct explicitly configured PR targets in the same existing Ops repository/id. One Issue per repository, duplicate/third/cross-repository/id/type rejection remain. Existing configuration/literal guard admits only Ops483/envs52/PR511. No fixture number is an active target. This PR is not admitted or deployed yet.\n\n## Actor and authority\nAuthor is retained native W01a1196c-ebd6-7e61-be34-3258c13cf828, gpt-6.1-sol/medium, windows-own UID1000, dedicated branch/worktreecodex/jev-utility-target-v1. Root01a1188d-bb1c-72b2-84ff-612aada80f5b combines P/D and independent review of W-authored source, not third-party or own-policy review. Scoped policye0ca1e33176947e0635f57bb468bdf10cbde7b3b / jev-issue-comment-utility-20261009-v2; Root sourceGO6073857216.\n\n## Evidence and limits\nW local affected30-scenario/source-contract, functional/central guard and4Nix checks PASS; provided source17+13 inventory/installed closed refusal checked. Two wrong ad-hoc CLI/schema smoke expectations remain failed history, corrected by reading the actual contract, not changing refusal behavior. Root independently read exactdiff/cleanHEAD/invariants and ran actual30-scenario/source-contract plus five extra negative variants; source-only provider0. Public current-head CI is pending.\n\n## Remaining ordered work\n1. Bind only this actual PR identity in reviewed settings and literal guard; preserve all three legacy targets.\n2. Publish and independently accept target-bound code before pinning both callers to that prior immutable published commit. Verify current-head CI and actual default/runtime/context. Evaluated PR HEAD is never executable runtime.\n3. Root fixes Jev-unseen judgment/external expectation, actual X0/E, burden accounting and remaining native reservations before separate liveGO. At most two new attempted Jev calls; existing204 reservations, token grants, Org-only key, six checks/nine roles/Core ceilings unchanged.\n4. Use only warranted evidence for an actual meaning/claim improvement and comparable X1 re-evaluation; independently judge correctness and total burden separately, preserve failures/unknown costs and finite EFFECT/NO_EFFECT/HARM/NOT_PROVEN. If no warranted improvement exists, do not force a second call. Purpose-linked agenda stays in existing Ops482, not a new authority engine.\n\nCurrent live calls0; U NOT_PROVEN. Known admission/stale-doc fixes are not Jev contribution. No new actor/core/client/threshold/secret/auth/budget refill, arbitrary target or automatic dispatch/merge authority. Historical function/finite quality stay completed within their recorded limits.\n","head":"dc681260ae53b1f8c7c68a3dbdaaeeaa515befff","node_id":"PR_kwDOTAg2Q88AAAABHdrTCQ","number":520,"updated_at":"2026-10-09T04:20:04Z","url":"https://github.com/roccho-org/ops/pull/520"});
 const PR511_EDIT_SIGNALS = Object.freeze({ lastEditedAt: '2026-10-08T04:38:40Z', includesCreatedEdit: true, edits: 3 });
 const REFUSED_S2_CONTEXT = "# Issue evaluation context\n\nAuthority: User permits Root-only OCI setup/source, normal merge and paid proof, plus 200 additional calls in total. Legacy admission is reviewed roccho-dev commands on Ops483/envs52; staged PR511 source and its separate activation boundary are described below. Evidence never grants effects.\nCompletion: First+next real Actions/Jev/result append and exact same-Issue readback on both targets. Source, projection and CI alone are not completion. Root self-readback is not independent R.\nResponsibility: envs/SOPS owns the secret SSOT and one Org slot; Ops owns the supplied evaluator and effect adapter; GitHub hosts normal execution. No Ops key copy.\nRequired contracts: Existing semlint six-axis catalog, closed request/result identity, trusted settings, finite spend and no replay after UNKNOWN.\nDependencies: Native Issue event, fixed Ops source/runtime, selected Org Secret and existing Jev core. No host/OCI or envs-CI dependency during evaluation.\nAccounting: Initial four-call history is retained; 100 further slots per repo add at most 200 calls (lifetime ceiling 204). One call per run, 15s operation/60s plan; no rerun spending or automatic refill. Missing/invalid/UNKNOWN is not success.\nRegistered cases: First+next on Ops483 and envs52; fixture non-trigger, replay, concurrency, stop, drift and UNKNOWN cases remain source evidence only.\nQuality: Raw six-axis Noul evidence, not truth, authority or merge verdict. Semantic usefulness improvement belongs to Ops482; no accuracy claim here.\nBaseline: Existing semlint bounded API is reused unchanged. Known finite-quality limitations496/500 remain; this functional proof is not a quality comparison.\n\n## Bounded PR-body extension\n\nUnder `jev-pr-body-target-20261008-v2`, the persistent OCI writer owns only the\ndeclared source/test/correction slice after source GO. Root independently reviews\nthat source without authoring it and alone publishes the accepted result. Root's\npolicy self-readback is not independent policy review, and same-account source\nreview is not third-party assurance.\n\nRoot has published and verified the meaningful change PR Ops511 in `roccho-org/ops`,\nrepository ID `1275606595`, author `roccho-dev`, branch `codex/jev-pr-body-target-v1`,\nbase `035fbf17fdd7ea699d33dc98537d74382c9eb9b5`. S2 settings and the source workflow\nguard retain both Issues and configure only PR511's full body as untrusted evaluation\ndata. Both runtime pins remain `2d592b1cdcdb2abed7b00dfd98baab7105914521`, whose\nsettings do not admit511: configured source is not deployed activation. Root must\nreview/publish S2 and verify its actual immutable remote identity before separate S3\ncorrection GO can pin that already published trusted runtime. No unpublished self-pin,\nS1 runtime substitution or dynamic evaluated PR HEAD is allowed.\nThe PR is never a runtime or authority source. Root separately\nauthorizes activation after source acceptance, verified PR identity, a previously\npublished immutable trusted runtime and current existing Ops reserved capacity.\nMerge/default-workflow activation needs applicable User merge authority; this source\ncontract does not grant it.\n\nCompletion for this extension is first+next real Jev evaluation, same-PR result append\nand Root's exact identity/author/body/input/source/model/accounting readback before\nmeta-loop discussion. The six questions, requester, Org-only provider/secret boundary,\nall 204 reservations and no replay after UNKNOWN remain unchanged. There is no new\nbudget, target discovery, event, client, actor, ledger or quality claim. Verified Codex\nweekly remaining zero stops new work/effects; reset alone does not resume work.\n";
 const actualContextBudgets = [];
-await check('exact-public-pr511-current-context-budget', async () => {
+await check('exact-public-pr511-pr520-current-context-budget', async () => {
   assert.equal(hash(PR511_SNAPSHOT.body), PR511_BODY_SHA256);
   assert.equal(Buffer.byteLength(PR511_SNAPSHOT.body, 'utf8'), 4808);
+  assert.equal(PR520_SNAPSHOT.number, 520);
+  assert.equal(PR520_SNAPSHOT.head, 'dc681260ae53b1f8c7c68a3dbdaaeeaa515befff');
+  assert.equal(hash(PR520_SNAPSHOT.body), '44f2a2b1fe364063806c8a1550d9cf4d6a0606b4a8a6c422f43ce47da95aa4c7');
+  assert.equal(Buffer.byteLength(PR520_SNAPSHOT.body, 'utf8'), 3215);
+  const actualContext = fs.readFileSync(new URL('../ISSUE-EVALUATION.md', import.meta.url), 'utf8');
+  for (const required of ['Ops483/envs52 Issues and Ops PR511/520 only', 'PR511 function is complete',
+    'at most two new attempts', 'pre-J0 input freeze', 'no forced second call or inherited GO',
+    'same-PR result append and exact identity/body/input/source/model/accounting readback']) {
+    assert.ok(actualContext.includes(required), required);
+  }
   const shipped = validateActionsConfig(JSON.parse(fs.readFileSync(new URL('../issue-actions.json', import.meta.url), 'utf8')));
   assert.deepEqual(shipped.context.map(row => row.role), ROLES);
   assert.deepEqual(shipped.allowedChecks, CHECKS);
   for (const [number, kind, body] of [
     [511, 'pull-request', PR511_SNAPSHOT.body],
+    [520, 'pull-request', PR520_SNAPSHOT.body],
     [483, 'issue', 'Legacy Ops483 compatibility subject (synthetic); full-body admission.'],
   ]) {
     const reservation = shipped.runRanges.find(row => row.repository === 'roccho-org/ops');
     const fixture = world('roccho-org/ops', number, reservation.workflowId, kind);
     fixture.issue.body = body;
-    if (kind === 'pull-request') Object.assign(fixture.issue, PR511_EDIT_SIGNALS, { id: PR511_SNAPSHOT.node_id });
+    if (number === 511) Object.assign(fixture.issue, PR511_EDIT_SIGNALS, { id: PR511_SNAPSHOT.node_id });
+    if (number === 520) fixture.issue.id = PR520_SNAPSHOT.node_id;
     const command = fixture.addComment({ author: 'roccho-dev' });
     const run = fixture.newRun({ run_number: reservation.first });
     const ctx = ctxFor(fixture, command, run);
@@ -1034,9 +1061,13 @@ const jsonl = (p) => repoFile(p).split('\n').filter(Boolean).map((l) => JSON.par
 const workflow = repoFile(WF_PATH);
 const invocation = repoFile('packages/jev-review/COMMENT-INVOCATION.md');
 const currentInvocation = invocation.split('## Controlled PR-token differential (historical v5 staging)')[0];
+const targetBudget = actualContextBudgets.find(row => row.number === 520);
+assert.ok(currentInvocation.includes(`The context is ${targetBudget.contextBytes} bytes (previously 1903)`));
+assert.ok(currentInvocation.includes(`state ${targetBudget.stateBytes} bytes, longest question ${targetBudget.longestQuestionBytes} and all questions ${targetBudget.allQuestionsBytes}`));
 for (const required of ['functional path is COMPLETE', '6057281071', '6056525801', '6057022678',
   'old two-call allowance is exhausted', 'utility remains NOT_PROVEN', 'Jev-unseen comparison',
   'external gold', 'shipped settings and', 'at most two distinct explicitly configured PRs',
+  'Ops483/envs52/PR511/PR520', 'jev-issue-comment-utility-20261009-v3', 'caller repin is pending',
   'Ordinary scoped technical FAIL', 'UNKNOWN holds without blind retry']) assert.ok(currentInvocation.includes(required), required);
 for (const stale of ['completion remains pending', 'not deployed or live accepted', 'live acceptance remains unproved']) {
   assert.equal(currentInvocation.includes(stale), false, stale);
@@ -1046,9 +1077,9 @@ assert.ok(guardText);
 assert.match(guardText, /^[A-Za-z0-9_.' /()&|!=\s-]+$/);
 const guard = new Function('github', `return (${guardText});`);
 for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other', 'roccho-dev/ops']) {
-  for (const number of [483, 52, 511, 512]) {
+  for (const number of [483, 52, 511, 512, 520, 521]) {
     for (const pullRequest of [null, { url: 'untrusted:never-used' }]) {
-      const allowed = repository === 'roccho-org/ops' && number === (pullRequest ? 511 : 483)
+      const allowed = repository === 'roccho-org/ops' && (pullRequest ? [511, 520].includes(number) : number === 483)
         || repository === 'roccho-org/envs' && number === 52 && pullRequest === null;
       const github = { repository, event_name: 'issue_comment', event: {
         repository: { owner: { type: 'Organization' } }, comment: { body: '/jev-evaluate' },
@@ -1070,7 +1101,8 @@ const expectedGuard = "github.event_name == 'issue_comment' && github.event.repo
   + "github.event.comment.body == '/jev-evaluate' && ((github.event.issue.pull_request == null && "
   + "((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || "
   + "(github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) || "
-  + "(github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && github.event.issue.number == 511))";
+  + "(github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && "
+  + "(github.event.issue.number == 511 || github.event.issue.number == 520)))";
 const assertWorkflowBoundary = (text) => {
   assert.equal(text.match(/\npermissions:\n([\s\S]*?)\njobs:/)?.[1], permissionBlock);
   assert.equal([...text.matchAll(/^\s*permissions:/gm)].length, 1);
@@ -1086,6 +1118,8 @@ for (const forbidden of [
   workflow.replace('permissions:\n' + permissionBlock, 'permissions: write-all\n'),
   workflow.replace('  evaluate:\n', '  evaluate:\n    permissions: write-all\n'),
   workflow.replace('github.event.issue.number == 511', 'github.event.issue.number >= 511'),
+  workflow.replace('github.event.issue.number == 520', 'github.event.issue.number == 521'),
+  workflow.replace('github.event.issue.number == 520', 'github.event.issue.number == 520 || github.event.issue.number == 521'),
   workflow.replace("github.repository == 'roccho-org/ops'", 'true'),
   workflow.replace("github.event.comment.body == '/jev-evaluate'", 'true'),
   workflow.replace('github.event.issue.pull_request != null', 'true'),
@@ -1101,7 +1135,8 @@ assert.match(workflow, /\non:\n  issue_comment:\n    types: \[created\]\n  workf
 assert.equal(/^\s*(?:workflow_dispatch|schedule|pull_request|pull_request_target|workflow_run|repository_dispatch|concurrency):/m.test(workflow), false);
 for (const part of ['github.event.issue.number == 483', 'github.event.issue.number == 52', "github.event_name == 'issue_comment'", "github.event.repository.owner.type == 'Organization'",
   "github.event.comment.body == '/jev-evaluate'", 'github.event.issue.pull_request == null',
-  'github.event.issue.pull_request != null', 'github.event.issue.number == 511']) assert.ok(workflow.includes(part), part);
+  'github.event.issue.pull_request != null', 'github.event.issue.number == 511',
+  'github.event.issue.number == 520']) assert.ok(workflow.includes(part), part);
 const uses = [...workflow.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
 assert.ok(uses.length === 2 && uses.every((u) => /^[A-Za-z0-9_.\/-]+@[0-9a-f]{40}$/.test(u)), uses.join());
 assert.ok(workflow.includes('repository: roccho-org/ops') && /ref: [0-9a-f]{40}/.test(workflow) && workflow.includes('persist-credentials: false'));

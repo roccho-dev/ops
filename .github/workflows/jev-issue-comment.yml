@@ -1,6 +1,6 @@
 name: Jev Issue comment evaluation
 
-# Guard admits Org Ops483/envs52/PR511; runtime/context use published correction.
+# Guard admits Org Ops483/envs52/PR511/PR520; published runtime repin is pending.
 # One projected Org slot; no Repository/Environment copy.
 # Initial four-call history plus 200 authorized additions; no rerun spending.
 on:
@@ -27,7 +27,8 @@ jobs:
       ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) ||
       (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) ||
       (github.event.issue.pull_request != null &&
-      github.repository == 'roccho-org/ops' && github.event.issue.number == 511))
+      github.repository == 'roccho-org/ops' &&
+      (github.event.issue.number == 511 || github.event.issue.number == 520)))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
