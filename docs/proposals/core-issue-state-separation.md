@@ -1,8 +1,8 @@
 # core-issue-state-separation — Issue本文とコメントの役割を評価する用途（方針案）
 
-> **Status: PROPOSAL ONLY / documentation-only.** 実装、全Issueへの自動適用、実Jev呼出し、CI必須化、既存Issueの一括編集、採否・merge・close権限は、この文書では発生しない。
+> **Status: PROPOSAL ONLY / documentation-only.** 実装、全Issueへの自動適用、実Sys1モデル呼出し、CI必須化、既存Issueの一括編集、採否・merge・close権限は、この文書では発生しない。
 >
-> **Relation:** [ops#524 — Jev Core / Adapter分離](https://github.com/roccho-org/ops/issues/524) に対する **1つの `core-xxx` 用途候補**。[ops#523](https://github.com/roccho-org/ops/issues/523) が必要な評価項目の発見・ルーティングを、[adrs#497](https://github.com/roccho-dev/adrs/issues/497) がFactory上位目標を所有する。
+> **Relation:** [ops#524 — Sys1 Core / Model・用途Adapter分離](https://github.com/roccho-org/ops/issues/524) に対する **1つの `core-xxx` 用途候補**。[ops#523](https://github.com/roccho-org/ops/issues/523) が必要な評価項目の発見・ルーティングを、[adrs#497](https://github.com/roccho-dev/adrs/issues/497) がFactory上位目標を所有する。
 
 ## Goal / 期待する完成状態
 
@@ -25,7 +25,7 @@
 
 ## One evaluation use case: `core-issue-state-separation`
 
-この `core-xxx` は**Issue記載の意味的な置き場所**だけを評価する。新しいprovider、CLI、Issue管理者、lint全般を作ることではない。
+この `core-xxx` は**Issue記載の意味的な置き場所**だけを評価する。新しいprovider、CLI、Issue管理者、lint全般を作ることではない。**判断の意味はSys1モデルから独立し、モデルの選択とconformanceは外部bindingが担当する。**
 
 | Core要素 | 契約 |
 |---|---|
@@ -39,7 +39,7 @@
 
 > 対象Issueの本文は、実現すべき期待・契約を記述しており、対象時点の観測結果や進捗報告を本文に混在させず、観測は出所付きのコメントとして分離されているか。
 
-この問い自体の正答率は未検証であり、JevのNoul値を規約違反の確定やGitHubの作用権限に変換しない。個別Coreの適用先を選ぶ `core-route`、共有の型付き意味判断処理、修正判断は各ownerの責務に残す。
+この問い自体の正答率は未検証。**どのSys1モデルのtyped judgmentも規約違反の確定やGitHubの作用権限に変換しない。** `core-route` による用途選択、`ModelPort` へのモデルbindingと対応primitiveのconformance、最終修正判断はそれぞれ別の責務に残す。
 
 ### 時系列と数式
 
@@ -56,7 +56,7 @@ Gap_t = Compare(Expected_v, Verified(Observation_≤t))
 ΔObservation_t ⇒ ΔExpected_v = 0
 ΔExpected_v ≠ 0 ⇒ explicit expectation revision + reason + authority
 Comment_t ≠ Admit(Expected_{v+1})
-JevJudgment ≠ ProvenGap ≠ PermissionToEdit
+Sys1Judgment ≠ ProvenGap ≠ PermissionToEdit
 ```
 
 ### 誤った判定を防ぐための評価例（想定、実測ではない）
@@ -77,15 +77,15 @@ JevJudgment ≠ ProvenGap ≠ PermissionToEdit
 1. **主張の置き場所を正しく区別**：期待（本文）・観測（コメント）・提案（コメント）を取り違えない。
 2. **未達前提を押し付けない**：課題の起票をgapの存在証明、実装着手許可としない。
 3. **目標の変更と進捗の変更を分離**：期待自体の正規改訂は可能だが、単なる現状変化では本文を改訂しない。
-4. **評価器を局所追加可能**：この用途が他の`core-xxx`・`cli`・共有Jev契約の変更を要求しない。Routeによる用途選択とCore自身の判断品質を別に評価できる。
+4. **評価器を局所追加可能**：この用途が他の`core-xxx`・`cli`・共有Sys1判断契約・モデルAdapterの変更を要求しない。Routeによる用途選択とCore自身の判断品質を別に評価できる。
 5. **独立正解に対して比較可能**：適切な正負例・曖昧例を事前固定し、無関係な既存6軸semLintとの差分、誤検知・見逃し・未観測を別々に保持する。
-6. **効果も権限も先取りしない**：この文書の存在は判断精度の実証ではない。将来の実験が必要なら許可・実Jev費用・停止条件・検証対象版を別途固定する。
+6. **効果も権限も先取りしない**：この文書の存在は判断精度の実証ではない。将来の実験が必要なら許可・実Sys1モデル費用・停止条件・検証対象版を別途固定する。
 
 ## Ownership / Non-goals
 
 - **規約の上位意味**：Issueの期待を書く行為は既存の[adrs#449](https://github.com/roccho-dev/adrs/issues/449)（WHATを渡しHOWを奪わない）と整合することを確認し、ADRSの採択権限をopsへ移さない。
 - **この文書の所有範囲**：[ops#524](https://github.com/roccho-org/ops/issues/524)の`core-xxx`の具体例として、Issue本文とコメントの意味区別を評価する境界だけ。Goal発見・選択全体は[ops#523](https://github.com/roccho-org/ops/issues/523)。
-- **既存の汎用意味検査**：[ops#471](https://github.com/roccho-org/ops/issues/471)のAligned/Closed/Unique/Minimal/Measurable/Improvingや[ops#403](https://github.com/roccho-org/ops/issues/403)のJev評価契約は再定義しない。
-- **対象外**：PR本文の同一規約化、Issueテンプレートの自動強制、GitHub bot、既存Issueの本文一括移行、現在状態の自動真偽認定、エラーによるmerge/close停止、新しいJevHarness/GEPAの実装・導入。
+- **既存の汎用意味検査**：[ops#471](https://github.com/roccho-org/ops/issues/471)のAligned/Closed/Unique/Minimal/Measurable/Improvingや[ops#403](https://github.com/roccho-org/ops/issues/403)のJev固有評価契約は再定義せず、[adrs#465](https://github.com/roccho-dev/adrs/issues/465)・[ops#524](https://github.com/roccho-org/ops/issues/524)のモデル非依存な判断境界に従う。
+- **対象外**：PR本文の同一規約化、Issueテンプレートの自動強制、GitHub bot、既存Issueの本文一括移行、現在状態の自動真偽認定、エラーによるmerge/close停止、新しいJevHarness/GEPAや特定Sys1モデルの導入・実装。
 
 **本PRの完了は、この用途方針のレビュー可能な公開まで。実Core・Route・CIの完成、契約の組織的採択は主張しない。**
