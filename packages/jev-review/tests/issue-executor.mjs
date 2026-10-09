@@ -1067,7 +1067,7 @@ assert.ok(currentInvocation.includes(`state ${targetBudget.stateBytes} bytes, lo
 for (const required of ['functional path is COMPLETE', '6057281071', '6056525801', '6057022678',
   'old two-call allowance is exhausted', 'utility remains NOT_PROVEN', 'Jev-unseen comparison',
   'external gold', 'shipped settings and', 'at most two distinct explicitly configured PRs',
-  'Ops483/envs52/PR511/PR520', 'jev-issue-comment-utility-20261009-v3', 'caller repin is pending',
+  'Ops483/envs52/PR511/PR520', 'jev-issue-comment-utility-20261009-v3', 'caller repin is local source',
   'Ordinary scoped technical FAIL', 'UNKNOWN holds without blind retry']) assert.ok(currentInvocation.includes(required), required);
 for (const stale of ['completion remains pending', 'not deployed or live accepted', 'live acceptance remains unproved']) {
   assert.equal(currentInvocation.includes(stale), false, stale);
@@ -1094,8 +1094,10 @@ for (const repository of ['roccho-org/ops', 'roccho-org/envs', 'roccho-org/other
     }
   }
 }
-assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
-assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], '5dbf20b0466f1a13d6a5299fdfd9f94424647a2c');
+const trustedRuntime = '362e6cde5668456c584e3aee251d92e617777568';
+assert.equal(workflow.match(/ref: ([0-9a-f]{40})/)[1], trustedRuntime);
+assert.equal(workflow.match(/runtime_source=([0-9a-f]{40})/)[1], trustedRuntime);
+assert.ok(currentInvocation.includes(trustedRuntime));
 const permissionBlock = '  actions: read\n  contents: read\n  issues: write\n  pull-requests: write\n';
 const expectedGuard = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && "
   + "github.event.comment.body == '/jev-evaluate' && ((github.event.issue.pull_request == null && "

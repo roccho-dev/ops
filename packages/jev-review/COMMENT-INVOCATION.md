@@ -13,7 +13,9 @@ completed and validated requests were 2/2/2, unknown HTTP0, cost unknown and
 authorityfalse. Those results bind the earlier exact body, not later edited PR text.
 The old two-call allowance is exhausted; no historical command is replayed.
 
-Both current caller pins remain published/reviewed
+Both source caller pins reference published/reviewed target-bound runtime
+`362e6cde5668456c584e3aee251d92e617777568`. This caller repin is local source,
+not merge/default activation or live GO. The prior deployed runtime was
 `5dbf20b0466f1a13d6a5299fdfd9f94424647a2c`. The deployed token differential
 retains Actionsread/Contentsread/Issueswrite/PRwrite: PRwrite is repository-wide,
 not PR511-scoped. The exact guard and trusted settings limit execution. The
@@ -30,10 +32,14 @@ literal workflow guard configure only Ops483/envs52/PR511/PR520. Root published
 bootstrap `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff` and verified actual
 [Ops520](https://github.com/roccho-org/ops/pull/520), repository ID `1275606595`,
 creator `roccho-dev`, base `41049cd7c59801afd6e6b119c34e15f674c41129`.
-This binding is local source awaiting Root acceptance/publication; caller repin is pending.
-It is not deployed admission or live GO; a fixture number is never a target grant.
-The still-pinned 5dbf20 runtime permits only one configured PR; local support for
-a second PR is not deployed admission until the publication/pin sequence completes.
+Root independently accepted and published target-bound source
+`362e6cde5668456c584e3aee251d92e617777568`, tree
+`beba31684d8847e9660edb2aa8d04ef808bebaf9`, parent `dc681260ae53b1f8c7c68a3dbdaaeeaa515befff`.
+This caller repin is local source awaiting Root acceptance/publication and
+current-head CI/default/runtime readback; a fixture number is never a target grant.
+The fixed runtime admits both PR511 and PR520; its earlier caller pins still
+describe the binding stage, not this caller source. Neither runtime nor context
+is selected from evaluated PR HEAD.
 The compact model context records the reviewed PR520 grant and finite lifecycle
 before J0; the known context/admission correction is not Jev contribution. The
 six predicates, nine role paths and legitimate baselineEvidence are unchanged.
@@ -44,8 +50,8 @@ state 25127 bytes, longest question 720 and all questions 4079; all six fit the
 unchanged Core ceilings. Admission/run metadata is synthetic, not live proof.
 This retained snapshot is not the eventual X0 freeze;
 Root must recheck the full observed body and exact accepted context before live GO.
-Target-bound source is independently accepted and published before
-both caller pins can move to its immutable commit. Required current-head checks,
+Target-bound source was independently accepted and published before
+both source caller pins moved to its immutable commit. Required current-head checks,
 normal merge/default/runtime/config readback and separate Root live GO precede
 any new request. Evaluated PR HEAD is never selected as executable runtime.
 
@@ -299,7 +305,7 @@ published S2 `f053c18b4b3b24bac3622821eeaf14b58ad56f65`, the earlier runtime.
 Root independently accepted the published context-budget runtime
 `46a20f607d1a29caac377401277c2b47d5119802` on repair PR513, merged at
 `f424584ece730d05a74f0c651bae137ab8e2d76d`. Its 1903-byte context, unchanged
-settings and exact PR511 admission remain in the current diagnostic runtime5dbf20.
+settings and exact PR511 admission remained in the earlier diagnostic runtime5dbf20.
 Both current caller pins are described above. Neither runtime is selected from
 PR HEAD, and PR513/PR515 are not evaluation targets.
 PR511's full body remains untrusted data; historical snapshot descriptions are
@@ -348,7 +354,8 @@ does not prove activation, semantic usefulness, merge acceptance or whole-loop c
 
 The source workflow job requires Org Ops Issue483 or envs Issue52 with no PR marker,
 or Org Ops PR511/PR520 with a PR marker, and body exactly `/jev-evaluate`.
-The still-pinned runtime admits only the old three targets until accepted repin.
+The fixed target-bound runtime admits these same four typed targets; caller-source
+acceptance and default/runtime readback remain pending as described above.
 The observed command author must be reviewed
 `roccho-dev`; Organization names are never compared with a person's login.
 Other Issues/repositories stop. The allowlist is not inferred from a public comment.
