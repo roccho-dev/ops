@@ -1,6 +1,6 @@
 name: Jev Issue comment evaluation
 
-# Guard admits Org Ops483/envs52/PR511/PR520; runtime is published target-bound source.
+# Guard binds Org Ops483/envs52/PR511/PR522; caller repin remains separate.
 # One projected Org slot; no Repository/Environment copy.
 # Initial four-call history plus 200 authorized additions; no rerun spending.
 on:
@@ -22,13 +22,16 @@ jobs:
     if: >-
       github.event_name == 'issue_comment' &&
       github.event.repository.owner.type == 'Organization' &&
-      github.event.comment.body == '/jev-evaluate' &&
+      (github.event.comment.body == '/jev-evaluate' ||
+      (github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' &&
+      github.event.issue.number == 522 &&
+      startsWith(github.event.comment.body, fromJSON('"/jev-evaluate\n"')))) &&
       ((github.event.issue.pull_request == null &&
       ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) ||
       (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) ||
       (github.event.issue.pull_request != null &&
       github.repository == 'roccho-org/ops' &&
-      (github.event.issue.number == 511 || github.event.issue.number == 520)))
+      (github.event.issue.number == 511 || github.event.issue.number == 522)))
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

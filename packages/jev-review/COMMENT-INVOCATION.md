@@ -1,6 +1,6 @@
 # Issue invocation contract
 
-## Provided-v14 consumer bootstrap (v4, not activated)
+## Provided-v14 PR522 binding (v4, caller repin pending)
 
 Under `jev-issue-comment-utility-20261009-v4`, the native consumer can admit the
 existing `/jev-evaluate\n` plus closed `ops.jev.issue-request.v1` JSON envelope,
@@ -9,10 +9,19 @@ does not add an evaluator, client, translator, explanation generator or effect a
 
 Admission requires an independent reviewed `providedRequestTargets` setting:
 at most one exact `{repository, repositoryId, pullRequest}` already in trusted
-targets, excluding legacy PR511 and retired trial PR520. The shipped config has
-no provided grant; existing targets, literal workflow guard and both caller pins
-remain unchanged. No future number or fixture number is active. Native fixtures
-exercise the integration directly; they are not current workflow activation.
+targets, excluding legacy PR511 and retired trial PR520. The shipped source grants
+only actual [PR522](https://github.com/roccho-org/ops/pull/522), repository ID
+`1275606595`, author `roccho-dev`, branch `codex/jev-comment-consumer-v14-v1`,
+base `c8c8430aed9c48ff3bf3c654fc15e6d12b793ea7`. It retains Ops483/envs52/PR511,
+replaces only retired520 with522, and guards the JSON-prefix route only on522.
+Both caller pins remain `362e6cde5668456c584e3aee251d92e617777568`, whose runtime
+does not admit522 or provided native requests. Configured source is not deployed
+activation; no future number or fixture number is active.
+
+The workflow uses `fromJSON('"/jev-evaluate\n"')` to decode the LF prefix before
+`startsWith`; malformed JSON may enter planning only on522 and is refused before
+claim/provider. GitHub string comparisons are case-insensitive; native admission
+still requires the exact case-sensitive command. Legacy literal behavior remains.
 
 The command is untrusted data, not configuration or authority. Its envelope is
 exactly `{schema, cases}` with one v14 case and one through six supplied criteria.
@@ -31,16 +40,33 @@ command digest, actual subject revision, criteria/context and v14 projection bin
 result composition and exact readback. Existing edit/drift/replay/UNKNOWN and
 Org-only key/token separation remain; legacy literal v1 behavior is retained.
 
-Root must accept/publish this meaningful slice and create/read the actual new PR.
-Later target-bound source retains Ops483/envs52/PR511 and replaces only PR520 with
-that verified PR, enables its provided grant/guard and updates context before
-publication and a separate immutable caller repin. Until current-head CI and
+Root published bootstrap `0d506978270fb0bd97dcd7ba6074835d7faa1faf` and verified
+PR522's complete initial 4585-byte body, SHA256
+`a4fdbe79a47775363902f5a1c4534b35ced11d3bb848093429812f2c089f90f4`.
+Root must accept/publish this target-bound source before a separate immutable
+caller repin. Until current-head CI and
 default/runtime/capacity verification plus separate Root live GO, new paid calls
 remain zero. The new ten-attempt pool is a ceiling, not automatic dispatch or
 reuse of the ended PR520 one-call NOT_PROVEN trial; old raw/FAIL/UNKNOWN history
 is preserved. Wiring itself is not Jev contribution. A necessary real decision,
 off-wire expectation, prospective comparison and total-burden measurement remain
 required; no forced improvement/J1 or score-based authority is granted.
+
+Provided planning still collects and validates all nine fixed legacy context roles.
+Whether these observations are necessary or safely removable is unresolved; this
+binding does not remove them, infer a defect or count preparation as Jev discovery.
+Independent expected judgment stays off wire; neither public lifecycle context nor
+caller-supplied criterion context is gold or automatic authority.
+
+Current context is 2189 bytes. With PR522's exact initial 4585-byte subject, the
+legacy literal producer yields state 27373 bytes, longest question 720 and all
+questions 4079. PR511's retained 4808-byte snapshot yields state 27635, longest
+question 731 and all questions 4145. Both pass unchanged Core limits. A six-criterion
+provided mechanical fixture using the same full PR522 subject and one declared
+context row yields state 7922, longest question 1725 and all questions 10350.
+That fixture is not the prospective Minimal criterion or an X0/E freeze; no paid
+or semantic usefulness evidence is claimed. Historical PR520 snapshots/raw results
+and earlier context budgets below remain immutable history, not current admission.
 
 The sections below retain the prior v3 operating/source history. PR520 was merged
 at `74df5e162dfe095289fad24a75d3986f6a9720c2`; its real result

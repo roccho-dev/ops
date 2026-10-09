@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const EXACT = "${{ github.sha }}";
 const JEV_ORG_WORKFLOW = ".github/workflows/jev-issue-comment.yml";
-const JEV_MULTI_GUARD = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && github.event.comment.body == '/jev-evaluate' && ((github.event.issue.pull_request == null && ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) || (github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && (github.event.issue.number == 511 || github.event.issue.number == 520)))";
+const JEV_MULTI_GUARD = "github.event_name == 'issue_comment' && github.event.repository.owner.type == 'Organization' && (github.event.comment.body == '/jev-evaluate' || (github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && github.event.issue.number == 522 && startsWith(github.event.comment.body, fromJSON('\"/jev-evaluate\\n\"')))) && ((github.event.issue.pull_request == null && ((github.repository == 'roccho-org/ops' && github.event.issue.number == 483) || (github.repository == 'roccho-org/envs' && github.event.issue.number == 52))) || (github.event.issue.pull_request != null && github.repository == 'roccho-org/ops' && (github.event.issue.number == 511 || github.event.issue.number == 522)))";
 const JEV_PLAN_RUN = [
   'set -euo pipefail',
   '"$JEV_NODE" "$JEV_SRC/issue-executor.mjs" plan "$JEV_RUN_DIR"',
@@ -324,8 +324,11 @@ export function selftest() {
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 52","== 53");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("roccho-org/envs","other/envs");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 511","== 512");},
-    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 520","== 521");},
-    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("== 520","== 520 || github.event.issue.number == 521");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replaceAll("== 522","== 520");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replaceAll("== 522","== 522 || github.event.issue.number == 523");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("github.event.issue.number == 522 && startsWith", "startsWith");},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace('fromJSON(\'"/jev-evaluate\\n"\')', '\'/jev-evaluate\'');},
+    w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("startsWith(github.event.comment.body", "contains(github.event.comment.body");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("pull_request != null","pull_request == null");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("pull_request == null","pull_request != null");},
     w=>{w.jobs.evaluate.if=w.jobs.evaluate.if.replace("github.event.issue.pull_request != null && ","");},
