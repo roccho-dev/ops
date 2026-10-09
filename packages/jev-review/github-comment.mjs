@@ -70,15 +70,22 @@ export async function admitIssueComment(eventValue, configValue) {
 // Shared requester/body/plan/size admission for webhook events and API snapshots.
 async function admitBody(config, limits, author, body, identityOf) {
   if (!config.requesters.includes(author)) return reject('REQUESTER_NOT_AUTHORIZED');
-  if (!body.startsWith(REQUEST_PREFIX)) return reject('NOT_A_REQUEST');
-  if (Buffer.byteLength(body, 'utf8') > limits.maxInputBytes) return reject('REQUEST_TOO_LARGE');
+  const parsed = await prepareIssueRequest(body, limits);
+  if (parsed.cause) return reject(parsed.cause);
+  return finishRequest(parsed.prepared, identityOf);
+}
+
+async function prepareIssueRequest(body, limits, validatePayload = null) {
+  if (!body.startsWith(REQUEST_PREFIX)) return { cause: 'NOT_A_REQUEST' };
+  if (Buffer.byteLength(body, 'utf8') > limits.maxInputBytes) return { cause: 'REQUEST_TOO_LARGE' };
   let prepared;
   try {
     const payload = JSON.parse(body.slice(REQUEST_PREFIX.length));
-    if (!exact(payload, ['schema', 'cases']) || payload.schema !== 'ops.jev.issue-request.v1') return reject('INVALID_REQUEST');
+    if (!exact(payload, ['schema', 'cases']) || payload.schema !== 'ops.jev.issue-request.v1') return { cause: 'INVALID_REQUEST' };
+    if (validatePayload !== null && !validatePayload(payload)) return { cause: 'INVALID_PROVIDED_REQUEST' };
     prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: payload.cases }, limits);
-  } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
-  return finishRequest(prepared, identityOf);
+  } catch { return { cause: 'INVALID_REQUEST_OR_ADMISSION' }; }
+  return { prepared };
 }
 
 // Shared result-size admission and registration of an admitted request, for every admission path.
@@ -143,7 +150,7 @@ export function validateActionsConfig(value) {
   let config;
   try { config = snapshotJson(value); entryLimits(config.limits); } catch { throw new Error('INVALID_ACTIONS_CONFIG'); }
   const ranges = config.runRanges;
-  if (!exact(config, ACTIONS_CONFIG_KEYS) || !text(config.subjectScope)
+  if (!exact(config, [...ACTIONS_CONFIG_KEYS, ...(Object.hasOwn(config, 'providedRequestTargets') ? ['providedRequestTargets'] : [])]) || !text(config.subjectScope)
     || !Array.isArray(config.trustedCallers) || !config.trustedCallers.every((x) => typeof x === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(x))
     || new Set(config.trustedCallers).size !== config.trustedCallers.length
     || !Array.isArray(config.allowedChecks) || !config.allowedChecks.length || !config.allowedChecks.every(text)
@@ -173,6 +180,13 @@ export function validateActionsConfig(value) {
       throw new Error('INVALID_ACTIONS_CONFIG');
     }
   }
+  if (Object.hasOwn(config, 'providedRequestTargets') && (!Array.isArray(config.providedRequestTargets)
+    || config.providedRequestTargets.length > 1 || !config.providedRequestTargets.every((grant) =>
+      exact(grant, ['repository', 'repositoryId', 'pullRequest']) && positive(grant.pullRequest)
+      && ![511, 520].includes(grant.pullRequest)
+      && config.targets.some((target) => Object.hasOwn(target, 'pullRequest')
+        && target.repository === grant.repository && target.repositoryId === grant.repositoryId
+        && target.pullRequest === grant.pullRequest)))) throw new Error('INVALID_ACTIONS_CONFIG');
   // Reservations never overlap for one native workflow identity, so a run number is admitted by at most one.
   for (const a of ranges) for (const b of ranges) {
     if (a !== b && a.repository === b.repository && a.workflowId === b.workflowId && a.first <= b.last && b.first <= a.last) throw new Error('INVALID_ACTIONS_CONFIG');
@@ -221,6 +235,22 @@ export function subjectRevision(issue) {
 // observed command against the event, builds the existing semlint input (log-entry subject = exact full Issue
 // body; context = declared repository files at the run's source SHA) and plans with the run's call ceiling.
 export const COMMAND_OBSERVATION = 'ACTIONS_TRUSTED_LITERAL_COMMAND';
+export const PROVIDED_COMMAND_OBSERVATION = 'ACTIONS_TRUSTED_PROVIDED_REQUEST';
+
+function providedPayloadMatches(payload, input, revision) {
+  if (!Array.isArray(payload.cases) || payload.cases.length !== 1) return false;
+  const value = payload.cases[0]?.input, subject = value?.subject;
+  return value?.schema === 'ops.semlint.input.v14' && subject?.kind === 'log-entry'
+    && subject.ref === `https://github.com/${input.repository}/pull/${input.issue.number}`
+    && subject.revision === revision && subject.scope === 'entire body of the approved pull request at the observed revision'
+    && subject.content === input.issue.body && subject.sha256 === sha256(input.issue.body)
+    && subject.evaluationSpan?.startByte === 0 && subject.evaluationSpan.endByte === Buffer.byteLength(input.issue.body, 'utf8')
+    && subject.englishAuxiliary === null && Array.isArray(value.context)
+    && value.context.every((row) => row?.englishAuxiliary === null)
+    && Array.isArray(value.checks) && value.checks.length > 0 && value.checks.length <= 6
+    && !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(JSON.stringify(value));
+}
+
 export async function admitIssueCommand(inputValue, configValue) {
   let config, input;
   try { config = validateActionsConfig(configValue); } catch (error) { return reject(error.message); }
@@ -243,7 +273,10 @@ export async function admitIssueCommand(inputValue, configValue) {
   const pullRequest = targetKind === 'pull-request';
   if (!selectActionsTarget(config, input.repository, issue.number, targetKind)) return reject('TARGET_NOT_AUTHORIZED');
   if (!config.trustedCallers.includes(command.author)) return reject('COMMAND_NOT_AUTHORIZED');
-  if (input.eventBody !== '/jev-evaluate') return reject('NOT_A_REQUEST');
+  const provided = input.eventBody.startsWith(REQUEST_PREFIX);
+  if (input.eventBody !== '/jev-evaluate' && !provided) return reject('NOT_A_REQUEST');
+  if (provided && (!pullRequest || !config.providedRequestTargets?.some((grant) =>
+    grant.repository === input.repository && grant.pullRequest === issue.number))) return reject('PROVIDED_REQUEST_NOT_AUTHORIZED');
   if (command.body !== input.eventBody) return reject('COMMAND_DRIFT');
   if (command.lastEditedAt !== null || command.includesCreatedEdit || command.userContentEditsTotal !== 0) return reject('EDITED');
   const selected = selectRunRange(config, { ...input.run, repository: input.repository });
@@ -256,7 +289,13 @@ export async function admitIssueCommand(inputValue, configValue) {
     context: input.context.map((c) => ({ role: c.role, ref: `${c.path}@${input.sha}`, revision: input.sha, content: c.content, sha256: sha256(c.content) })),
     checks: [...config.allowedChecks] };
   let prepared;
-  try {
+  if (provided) {
+    const parsed = await prepareIssueRequest(command.body, { ...config.limits, maxCases: 1, maxCalls: Math.min(1, selected.callsPerRun) },
+      (payload) => providedPayloadMatches(payload, input, revision));
+    if (parsed.cause) return reject(parsed.cause);
+    prepared = parsed.prepared;
+    if (prepared.expected[0].sendable !== prepared.plan.cases[0].input.checks.length) return reject('PROVIDED_CONTEXT_INCOMPLETE');
+  } else try {
     prepared = await preparePlan({ schema: 'ops.semlint.real-input.v1', cases: [{ id: targetKind, input: semlintInput }] },
       { ...config.limits, maxCalls: selected.callsPerRun });
   } catch { return reject('INVALID_REQUEST_OR_ADMISSION'); }
@@ -264,7 +303,7 @@ export async function admitIssueCommand(inputValue, configValue) {
     repository: input.repository, issue: issue.number, issueNodeId: issue.nodeId, subjectRevision: revision,
     ...(pullRequest ? { targetKind } : {}),
     commentId: command.databaseId, nodeId: command.nodeId, author: command.author, bodyDigest: digest(command.body),
-    observation: COMMAND_OBSERVATION, executionSource: input.sha, configDigest: digest(config),
+    observation: provided ? PROVIDED_COMMAND_OBSERVATION : COMMAND_OBSERVATION, executionSource: input.sha, configDigest: digest(config),
     run: { id: input.run.id, number: input.run.number, attempt: input.run.attempt, workflowId: input.run.workflowId },
     planDigest }));
 }

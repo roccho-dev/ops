@@ -125,7 +125,14 @@
     {
       "repository": "roccho-org/ops",
       "repositoryId": "1275606595",
-      "pullRequest": 520
+      "pullRequest": 522
+    }
+  ],
+  "providedRequestTargets": [
+    {
+      "repository": "roccho-org/ops",
+      "repositoryId": "1275606595",
+      "pullRequest": 522
     }
   ],
   "provider": {

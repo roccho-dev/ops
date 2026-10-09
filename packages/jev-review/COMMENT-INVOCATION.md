@@ -1,5 +1,85 @@
 # Issue invocation contract
 
+## Provided-v14 PR522 binding (v4, fixed-runtime wired source)
+
+Under `jev-issue-comment-utility-20261009-v4`, the native consumer can admit the
+existing `/jev-evaluate\n` plus closed `ops.jev.issue-request.v1` JSON envelope,
+using the already implemented semlint v14, owner and result composer. This source
+does not add an evaluator, client, translator, explanation generator or effect actor.
+
+Admission requires an independent reviewed `providedRequestTargets` setting:
+at most one exact `{repository, repositoryId, pullRequest}` already in trusted
+targets, excluding legacy PR511 and retired trial PR520. The shipped source grants
+only actual [PR522](https://github.com/roccho-org/ops/pull/522), repository ID
+`1275606595`, author `roccho-dev`, branch `codex/jev-comment-consumer-v14-v1`,
+base `c8c8430aed9c48ff3bf3c654fc15e6d12b793ea7`. It retains Ops483/envs52/PR511,
+replaces only retired520 with522, and guards the JSON-prefix route only on522.
+Root accepted, published and read back target-bound runtime
+`305b5321ebc4d41d5c143cc002b82af71f140b8e`, tree
+`66dd6d10622c8c626369f92dbc7a5d2d163e59fd`. Both caller pins now reference only
+that immutable commit, not this repin candidate or evaluated PR HEAD. The actual
+caller source is this repin; runtime/settings/2189-byte context are305b5321.
+The runtime's invocation document records its earlier caller-repin-pending stage,
+not this caller's pins. Wired source is not default deployment or live acceptance;
+no future number or fixture number is active.
+
+The workflow uses `fromJSON('"/jev-evaluate\n"')` to decode the LF prefix before
+`startsWith`; malformed JSON may enter planning only on522 and is refused before
+claim/provider. GitHub string comparisons are case-insensitive; native admission
+still requires the exact case-sensitive command. Legacy literal behavior remains.
+
+The command is untrusted data, not configuration or authority. Its envelope is
+exactly `{schema, cases}` with one v14 case and one through six supplied criteria.
+The subject must equal the complete observed PR body, URL, body-edit revision,
+UTF-8 SHA256 and full byte span, with the fixed entire-body scope. All auxiliaries
+must be null; CJK-containing input is refused. CJK absence does not prove English
+meaning or translation fidelity. Criteria/context refs are caller declarations,
+not fetched evidence, accepted authority or proof of reading. Root must review
+the actual English payload and keep independent gold/unassisted judgment off wire;
+shape validation cannot detect expected answers hidden in prose.
+
+The existing reservation and fixed source remain independent of JSON. There is
+at most one case/call per native run, unchanged byte/time/result caps, preflight
+before claim/provider, and refusal for unavailable required context. Plan, full
+command digest, actual subject revision, criteria/context and v14 projection bind
+result composition and exact readback. Existing edit/drift/replay/UNKNOWN and
+Org-only key/token separation remain; legacy literal v1 behavior is retained.
+
+Root published bootstrap `0d506978270fb0bd97dcd7ba6074835d7faa1faf` and verified
+PR522's complete initial 4585-byte body, SHA256
+`a4fdbe79a47775363902f5a1c4534b35ced11d3bb848093429812f2c089f90f4`.
+The target-bound source is already accepted/published; this separate immutable
+caller repin needs Root independent acceptance/publication. Until current-head CI and
+default/runtime/capacity verification plus separate Root live GO, new paid calls
+remain zero. The new ten-attempt pool is a ceiling, not automatic dispatch or
+reuse of the ended PR520 one-call NOT_PROVEN trial; old raw/FAIL/UNKNOWN history
+is preserved. Wiring itself is not Jev contribution. A necessary real decision,
+off-wire expectation, prospective comparison and total-burden measurement remain
+required; no forced improvement/J1 or score-based authority is granted.
+
+Provided planning still collects and validates all nine fixed legacy context roles.
+Whether these observations are necessary or safely removable is unresolved; this
+binding does not remove them, infer a defect or count preparation as Jev discovery.
+Independent expected judgment stays off wire; neither public lifecycle context nor
+caller-supplied criterion context is gold or automatic authority.
+
+Current context is 2189 bytes. With PR522's exact initial 4585-byte subject, the
+legacy literal producer yields state 27373 bytes, longest question 720 and all
+questions 4079. PR511's retained 4808-byte snapshot yields state 27635, longest
+question 731 and all questions 4145. Both pass unchanged Core limits. A six-criterion
+provided mechanical fixture using the same full PR522 subject and one declared
+context row yields state 7922, longest question 1725 and all questions 10350.
+That fixture is not the prospective Minimal criterion or an X0/E freeze; no paid
+or semantic usefulness evidence is claimed. Historical PR520 snapshots/raw results
+and earlier context budgets below remain immutable history, not current admission.
+
+The sections below retain the prior v3 operating/source history. PR520 was merged
+at `74df5e162dfe095289fad24a75d3986f6a9720c2`; its real result
+[6074620700](https://github.com/roccho-org/ops/pull/520#issuecomment-6074620700)
+and [finite-trial closure](https://github.com/roccho-org/ops/issues/482#issuecomment-6074844658)
+supersede the earlier pending descriptions only for that completed trial, not the
+new provided-mode activation or consumer usefulness.
+
 ## Current completed function and finite utility bootstrap
 
 The bounded PR511 functional path is COMPLETE. Root's
