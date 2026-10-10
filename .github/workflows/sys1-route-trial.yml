@@ -9,20 +9,21 @@ permissions:
   contents: read
 
 concurrency:
-  group: sys1-p6-route-20261010-v1
+  group: sys1-p6-route-20261010-v2
   cancel-in-progress: false
 
 jobs:
   route:
-    if: github.repository == 'roccho-org/ops' && github.event.before == '26d4e330e651f5962179138cbbe21f2258e61bca' && github.run_attempt == 1
+    if: github.repository == 'roccho-org/ops' && github.event.before == '37cee79712b1ce9e45e967bff8e4e4390bf981c0' && github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     env:
-      TRIAL_SOURCE_SHA: 26d4e330e651f5962179138cbbe21f2258e61bca
+      TRIAL_SOURCE_SHA: 37cee79712b1ce9e45e967bff8e4e4390bf981c0
+      ROUTE_PLAN: route-plan-v2.json
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 26d4e330e651f5962179138cbbe21f2258e61bca
+          ref: 37cee79712b1ce9e45e967bff8e4e4390bf981c0
           persist-credentials: false
       - name: Fixed input, grant, reservation and key-free tests
         run: |
