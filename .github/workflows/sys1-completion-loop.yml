@@ -18,49 +18,48 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     env:
-      TRIAL_SOURCE_SHA: 037115005c602e35b80ffb82544223a9b8a8b6b5
+      TRIAL_SOURCE_SHA: d6cee7143230f76fa6376626ccd1876324f2c3a8
       TRIAL_SUITE: role-boundaries
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 037115005c602e35b80ffb82544223a9b8a8b6b5
+          ref: d6cee7143230f76fa6376626ccd1876324f2c3a8
           persist-credentials: false
-      - name: Check fixed source and tests without credentials
+      - name: Check fixed source, remaining allowance and tests without credentials
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
           test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
           node --test experiments/sys1-eval-loop/*test.mjs
-      - name: Baseline live (at most eight HTTP calls)
-        id: base_live
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const dir='experiments/sys1-eval-loop/results/completion-loop/';
+          const base=JSON.parse(fs.readFileSync(dir+'baseline.json','utf8'));
+          const previous=JSON.parse(fs.readFileSync(dir+'binary-eo-v1.json','utf8'));
+          assert.equal(base.actualCalls+previous.actualCalls,24);
+          assert.equal(previous.targetReached,false);
+          assert.equal(base.contractDigest,previous.contractDigest);
+          assert.ok(80-base.actualCalls-previous.actualCalls>=16);
+          JS
+      - name: E/O candidate v2 (at most sixteen HTTP calls, previous spent24)
+        id: live
         env:
           JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
-        run: node experiments/sys1-eval-loop/split.mjs evaluate baseline "$RUNNER_TEMP/eo-baseline"
-      - name: Baseline fixed scoring without key
-        id: base_score
-        run: node experiments/sys1-eval-loop/split.mjs score baseline "$RUNNER_TEMP/eo-baseline"
-      - name: E/O candidate live (at most sixteen HTTP calls)
-        if: steps.base_score.outputs.target == 'false'
-        id: split_live
-        env:
-          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
-        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v1 "$RUNNER_TEMP/eo-candidate"
-      - name: Candidate fixed scoring without key
-        if: steps.split_live.outcome == 'success'
+        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v2 "$RUNNER_TEMP/eo-candidate"
+      - name: Fixed scoring and comparison without key
         run: |
-          node experiments/sys1-eval-loop/split.mjs score binary-eo-v1 "$RUNNER_TEMP/eo-candidate"
-          node experiments/sys1-eval-loop/run.mjs compare "$RUNNER_TEMP/eo-baseline/scored.json" "$RUNNER_TEMP/eo-candidate/scored.json"
+          node experiments/sys1-eval-loop/split.mjs score binary-eo-v2 "$RUNNER_TEMP/eo-candidate"
+          node experiments/sys1-eval-loop/run.mjs compare experiments/sys1-eval-loop/results/completion-loop/baseline.json "$RUNNER_TEMP/eo-candidate/scored.json"
       - name: Compact readback and spent allowance (no credentials)
         if: always() && !cancelled()
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import {compare} from './experiments/sys1-eval-loop/run.mjs';
-          const load=name=>{
-            const p=process.env.RUNNER_TEMP+'/'+name+'/scored.json';
-            return fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
-          };
-          const before=load('eo-baseline'),after=load('eo-candidate');
+          const p=process.env.RUNNER_TEMP+'/eo-candidate/scored.json';
+          const before=JSON.parse(fs.readFileSync('experiments/sys1-eval-loop/results/completion-loop/baseline.json','utf8'));
+          const after=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
           const brief=r=>r?({...r,rows:r.rows.map(x=>({id:x.id,status:x.status,prediction:x.prediction,expected:x.expected,correct:x.correct,model:x.model,usage:x.usage,axes:x.modelTrace?.map(q=>({axis:q.axis,answer:q.answer}))}))}):null;
-          console.log('SYS1_SPLIT_COMPACT '+JSON.stringify({before:brief(before),after:brief(after),comparison:before&&after?compare(before,after):null}));
+          console.log('SYS1_SPLIT_COMPACT '+JSON.stringify({after:brief(after),comparison:after?compare(before,after):null,previousCalls:24,sessionCalls:after?24+after.actualCalls:null,sessionMax:80}));
           JS
