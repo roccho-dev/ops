@@ -8,6 +8,7 @@
 - World ID、開始版、有限Scope、反復回数とイベント上限、許された操作、権限ownerを固定。
 - 観測→問いの提案（既知Core / catalog外不足）→別主体の確認→権限→変更0または作用receipt→独立readback→次の観測。残Gapなら上限内で繰返す。UNKNOWN・棄却・不許可は別扱い。
 - Readbackは世界の版と固定coverageを照合。費用は Human、Sys2、Sys1、CI、計算、手戻り、支払額の別次元を保持し、未観測値は null として残す。
+- `recordedReadbackCost` は受領したreadbackの費用だけの累計。次の観測でactiveを更新しても値を失わず、未知(null)は0にしない。readback未到着・外部作業・ブロック中の費用は含まないため、これを実行全体の総費用として主張しない。
 
 ## 未解決入力（独立担当が所有）
 

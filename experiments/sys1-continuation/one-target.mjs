@@ -14,7 +14,8 @@ export function openTrial(spec){
   requireThat(Array.isArray(spec.allowedEffects)&&new Set(spec.allowedEffects).size===spec.allowedEffects.length&&spec.allowedEffects.every(str),'INVALID_PERMISSIONS');
   requireThat(!['gold','questions','holdoutCases','secret'].some(k=>Object.hasOwn(spec,k)),'SEALED_CONTENT_FORBIDDEN');
   return {schema:'ops.sys1.one-target.v1',contract:structuredClone(spec),phase:'OBSERVE',worldVersion:spec.world.version,
-    cycles:0,events:[],active:null,result:'NOT_PROVEN',independentHoldout:false,automatedLoopProven:false,qualityProven:false};
+    cycles:0,events:[],active:null,result:'NOT_PROVEN',independentHoldout:false,automatedLoopProven:false,qualityProven:false,
+    recordedReadbackCost:Object.fromEntries(costKeys.map(k=>[k,0]))};
 }
 export function transition(previous,event){
   requireThat(previous?.schema==='ops.sys1.one-target.v1'&&str(event?.id)&&str(event?.kind),'INVALID_EVENT');
@@ -69,6 +70,17 @@ export function transition(previous,event){
       requireThat(event.worldId===contract.world.id&&event.worldVersion===(s.active.effect?.version??s.worldVersion),'WRONG_READBACK_WORLD');
       requireThat(event.evidence.reviewer!==s.active.proposal.author&&event.evidence.reviewer!==s.active.effect?.actor,'SELF_READBACK');
       requireThat(event.cost&&costKeys.every(k=>Object.hasOwn(event.cost,k)&&(event.cost[k]===null||(Number.isFinite(event.cost[k])&&event.cost[k]>=0))),'UNKNOWN_OR_INVALID_COST');
+      // This is the sum of accepted readback reports, NOT total run spend.
+      // Blocked or unobserved steps have unknown costs outside this projection.
+      requireThat(s.recordedReadbackCost&&costKeys.every(k=>Object.hasOwn(s.recordedReadbackCost,k)),'MISSING_COST_HISTORY');
+      for(const k of costKeys){
+        const before=s.recordedReadbackCost[k],now=event.cost[k];
+        requireThat(before===null||(Number.isFinite(before)&&before>=0),'INVALID_COST_HISTORY');
+        if(before===null||now===null){s.recordedReadbackCost[k]=null;continue;}
+        const sum=before+now;
+        requireThat(Number.isFinite(sum),'COST_OVERFLOW');
+        s.recordedReadbackCost[k]=sum;
+      }
       s.active.readback={ref:event.evidence.ref,verdict:event.verdict,cost:structuredClone(event.cost)};
       s.worldVersion=event.worldVersion;s.cycles++;
       if(event.verdict==='NO_GAP'){s.phase='DONE';s.result='TARGET_REPORTED_MET';}
