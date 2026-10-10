@@ -1,0 +1,66 @@
+name: Sys1 continuation evidence
+
+on:
+  push:
+    branches: [codex/sys1-continuation-20261010]
+    paths:
+      - experiments/sys1-continuation/**
+      - .github/workflows/sys1-continuation-evidence.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-continuation-evidence
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'roccho-org/ops'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Replay fixed intake contract against exact before and current source without inference
+        run: |
+          set -euo pipefail
+          subject=experiments/sys1-continuation/progress.mjs
+          tests=experiments/sys1-continuation/intake.test.mjs
+          old="$RUNNER_TEMP/intake-before.mjs"
+          printf '%s  %s\n' 18c1485b62c6d5f605ae226a0a856acc27a8239bfbc3f264a1030e998672203d "$tests" | sha256sum --check
+          git show 3ff9a8645c92b2116b530c46fef4965de326e672:"$subject" > "$old"
+          test "$(git hash-object "$old")" = 49ddde8104540a5e5bebaa778b8884bf4284e590
+          if INTAKE_SUBJECT="$old" node --test --test-reporter=tap "$tests" > "$RUNNER_TEMP/intake-before.tap" 2>&1; then
+            echo 'Expected old-source contract violations were not observed'; exit 1
+          else
+            test "$?" = 1
+          fi
+          grep -Fx '# tests 31' "$RUNNER_TEMP/intake-before.tap"
+          grep -Fx '# pass 11' "$RUNNER_TEMP/intake-before.tap"
+          grep -Fx '# fail 20' "$RUNNER_TEMP/intake-before.tap"
+          node --test --test-reporter=tap "$tests" > "$RUNNER_TEMP/intake-after.tap"
+          grep -Fx '# tests 31' "$RUNNER_TEMP/intake-after.tap"
+          grep -Fx '# pass 31' "$RUNNER_TEMP/intake-after.tap"
+          grep -Fx '# fail 0' "$RUNNER_TEMP/intake-after.tap"
+          INTAKE_BEFORE="$old" node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          const p='experiments/sys1-continuation/progress.mjs';
+          const before=fs.readFileSync(process.env.INTAKE_BEFORE,'utf8'),after=fs.readFileSync(p,'utf8');
+          assert.equal(before.split('export function holdoutIntake(')[0],after.split('export function holdoutIntake(')[0]);
+          const body=Buffer.from(after),blob=createHash('sha1').update(Buffer.from(`blob ${body.length}\0`)).update(body).digest('hex');
+          console.log('INTAKE_PATH_VERIFIED '+JSON.stringify({beforeSource:'3ff9a8645c92b2116b530c46fef4965de326e672',afterSource:process.env.GITHUB_SHA,afterBlob:blob,testsDigest:'18c1485b62c6d5f605ae226a0a856acc27a8239bfbc3f264a1030e998672203d',beforePassed:11,afterPassed:31,total:31,remainingContractFailures:0,modelCalls:0,independentQuality:false,scope:'fixed metadata intake contract only'}));
+          JS
+      - name: Test contracts, errors, restart rules and evidence without credentials
+        run: node --test experiments/sys1-eval-loop/*test.mjs experiments/sys1-continuation/*test.mjs experiments/sys1-continuation/models/*test.mjs
+      - name: Verify fixed Core and scored model evidence without new inference
+        run: |
+          set -euo pipefail
+          test "$(git hash-object experiments/sys1-eval-loop/split.mjs)" = dae89512b676a5572329b2e670beeca9baae0c50
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          node experiments/sys1-continuation/verify.mjs
+          node experiments/sys1-continuation/compare-models.mjs

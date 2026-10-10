@@ -1,0 +1,22 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {localTransport} from './ollaya.mjs';
+const input={model:'jev-latest',state:'unchanged public state',questions:{live:{type:'choice',criteria:{yes:'yes',no:'no'},instructions:'judge'}}};
+const answer={model:'laya:multilingual',answers:{live:{type:'choice',choice:'yes',probabilities:{yes:0.7,no:0.3},confidence:0.7}},usage:{input_tokens:30,output_tokens:0}};
+const response=(data=answer,status=200)=>new Response(JSON.stringify(data),{status});
+test('local adapter changes model binding only and never sends credentials',async()=>{
+  let sent;
+  const p=localTransport({expected:'laya:multilingual',limit:2,fetch:async(u,o)=>{sent={u,o};return response();}});
+  const before=structuredClone(input);await p.post(input);
+  assert.equal(sent.u,'http://127.0.0.1:11435/v1/systemone');assert.equal(sent.o.redirect,'error');
+  assert.deepEqual(sent.o.headers,{'Content-Type':'application/json'});
+  assert.deepEqual(JSON.parse(sent.o.body),{...input,model:'laya:multilingual'});
+  assert.deepEqual(input,before);assert.equal(p.accounting().calls,1);
+});
+test('local allowance stops before excess HTTP',async()=>{let count=0;const p=localTransport({expected:'laya:multilingual',limit:1,fetch:async()=>{count++;return response();}});await p.post(input);await assert.rejects(()=>p.post(input),/CALL_LIMIT/);assert.equal(count,1);});
+test('context loss is unsupported input, not a prediction or silent retry',async()=>{let count=0;const p=localTransport({expected:'laya:multilingual',limit:2,fetch:async()=>{count++;return response({code:'STATE_TRUNCATED'},422);}});await assert.rejects(()=>p.post(input),e=>e.code==='STATE_TRUNCATED');assert.equal(count,1);assert.equal(p.accounting().calls,1);});
+test('unknown server failure is sanitized',async()=>{const p=localTransport({expected:'laya:multilingual',limit:1,fetch:async()=>response({code:'not-stable',error:'sensitive details'},500)});await assert.rejects(()=>p.post(input),e=>e.code==='LOCAL_MODEL_FAILURE'&&!e.message.includes('sensitive'));});
+test('reported model change is rejected',async()=>{const p=localTransport({expected:'laya:multilingual',limit:1,fetch:async()=>response({...answer,model:'other'})});await assert.rejects(()=>p.post(input),/MODEL_OR_COVERAGE_CHANGED/);});
+test('four-decimal probability rounding is accepted, not renormalized',async()=>{const a=structuredClone(answer);a.answers.live.probabilities={yes:0.6001,no:0.4};const p=localTransport({expected:'laya:multilingual',limit:1,fetch:async()=>response(a)});assert.equal((await p.post(input)).answers.live.probabilities.yes,0.6001);});
+test('invalid probability total is not accepted',async()=>{const a=structuredClone(answer);a.answers.live.probabilities={yes:0.8,no:0.4};const p=localTransport({expected:'laya:multilingual',limit:1,fetch:async()=>response(a)});await assert.rejects(()=>p.post(input),/INVALID_PROBABILITIES/);});
+test('model name cannot introduce arbitrary endpoint or path',()=>assert.throws(()=>localTransport({expected:'https://external/model',limit:20})));

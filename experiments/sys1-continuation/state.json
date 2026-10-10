@@ -1,0 +1,44 @@
+{
+  "schema": "ops.sys1.progress.v1",
+  "limit": 400,
+  "previous": 80,
+  "grantRef": "https://github.com/roccho-org/ops/issues/523#issuecomment-6096258160",
+  "additionalGrants": {
+    "issuecomment-6096896561": {
+      "calls": 200,
+      "previousLimit": 200,
+      "resultingLimit": 400,
+      "receipt": "https://github.com/roccho-org/ops/issues/523#issuecomment-6096896561"
+    }
+  },
+  "runs": {
+    "p5-portability-20261010-v1": {
+      "binding": "4d6080c4aaed00e5ed1a7643353a9518105b11911be9eed66305f23689ea14ea",
+      "reserved": 20,
+      "status": "settled",
+      "actual": 20,
+      "receipt": "https://github.com/roccho-org/ops/actions/runs/38043293840/job/114187679265"
+    },
+    "p5-ollaya-multilingual-20261010-v1": {
+      "binding": "39629c727830797f95f2122dbd1756e16afc3ceebd38b89aa8aa486262eda713",
+      "reserved": 20,
+      "status": "settled",
+      "actual": 20,
+      "receipt": "https://github.com/roccho-org/ops/actions/runs/38044600930/job/114191475111"
+    },
+    "p6-route-20261010-v1": {
+      "binding": "1570758d05b31e06d70d146cbab5967b43c135da0df9ed596c4c385100a1312c",
+      "reserved": 16,
+      "status": "settled",
+      "actual": 16,
+      "receipt": "https://github.com/roccho-org/ops/actions/runs/38048073744/job/114201531112"
+    },
+    "p6-route-20261010-v2": {
+      "binding": "f977bfc73b3aef2422700767fc034e20f2033fa2e9bbd00a6e9b9bf01bdde3d1",
+      "reserved": 16,
+      "status": "settled",
+      "actual": 16,
+      "receipt": "https://github.com/roccho-org/ops/actions/runs/38048344995/job/114202296019"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "schema": "ops.sys1.portability-receipt.v1",
+  "recordNature": "compact projection of exact CI model/scoring log; no new evaluation",
+  "id": "p5-portability-20261010-v1",
+  "source": "1a50da6193b8e926cc49776528d97640a1456fb2",
+  "workflowCommit": "adc86fa271ca46c3eb55f65c666e3279cceb4203",
+  "runUrl": "https://github.com/roccho-org/ops/actions/runs/38043293840",
+  "jobId": 114187679265,
+  "planDigest": "4d6080c4aaed00e5ed1a7643353a9518105b11911be9eed66305f23689ea14ea",
+  "model": "jev-1.13.0",
+  "accounting": {"calls":20,"usage":{"input_tokens":17832,"output_tokens":712},"cost":null},
+  "mechanicalTests": {"passed":91,"failed":0},
+  "results": [
+    {
+      "core": "issue-state-separation/body-role",
+      "correct": 8,
+      "total": 8,
+      "errors": 0,
+      "inputsDigest": "fef3a54a915ba5812d4734db644ebea4a07675d102400dcf17884cdf56db4534",
+      "rows": [
+        {"id":"c7a4","prediction":"ok","expected":"ok","source":"model","calls":2,"inputTokens":2053,"outputTokens":62},
+        {"id":"m2d8","prediction":"body_observation","expected":"body_observation","source":"model","calls":2,"inputTokens":2029,"outputTokens":62},
+        {"id":"r9b1","prediction":"expectation_missing","expected":"expectation_missing","source":"model","calls":2,"inputTokens":2019,"outputTokens":62},
+        {"id":"t4e6","prediction":"ok","expected":"ok","source":"model","calls":2,"inputTokens":1979,"outputTokens":62},
+        {"id":"h3f5","prediction":"ok","expected":"ok","source":"model","calls":2,"inputTokens":2077,"outputTokens":62},
+        {"id":"n8c2","prediction":"ok","expected":"ok","source":"model","calls":2,"inputTokens":2067,"outputTokens":62},
+        {"id":"v5a9","prediction":"unknown","expected":"unknown","source":"declared-input","calls":0,"inputTokens":0,"outputTokens":0},
+        {"id":"p1d7","prediction":"not_applicable","expected":"not_applicable","source":"declared-input","calls":0,"inputTokens":0,"outputTokens":0}
+      ]
+    },
+    {
+      "core": "dirtree-beauty/responsibility-overlap",
+      "correct": 8,
+      "total": 8,
+      "errors": 0,
+      "inputsDigest": "4f1331a2f0746b94b5cae2a33fc73ded4ac063ddf2c810a9c92a8475651180b7",
+      "rows": [
+        {"id":"d81x","prediction":"overlap","expected":"overlap","source":"model","calls":1,"inputTokens":719,"outputTokens":42},
+        {"id":"k92p","prediction":"separate","expected":"separate","source":"model","calls":1,"inputTokens":688,"outputTokens":43},
+        {"id":"n47t","prediction":"separate","expected":"separate","source":"model","calls":1,"inputTokens":718,"outputTokens":43},
+        {"id":"y36a","prediction":"overlap","expected":"overlap","source":"model","calls":1,"inputTokens":722,"outputTokens":42},
+        {"id":"m58r","prediction":"separate","expected":"separate","source":"model","calls":1,"inputTokens":684,"outputTokens":43},
+        {"id":"c64v","prediction":"unknown","expected":"unknown","source":"model","calls":1,"inputTokens":663,"outputTokens":41},
+        {"id":"p73u","prediction":"separate","expected":"separate","source":"model","calls":1,"inputTokens":696,"outputTokens":43},
+        {"id":"s28b","prediction":"separate","expected":"separate","source":"model","calls":1,"inputTokens":718,"outputTokens":43}
+      ]
+    }
+  ],
+  "independentHoldout": false,
+  "secondRealModel": false,
+  "autonomousRestartProven": false,
+  "productionAdoption": false
+}

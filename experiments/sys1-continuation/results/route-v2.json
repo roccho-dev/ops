@@ -1,0 +1,43 @@
+{
+  "schema": "ops.sys1.route-receipt.v1",
+  "recordNature": "projection of actual CI ROUTE_FULL and ROUTE_SUMMARY; no new inference",
+  "id": "p6-route-20261010-v2",
+  "planPath": "route-plan-v2.json",
+  "binding": "f977bfc73b3aef2422700767fc034e20f2033fa2e9bbd00a6e9b9bf01bdde3d1",
+  "source": "37cee79712b1ce9e45e967bff8e4e4390bf981c0",
+  "workflowCommit": "b417d0189e52b906a5ec6c0958f57865618da14d",
+  "runId": "38048344995",
+  "jobId": 114202296019,
+  "model": "jev-1.13.0",
+  "accounting": {"calls":16,"usage":{"input_tokens":11076,"output_tokens":608},"cost":null},
+  "pairsCorrect": 16,
+  "pairsTotal": 16,
+  "setsCorrect": 8,
+  "setsTotal": 8,
+  "rows": [
+    {"id":"g81k/0","label":"apply","expected":"apply","inputTokens":675,"outputTokens":38},
+    {"id":"g81k/1","label":"skip","expected":"skip","inputTokens":695,"outputTokens":38},
+    {"id":"g42p/0","label":"skip","expected":"skip","inputTokens":696,"outputTokens":38},
+    {"id":"g42p/1","label":"apply","expected":"apply","inputTokens":716,"outputTokens":38},
+    {"id":"g73r/0","label":"apply","expected":"apply","inputTokens":691,"outputTokens":38},
+    {"id":"g73r/1","label":"apply","expected":"apply","inputTokens":711,"outputTokens":38},
+    {"id":"g16n/0","label":"skip","expected":"skip","inputTokens":655,"outputTokens":38},
+    {"id":"g16n/1","label":"skip","expected":"skip","inputTokens":675,"outputTokens":38},
+    {"id":"g59v/0","label":"skip","expected":"skip","inputTokens":687,"outputTokens":38},
+    {"id":"g59v/1","label":"apply","expected":"apply","inputTokens":707,"outputTokens":38},
+    {"id":"g24a/0","label":"apply","expected":"apply","inputTokens":696,"outputTokens":38},
+    {"id":"g24a/1","label":"skip","expected":"skip","inputTokens":716,"outputTokens":38},
+    {"id":"g68c/0","label":"unknown","expected":"unknown","inputTokens":653,"outputTokens":38},
+    {"id":"g68c/1","label":"unknown","expected":"unknown","inputTokens":673,"outputTokens":38},
+    {"id":"g95s/0","label":"skip","expected":"skip","inputTokens":705,"outputTokens":38},
+    {"id":"g95s/1","label":"skip","expected":"skip","inputTokens":725,"outputTokens":38}
+  ],
+  "targetReached": true,
+  "independentHoldout": false,
+  "newCapabilityDiscoveryProven": false,
+  "executionAuthorized": false,
+  "catalog": [
+    {"id":"issue-state-separation/body-role","when":"Issue本文の期待宣言と観測の分離を確認する"},
+    {"id":"dirtree-beauty/responsibility-overlap","when":"完成形dirtreeで指定した二要素の責務が重複しているか確認する"}
+  ]
+}
