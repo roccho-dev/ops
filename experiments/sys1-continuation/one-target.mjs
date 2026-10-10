@@ -32,6 +32,8 @@ export function transition(previous,event){
   switch(event.kind){
     case 'OBSERVED':
       phase('OBSERVE');world(event);coverage(event);evidence(event.evidence);verdict(event.verdict);
+      // A resume reference must identify the evidence actually used for the next observation.
+      if(s.active?.resumeEvidenceRef)requireThat(event.evidence.ref===s.active.resumeEvidenceRef,'RESUME_EVIDENCE_MISMATCH');
       s.active={observed:{ref:event.evidence.ref,verdict:event.verdict}};
       if(event.verdict==='NO_GAP'){s.phase='DONE';s.result='TARGET_REPORTED_MET';}
       else if(event.verdict==='UNKNOWN'){s.phase='BLOCKED';s.result='NEEDS_OBSERVATION';}
@@ -91,6 +93,7 @@ export function transition(previous,event){
     case 'RESUMED':
       phase('BLOCKED');requireThat(str(event.newEvidenceRef)&&str(event.reason),'NO_RESUME_EVIDENCE');
       requireThat(event.newEvidenceRef!==s.active?.readback?.ref&&event.newEvidenceRef!==s.active?.observed?.ref,'STALE_RESUME_EVIDENCE');
+      s.active.resumeEvidenceRef=event.newEvidenceRef;
       s.phase='OBSERVE';s.result='NOT_PROVEN';
       break;
     default:throw Error('UNKNOWN_EVENT_KIND');
