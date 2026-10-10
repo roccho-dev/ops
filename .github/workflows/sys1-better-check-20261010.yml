@@ -1,0 +1,131 @@
+name: Sys1 better-check bounded pair 20261010
+
+# Separate allowance recorded in ops#523 comment6092419675.
+# A new workflow's first run only; no repeated push or rerun can spend this allowance.
+on:
+  push:
+    branches: [codex/sys1-eval-loop-20261010]
+    paths: [.github/workflows/sys1-better-check-20261010.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-better-check-20261010
+  cancel-in-progress: false
+
+jobs:
+  pair:
+    if: >-
+      github.repository == 'roccho-org/ops' &&
+      github.ref == 'refs/heads/codex/sys1-eval-loop-20261010' &&
+      github.actor == 'roccho-dev' &&
+      github.run_number == 1 && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TRIAL_SOURCE_SHA: 12f4223d8fd87f1ad6ef1c6b6e3f79f44a8f20e5
+      TRIAL_SUITE: role-boundaries
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 12f4223d8fd87f1ad6ef1c6b6e3f79f44a8f20e5
+          persist-credentials: false
+
+      - name: Check fixed evaluator, inputs and candidate without credentials
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
+          test "$GITHUB_RUN_NUMBER" = 1
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          node --test experiments/sys1-eval-loop/test.mjs experiments/sys1-eval-loop/suites.test.mjs
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          import {loadInput,digest,requestFor} from './experiments/sys1-eval-loop/run.mjs';
+          const root='experiments/sys1-eval-loop', suite=root+'/suites/role-boundaries';
+          for (const id of ['baseline','role-rules-v2']) {
+            const input=loadInput(root+'/candidates/'+id+'.json',suite);
+            assert.equal(input.contractDigest,'8a4a82a845fa5204d32bd311795a84557d3f04b6612eede2199364640d63d1f0');
+            assert.equal(digest(fs.readFileSync(suite+'/expected.jsonl','utf8')),input.contract.goldSha256);
+            assert.equal(input.contract.maxCandidates,2);
+            assert.equal(input.contract.maxCallsPerCandidate,8);
+            assert.equal(input.contract.maxTotalCalls,16);
+            assert.equal(input.contract.expectedModel,'jev-1.13.0');
+            assert.equal(input.contract.target.correct,8);
+            for (const c of input.cases) {
+              assert.ok(!input.candidate.instructions.includes(c.id));
+              assert.ok(!Object.hasOwn(requestFor(c,input.candidate,input.contract),'expected'));
+            }
+          }
+          JS
+
+      - name: Real baseline, at most eight calls
+        id: baseline
+        continue-on-error: true
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-eval-loop/run.mjs evaluate baseline "$RUNNER_TEMP/better-check/baseline"
+
+      - name: Fixed baseline scoring without credentials
+        id: baseline_score
+        if: always() && !cancelled() && steps.baseline.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          node experiments/sys1-eval-loop/run.mjs score baseline "$RUNNER_TEMP/better-check/baseline"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const b=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/better-check/baseline/scored.json','utf8'));
+          assert.equal(b.status,'EVALUATED');
+          assert.equal(b.actualCalls,8);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'improve='+String(!b.targetReached)+'\n');
+          JS
+
+      - name: Real improved candidate, at most eight further calls
+        id: candidate
+        if: steps.baseline.outcome == 'success' && steps.baseline_score.outputs.improve == 'true'
+        continue-on-error: true
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-eval-loop/run.mjs evaluate role-rules-v2 "$RUNNER_TEMP/better-check/candidate"
+
+      - name: Fixed candidate scoring and comparison without credentials
+        id: candidate_score
+        if: always() && !cancelled() && steps.candidate.outcome != 'skipped'
+        run: |
+          set -euo pipefail
+          node experiments/sys1-eval-loop/run.mjs score role-rules-v2 "$RUNNER_TEMP/better-check/candidate"
+          node experiments/sys1-eval-loop/run.mjs compare "$RUNNER_TEMP/better-check/baseline/scored.json" "$RUNNER_TEMP/better-check/candidate/scored.json" | tee "$RUNNER_TEMP/better-check/comparison.json"
+
+      - name: Retain bounded terminal receipt, never mask a failed attempt
+        if: always() && !cancelled()
+        env:
+          BASELINE_OUTCOME: ${{ steps.baseline.outcome }}
+          CANDIDATE_OUTCOME: ${{ steps.candidate.outcome }}
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const dir=process.env.RUNNER_TEMP+'/better-check';
+          const read=p=>fs.existsSync(dir+'/'+p)?JSON.parse(fs.readFileSync(dir+'/'+p,'utf8')):null;
+          const b=read('baseline/scored.json'), c=read('candidate/scored.json'), pair=read('comparison.json');
+          const phases=[['baseline',process.env.BASELINE_OUTCOME],['candidate',process.env.CANDIDATE_OUTCOME]];
+          const attempts=phases.map(([name,outcome])=>({name,outcome,predictions:read(name+'/predictions.json')}));
+          const unknown=attempts.some(a=>a.outcome!=='skipped' && !a.predictions);
+          const calls=unknown?null:attempts.reduce((n,a)=>n+(a.predictions?.actualCalls??0),0);
+          const failed=attempts.some(a=>a.outcome==='failure') || unknown;
+          const target=!failed && (b?.targetReached===true || pair?.targetReached===true);
+          const best=pair?.best??(b?.status==='EVALUATED'?b.candidateDigest:null);
+          const receipt={schema:'ops.sys1.better-check-receipt.v1',trial:'better-check-20261010',
+            sourceSha:process.env.TRIAL_SOURCE_SHA,workflowCommit:process.env.GITHUB_SHA,
+            runUrl:`https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+            runNumber:Number(process.env.GITHUB_RUN_NUMBER),attempt:Number(process.env.GITHUB_RUN_ATTEMPT),
+            actualCalls:calls,maxTotalCalls:16,beforeCorrect:b?.correct??null,afterCorrect:c?.correct??null,
+            regressed:pair?.regressed??null,best,targetReached:target,
+            stop:failed?'STOP_EVALUATION_UNKNOWN':target?'DEVELOPMENT_TARGET_REACHED':calls===16?'STOP_BUDGET':'STOP_NOT_STARTED',
+            developmentFreeze:target?best:null,cost:null,independentQuality:'NOT_PROVEN',
+            externalSys2Resume:'NOT_PROVEN',wholeIssueComplete:false,qualityAdoptionAuthorized:false};
+          console.log('SYS1_BETTER_CHECK_RECEIPT '+JSON.stringify(receipt));
+          if (failed || calls===null || calls>16) process.exitCode=1;
+          JS
