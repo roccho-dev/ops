@@ -1,0 +1,64 @@
+name: Sys1 known-Core route trial
+
+on:
+  push:
+    branches: [codex/sys1-continuation-20261010]
+    paths: [.github/workflows/sys1-route-trial.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-p6-route-20261010-v1
+  cancel-in-progress: false
+
+jobs:
+  route:
+    if: github.repository == 'roccho-org/ops' && github.event.before == '26d4e330e651f5962179138cbbe21f2258e61bca' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      TRIAL_SOURCE_SHA: 26d4e330e651f5962179138cbbe21f2258e61bca
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 26d4e330e651f5962179138cbbe21f2258e61bca
+          persist-credentials: false
+      - name: Fixed input, grant, reservation and key-free tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          test "$(git hash-object experiments/sys1-eval-loop/split.mjs)" = dae89512b676a5572329b2e670beeca9baae0c50
+          node --test experiments/sys1-eval-loop/*test.mjs experiments/sys1-continuation/*test.mjs experiments/sys1-continuation/models/*test.mjs
+          node experiments/sys1-continuation/route-run.mjs verify
+      - name: Goal to Core applicability (maximum sixteen HTTP calls)
+        id: live
+        continue-on-error: true
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-continuation/route-run.mjs evaluate "$RUNNER_TEMP/sys1-route"
+      - name: Fixed pair and set scoring without credentials
+        if: always() && !cancelled()
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/sys1-route/predictions.json"
+          node experiments/sys1-continuation/route-run.mjs score "$RUNNER_TEMP/sys1-route"
+      - name: Read actual consumption even when quality did not reach target
+        if: always() && !cancelled()
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const p=process.env.RUNNER_TEMP+'/sys1-route/predictions.json';
+          if(!fs.existsSync(p)){
+            console.log('ROUTE_ACCOUNTING_UNRESOLVED: inspect real step outcomes; keep reservation');
+          }else{
+            const r=JSON.parse(fs.readFileSync(p,'utf8'));
+            console.log('ROUTE_ACCOUNTING '+JSON.stringify({id:r.id,source:r.source,runId:r.runId,accounting:r.accounting}));
+          }
+          JS
+      - name: Do not hide execution failure
+        if: always() && !cancelled()
+        env:
+          LIVE_OUTCOME: ${{ steps.live.outcome }}
+        run: test "$LIVE_OUTCOME" = success
