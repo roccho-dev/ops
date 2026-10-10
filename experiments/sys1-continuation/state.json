@@ -36,7 +36,9 @@
     "p6-route-20261010-v2": {
       "binding": "f977bfc73b3aef2422700767fc034e20f2033fa2e9bbd00a6e9b9bf01bdde3d1",
       "reserved": 16,
-      "status": "reserved"
+      "status": "settled",
+      "actual": 16,
+      "receipt": "https://github.com/roccho-org/ops/actions/runs/38048344995/job/114202296019"
     }
   }
 }
