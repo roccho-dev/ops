@@ -4,9 +4,30 @@ const fail = code => {throw new Error(code);};
 const integer = n => Number.isSafeInteger(n) && n >= 0;
 const value = x => typeof x === 'string' && x.trim().length > 0;
 export const hash = x => createHash('sha256').update(typeof x === 'string' ? x : JSON.stringify(x)).digest('hex');
+function validateGrantLedger(s) {
+  if (!Object.hasOwn(s, 'additionalGrants')) return;
+  const grants = s.additionalGrants;
+  if (!grants || typeof grants !== 'object' || Array.isArray(grants)) fail('INVALID_GRANT_LEDGER');
+  const entries = Object.entries(grants), receipts = new Set();
+  if (!entries.length) fail('INVALID_GRANT_LEDGER');
+  let result;
+  for (const [key, grant] of entries) {
+    if (!/^[a-z0-9][a-z0-9-]{2,}$/.test(key) || !grant || typeof grant !== 'object'
+      || !integer(grant.calls) || grant.calls < 1
+      || !integer(grant.previousLimit) || !integer(grant.resultingLimit)
+      || grant.resultingLimit !== grant.previousLimit + grant.calls
+      || (result !== undefined && grant.previousLimit !== result)
+      || !value(grant.receipt) || receipts.has(grant.receipt)) fail('INVALID_GRANT_LEDGER');
+    receipts.add(grant.receipt);
+    result = grant.resultingLimit;
+  }
+  if (result !== s.limit) fail('GRANT_LEDGER_LIMIT_MISMATCH');
+}
+
 export function remaining(s) {
   if(s?.schema !== 'ops.sys1.progress.v1' || !integer(s.limit) || !integer(s.previous)
     || !s.runs || typeof s.runs !== 'object' || Array.isArray(s.runs)) fail('INVALID_PROGRESS');
+  validateGrantLedger(s);
   let spent=s.previous;
   for(const [id,r] of Object.entries(s.runs)) {
     if(!value(id)||!value(r.binding)||!integer(r.reserved)||r.reserved===0||!['reserved','settled'].includes(r.status))fail('INVALID_RUN');
