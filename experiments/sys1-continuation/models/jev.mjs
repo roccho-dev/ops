@@ -7,9 +7,8 @@ export async function jevModel({key,limit=20,expected='jev-1.13.0'}) {
   const port=modelPort({id:'jev-choice/'+expected,mode:'live',choice:async q=>{
     let used=null;
     const bounded={available:provider.available,post:async body=>{
-      if(calls>=limit)throw Error('CALL_LIMIT');
       if(body.model!=='jev-latest'||Buffer.byteLength(JSON.stringify(body))>24000)throw Error('INVALID_REQUEST');
-      calls++;
+      if(calls>=limit)throw Error('CALL_LIMIT');calls++;
       const d=await provider.post(body,{deadlineMs:15000});
       if(d.model!==expected||!d.answers||Object.keys(d.answers).join()!=='live')throw Error('MODEL_OR_COVERAGE_CHANGED');
       const p=d.answers.live?.probabilities;
@@ -23,3 +22,4 @@ export async function jevModel({key,limit=20,expected='jev-1.13.0'}) {
   }});
   return {...port,accounting:()=>({calls,usage,cost:null})};
 }
+export const createModel=jevModel;

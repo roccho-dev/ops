@@ -27,7 +27,11 @@ export async function evaluate(core,rows,model,identity) {
       const output=await core.run(structuredClone(row.input),port);
       if(!core.labels.includes(output?.label))fail('INVALID_CORE_OUTPUT');
       result.push({id:row.id,status:'ok',output,traces});
-    } catch {stopped=true;result.push({id:row.id,status:'error',error:'CORE_OR_MODEL_FAILURE',traces});}
+    } catch(error) {
+      stopped=true;
+      const kind=['STATE_TRUNCATED','INPUT_TOO_LONG','TOO_MANY_OPTIONS','UNSUPPORTED_MODEL'].includes(error?.code)?error.code:'CORE_OR_MODEL_FAILURE';
+      result.push({id:row.id,status:'error',error:kind,traces});
+    }
   }
   return {schema:'ops.sys1.portable-result.v1',core:core.id,model:model.id,mode:model.mode,
     identity,inputsDigest:hash(rows),rows:result,complete:!stopped};

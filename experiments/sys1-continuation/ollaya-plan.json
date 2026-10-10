@@ -1,0 +1,26 @@
+{
+  "schema": "ops.sys1.portability-plan.v1",
+  "id": "p5-ollaya-multilingual-20261010-v1",
+  "expectedModel": "laya:multilingual",
+  "maxCalls": 20,
+  "frozenCandidateDigest": "f6f09a684f1c6ca6823e555fab745370fe0988af68e61764c2cb40c99700efe9",
+  "suites": [
+    {
+      "core": "issue-state-separation/body-role",
+      "inputsDigest": "fef3a54a915ba5812d4734db644ebea4a07675d102400dcf17884cdf56db4534",
+      "goldDigest": "b5426e5cc59803155655cf9749e9afe0d9c84ad13df84353972232d36083f7dd"
+    },
+    {
+      "core": "dirtree-beauty/responsibility-overlap",
+      "inputsDigest": "4f1331a2f0746b94b5cae2a33fc73ded4ac063ddf2c810a9c92a8475651180b7",
+      "goldDigest": "0b09ba14dae0bd9d9288142ce1061d00b65adc26adc9551ad47319512325a6f2"
+    }
+  ],
+  "independentHoldout": false,
+  "claim": "same Core/data/scorer with an alternate local model; not an independent holdout",
+  "modelAdapter": "ollaya",
+  "runtime": {
+    "tag": "v0.7.5",
+    "archiveSha256": "9e2a68a9d0762c819e94cfc30f8a8ada379c6a63f1c66dbf6a6182f77ca32353"
+  }
+}

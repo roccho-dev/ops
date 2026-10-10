@@ -10,6 +10,11 @@
       "status": "settled",
       "actual": 20,
       "receipt": "https://github.com/roccho-org/ops/actions/runs/38043293840/job/114187679265"
+    },
+    "p5-ollaya-multilingual-20261010-v1": {
+      "binding": "39629c727830797f95f2122dbd1756e16afc3ceebd38b89aa8aa486262eda713",
+      "reserved": 20,
+      "status": "reserved"
     }
   }
 }

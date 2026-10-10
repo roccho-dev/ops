@@ -11,7 +11,9 @@ const json=p=>JSON.parse(read(p));
 const lines=p=>read(p).trim().split('\n').map(JSON.parse);
 const fail=code=>{throw Error(code);};
 const candidate=json('../sys1-eval-loop/candidates/binary-eo-v3.json');
-const spec=json('plan.json');
+const planFile=process.env.TRIAL_PLAN??'plan.json';
+if(!/^[a-z][a-z0-9-]*\.json$/.test(planFile))fail('INVALID_PLAN');
+const spec=json(planFile);
 const state=json('state.json');
 // A composition list; the evaluator/ModelPort itself contains no Core-specific branches.
 const plans=[
@@ -38,13 +40,16 @@ async function main() {
   if(mode==='evaluate') {
     if(process.env.GITHUB_RUN_ATTEMPT&&process.env.GITHUB_RUN_ATTEMPT!=='1')fail('REPLAY_REFUSED');
     write('attempt',{binding:hash(spec),source:process.env.TRIAL_SOURCE_SHA??null});
-    const {jevModel}=await import('./models/jev.mjs');
-    const model=await jevModel({key:process.env.JEV_API_KEY,limit:spec.maxCalls,expected:spec.expectedModel});
+    const adapter=spec.modelAdapter??'jev';
+    if(!/^[a-z][a-z0-9-]*$/.test(adapter))fail('INVALID_ADAPTER');
+    const {createModel}=await import('./models/'+adapter+'.mjs');
+    const model=await createModel({key:process.env.JEV_API_KEY,limit:spec.maxCalls,expected:spec.expectedModel});
     const results=[];let broken=false;
     for(const p of plans) {
       const port=broken?{...model,which:async()=>{throw Error('PREVIOUS_FAILURE');}}:model;
       const r=await evaluate(p.core,p.inputs,port,{planDigest:hash(spec),source:process.env.TRIAL_SOURCE_SHA??null});
-      if(!r.complete)broken=true;results.push(r);
+      if(!r.complete&&r.rows.some(x=>x.status==='error'&&!['STATE_TRUNCATED','INPUT_TOO_LONG','TOO_MANY_OPTIONS','UNSUPPORTED_MODEL'].includes(x.error)))broken=true;
+      results.push(r);
     }
     const accounting=model.accounting();
     write('predictions',{schema:'ops.sys1.portable-run.v1',id:spec.id,planDigest:hash(spec),
@@ -62,14 +67,14 @@ async function main() {
     });
     const output={...predictions,results,allDevelopmentTargets:results.every(r=>r.targetReached),
       P3:'NOT_VERIFIED',P4:'NO_AUTONOMOUS_LOOP_PROOF',P5:'TWO_CORE_PORTABILITY_ONLY',
-      secondRealModel:false,productionAdoption:false};
+      crossModelComparisonIncluded:false,productionAdoption:false};
     write('scored',output);
     // Inputs here are explicitly public development cases, never holdout material.
     console.log('PORTABLE_FULL '+JSON.stringify(output));
     const brief=results.map(r=>({core:r.core,correct:r.correct,total:r.total,errors:r.errors,confusion:r.confusion,target:r.targetReached,
       rows:r.rows.map(x=>({id:x.id,status:x.status,label:x.output?.label,expected:x.expected,correct:x.correct,source:x.output?.source,subjects:x.output?.subjects}))}));
     console.log('PORTABLE_SUMMARY '+JSON.stringify({id:spec.id,source:output.source,runId:output.runId,accounting:output.accounting,
-      results:brief,allDevelopmentTargets:output.allDevelopmentTargets,secondRealModel:false,independentHoldout:false}));
+      results:brief,allDevelopmentTargets:output.allDevelopmentTargets,crossModelComparisonIncluded:false,independentHoldout:false}));
     if(results.some(r=>r.errors))process.exitCode=2;
   }
 }

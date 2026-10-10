@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {loadEvidence,verifyReceipt} from './verify.mjs';
+import {remaining} from './progress.mjs';
 const data=loadEvidence();
 const verify=x=>verifyReceipt(x.receipt,x.plan,x.state,x.datasets);
-test('retained actual receipt recomputes scores and settlement without extra calls',()=>{const r=verify(data);assert.equal(r.calls,20);assert.equal(r.remaining,100);assert.equal(r.modelCallsForThisVerification,0);});
+test('retained actual receipt recomputes scores and settlement without extra calls',()=>{const r=verify(data);assert.equal(r.calls,20);assert.equal(r.remaining,remaining(data.state));assert.equal(r.modelCallsForThisVerification,0);});
 for(const [name,change] of [
   ['erased mistaken prediction',x=>{x.receipt.results[0].rows[0].prediction='body_observation';}],
   ['modified corpus',x=>{x.datasets[1].inputs[0].input.goal='changed';}],
