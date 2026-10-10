@@ -13,19 +13,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  compare:
+  regression:
     if: github.repository == 'roccho-org/ops' && github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     env:
-      TRIAL_SOURCE_SHA: d6cee7143230f76fa6376626ccd1876324f2c3a8
-      TRIAL_SUITE: role-boundaries
+      TRIAL_SOURCE_SHA: dfec78800fb7e3b2cf2b4627632de849f35f818e
+      TRIAL_SUITE: original
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: d6cee7143230f76fa6376626ccd1876324f2c3a8
+          ref: dfec78800fb7e3b2cf2b4627632de849f35f818e
           persist-credentials: false
-      - name: Check fixed source, remaining allowance and tests without credentials
+      - name: Check frozen candidate, successful prior comparison and allowance
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
@@ -34,32 +34,30 @@ jobs:
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
-          const dir='experiments/sys1-eval-loop/results/completion-loop/';
-          const base=JSON.parse(fs.readFileSync(dir+'baseline.json','utf8'));
-          const previous=JSON.parse(fs.readFileSync(dir+'binary-eo-v1.json','utf8'));
-          assert.equal(base.actualCalls+previous.actualCalls,24);
-          assert.equal(previous.targetReached,false);
-          assert.equal(base.contractDigest,previous.contractDigest);
-          assert.ok(80-base.actualCalls-previous.actualCalls>=16);
+          import {loadInput,digest,compare} from './experiments/sys1-eval-loop/run.mjs';
+          const root='experiments/sys1-eval-loop',dir=root+'/results/completion-loop/';
+          const read=n=>JSON.parse(fs.readFileSync(dir+n+'.json','utf8'));
+          const base=read('baseline'),v1=read('binary-eo-v1'),best=read('binary-eo-v2');
+          const input=loadInput(root+'/candidates/binary-eo-v2.json');
+          assert.equal(base.actualCalls+v1.actualCalls+best.actualCalls,40);
+          assert.equal(digest(input.candidate),best.candidateDigest);
+          assert.equal(compare(base,best).targetReached,true);
+          assert.ok(80-40>=16);
+          assert.equal(input.contract.goldOrigin.authorIndependent,false);
           JS
-      - name: E/O candidate v2 (at most sixteen HTTP calls, previous spent24)
-        id: live
+      - name: Original suite regression with unchanged candidate (maximum sixteen requests)
         env:
           JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
-        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v2 "$RUNNER_TEMP/eo-candidate"
-      - name: Fixed scoring and comparison without key
-        run: |
-          node experiments/sys1-eval-loop/split.mjs score binary-eo-v2 "$RUNNER_TEMP/eo-candidate"
-          node experiments/sys1-eval-loop/run.mjs compare experiments/sys1-eval-loop/results/completion-loop/baseline.json "$RUNNER_TEMP/eo-candidate/scored.json"
-      - name: Compact readback and spent allowance (no credentials)
+        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v2 "$RUNNER_TEMP/eo-regression"
+      - name: Fixed scoring without key
+        run: node experiments/sys1-eval-loop/split.mjs score binary-eo-v2 "$RUNNER_TEMP/eo-regression"
+      - name: Compact regression evidence and session accounting
         if: always() && !cancelled()
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
-          import {compare} from './experiments/sys1-eval-loop/run.mjs';
-          const p=process.env.RUNNER_TEMP+'/eo-candidate/scored.json';
-          const before=JSON.parse(fs.readFileSync('experiments/sys1-eval-loop/results/completion-loop/baseline.json','utf8'));
-          const after=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
-          const brief=r=>r?({...r,rows:r.rows.map(x=>({id:x.id,status:x.status,prediction:x.prediction,expected:x.expected,correct:x.correct,model:x.model,usage:x.usage,axes:x.modelTrace?.map(q=>({axis:q.axis,answer:q.answer}))}))}):null;
-          console.log('SYS1_SPLIT_COMPACT '+JSON.stringify({after:brief(after),comparison:after?compare(before,after):null,previousCalls:24,sessionCalls:after?24+after.actualCalls:null,sessionMax:80}));
+          const p=process.env.RUNNER_TEMP+'/eo-regression/scored.json';
+          const r=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
+          const brief=r?({...r,rows:r.rows.map(x=>({id:x.id,status:x.status,prediction:x.prediction,expected:x.expected,correct:x.correct,model:x.model,usage:x.usage,axes:x.modelTrace?.map(q=>({axis:q.axis,answer:q.answer}))}))}):null;
+          console.log('SYS1_REGRESSION_COMPACT '+JSON.stringify({result:brief,previousCalls:40,sessionCalls:r?40+r.actualCalls:null,sessionMax:80,independentHoldout:false}));
           JS
