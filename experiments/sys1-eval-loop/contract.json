@@ -1,0 +1,33 @@
+{
+  "schema": "ops.sys1.eval-contract.v1",
+  "task": "issue-state-separation/body-role-slice",
+  "caseCount": 8,
+  "labels": {
+    "ok": "本文は期待する状態・要件・受入条件の宣言で、現在の観測報告が混在しない。",
+    "body_observation": "本文には期待もあるが、その時点の実装状況・進捗・観測結果も事実として混在する。",
+    "expectation_missing": "タスク本文がその時点の観測報告だけで、期待する状態がない。",
+    "unknown": "本文が欠けるなど必要情報が不足し、分類を確定できない。",
+    "not_applicable": "目標達成を追う課題ではなく、明示された史料・記録の保存が目的。"
+  },
+  "casesSha256": "3fd440f89f08fc2043687138a7c24be261b97095175dc0219eaa5a3884abfa71",
+  "goldSha256": "b5426e5cc59803155655cf9749e9afe0d9c84ad13df84353972232d36083f7dd",
+  "maxCallsPerCandidate": 8,
+  "maxCandidates": 2,
+  "maxTotalCalls": 16,
+  "deadlineMs": 15000,
+  "target": {
+    "correct": 8,
+    "falsePositives": 0,
+    "falseNegatives": 0
+  },
+  "modelAlias": "jev-latest",
+  "modelChange": "not-comparable",
+  "evidenceScope": "rule-derived synthetic development cases; not independent holdout",
+  "goldOrigin": {
+    "source": "PR525@a27770545ef5fea451f4e67b58ad01d4205d3f0d + user rule",
+    "authorIndependent": false,
+    "frozenBeforeLiveEvaluation": true
+  },
+  "holdout": "NOT_AVAILABLE",
+  "qualityAdoptionAuthorized": false
+}
