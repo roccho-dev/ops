@@ -1,0 +1,34 @@
+name: Sys1 continuation evidence
+
+on:
+  push:
+    branches: [codex/sys1-continuation-20261010]
+    paths:
+      - experiments/sys1-continuation/**
+      - .github/workflows/sys1-continuation-evidence.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-continuation-evidence
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.repository == 'roccho-org/ops'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test contracts, errors, restart rules and evidence without credentials
+        run: node --test experiments/sys1-eval-loop/*test.mjs experiments/sys1-continuation/*test.mjs experiments/sys1-continuation/models/*test.mjs
+      - name: Verify fixed Core and scored model evidence without new inference
+        run: |
+          set -euo pipefail
+          test "$(git hash-object experiments/sys1-eval-loop/split.mjs)" = dae89512b676a5572329b2e670beeca9baae0c50
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          node experiments/sys1-continuation/verify.mjs
+          node experiments/sys1-continuation/compare-models.mjs
