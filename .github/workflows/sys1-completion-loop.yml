@@ -1,0 +1,66 @@
+name: Sys1 completion loop finite comparison
+
+on:
+  push:
+    branches: [codex/sys1-eval-loop-20261010]
+    paths: [.github/workflows/sys1-completion-loop.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-completion-eo-20261010
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    if: github.repository == 'roccho-org/ops' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      TRIAL_SOURCE_SHA: 037115005c602e35b80ffb82544223a9b8a8b6b5
+      TRIAL_SUITE: role-boundaries
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 037115005c602e35b80ffb82544223a9b8a8b6b5
+          persist-credentials: false
+      - name: Check fixed source and tests without credentials
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          node --test experiments/sys1-eval-loop/*test.mjs
+      - name: Baseline live (at most eight HTTP calls)
+        id: base_live
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-eval-loop/split.mjs evaluate baseline "$RUNNER_TEMP/eo-baseline"
+      - name: Baseline fixed scoring without key
+        id: base_score
+        run: node experiments/sys1-eval-loop/split.mjs score baseline "$RUNNER_TEMP/eo-baseline"
+      - name: E/O candidate live (at most sixteen HTTP calls)
+        if: steps.base_score.outputs.target == 'false'
+        id: split_live
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v1 "$RUNNER_TEMP/eo-candidate"
+      - name: Candidate fixed scoring without key
+        if: steps.split_live.outcome == 'success'
+        run: |
+          node experiments/sys1-eval-loop/split.mjs score binary-eo-v1 "$RUNNER_TEMP/eo-candidate"
+          node experiments/sys1-eval-loop/run.mjs compare "$RUNNER_TEMP/eo-baseline/scored.json" "$RUNNER_TEMP/eo-candidate/scored.json"
+      - name: Compact readback and spent allowance (no credentials)
+        if: always() && !cancelled()
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {compare} from './experiments/sys1-eval-loop/run.mjs';
+          const load=name=>{
+            const p=process.env.RUNNER_TEMP+'/'+name+'/scored.json';
+            return fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
+          };
+          const before=load('eo-baseline'),after=load('eo-candidate');
+          const brief=r=>r?({...r,rows:r.rows.map(x=>({id:x.id,status:x.status,prediction:x.prediction,expected:x.expected,correct:x.correct,model:x.model,usage:x.usage,axes:x.modelTrace?.map(q=>({axis:q.axis,answer:q.answer}))}))}):null;
+          console.log('SYS1_SPLIT_COMPACT '+JSON.stringify({before:brief(before),after:brief(after),comparison:before&&after?compare(before,after):null}));
+          JS
