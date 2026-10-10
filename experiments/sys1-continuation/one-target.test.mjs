@@ -40,3 +40,21 @@ test('readback cannot shrink fixed total coverage',()=>{const v=many(ready(),adm
 test('cost dimensions are all mandatory, unknown preserved as null',()=>{const v=many(ready(),admitted());const r=readback('r');delete r.cost.ciSeconds;assert.throws(()=>transition(v,r));assert.equal(transition(v,readback('r2')).state.active.readback.cost.paidUsd,null);});
 test('resume requires new evidence, not same reference',()=>{const v=many(openTrial(spec()),observed('o','UNKNOWN'));assert.throws(()=>transition(v,ev('resume','RESUMED',{newEvidenceRef:'obs-o',reason:'repeat'})));assert.equal(transition(v,ev('resume2','RESUMED',{newEvidenceRef:'new-source',reason:'readback provided'})).state.phase,'OBSERVE');});
 test('bounded number of events stops endless rejected proposals',()=>{const s=spec();s.maxSteps=4;const v=many(openTrial(s),observed('o'),proposed(),verified('v','REJECT'),proposed('p2'));assert.equal(transition(v,verified('v2','REJECT')).state.result,'STEP_LIMIT');});
+
+test('completed trial keeps its terminal result after unrelated delivery at limit',()=>{
+  const x=spec();x.maxSteps=5;
+  const done=many(openTrial(x),observed('o'),proposed(),verified(),admitted(),readback('r','NO_GAP'));
+  assert.equal(done.phase,'DONE');assert.equal(done.result,'TARGET_REPORTED_MET');
+  const snapshot=structuredClone(done);
+  assert.throws(()=>transition(done,observed('unrelated')),/TERMINAL_TRIAL/);
+  assert.deepEqual(done,snapshot);
+  assert.equal(transition(done,readback('r','NO_GAP')).changed,false);
+});
+test('stopped trial cannot silently rewrite its original stop reason',()=>{
+  const x=spec();x.maxSteps=4;
+  const stopped=many(openTrial(x),observed('o'),proposed(),verified('v','REJECT'),proposed('p2'),verified('v2','REJECT'));
+  assert.equal(stopped.phase,'STOPPED');assert.equal(stopped.result,'STEP_LIMIT');
+  const snapshot=structuredClone(stopped);
+  assert.throws(()=>transition(stopped,verified('v3','REJECT')),/TERMINAL_TRIAL/);
+  assert.deepEqual(stopped,snapshot);
+});

@@ -20,6 +20,7 @@ export function transition(previous,event){
   requireThat(previous?.schema==='ops.sys1.one-target.v1'&&str(event?.id)&&str(event?.kind),'INVALID_EVENT');
   const digest=hash(event),repeat=previous.events.find(x=>x.id===event.id);
   if(repeat){requireThat(repeat.hash===digest,'CONFLICTING_EVENT');return {state:previous,changed:false};}
+  requireThat(!['DONE','STOPPED'].includes(previous.phase),'TERMINAL_TRIAL');
   const s=structuredClone(previous),contract=s.contract;
   if(s.events.length>=contract.maxSteps){s.phase='STOPPED';s.result='STEP_LIMIT';return {state:s,changed:true};}
   const phase=name=>requireThat(s.phase===name,'INVALID_TRANSITION');
