@@ -1,0 +1,126 @@
+name: Sys1 alternate local model trial
+
+on:
+  push:
+    branches: [codex/sys1-continuation-20261010]
+    paths: [.github/workflows/sys1-local-model-trial.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-p5-ollaya-multilingual-20261010-v1
+  cancel-in-progress: false
+
+jobs:
+  local-model:
+    if: github.repository == 'roccho-org/ops' && github.event.before == '486ceb528a6738bf817fde43b359008ea9eb3746' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TRIAL_SOURCE_SHA: 486ceb528a6738bf817fde43b359008ea9eb3746
+      OLLAYA_HOST: 127.0.0.1:11435
+      OLLAYA_DEVICE: cpu
+      OLLAYA_KEEP_ALIVE: 30m
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 486ceb528a6738bf817fde43b359008ea9eb3746
+          persist-credentials: false
+
+      - name: Verify fixed Core, scoring and prior settlement without credentials
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
+          test "$(git hash-object experiments/sys1-eval-loop/split.mjs)" = dae89512b676a5572329b2e670beeca9baae0c50
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          test "$(git hash-object packages/jev/src/client.mjs)" = c43238f9a4129d571cf6e2670f76514b5cc94410
+          node --test experiments/sys1-eval-loop/*test.mjs experiments/sys1-continuation/*test.mjs experiments/sys1-continuation/models/*test.mjs
+          node experiments/sys1-continuation/verify.mjs
+
+      - name: Verify alternate-model reservation
+        env:
+          TRIAL_PLAN: ollaya-plan.json
+        run: node experiments/sys1-continuation/run.mjs verify
+
+      - name: Download pinned runtime and check archive digest
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/ollaya"
+          mkdir -p "$root/runtime" "$root/models"
+          curl --fail --location --max-time 180 --output "$root/ollaya-linux-amd64.tar.zst" https://github.com/ollaya-dev/ollaya/releases/download/v0.7.5/ollaya-linux-amd64.tar.zst
+          printf '%s  %s\n' '9e2a68a9d0762c819e94cfc30f8a8ada379c6a63f1c66dbf6a6182f77ca32353' "$root/ollaya-linux-amd64.tar.zst" | sha256sum --check
+          tar --zstd -xf "$root/ollaya-linux-amd64.tar.zst" -C "$root/runtime"
+          test -x "$root/runtime/bin/ollaya"
+          free -m
+
+      - name: Start temporary local daemon and acquire model before inference
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/ollaya"
+          export OLLAYA_MODELS="$root/models"
+          export OLLAYA_LIBRARY_PATH="$root/runtime/lib/ollaya"
+          "$root/runtime/bin/ollaya" serve > "$root/server.log" 2>&1 &
+          echo "$!" > "$root/server.pid"
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:11435/ >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          curl --fail --silent --show-error --max-time 900 -H 'Content-Type: application/json' -d '{"model":"laya:multilingual","stream":false}' http://127.0.0.1:11435/api/pull > "$root/pull.json"
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:11435/api/version > "$root/version.json"
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:11435/api/tags > "$root/tags.json"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const root=process.env.RUNNER_TEMP+'/ollaya/';
+          const read=n=>JSON.parse(fs.readFileSync(root+n+'.json','utf8'));
+          assert.equal(read('pull').status,'success');
+          const version=read('version'),tags=read('tags');
+          assert.ok(String(version.version).includes('0.7.5'));
+          const model=tags.models?.find(x=>x.name==='laya:multilingual'||x.model==='laya:multilingual');
+          assert.ok(model,'expected local model must be present before evaluation');
+          assert.match(model.digest,/^(sha256:)?[a-f0-9]{64}$/);
+          console.log('LOCAL_MODEL_MANIFEST '+JSON.stringify({runtime:version,model,archiveSha256:'9e2a68a9d0762c819e94cfc30f8a8ada379c6a63f1c66dbf6a6182f77ca32353',setupNotInference:true}));
+          JS
+
+      - name: Evaluate unchanged Core inputs on local model (maximum twenty inference HTTP requests)
+        id: live
+        continue-on-error: true
+        env:
+          TRIAL_PLAN: ollaya-plan.json
+        run: node experiments/sys1-continuation/run.mjs evaluate "$RUNNER_TEMP/sys1-local-model"
+
+      - name: Fixed scoring without credentials
+        if: always() && !cancelled()
+        env:
+          TRIAL_PLAN: ollaya-plan.json
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/sys1-local-model/predictions.json" ]; then
+            echo 'LOCAL_MODEL_RESULT_ABSENT: inspect setup and evaluation steps; do not call this a quality pass'
+            exit 1
+          fi
+          node experiments/sys1-continuation/run.mjs score "$RUNNER_TEMP/sys1-local-model"
+
+      - name: Record local call count independently of quality and stop daemon
+        if: always()
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const path=process.env.RUNNER_TEMP+'/sys1-local-model/predictions.json';
+          if(fs.existsSync(path)){
+            const r=JSON.parse(fs.readFileSync(path,'utf8'));
+            console.log('LOCAL_MODEL_ACCOUNTING '+JSON.stringify({id:r.id,source:r.source,runId:r.runId,accounting:r.accounting}));
+          } else console.log('LOCAL_MODEL_ACCOUNTING_UNRESOLVED: result absent; read actual step outcomes');
+          JS
+          root="$RUNNER_TEMP/ollaya"
+          if [ -f "$root/server.pid" ]; then kill "$(cat "$root/server.pid")" 2>/dev/null || true; fi
+          if [ -f "$root/server.log" ]; then tail -n 30 "$root/server.log"; fi
+
+      - name: Reject masked execution failure
+        if: always() && !cancelled()
+        env:
+          LIVE_OUTCOME: ${{ steps.live.outcome }}
+        run: test "$LIVE_OUTCOME" = success
