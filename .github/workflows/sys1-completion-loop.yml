@@ -19,7 +19,6 @@ jobs:
     timeout-minutes: 6
     env:
       TRIAL_SOURCE_SHA: dfec78800fb7e3b2cf2b4627632de849f35f818e
-      TRIAL_SUITE: original
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -47,9 +46,12 @@ jobs:
           JS
       - name: Original suite regression with unchanged candidate (maximum sixteen requests)
         env:
+          TRIAL_SUITE: original
           JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
         run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v2 "$RUNNER_TEMP/eo-regression"
       - name: Fixed scoring without key
+        env:
+          TRIAL_SUITE: original
         run: node experiments/sys1-eval-loop/split.mjs score binary-eo-v2 "$RUNNER_TEMP/eo-regression"
       - name: Compact regression evidence and session accounting
         if: always() && !cancelled()
