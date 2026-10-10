@@ -13,18 +13,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  regression:
+  final-candidate:
     if: github.repository == 'roccho-org/ops' && github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     env:
-      TRIAL_SOURCE_SHA: dfec78800fb7e3b2cf2b4627632de849f35f818e
+      TRIAL_SOURCE_SHA: 155edc8c36dd75d5f494e40212a74bebc1fcc0e8
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: dfec78800fb7e3b2cf2b4627632de849f35f818e
+          ref: 155edc8c36dd75d5f494e40212a74bebc1fcc0e8
           persist-credentials: false
-      - name: Check frozen candidate, successful prior comparison and allowance
+      - name: Verify fixed scorer, final candidate and remaining session allowance
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
@@ -33,33 +33,63 @@ jobs:
           node --input-type=module <<'JS'
           import fs from 'node:fs';
           import assert from 'node:assert/strict';
-          import {loadInput,digest,compare} from './experiments/sys1-eval-loop/run.mjs';
+          import {loadInput,digest} from './experiments/sys1-eval-loop/run.mjs';
           const root='experiments/sys1-eval-loop',dir=root+'/results/completion-loop/';
           const read=n=>JSON.parse(fs.readFileSync(dir+n+'.json','utf8'));
-          const base=read('baseline'),v1=read('binary-eo-v1'),best=read('binary-eo-v2');
-          const input=loadInput(root+'/candidates/binary-eo-v2.json');
-          assert.equal(base.actualCalls+v1.actualCalls+best.actualCalls,40);
-          assert.equal(digest(input.candidate),best.candidateDigest);
-          assert.equal(compare(base,best).targetReached,true);
-          assert.ok(80-40>=16);
-          assert.equal(input.contract.goldOrigin.authorIndependent,false);
+          const history=['baseline','binary-eo-v1','binary-eo-v2','binary-eo-v2-original'].map(read);
+          assert.equal(history.reduce((n,r)=>n+r.actualCalls,0),52);
+          for(const r of history){assert.equal(r.mode,'live');assert.equal(r.status,'EVALUATED');assert.deepEqual(r.models,['jev-1.13.0']);}
+          const original=loadInput(root+'/candidates/binary-eo-v3.json');
+          const role=loadInput(root+'/candidates/binary-eo-v3.json',root+'/suites/role-boundaries');
+          assert.equal(digest(original.candidate),'f6f09a684f1c6ca6823e555fab745370fe0988af68e61764c2cb40c99700efe9');
+          assert.equal(digest(original.candidate),digest(role.candidate));
+          const calls=x=>2*x.cases.filter(c=>c.purpose==='task'&&c.complete).length;
+          assert.equal(calls(role),16);assert.equal(calls(original),12);assert.equal(52+calls(role)+calls(original),80);
+          assert.equal(role.contract.casesSha256,history[0].casesDigest);
+          assert.equal(role.contract.goldSha256,history[0].goldDigest);
+          assert.equal(original.contract.casesSha256,history[3].casesDigest);
+          assert.equal(original.contract.goldSha256,history[3].goldDigest);
           JS
-      - name: Original suite regression with unchanged candidate (maximum sixteen requests)
+      - name: Final candidate role boundaries (at most sixteen HTTP calls)
+        env:
+          TRIAL_SUITE: role-boundaries
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v3 "$RUNNER_TEMP/eo-final-role"
+      - name: Fixed role scoring and same-contract comparison without key
+        env:
+          TRIAL_SUITE: role-boundaries
+        run: |
+          node experiments/sys1-eval-loop/split.mjs score binary-eo-v3 "$RUNNER_TEMP/eo-final-role"
+          node experiments/sys1-eval-loop/run.mjs compare experiments/sys1-eval-loop/results/completion-loop/baseline.json "$RUNNER_TEMP/eo-final-role/scored.json"
+      - name: Original regression with same final candidate (at most twelve HTTP calls)
         env:
           TRIAL_SUITE: original
           JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
-        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v2 "$RUNNER_TEMP/eo-regression"
-      - name: Fixed scoring without key
+        run: node experiments/sys1-eval-loop/split.mjs evaluate binary-eo-v3 "$RUNNER_TEMP/eo-final-original"
+      - name: Fixed original scoring without key
         env:
           TRIAL_SUITE: original
-        run: node experiments/sys1-eval-loop/split.mjs score binary-eo-v2 "$RUNNER_TEMP/eo-regression"
-      - name: Compact regression evidence and session accounting
+        run: node experiments/sys1-eval-loop/split.mjs score binary-eo-v3 "$RUNNER_TEMP/eo-final-original"
+      - name: Final development evidence and budget readback without credentials
         if: always() && !cancelled()
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
-          const p=process.env.RUNNER_TEMP+'/eo-regression/scored.json';
-          const r=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
-          const brief=r?({...r,rows:r.rows.map(x=>({id:x.id,status:x.status,prediction:x.prediction,expected:x.expected,correct:x.correct,model:x.model,usage:x.usage,axes:x.modelTrace?.map(q=>({axis:q.axis,answer:q.answer}))}))}):null;
-          console.log('SYS1_REGRESSION_COMPACT '+JSON.stringify({result:brief,previousCalls:40,sessionCalls:r?40+r.actualCalls:null,sessionMax:80,independentHoldout:false}));
+          import {compare} from './experiments/sys1-eval-loop/run.mjs';
+          const load=(dir,name)=>{
+            const p=process.env.RUNNER_TEMP+'/'+dir+'/'+name+'.json';
+            return fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8')):null;
+          };
+          const dirs=['eo-final-role','eo-final-original'];
+          const predictions=dirs.map(d=>load(d,'predictions'));
+          const scored=dirs.map(d=>load(d,'scored'));
+          const brief=r=>r?({...r,rows:r.rows.map(x=>({id:x.id,status:x.status,prediction:x.prediction,expected:x.expected,correct:x.correct,model:x.model,usage:x.usage,axes:x.modelTrace?.map(q=>({axis:q.axis,answer:q.answer}))}))}):null;
+          const before=JSON.parse(fs.readFileSync('experiments/sys1-eval-loop/results/completion-loop/baseline.json','utf8'));
+          const complete=scored.every(r=>r?.status==='EVALUATED');
+          const callsKnown=predictions.every(p=>Number.isInteger(p?.actualCalls));
+          const total=callsKnown?52+predictions.reduce((n,p)=>n+p.actualCalls,0):null;
+          const allDevelopmentTargets=complete&&scored.every(r=>r.targetReached);
+          console.log('SYS1_FINAL_COMPACT '+JSON.stringify({role:brief(scored[0]),original:brief(scored[1]),comparison:scored[0]?.status==='EVALUATED'?compare(before,scored[0]):null,allDevelopmentTargets,previousCalls:52,sessionCalls:total,sessionMax:80,independentHoldout:false,productionAdoption:false}));
+          if(total!==null&&total>80)throw Error('SESSION_BUDGET_EXCEEDED');
+          if(!complete)process.exitCode=2;
           JS
