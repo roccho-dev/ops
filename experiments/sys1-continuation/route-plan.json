@@ -1,0 +1,17 @@
+{
+  "schema": "ops.sys1.route-plan.v1",
+  "id": "p6-route-20261010-v1",
+  "maxCalls": 16,
+  "expectedModel": "jev-1.13.0",
+  "caseCount": 8,
+  "catalogCount": 2,
+  "catalogDigest": "c2ed70e1602c50371a2a681f51b945373f9c027f8e9b0b3fef7156de80eaa5df",
+  "casesDigest": "2bc634f69412cd94d9a6660043b4c928d782fdabb9302213a4547a408bbe328e",
+  "goldDigest": "e3923241c8cb4cbdfedb17e2c3c3fa2fdb18779f685188f8d0a9831e5018169e",
+  "coreDigest": "2e453bab6e4d5d89fe6fb7195ece15de88bc2f779006881fb77c03b14d87e18f",
+  "expectedPairsCorrect": 16,
+  "expectedSetsCorrect": 8,
+  "independentGold": false,
+  "holdout": false,
+  "scope": "known capability selection; no new capability discovery or execution"
+}

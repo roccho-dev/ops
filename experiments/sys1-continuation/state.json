@@ -25,6 +25,11 @@
       "status": "settled",
       "actual": 20,
       "receipt": "https://github.com/roccho-org/ops/actions/runs/38044600930/job/114191475111"
+    },
+    "p6-route-20261010-v1": {
+      "binding": "1570758d05b31e06d70d146cbab5967b43c135da0df9ed596c4c385100a1312c",
+      "reserved": 16,
+      "status": "reserved"
     }
   }
 }
