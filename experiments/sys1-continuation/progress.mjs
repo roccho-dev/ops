@@ -66,19 +66,38 @@ export function selectPhase(phases,verified,blocked=[]) {
   for(const p of phases)if(p.deps.some(d=>!seen.has(d)))fail('UNKNOWN_DEPENDENCY');
   return phases.find(p=>!verified.includes(p.id)&&!blocked.includes(p.id)&&p.deps.every(d=>verified.includes(d)))?.id??null;
 }
-export function holdoutIntake(m,optimizerId) {
-  // Validate provenance references only. This cannot attest that their claims are true.
+export function holdoutIntake(m,optimizerId,expected={}) {
+  // Structural checks only. References and independent provenance still need external verification.
+  const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
+  const digest=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
+  const identity=x=>value(x)&&x===x.trim();
+  const fields=[
+    [m,['schema','packageId','candidateDigest','author','reviewer','privateArtifact','population','count','criteria','exposure']],
+    [m?.author,['id','receipt']],[m?.reviewer,['id','receipt']],
+    [m?.privateArtifact,['visibility','locator','digest']],
+    [m?.criteria,['digest','fixedBeforeEvaluation']],
+    [m?.exposure,['optimizerSaw','usedForTuning','receipt']]
+  ];
+  for(const [record,allowed] of fields) {
+    if(record==null)continue;
+    if(!object(record))fail('INVALID_HOLDOUT_METADATA');
+    if(Object.keys(record).some(key=>!allowed.includes(key)))fail('HOLDOUT_CONTENT_MUST_NOT_ENTER_OPTIMIZER');
+  }
   const missing=[];
   const need=(condition,key)=>{if(!condition)missing.push(key);};
   need(m?.schema==='ops.sys1.holdout-manifest.v1','schema');
-  need(value(m?.packageId),'packageId');need(value(m?.candidateDigest),'candidateDigest');
-  need(value(m?.author?.id)&&value(m?.author?.receipt),'author');
-  need(value(m?.reviewer?.id)&&value(m?.reviewer?.receipt),'reviewer');
-  need(m?.author?.id!==optimizerId&&m?.reviewer?.id!==optimizerId&&m?.author?.id!==m?.reviewer?.id,'independent-identities');
-  need(m?.privateArtifact?.visibility==='sealed'&&value(m?.privateArtifact?.locator)&&/^[a-f0-9]{64}$/.test(m?.privateArtifact?.digest??''),'sealed-artifact');
+  need(value(m?.packageId),'packageId');
+  need(identity(optimizerId),'optimizer-identity');
+  need(digest(expected?.candidateDigest)&&digest(expected?.criteriaDigest),'expected-binding');
+  need(digest(m?.candidateDigest)&&m.candidateDigest===expected?.candidateDigest,'candidate-binding');
+  need(identity(m?.author?.id)&&value(m?.author?.receipt),'author');
+  need(identity(m?.reviewer?.id)&&value(m?.reviewer?.receipt),'reviewer');
+  need(identity(optimizerId)&&identity(m?.author?.id)&&identity(m?.reviewer?.id)
+    &&m.author.id!==optimizerId&&m.reviewer.id!==optimizerId&&m.author.id!==m.reviewer.id,'independent-identities');
+  need(m?.privateArtifact?.visibility==='sealed'&&value(m?.privateArtifact?.locator)&&digest(m?.privateArtifact?.digest),'sealed-artifact');
   need(value(m?.population)&&integer(m?.count)&&m.count>0,'population-count');
-  need(value(m?.criteria?.digest)&&value(m?.criteria?.fixedBeforeEvaluation),'fixed-criteria');
+  need(digest(m?.criteria?.digest)&&m.criteria.digest===expected?.criteriaDigest
+    &&value(m?.criteria?.fixedBeforeEvaluation),'fixed-criteria');
   need(m?.exposure?.optimizerSaw===false&&m?.exposure?.usedForTuning===false&&value(m?.exposure?.receipt),'unexposed-history');
-  if(m&&['cases','gold','answers','questions'].some(k=>Object.hasOwn(m,k)))fail('HOLDOUT_CONTENT_MUST_NOT_ENTER_OPTIMIZER');
   return {status:missing.length?'NEEDS_INPUT':'READY_FOR_INDEPENDENT_VERIFICATION',missing,p3Complete:false};
 }
