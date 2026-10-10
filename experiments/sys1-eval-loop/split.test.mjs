@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classify,question,askSplit,sessionContract} from './split.mjs';
+import {classify,question,askSplit,sessionContract,projectBody} from './split.mjs';
 const request={text:JSON.stringify({purpose:'task',complete:true,body:'完成状態を宣言する本文',comments:[]}),instructions:'本文とコメントを区別する。',criteria:{}};
 for(const [e,o,wanted] of [['yes','yes','body_observation'],['yes','no','ok'],['no','yes','expectation_missing'],['no','no','unknown']]) {
   test(`fixed map ${e}/${o}`,()=>assert.equal(classify(e,o),wanted));
@@ -42,3 +42,20 @@ test('session changes budget and treatment, not labels/data/Gold/targets',()=>{
   for(const k of ['labels','casesSha256','goldSha256','target'])assert.deepEqual(next[k],old[k]);assert.equal(old.maxCallsPerCandidate,8);
 });
 test('invalid axis rejected',()=>assert.throws(()=>question(request,'other')));
+
+test('body projection excludes comments and preserves raw body including HTML',()=>{
+  const input={...request,text:JSON.stringify({purpose:'task',complete:true,body:'要件\n<!-- 観測 -->',comments:['COMMENT_CANARY']})};
+  const before=structuredClone(input),p=projectBody(input);
+  assert.deepEqual(JSON.parse(p.text),{body:'要件\n<!-- 観測 -->'});
+  assert.equal(p.text.includes('COMMENT_CANARY'),false);assert.deepEqual(input,before);
+});
+test('body-only E/O sends neither comments nor metadata to either model call',async()=>{
+  const input={...request,text:JSON.stringify({purpose:'task',complete:true,body:'要件',comments:['COMMENT_CANARY']})},sent=[],trace=[];
+  const result=await askSplit(input,async q=>{sent.push(q);return {label:sent.length===1?'yes':'no',model:'jev-1.13.0'};},trace,{bodyOnly:true});
+  assert.equal(result.label,'ok');assert.equal(sent.length,2);
+  for(const q of sent) assert.deepEqual(JSON.parse(q.text),{body:'要件'});
+  assert.equal(JSON.stringify(trace).includes('COMMENT_CANARY'),false);
+});
+test('body-only projection cannot silently invent a missing body',()=>{
+  assert.throws(()=>projectBody({...request,text:'{}'}),/INVALID_BODY/);
+});

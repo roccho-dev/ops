@@ -23,14 +23,20 @@ export function question(request, axis) {
       ?'本問はEだけ：本文が実現すべき状態を一つでも宣言しているか。完成状態の表・責務・式も宣言である。Goal等の見出しだけでYesにしない。本文にそのような期待がなければNo。実施済みと書いてあるだけなら期待ではない。'
       :'本問はOだけ：本文が実際の出来事や達成状況を報告しているか。現在形の定義、完成状態の表、役割、将来条件や架空の入力例は報告ではない。実測の引用、確認済み/未確認の進捗一覧、HTMLコメント内の作業メモは報告に含める。comments配列内だけの観測は数えない。')};
 }
-export async function askSplit(request, askChoice, trace) {
+export function projectBody(request) {
+  const state=JSON.parse(request.text);
+  if(typeof state.body!=='string'||!state.body.trim()) throw Error('INVALID_BODY');
+  return {...request,text:JSON.stringify({body:state.body})};
+}
+export async function askSplit(request, askChoice, trace, {bodyOnly=false}={}) {
   const state=JSON.parse(request.text);
   // These are declared inputs, not inferences about an unseen Issue.
   if(state.purpose==='historical-record') return {label:'not_applicable',model:EXPECTED_MODEL,usage:null};
   if(state.complete===false) return {label:'unknown',model:EXPECTED_MODEL,usage:null};
+  const modelRequest=bodyOnly?projectBody(request):request;
   const answers=[],usage={};
   for(const axis of ['E','O']) {
-    const q=question(request,axis);
+    const q=question(modelRequest,axis);
     const r=await askChoice(q);
     trace.push({axis,request:q,answer:r.label,model:r.model,usage:r.usage??null});
     if(r.model!==EXPECTED_MODEL) throw Error('MODEL_CHANGED');
@@ -83,7 +89,7 @@ async function main() {
     };
     const ask=async request=>{
       const trace=[];traces.push(trace);
-      if(name!=='baseline') return askSplit(request,choice,trace);
+      if(name!=='baseline') return askSplit(request,choice,trace,{bodyOnly:name==='binary-eo-v3'});
       const r=await choice(request);trace.push({axis:'single',request,answer:r.label,model:r.model,usage:r.usage});return r;
     };
     const p=await core.evaluate(input,ask,{mode:'live',sourceSha:process.env.TRIAL_SOURCE_SHA??null,
@@ -101,7 +107,7 @@ async function main() {
     if(predictions.inheritedContractDigest!==inheritedDigest) throw Error('CONTRACT_CHANGED');
     const result=core.score(input,raw.trim().split('\n').map(JSON.parse),predictions);
     result.inheritedContractDigest=inheritedDigest;
-    result.treatment=name==='baseline'?'single-choice':'independent-E/O-choice';
+    result.treatment=name==='baseline'?'single-choice':name==='binary-eo-v3'?'body-only-independent-E/O-choice':'independent-E/O-choice';
     result.accounting={expectedMaxCalls:name==='baseline'?8:16,sessionMaxCalls:80,cost:null};
     write('scored.json',result);console.log('SYS1_EVAL_RESULT '+JSON.stringify(result));
     if(process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,`target=${result.targetReached}\n`);
