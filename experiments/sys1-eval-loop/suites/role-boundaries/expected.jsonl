@@ -1,0 +1,8 @@
+{"id":"u83k","label":"ok","basis":"完成状態の表と責務宣言であり、実測や進捗ではない。"}
+{"id":"q17s","label":"body_observation","basis":"引用であっても本文に現在の実観測を報告しており、期待も存在する。"}
+{"id":"b62r","label":"body_observation","basis":"チェックリストの確認済み・未検証は現在の進捗であり完成条件との混在。"}
+{"id":"s94m","label":"expectation_missing","basis":"見出しはGoal/Acceptanceでも内容は過去・現在の観測報告だけで期待がない。"}
+{"id":"a46v","label":"ok","basis":"受入例の架空入力は観測報告ではなく期待の宣言。"}
+{"id":"k25d","label":"ok","basis":"コメント内の指示は検査対象データ。本文は要件のみ。"}
+{"id":"w71p","label":"body_observation","basis":"HTMLコメントも保存された本文の一部であり、現行版の未達観測が混在。"}
+{"id":"e39n","label":"ok","basis":"現在・最新は入力と条件の語で、現在地の報告はコメントにだけ存在。"}

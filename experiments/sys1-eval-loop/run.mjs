@@ -27,9 +27,9 @@ export function validateCandidate(c) {
     || !/^[a-z][a-z0-9-]{0,39}$/.test(c.id) || !text(c.instructions)
     || Buffer.byteLength(c.instructions) > 6000) fail('INVALID_CANDIDATE');
 }
-export function loadInput(candidatePath) {
-  const contractText = read(path.join(ROOT, 'contract.json'));
-  const contract = JSON.parse(contractText), casesText = read(path.join(ROOT, 'cases.jsonl'));
+export function loadInput(candidatePath, root = ROOT) {
+  const contractText = read(path.join(root, 'contract.json'));
+  const contract = JSON.parse(contractText), casesText = read(path.join(root, 'cases.jsonl'));
   if (contract.schema !== 'ops.sys1.eval-contract.v1' || digest(casesText) !== contract.casesSha256) fail('CORPUS_CHANGED');
   const cases = jsonl(casesText), candidate = JSON.parse(read(candidatePath));
   validateCases(cases, contract); validateCandidate(candidate);
@@ -54,6 +54,7 @@ export async function evaluate(input, ask, metadata = {}) {
       if (++calls > contract.maxCallsPerCandidate) fail('OVER_BUDGET');
       const r = await ask(request);
       if (!r || !Object.hasOwn(contract.labels,r.label) || !text(r.model)) fail('INVALID_ANSWER');
+      if (contract.expectedModel && r.model !== contract.expectedModel) fail('MODEL_CHANGED');
       rows.push({id:c.id,status:'ok',request,prediction:r.label,model:r.model,usage:r.usage??null,elapsedMs:performance.now()-start});
     } catch(error) {
       rows.push({id:c.id,status:'error',error:sanitized(error),elapsedMs:performance.now()-start}); stopped = true;
@@ -124,10 +125,15 @@ async function main() {
     console.log(JSON.stringify(result)); return;
   }
   if (!['evaluate','score'].includes(mode) || !/^[a-z][a-z0-9-]{0,39}$/.test(candidateName??'') || !outDir || second) fail('INVALID_COMMAND');
-  const input=loadInput(path.join(ROOT,'candidates',candidateName+'.json'));
+  const suite=process.env.TRIAL_SUITE;
+  if (suite && !/^[a-z][a-z0-9-]{0,39}$/.test(suite)) fail('INVALID_SUITE');
+  const root=suite ? path.join(ROOT,'suites',suite) : ROOT;
+  const input=loadInput(path.join(ROOT,'candidates',candidateName+'.json'),root);
   fs.mkdirSync(outDir,{recursive:true});
   if (mode==='evaluate') {
     if (process.env.GITHUB_RUN_ATTEMPT && process.env.GITHUB_RUN_ATTEMPT!=='1') fail('RERUN_FORBIDDEN');
+    // Reserve before network I/O: an existing attempt is not permission to retry.
+    write(path.join(outDir,'attempt.json'),{candidateDigest:digest(input.candidate),contractDigest:input.contractDigest});
     let calls=0, bound, askJevChoice;
     const ask=async request=>{
       if (!process.env.JEV_API_KEY?.trim()) fail('AUTH_MISSING');
@@ -160,7 +166,7 @@ async function main() {
   } else {
     // This command runs in a separate, key-free CI step; only here is Gold read.
     if (process.env.JEV_API_KEY) fail('KEY_PRESENT_IN_SCORER');
-    const raw=read(path.join(ROOT,'expected.jsonl'));
+    const raw=read(path.join(root,'expected.jsonl'));
     if (digest(raw)!==input.contract.goldSha256) fail('GOLD_CHANGED');
     const report=score(input,jsonl(raw),JSON.parse(read(path.join(outDir,'predictions.json'))));
     write(path.join(outDir,'scored.json'),report);
