@@ -1,0 +1,59 @@
+{
+  "schema": "ops.sys1.development-freeze.v1",
+  "status": "DEVELOPMENT_TARGET_REACHED",
+  "core": "issue-state-separation/body-role-slice",
+  "sourceSha": "155edc8c36dd75d5f494e40212a74bebc1fcc0e8",
+  "candidate": {
+    "path": "candidates/binary-eo-v3.json",
+    "digest": "f6f09a684f1c6ca6823e555fab745370fe0988af68e61764c2cb40c99700efe9",
+    "blob": "2fee800fd546f083d69d19b924020d869b1eb38a"
+  },
+  "processor": {
+    "path": "split.mjs",
+    "blob": "dae89512b676a5572329b2e670beeca9baae0c50"
+  },
+  "scorer": {
+    "path": "run.mjs",
+    "blob": "ed26428a6bacbaac693c7ae14023cbbf5555b481"
+  },
+  "providerClient": {
+    "path": "../../packages/jev/src/client.mjs",
+    "blob": "c43238f9a4129d571cf6e2670f76514b5cc94410"
+  },
+  "evidence": {
+    "path": "results/completion-loop/final.json",
+    "sha256": "13e7aa047abcd29eb6080baa02fae117f013d126f5bc68ecb0ebb2f444e50bc3",
+    "runUrl": "https://github.com/roccho-org/ops/actions/runs/38026481193",
+    "jobId": 114138286749
+  },
+  "scope": "seen synthetic development cases only; not independent Gold or Holdout",
+  "budget": {
+    "maxHttpCalls": 80,
+    "actualHttpCalls": 80,
+    "remainingHttpCalls": 0,
+    "inputTokens": 72131,
+    "outputTokens": 2732,
+    "cost": null,
+    "automaticRefill": false
+  },
+  "gates": {
+    "developmentTarget": "VERIFIED_16_OF_16",
+    "independentGold": "NOT_PROVIDED",
+    "holdout": "NOT_RUN",
+    "autonomousResume": "NOT_PROVEN",
+    "secondCoreAndModel": "NOT_PROVEN",
+    "goalDiscoveryAndRoute": "NOT_PROVEN",
+    "gepa": "NOT_COMPARED",
+    "issueComplete": false,
+    "adoptionAuthorized": false
+  },
+  "next": {
+    "phase": "P3",
+    "requires": [
+      "独立した問題・Gold作成/照合担当と閲覧・利用履歴",
+      "未使用Holdoutの非公開所在・版・母集合・事前品質基準",
+      "固定候補を変更せず評価する実行契約と新たな有限予算"
+    ],
+    "parallel": "P4の起動・永続再開証拠とP5のCore/モデル交換証拠は別に進める。既知開発例をHoldoutへ変更しない。"
+  }
+}
