@@ -1,0 +1,8 @@
+{"id":"c7a4","purpose":"task","complete":true,"body":"目的：入力ごとに必要な検査を選び、根拠と不明点を返す。完成条件：必要な検査を漏らさず、不要な検査を実行しない。","comments":["2026-10-09の観測：10件中3件を確認。残りは未検証。実行記録はrun-17。"]}
+{"id":"m2d8","purpose":"task","complete":true,"body":"目的：入力ごとに必要な検査を選ぶ。現在10件中3件が完成し、CIは失敗中。次に残りを直す。","comments":[]}
+{"id":"r9b1","purpose":"task","complete":true,"body":"本日ログを確認した。3件は成功し、2件はタイムアウトした。担当者へ連絡済み。","comments":[]}
+{"id":"t4e6","purpose":"task","complete":true,"body":"完成条件：処理時間は1秒以下とする。","comments":["提案：処理時間の要件を2秒以下に改訂したい。これは未承認の提案であり、採用済み要件は変更していない。"]}
+{"id":"h3f5","purpose":"task","complete":true,"body":"完成条件：CI失敗時はUNKNOWNを返す。本文への現状報告は含めない。反例：「現在3/10件完成、CI失敗中」のような進捗はコメントへ記録する。","comments":[]}
+{"id":"n8c2","purpose":"task","complete":true,"body":"今こうであってほしい：用途を追加しても共通処理を変更しなくてよい。差分が存在するかは未確認でもよく、満たすなら修正0でよい。","comments":[]}
+{"id":"v5a9","purpose":"task","complete":false,"body":"本文の一部だけ取得した：検査結果…","comments":["取得が途中で切れたため、本文全体の内容は分からない。"]}
+{"id":"p1d7","purpose":"historical-record","complete":true,"body":"2025年の障害記録を原文のまま保存する史料。2025-01-12にジョブが停止し、翌日に復旧した。目標達成を追う課題ではない。","comments":[]}

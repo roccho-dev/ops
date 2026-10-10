@@ -1,0 +1,58 @@
+{
+  "schema": "ops.sys1.better-check-observation.v1",
+  "recordNature": "Normalized projection of the two actual SYS1_EVAL_RESULT log lines. Requests are bound by frozen source and candidate digests; this is not a raw provider response or independent author review.",
+  "sourceSha": "12f4223d8fd87f1ad6ef1c6b6e3f79f44a8f20e5",
+  "workflowCommit": "dfb40c2438a54aa9154c0594bd29e7fa83e467e9",
+  "runUrl": "https://github.com/roccho-org/ops/actions/runs/38015750960",
+  "jobId": 114105487663,
+  "runNumber": 1,
+  "attempt": 1,
+  "evaluatorBlob": "ed26428a6bacbaac693c7ae14023cbbf5555b481",
+  "contractDigest": "8a4a82a845fa5204d32bd311795a84557d3f04b6612eede2199364640d63d1f0",
+  "casesDigest": "58d723c1664f9eab6ef31011a167b2bbd1f6360619b8ec22d06dc6f062e02ceb",
+  "goldDigest": "2f77d7a601a16d51d2e3ca8a6e8ead03edae6cd13b856cb79799408fa8519fc5",
+  "baseline": {
+    "candidateId": "baseline", "candidateDigest": "927182766f8a7e168cf9ec023277ddff692111d54b0b1a90c0665169392f84a1",
+    "actualCalls": 8, "correct": 4, "falsePositives": 2, "falseNegatives": 2, "errors": 0, "targetReached": false,
+    "usage": {"input_tokens": 5619, "output_tokens": 500},
+    "rows": [
+      {"id":"u83k","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":697,"output_tokens":64},"elapsedMs":204.894421},
+      {"id":"q17s","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":716,"output_tokens":64},"elapsedMs":139.771092},
+      {"id":"b62r","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":695,"output_tokens":61},"elapsedMs":130.81429100000003},
+      {"id":"s94m","status":"ok","prediction":"expectation_missing","model":"jev-1.13.0","usage":{"input_tokens":669,"output_tokens":64},"elapsedMs":123.37552099999994},
+      {"id":"a46v","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":705,"output_tokens":64},"elapsedMs":115.60206700000003},
+      {"id":"k25d","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":725,"output_tokens":61},"elapsedMs":159.311325},
+      {"id":"w71p","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":684,"output_tokens":61},"elapsedMs":131.80325300000004},
+      {"id":"e39n","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":728,"output_tokens":61},"elapsedMs":137.23031300000002}
+    ]
+  },
+  "candidate": {
+    "candidateId": "role-rules-v2", "candidateDigest": "bfabe2fba2ccd281076ed3c6c2e91b93a1fbf617baaec7ce7e6cfd11685a1596",
+    "actualCalls": 8, "correct": 6, "falsePositives": 1, "falseNegatives": 0, "errors": 0, "targetReached": false,
+    "usage": {"input_tokens": 9459, "output_tokens": 503},
+    "rows": [
+      {"id":"u83k","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":1177,"output_tokens":64},"elapsedMs":178.701599},
+      {"id":"q17s","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":1196,"output_tokens":64},"elapsedMs":117.69440900000001},
+      {"id":"b62r","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":1175,"output_tokens":64},"elapsedMs":128.41420200000005},
+      {"id":"s94m","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":1149,"output_tokens":64},"elapsedMs":132.44227099999995},
+      {"id":"a46v","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":1185,"output_tokens":61},"elapsedMs":163.61925800000006},
+      {"id":"k25d","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":1205,"output_tokens":61},"elapsedMs":117.71187899999995},
+      {"id":"w71p","status":"ok","prediction":"body_observation","model":"jev-1.13.0","usage":{"input_tokens":1164,"output_tokens":64},"elapsedMs":141.58710600000006},
+      {"id":"e39n","status":"ok","prediction":"ok","model":"jev-1.13.0","usage":{"input_tokens":1208,"output_tokens":61},"elapsedMs":163.03793999999994}
+    ]
+  },
+  "comparison": {
+    "schema":"ops.sys1.comparison.v1",
+    "baseline":"927182766f8a7e168cf9ec023277ddff692111d54b0b1a90c0665169392f84a1",
+    "candidate":"bfabe2fba2ccd281076ed3c6c2e91b93a1fbf617baaec7ce7e6cfd11685a1596",
+    "beforeCorrect":4,"afterCorrect":6,"total":8,"delta":2,
+    "resolved":["b62r","a46v","w71p"],"regressed":["s94m"],
+    "outcome":"EFFECT_OBSERVED",
+    "best":"927182766f8a7e168cf9ec023277ddff692111d54b0b1a90c0665169392f84a1",
+    "targetReached":false,"qualityAdoptionAuthorized":false,
+    "evidenceScope":"paired synthetic development only; no holdout or independent author"
+  },
+  "actualCalls":16,"maxTotalCalls":16,"stop":"STOP_BUDGET","developmentFreeze":null,
+  "cost":null,"independentQuality":"NOT_PROVEN","externalSys2Resume":"NOT_PROVEN",
+  "wholeIssueComplete":false,"qualityAdoptionAuthorized":false
+}

@@ -1,0 +1,8 @@
+{"id":"c7a4","label":"ok","basis":"期待は本文、観測はコメント。"}
+{"id":"m2d8","label":"body_observation","basis":"達成状況とCI状態を本文の事実として報告。"}
+{"id":"r9b1","label":"expectation_missing","basis":"タスク本文は観測だけで期待宣言がない。"}
+{"id":"t4e6","label":"ok","basis":"コメントの変更提案は未承認と明示。"}
+{"id":"h3f5","label":"ok","basis":"条件文と禁止例は現在地の報告ではない。"}
+{"id":"n8c2","label":"ok","basis":"未達を断定しない期待宣言。観測コメントがないことは違反ではない。"}
+{"id":"v5a9","label":"unknown","basis":"本文全体を確認できない。"}
+{"id":"p1d7","label":"not_applicable","basis":"明示的に史料保存専用。"}
