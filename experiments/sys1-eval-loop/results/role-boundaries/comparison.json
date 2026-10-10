@@ -1,0 +1,16 @@
+{
+  "schema": "ops.sys1.comparison.v1",
+  "baseline": "927182766f8a7e168cf9ec023277ddff692111d54b0b1a90c0665169392f84a1",
+  "candidate": "568369fac68e91616dd31d2998c522f80d6b8374af8b89e092a8ff3dac8ac8a1",
+  "beforeCorrect": 4,
+  "afterCorrect": 6,
+  "total": 8,
+  "delta": 2,
+  "resolved": ["b62r", "a46v", "w71p"],
+  "regressed": ["s94m"],
+  "outcome": "EFFECT_OBSERVED",
+  "best": "927182766f8a7e168cf9ec023277ddff692111d54b0b1a90c0665169392f84a1",
+  "targetReached": false,
+  "qualityAdoptionAuthorized": false,
+  "evidenceScope": "paired synthetic development only; no holdout or independent author"
+}
