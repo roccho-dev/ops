@@ -7,7 +7,9 @@
     "p5-portability-20261010-v1": {
       "binding": "4d6080c4aaed00e5ed1a7643353a9518105b11911be9eed66305f23689ea14ea",
       "reserved": 20,
-      "status": "reserved"
+      "status": "settled",
+      "actual": 20,
+      "receipt": "https://github.com/roccho-org/ops/actions/runs/38043293840/job/114187679265"
     }
   }
 }
