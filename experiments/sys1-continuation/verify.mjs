@@ -5,12 +5,13 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {hash,remaining,reserve,settle} from './progress.mjs';
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 export function verifyReceipt(receipt,plan,state,datasets) {
-  assert.equal(receipt.schema,'ops.sys1.portability-receipt.v1');
+  assert.ok(['ops.sys1.portability-receipt.v1','ops.sys1.alternate-model-receipt.v1'].includes(receipt.schema));
   assert.equal(receipt.planDigest,hash(plan));
   assert.equal(receipt.id,plan.id);
   assert.equal(receipt.results.length,plan.suites.length);
   assert.equal(receipt.model,plan.expectedModel);
-  assert.equal(receipt.secondRealModel,false);
+  assert.notEqual(receipt.secondRealModel,true);
+  assert.notEqual(receipt.crossModelComparisonIncluded,true);
   assert.equal(receipt.independentHoldout,false);
   assert.equal(receipt.autonomousRestartProven,false);
   assert.equal(receipt.productionAdoption,false);
@@ -53,7 +54,7 @@ export function verifyReceipt(receipt,plan,state,datasets) {
   assert.equal(reserve(state,plan.id,hash(plan),plan.maxCalls).dispatch,false);
   return {receiptVerified:true,cores:receipt.results.map(x=>({core:x.core,correct:x.correct,total:x.total})),
     calls:totals.calls,previous:state.previous,remaining:remaining(state),modelCallsForThisVerification:0,
-    p3Verified:false,p4AutonomousLoopProven:false,secondRealModel:false};
+    p3Verified:false,p4AutonomousLoopProven:false,crossModelComparisonIncluded:false};
 }
 export function loadEvidence(){
   const read=p=>fs.readFileSync(path.resolve(ROOT,p),'utf8');
