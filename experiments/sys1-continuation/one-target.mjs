@@ -53,6 +53,8 @@ export function transition(previous,event){
       break;
     case 'ADMITTED':
       phase('ADMIT');requireThat(str(event.operation)&&str(event.authorizationRef),'INVALID_ADMISSION');
+      requireThat(event.proposalDigest===s.active.proposal.digest
+        &&event.worldId===contract.world.id&&event.worldVersion===s.worldVersion,'STALE_OR_UNBOUND_ADMISSION');
       if(event.operation==='NO_EFFECT'){s.active.admission={operation:'NO_EFFECT',ref:event.authorizationRef};s.phase='READBACK';}
       else if(!contract.allowedEffects.includes(event.operation)){s.phase='BLOCKED';s.result='PERMISSION_MISSING';}
       else{requireThat(str(event.effectKey),'MISSING_EFFECT_KEY');s.active.admission={operation:event.operation,key:event.effectKey,ref:event.authorizationRef};s.phase='EFFECT';}

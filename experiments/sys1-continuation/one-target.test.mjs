@@ -9,7 +9,7 @@ const att=(ref,author='observer',reviewer='independent-syntactic-reviewer')=>({r
 const observed=(id,verdict='GAP')=>ev(id,'OBSERVED',{worldId:'one-scope',worldVersion:'initial',coverageDigest:spec().coverageDigest,verdict,evidence:att('obs-'+id)});
 const proposed=(id='p')=>ev(id,'PROPOSED',{author:'optimizer',proposalDigest:'e'.repeat(64),questions:[{id:'q1',reason:'missing objective evidence',route:'MISSING'}]});
 const verified=(id='v',verdict='PASS')=>ev(id,'VERIFIED',{proposalDigest:'e'.repeat(64),verdict,evidence:att('review-'+id,'optimizer')});
-const admitted=(operation='NO_EFFECT')=>ev('admit-'+operation,'ADMITTED',{operation,authorizationRef:'synthetic-permission',effectKey:'one-effect'});
+const admitted=(operation='NO_EFFECT')=>ev('admit-'+operation,'ADMITTED',{operation,authorizationRef:'synthetic-permission',effectKey:'one-effect',proposalDigest:'e'.repeat(64),worldId:'one-scope',worldVersion:'initial'});
 const receipt=()=>ev('effect','EFFECT_RECORDED',{worldId:'one-scope',worldVersion:'initial',effectKey:'one-effect',receiptRef:'synthetic-receipt',resultWorldVersion:'changed',actor:'actor'});
 const cost=()=>({humanMinutes:5,sys2Calls:2,sys1Calls:1,ciSeconds:10,computeSeconds:2,reworkMinutes:null,paidUsd:null});
 const readback=(id,verdict='GAP',worldVersion='initial')=>ev(id,'READBACK',{worldId:'one-scope',worldVersion,coverageDigest:spec().coverageDigest,verdict,evidence:att('rb-'+id,'observer','reviewer'),cost:cost()});
@@ -31,7 +31,7 @@ test('no-effect still requires independent readback',()=>{const r=many(ready(),a
 test('remaining Gap is reobserved, not completed',()=>{const r=many(ready(),admitted(),readback('r'));assert.equal(r.phase,'OBSERVE');assert.equal(r.cycles,1);});
 test('readback with no gap is only target-level reported outcome',()=>{const r=many(ready(),admitted(),readback('r','NO_GAP'));assert.equal(r.phase,'DONE');assert.equal(r.qualityProven,false);});
 test('unknown readback is not success',()=>assert.equal(many(ready(),admitted(),readback('r','UNKNOWN')).phase,'BLOCKED'));
-test('two unresolved cycles stop within finite budget',()=>{const r=many(ready(),admitted(),readback('r'),observed('o2'),proposed('p2'),verified('v2'),ev('a2','ADMITTED',{operation:'NO_EFFECT',authorizationRef:'permission'}),readback('r2'));assert.equal(r.result,'CYCLE_LIMIT');});
+test('two unresolved cycles stop within finite budget',()=>{const r=many(ready(),admitted(),readback('r'),observed('o2'),proposed('p2'),verified('v2'),ev('a2','ADMITTED',{operation:'NO_EFFECT',authorizationRef:'permission',proposalDigest:'e'.repeat(64),worldId:'one-scope',worldVersion:'initial'}),readback('r2'));assert.equal(r.result,'CYCLE_LIMIT');});
 test('event idempotency and collision protection',()=>{const v=transition(openTrial(spec()),observed('o'));assert.equal(transition(v.state,observed('o')).changed,false);assert.throws(()=>transition(v.state,observed('o','UNKNOWN')));});
 test('effect receipt alone does not make semantic outcome true',()=>{const v=many(ready(),admitted('change-draft'),receipt());assert.equal(v.phase,'READBACK');assert.equal(v.result,'NOT_PROVEN');});
 test('readback must use current effect version',()=>{const v=many(ready(),admitted('change-draft'),receipt());assert.throws(()=>transition(v,readback('r')));const r=transition(v,readback('r','GAP','changed')).state;assert.equal(r.worldVersion,'changed');});
@@ -57,4 +57,23 @@ test('stopped trial cannot silently rewrite its original stop reason',()=>{
   const snapshot=structuredClone(stopped);
   assert.throws(()=>transition(stopped,verified('v3','REJECT')),/TERMINAL_TRIAL/);
   assert.deepEqual(stopped,snapshot);
+});
+
+test('admission rejects stale proposal identity before any effect',()=>{
+  const s=ready(), e=admitted('change-draft'); e.proposalDigest='f'.repeat(64);
+  assert.throws(()=>transition(s,e),/STALE_OR_UNBOUND_ADMISSION/);
+  assert.equal(s.phase,'ADMIT'); assert.equal(s.events.length,3);
+});
+test('admission rejects another world even with operation in allowed list',()=>{
+  const s=ready(), e=admitted('change-draft'); e.worldId='other-target';
+  assert.throws(()=>transition(s,e),/STALE_OR_UNBOUND_ADMISSION/);
+  assert.equal(s.phase,'ADMIT');
+});
+test('admission refuses stale version after world changes',()=>{
+  const first=many(ready(),admitted('change-draft'),receipt(),readback('r','GAP','changed'));
+  const next=many(first,ev('ob2','OBSERVED',{...observed('ob2'),worldVersion:'changed'}),proposed('p2'),verified('v2'));
+  const bad=admitted('change-draft'); bad.id='admit-second';
+  assert.throws(()=>transition(next,bad),/STALE_OR_UNBOUND_ADMISSION/);
+  bad.worldVersion='changed';
+  assert.equal(transition(next,bad).state.phase,'EFFECT');
 });
