@@ -1,0 +1,8 @@
+{"id":"d81x","input":{"goal":"請求と見積で同じ税計算を一か所に保つ","tree":"product/\n├── billing/tax.mjs # 国別税率と丸め規則を独自に定義し請求税額を計算\n└── quote/tax.mjs # billingと同じ国別税率と丸め規則を別に定義し見積税額を計算。共通参照はない。","subjects":["billing/tax.mjs","quote/tax.mjs"]}}
+{"id":"k92p","input":{"goal":"税計算をCLIから使う","tree":"product/\n├── cli.mjs # 入力JSONの読み込みと結果出力だけ。税規則を持たない。\n└── tax.mjs # 税率と丸め規則を唯一所有し計算する。","subjects":["cli.mjs","tax.mjs"]}}
+{"id":"n47t","input":{"goal":"税規則は唯一の正本にする","tree":"product/\n├── policy.mjs # 税率と丸め規則の唯一の定義\n├── billing.mjs # policy.mjsをimportして請求する。規則の定義はしない。\n└── quote.mjs # 同じpolicy.mjsをimportして見積する。規則の定義はしない。","subjects":["billing.mjs","quote.mjs"]}}
+{"id":"y36a","input":{"goal":"アクセス許可を一貫した規則で判断する","tree":"product/\n├── server/auth.mjs # 許可条件と役割一覧を独立定義。これがサーバー側正本\n└── ui/auth.mjs # 同一の許可条件と役割一覧を別に定義。これがUI側正本。参照も生成も同期もない。","subjects":["server/auth.mjs","ui/auth.mjs"]}}
+{"id":"m58r","input":{"goal":"変換処理を一つの実装にまとめる","tree":"convert/ # 配下の変換責務を要約したフォルダ名。ここに別実装はない。\n└── parse.mjs # 変換を担当する唯一の実装","subjects":["convert/","convert/parse.mjs"]}}
+{"id":"c64v","input":{"goal":"責務を重複させない","tree":"app/\n├── a.mjs\n└── b.mjs\n# 両要素の役割も入出力も参照関係も未記載","subjects":["a.mjs","b.mjs"]}}
+{"id":"p73u","input":{"goal":"入力確定後の計算結果を再利用する","tree":"app/\n├── compute.mjs # 規則を唯一所有し結果を計算\n└── cache.mjs # computeの結果をキーで保存して返すだけ。規則の再定義・再計算はしない。","subjects":["compute.mjs","cache.mjs"]}}
+{"id":"s28b","input":{"goal":"地域別に異なる配送契約を計算する","tree":"shipping/\n├── domestic.mjs # 国内契約専用の料金規則を所有。海外を扱わない。\n└── overseas.mjs # 国内と異なる海外契約専用の料金規則を所有。国内を扱わない。共通の業務規則はない。","subjects":["domestic.mjs","overseas.mjs"]}}
