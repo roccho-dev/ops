@@ -1,0 +1,59 @@
+name: Sys1 two-Core continuation trial
+
+on:
+  push:
+    branches: [codex/sys1-continuation-20261010]
+    paths: [.github/workflows/sys1-continuation-trial.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sys1-p5-portability-20261010-v1
+  cancel-in-progress: false
+
+jobs:
+  portability:
+    if: github.repository == 'roccho-org/ops' && github.event.before == '1a50da6193b8e926cc49776528d97640a1456fb2' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      TRIAL_SOURCE_SHA: 1a50da6193b8e926cc49776528d97640a1456fb2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 1a50da6193b8e926cc49776528d97640a1456fb2
+          persist-credentials: false
+
+      - name: Verify unchanged frozen source and reservation without credentials
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TRIAL_SOURCE_SHA"
+          test "$(git hash-object experiments/sys1-eval-loop/split.mjs)" = dae89512b676a5572329b2e670beeca9baae0c50
+          test "$(git hash-object experiments/sys1-eval-loop/run.mjs)" = ed26428a6bacbaac693c7ae14023cbbf5555b481
+          test "$(git hash-object packages/jev/src/client.mjs)" = c43238f9a4129d571cf6e2670f76514b5cc94410
+          node --test experiments/sys1-eval-loop/*test.mjs experiments/sys1-continuation/test.mjs
+          node experiments/sys1-continuation/run.mjs verify
+
+      - name: Two Core adapters through one model port (reserved maximum twenty HTTP requests)
+        id: live
+        continue-on-error: true
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+        run: node experiments/sys1-continuation/run.mjs evaluate "$RUNNER_TEMP/sys1-two-core"
+
+      - name: Fixed development Gold scoring without credentials
+        if: always() && !cancelled()
+        run: |
+          set -euo pipefail
+          if [ ! -f "$RUNNER_TEMP/sys1-two-core/predictions.json" ]; then
+            echo 'CONTINUATION_STOP: predictions absent; retain reservation until actual spend is reconciled'
+            exit 1
+          fi
+          node experiments/sys1-continuation/run.mjs score "$RUNNER_TEMP/sys1-two-core"
+
+      - name: Reject masked provider or evaluation failure
+        if: always() && !cancelled()
+        env:
+          LIVE_OUTCOME: ${{ steps.live.outcome }}
+        run: test "$LIVE_OUTCOME" = success
