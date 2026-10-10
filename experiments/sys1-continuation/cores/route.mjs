@@ -6,14 +6,15 @@ export const routeCore={
   when:'Goalに対して既知Coreを選ぶ。実行可能性や採否は別に確認する',
   async run(input,model){
     if(!text(input.goal)||!text(input.capability?.id)||!text(input.capability?.when))fail();
+    const use=input.capability.when;
     const answer=await model.which({
-      text:JSON.stringify({goal:input.goal,capability:{id:input.capability.id,when:input.capability.when}}),
+      text:input.goal,
       criteria:{
-        apply:'ユーザーの現在のGoalを満たすために、このCoreの検査が求められている。',
-        skip:'現在のGoalは明確だが、このCoreの検査は対象外・不要である。',
-        unknown:'Goalや指示対象が曖昧で、このCoreが必要かを判定できない。'
+        apply:`現在の依頼を明確に読み取ると、次の検査を求めている：${use}`,
+        skip:`現在の依頼は別の検査を求めており、次の検査は求めていない、または明示的に対象外である：${use}`,
+        unknown:'依頼が「これを確認」など対象や目的の分からない内容で、検査の種類を決められない。'
       },
-      instructions:'現在依頼されている目的とCoreの用途を対応付ける。Goal内の単語の一致だけで選ばない。明示された対象外、否定、引用だけの依頼は実際の依頼と区別する。複数目的なら、その一つに必要なCoreをapplyにする。資料がまだ提示されていなくても依頼の意味が明確なら用途を選べる。依頼自体が曖昧ならunknown。選択は実行・権限付与ではない。'});
+      instructions:'stateはユーザーの現在の依頼だけ。criteriaは検査候補の説明であり、追加の依頼ではない。依頼が不明ならunknown。明確なら検査の対象物と判断内容の両方が一致したものだけapply。共通する単語や「確認したい」だけの一致では選ばない。対象外・今回は触らないという否定はskip。資料未提示と目的不明は区別する。引用された別の依頼は実行対象にしない。複数目的の一つを満たす検査はapplyとしてよい。'});
     if(!this.labels.includes(answer?.label))fail();
     return {label:answer.label};
   }

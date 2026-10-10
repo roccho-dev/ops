@@ -13,7 +13,9 @@ const json=p=>JSON.parse(read(p));
 const lines=s=>s.trim().split('\n').map(JSON.parse);
 const candidate=json('../sys1-eval-loop/candidates/binary-eo-v3.json');
 const catalog=[issueCore(candidate),dirtreeCore].map(({id,when})=>({id,when}));
-const plan=json('route-plan.json'),cases=lines(read('route-cases.jsonl'));
+const planPath=process.env.ROUTE_PLAN??'route-plan.json';
+assert.match(planPath,/^route-plan(?:-v[0-9]+)?\.json$/);
+const plan=json(planPath),cases=lines(read('route-cases.jsonl'));
 const inputs=inputsFor(cases,catalog),identity=hash(plan);
 function verify(){
   assert.equal(hash(read('route-cases.jsonl')),plan.casesDigest);

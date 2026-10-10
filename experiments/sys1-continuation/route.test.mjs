@@ -20,7 +20,7 @@ test('question exposes neither case identity nor arbitrary executable fields',as
   let sent;const input={goal:'current goal',capability:{id:'c1',when:'one',secret:'DO_NOT_SEND'}};
   const before=structuredClone(input);
   const result=await routeCore.run(input,{which:async q=>{sent=q;return {label:'skip'};}});
-  assert.deepEqual(JSON.parse(sent.text),{goal:input.goal,capability:{id:'c1',when:'one'}});
+  assert.equal(sent.text,input.goal);assert.ok(sent.criteria.apply.includes('one'));assert.equal(JSON.stringify(sent).includes('DO_NOT_SEND'),false);
   assert.deepEqual(input,before);assert.deepEqual(result,{label:'skip'});
 });
 test('model failure propagates, is not retried',async()=>{let calls=0;await assert.rejects(()=>routeCore.run({goal:'x',capability:catalog[0]},{which:async()=>{calls++;throw Error('test');}}));assert.equal(calls,1);});
